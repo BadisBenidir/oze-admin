@@ -46,7 +46,7 @@ interface UseResellersResult {
   updateResellerStatus: (id: string, status: Reseller['status']) => Promise<{ success: boolean; error?: string }>;
   deleteReseller: (id: string) => Promise<{ success: boolean; error?: string }>;
   fetchContacts: (resellerId: string) => Promise<ResellerContact[]>;
-  inviteContact: (resellerId: string, email: string, firstName: string, lastName: string) => Promise<{ success: boolean; error?: string }>;
+  inviteContact: (resellerId: string, email: string, firstName: string, lastName: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   removeContact: (contactId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -208,11 +208,12 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     resellerId: string,
     email: string,
     firstName: string,
-    lastName: string
+    lastName: string,
+    password?: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       const { data, error: invokeError } = await supabase.functions.invoke('invite-reseller-contact', {
-        body: { reseller_id: resellerId, email, first_name: firstName, last_name: lastName },
+        body: { reseller_id: resellerId, email, first_name: firstName, last_name: lastName, password: password || undefined },
       });
 
       if (invokeError) {

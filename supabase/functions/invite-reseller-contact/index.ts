@@ -57,9 +57,15 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { reseller_id, email, first_name, last_name } = await req.json();
+    const { reseller_id, email, first_name, last_name, password } = await req.json();
     if (!reseller_id || !email) {
       return new Response(JSON.stringify({ error: 'reseller_id et email sont requis' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (password && password.length < 8) {
+      return new Response(JSON.stringify({ error: 'Le mot de passe doit contenir au moins 8 caractères' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -68,9 +74,20 @@ Deno.serve(async (req: Request) => {
     // Client admin (clé service-role) : seul habilité à créer un utilisateur Auth.
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const { data: created, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-      data: { first_name: first_name ?? '', last_name: last_name ?? '' },
-    });
+    // Deux modes : soit l'admin fixe lui-même le mot de passe (le revendeur
+    // peut se connecter immédiatement, aucun email envoyé), soit on envoie
+    // une invitation par email classique (le revendeur choisit son mot de
+    // passe via le lien reçu).
+    const { data: created, error: createError } = password
+      ? await adminClient.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { first_name: first_name ?? '', last_name: last_name ?? '' },
+        })
+      : await adminClient.auth.admin.inviteUserByEmail(email, {
+          data: { first_name: first_name ?? '', last_name: last_name ?? '' },
+        });
 
     if (createError || !created?.user) {
       return new Response(JSON.stringify({ error: createError?.message ?? "Échec de la création de l'utilisateur" }), {

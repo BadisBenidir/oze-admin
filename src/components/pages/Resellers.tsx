@@ -70,8 +70,19 @@ export const Resellers: React.FC = () => {
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contactsError, setContactsError] = useState<string | null>(null);
-  const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '' });
+  const [inviteMode, setInviteMode] = useState<'email' | 'password'>('email');
+  const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', password: '' });
   const [inviting, setInviting] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
+
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    let result = '';
+    for (let i = 0; i < 12; i++) {
+      result += chars[Math.floor(Math.random() * chars.length)];
+    }
+    setInviteForm((f) => ({ ...f, password: result }));
+  };
 
   const filteredResellers = resellers.filter((r) => {
     const matchesSearch =
@@ -159,7 +170,9 @@ export const Resellers: React.FC = () => {
 
   const openContactsModal = async (reseller: Reseller) => {
     setContactsReseller(reseller);
-    setInviteForm({ email: '', first_name: '', last_name: '' });
+    setInviteForm({ email: '', first_name: '', last_name: '', password: '' });
+    setInviteMode('email');
+    setCreatedCredentials(null);
     setContactsError(null);
     setContactsLoading(true);
     try {
@@ -176,6 +189,7 @@ export const Resellers: React.FC = () => {
     setContactsReseller(null);
     setContacts([]);
     setContactsError(null);
+    setCreatedCredentials(null);
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -185,18 +199,27 @@ export const Resellers: React.FC = () => {
       setContactsError('L\'email est obligatoire');
       return;
     }
+    if (inviteMode === 'password' && inviteForm.password.trim().length < 8) {
+      setContactsError('Le mot de passe doit contenir au moins 8 caractères');
+      return;
+    }
 
     setInviting(true);
     setContactsError(null);
+    setCreatedCredentials(null);
     try {
       const result = await inviteContact(
         contactsReseller.id,
         inviteForm.email.trim(),
         inviteForm.first_name.trim(),
-        inviteForm.last_name.trim()
+        inviteForm.last_name.trim(),
+        inviteMode === 'password' ? inviteForm.password.trim() : undefined
       );
       if (result.success) {
-        setInviteForm({ email: '', first_name: '', last_name: '' });
+        if (inviteMode === 'password') {
+          setCreatedCredentials({ email: inviteForm.email.trim(), password: inviteForm.password.trim() });
+        }
+        setInviteForm({ email: '', first_name: '', last_name: '', password: '' });
         const data = await fetchContacts(contactsReseller.id);
         setContacts(data);
         await refreshResellers();
@@ -574,8 +597,47 @@ export const Resellers: React.FC = () => {
             </ul>
           )}
 
+          {createdCredentials && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
+              <p className="text-sm font-medium text-green-800">Compte créé — communique ces identifiants au revendeur (ils ne seront plus affichés) :</p>
+              <div className="bg-white rounded-lg border border-green-200 p-2 space-y-1">
+                <p className="text-xs text-gray-500">Email</p>
+                <p className="text-sm font-mono text-gray-900">{createdCredentials.email}</p>
+                <p className="text-xs text-gray-500 mt-1">Mot de passe</p>
+                <p className="text-sm font-mono text-gray-900">{createdCredentials.password}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`Email : ${createdCredentials.email}\nMot de passe : ${createdCredentials.password}`);
+                }}
+                className="text-xs text-green-700 underline"
+              >
+                Copier
+              </button>
+            </div>
+          )}
+
           <form onSubmit={handleInvite} className="space-y-3 pt-3 border-t border-gray-100">
-            <p className="text-sm font-medium text-gray-700">Inviter un nouveau contact</p>
+            <p className="text-sm font-medium text-gray-700">Ajouter un nouveau contact</p>
+
+            <div className="flex rounded-lg border border-gray-200 p-1 text-sm">
+              <button
+                type="button"
+                onClick={() => setInviteMode('email')}
+                className={`flex-1 py-1.5 rounded-md transition-colors ${inviteMode === 'email' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+              >
+                Inviter par email
+              </button>
+              <button
+                type="button"
+                onClick={() => setInviteMode('password')}
+                className={`flex-1 py-1.5 rounded-md transition-colors ${inviteMode === 'password' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+              >
+                Créer avec mot de passe
+              </button>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <input
                 type="text"
@@ -603,13 +665,37 @@ export const Resellers: React.FC = () => {
                 required
               />
             </div>
+
+            {inviteMode === 'password' && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Mot de passe (min. 8 caractères)"
+                  value={inviteForm.password}
+                  onChange={(e) => setInviteForm({ ...inviteForm, password: e.target.value })}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={generatePassword}
+                  className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-xs whitespace-nowrap"
+                >
+                  Générer
+                </button>
+              </div>
+            )}
+
+            {inviteMode === 'password' && (
+              <p className="text-xs text-gray-500">Aucun email n'est envoyé dans ce mode — communique ces identifiants toi-même au revendeur.</p>
+            )}
+
             <button
               type="submit"
               disabled={inviting}
               className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
             >
               <UserPlus className="h-4 w-4" />
-              <span>{inviting ? 'Envoi...' : "Envoyer l'invitation"}</span>
+              <span>{inviting ? 'Création...' : inviteMode === 'password' ? 'Créer le compte' : "Envoyer l'invitation"}</span>
             </button>
           </form>
         </div>
