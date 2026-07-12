@@ -24,6 +24,7 @@ import {
 interface CreateProductProps {
   onBack: () => void;
   productId?: string; // Optionnel : si fourni, mode édition
+  defaultStatus?: string; // Optionnel : préselectionne le statut (ex: création depuis la section B2B)
 }
 
 interface ProductData {
@@ -91,7 +92,7 @@ const parseAmount = (value: string): number => {
   return isNaN(n) ? 0 : n;
 };
 
-export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId }) => {
+export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId, defaultStatus }) => {
   const { isAdmin } = useAdminAuth();
   const { categories } = useCategories(isAdmin);
   const { brands, totalCount: totalBrands } = useBrands(isAdmin);
@@ -121,7 +122,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId 
     defects: '',
     colors: [],
     material: '',
-    status: '',
+    status: defaultStatus || '',
     serialNumber: '',
     internalComments: ''
   });

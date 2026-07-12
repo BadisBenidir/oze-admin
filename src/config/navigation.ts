@@ -102,6 +102,7 @@ export const navigationItems: MenuItem[] = [
     path: '/b2b',
     subItems: [
       { id: 'resellers', label: 'Revendeurs', path: '/b2b/resellers', icon: Users },
+      { id: 'b2b-products', label: 'Produits B2B', path: '/b2b/products', icon: Package },
       { id: 'b2b-orders', label: 'Commandes B2B', path: '/b2b/orders', icon: ShoppingCart },
       { id: 'commissions', label: 'Chiffre d\'affaires B2B', path: '/b2b/commissions', icon: Banknote },
     ]

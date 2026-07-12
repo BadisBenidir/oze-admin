@@ -1,5 +1,6 @@
 import React from 'react';
 import { Resellers } from './Resellers';
+import { B2BProducts } from './B2BProducts';
 import { B2BOrders } from './B2BOrders';
 import { B2BRevenue } from './B2BRevenue';
 
@@ -9,6 +10,8 @@ interface B2BProps {
 
 export const B2B: React.FC<B2BProps> = ({ activeSubTab }) => {
   switch (activeSubTab) {
+    case 'b2b-products':
+      return <B2BProducts />;
     case 'b2b-orders':
       return <B2BOrders />;
     case 'commissions':
