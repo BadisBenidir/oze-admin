@@ -44,20 +44,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { data: callerProfile } = await callerClient
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (callerProfile?.role !== 'admin') {
-      return new Response(JSON.stringify({ error: 'Accès refusé : réservé aux administrateurs' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const { reseller_id, email, first_name, last_name, password } = await req.json();
+    const { reseller_id, email, first_name, last_name, password, is_primary } = await req.json();
     if (!reseller_id || !email) {
       return new Response(JSON.stringify({ error: 'reseller_id et email sont requis' }), {
         status: 400,
@@ -70,6 +57,45 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const { data: callerProfile } = await callerClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    const isAdmin = callerProfile?.role === 'admin';
+
+    // Un admin OZË peut créer un contact pour n'importe quel revendeur. Un
+    // contact "principal" (is_primary) peut créer des comptes UNIQUEMENT
+    // pour sa propre entreprise, tant qu'elle est active — c'est ce qui
+    // permet à un revendeur de gérer ses propres employés en autonomie.
+    let isPrimaryOfSameReseller = false;
+    if (!isAdmin) {
+      const { data: callerContact } = await callerClient
+        .from('reseller_contacts')
+        .select('reseller_id, is_primary, resellers(status)')
+        .eq('profile_id', user.id)
+        .single();
+
+      const callerReseller = Array.isArray(callerContact?.resellers) ? callerContact?.resellers[0] : callerContact?.resellers;
+      isPrimaryOfSameReseller = Boolean(
+        callerContact?.is_primary &&
+        callerContact.reseller_id === reseller_id &&
+        callerReseller?.status === 'active'
+      );
+    }
+
+    if (!isAdmin && !isPrimaryOfSameReseller) {
+      return new Response(JSON.stringify({ error: 'Accès refusé : réservé aux administrateurs ou au contact principal de cette entreprise' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Seul un admin OZË peut désigner un contact "principal" : un contact
+    // créé par un revendeur pour son équipe n'est jamais principal.
+    const finalIsPrimary = isAdmin ? Boolean(is_primary) : false;
 
     // Client admin (clé service-role) : seul habilité à créer un utilisateur Auth.
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -117,7 +143,7 @@ Deno.serve(async (req: Request) => {
 
     const { error: contactError } = await adminClient
       .from('reseller_contacts')
-      .insert({ reseller_id, profile_id: newUserId });
+      .insert({ reseller_id, profile_id: newUserId, is_primary: finalIsPrimary });
 
     if (contactError) {
       return new Response(JSON.stringify({ error: contactError.message }), {

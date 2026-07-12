@@ -41,12 +41,12 @@ interface UseResellersResult {
   loading: boolean;
   error: string | null;
   refreshResellers: () => Promise<void>;
-  createReseller: (data: ResellerFormData) => Promise<{ success: boolean; error?: string }>;
+  createReseller: (data: ResellerFormData) => Promise<{ success: boolean; error?: string; id?: string }>;
   updateReseller: (id: string, data: Partial<ResellerFormData>) => Promise<{ success: boolean; error?: string }>;
   updateResellerStatus: (id: string, status: Reseller['status']) => Promise<{ success: boolean; error?: string }>;
   deleteReseller: (id: string) => Promise<{ success: boolean; error?: string }>;
   fetchContacts: (resellerId: string) => Promise<ResellerContact[]>;
-  inviteContact: (resellerId: string, email: string, firstName: string, lastName: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  inviteContact: (resellerId: string, email: string, firstName: string, lastName: string, password?: string, isPrimary?: boolean) => Promise<{ success: boolean; error?: string }>;
   removeContact: (contactId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -87,9 +87,9 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     await fetchResellers();
   };
 
-  const createReseller = async (data: ResellerFormData): Promise<{ success: boolean; error?: string }> => {
+  const createReseller = async (data: ResellerFormData): Promise<{ success: boolean; error?: string; id?: string }> => {
     try {
-      const { error: insertError } = await supabase
+      const { data: inserted, error: insertError } = await supabase
         .from('resellers')
         .insert([{
           company_name: data.company_name.trim(),
@@ -98,14 +98,16 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
           contact_email: data.contact_email || null,
           contact_phone: data.contact_phone || null,
           notes: data.notes || null,
-        }]);
+        }])
+        .select('id')
+        .single();
 
       if (insertError) {
         throw new Error(insertError.message);
       }
 
       await fetchResellers();
-      return { success: true };
+      return { success: true, id: inserted.id };
     } catch (err) {
       console.error('Erreur lors de la création du revendeur:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
@@ -209,11 +211,12 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     email: string,
     firstName: string,
     lastName: string,
-    password?: string
+    password?: string,
+    isPrimary?: boolean
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       const { data, error: invokeError } = await supabase.functions.invoke('invite-reseller-contact', {
-        body: { reseller_id: resellerId, email, first_name: firstName, last_name: lastName, password: password || undefined },
+        body: { reseller_id: resellerId, email, first_name: firstName, last_name: lastName, password: password || undefined, is_primary: Boolean(isPrimary) },
       });
 
       if (invokeError) {

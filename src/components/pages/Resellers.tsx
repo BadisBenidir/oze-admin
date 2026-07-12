@@ -21,6 +21,15 @@ import {
   Mail,
 } from 'lucide-react';
 
+const generateRandomPassword = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let result = '';
+  for (let i = 0; i < 12; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return result;
+};
+
 const emptyForm: ResellerFormData = {
   company_name: '',
   legal_id: '',
@@ -63,8 +72,11 @@ export const Resellers: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingReseller, setEditingReseller] = useState<Reseller | null>(null);
   const [formData, setFormData] = useState<ResellerFormData>(emptyForm);
+  const [ownerFirstName, setOwnerFirstName] = useState('');
+  const [ownerLastName, setOwnerLastName] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [createdOwnerCredentials, setCreatedOwnerCredentials] = useState<{ email: string; password: string } | null>(null);
 
   const [contactsReseller, setContactsReseller] = useState<Reseller | null>(null);
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
@@ -76,12 +88,7 @@ export const Resellers: React.FC = () => {
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
 
   const generatePassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-    let result = '';
-    for (let i = 0; i < 12; i++) {
-      result += chars[Math.floor(Math.random() * chars.length)];
-    }
-    setInviteForm((f) => ({ ...f, password: result }));
+    setInviteForm((f) => ({ ...f, password: generateRandomPassword() }));
   };
 
   const filteredResellers = resellers.filter((r) => {
@@ -99,6 +106,9 @@ export const Resellers: React.FC = () => {
     setFormData(emptyForm);
     setEditingReseller(null);
     setFormError(null);
+    setOwnerFirstName('');
+    setOwnerLastName('');
+    setCreatedOwnerCredentials(null);
   };
 
   const openCreateModal = () => {
@@ -140,14 +150,45 @@ export const Resellers: React.FC = () => {
 
     setSaving(true);
     try {
-      const result = editingReseller
-        ? await updateReseller(editingReseller.id, formData)
-        : await createReseller(formData);
+      if (editingReseller) {
+        const result = await updateReseller(editingReseller.id, formData);
+        if (result.success) {
+          closeModal();
+        } else {
+          setFormError(result.error || 'Une erreur est survenue');
+        }
+        return;
+      }
 
-      if (result.success) {
-        closeModal();
-      } else {
+      const result = await createReseller(formData);
+      if (!result.success || !result.id) {
         setFormError(result.error || 'Une erreur est survenue');
+        return;
+      }
+
+      // Si un email de contact est fourni, on crée directement le compte de
+      // connexion principal de l'entreprise (mot de passe généré), pour ne
+      // pas avoir à repasser par la modale "Gérer les contacts" ensuite.
+      if (formData.contact_email.trim()) {
+        const password = generateRandomPassword();
+        const contactResult = await inviteContact(
+          result.id,
+          formData.contact_email.trim(),
+          ownerFirstName.trim(),
+          ownerLastName.trim(),
+          password,
+          true
+        );
+
+        if (contactResult.success) {
+          setCreatedOwnerCredentials({ email: formData.contact_email.trim(), password });
+        } else {
+          setFormError(
+            `Revendeur créé, mais la création du compte principal a échoué : ${contactResult.error || 'erreur inconnue'}. Réessaie depuis "Gérer les contacts".`
+          );
+        }
+      } else {
+        closeModal();
       }
     } finally {
       setSaving(false);
@@ -460,6 +501,44 @@ export const Resellers: React.FC = () => {
                 </div>
               )}
 
+              {createdOwnerCredentials ? (
+                <div className="space-y-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+                    <p className="text-sm font-medium text-green-800">
+                      Revendeur créé, avec un compte principal prêt à l'emploi. Communique ces identifiants à l'administrateur de l'entreprise (ils ne seront plus affichés) :
+                    </p>
+                    <div className="bg-white rounded-lg border border-green-200 p-3 space-y-1">
+                      <p className="text-xs text-gray-500">Email</p>
+                      <p className="text-sm font-mono text-gray-900">{createdOwnerCredentials.email}</p>
+                      <p className="text-xs text-gray-500 mt-1">Mot de passe</p>
+                      <p className="text-sm font-mono text-gray-900">{createdOwnerCredentials.password}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigator.clipboard.writeText(
+                          `Email : ${createdOwnerCredentials.email}\nMot de passe : ${createdOwnerCredentials.password}`
+                        )
+                      }
+                      className="text-xs text-green-700 underline"
+                    >
+                      Copier
+                    </button>
+                    <p className="text-xs text-gray-500 pt-1">
+                      Ce contact est le compte "principal" de l'entreprise : il pourra lui-même créer des accès pour ses collègues depuis son espace.
+                    </p>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                    >
+                      Fermer
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Nom de l'entreprise *</label>
@@ -522,6 +601,36 @@ export const Resellers: React.FC = () => {
                   </div>
                 </div>
 
+                {!editingReseller && (
+                  <div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Prénom du contact principal</label>
+                        <input
+                          type="text"
+                          value={ownerFirstName}
+                          onChange={(e) => setOwnerFirstName(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Nom du contact principal</label>
+                        <input
+                          type="text"
+                          value={ownerLastName}
+                          onChange={(e) => setOwnerLastName(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                    {formData.contact_email.trim() && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        Un compte de connexion sera créé automatiquement pour cet email, avec un mot de passe généré à te communiquer toi-même à l'administrateur de l'entreprise. Il pourra ensuite créer des accès pour ses collègues.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes internes</label>
                   <textarea
@@ -550,6 +659,7 @@ export const Resellers: React.FC = () => {
                   </button>
                 </div>
               </form>
+              )}
             </div>
           </div>
         </div>

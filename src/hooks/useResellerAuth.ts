@@ -12,6 +12,8 @@ export interface ResellerProfile {
   company_name: string
   discount_percent: number
   reseller_status: 'pending' | 'active' | 'suspended'
+  /** Contact principal de l'entreprise : seul rôle autorisé à gérer les autres comptes de son équipe */
+  is_primary: boolean
 }
 
 interface ResellerAuthState {
@@ -45,7 +47,7 @@ export const useResellerAuth = () => {
         .select(`
           id, email, first_name, last_name, role,
           reseller_contacts!inner(
-            reseller_id,
+            reseller_id, is_primary,
             resellers!inner(company_name, discount_percent, status)
           )
         `)
@@ -82,6 +84,7 @@ export const useResellerAuth = () => {
           company_name: reseller.company_name,
           discount_percent: reseller.discount_percent,
           reseller_status: reseller.status,
+          is_primary: Boolean(contact.is_primary),
         },
         pendingReason: null,
       }
