@@ -38,7 +38,7 @@ export const CartPanel: React.FC<CartPanelProps> = ({ isOpen, onClose, cart }) =
     setSubmitting(false);
 
     if (result.success) {
-      setSuccess(`Commande ${result.orderNumber || ''} soumise, en attente de validation par OZË Paris.`);
+      setSuccess(`Commande ${result.orderNumber || ''} confirmée. Retrouve-la dans "Mes commandes".`);
       setAddress(emptyAddress);
     } else {
       setError(result.error || 'Une erreur est survenue');
@@ -51,7 +51,7 @@ export const CartPanel: React.FC<CartPanelProps> = ({ isOpen, onClose, cart }) =
         {success ? (
           <div className="text-center py-6">
             <CheckCircle2 className="h-10 w-10 text-green-600 mx-auto mb-3" />
-            <p className="text-sm text-gray-900 font-medium mb-1">Commande envoyée</p>
+            <p className="text-sm text-gray-900 font-medium mb-1">Commande confirmée</p>
             <p className="text-sm text-gray-500 mb-4">{success}</p>
             <button
               onClick={handleClose}
@@ -154,11 +154,8 @@ export const CartPanel: React.FC<CartPanelProps> = ({ isOpen, onClose, cart }) =
                     disabled={submitting}
                     className="w-full px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
                   >
-                    {submitting ? 'Envoi...' : 'Soumettre la commande'}
+                    {submitting ? 'Envoi...' : 'Commander'}
                   </button>
-                  <p className="text-xs text-gray-400 text-center">
-                    Votre commande sera validée par OZË Paris avant confirmation définitive.
-                  </p>
                 </form>
               </>
             )}

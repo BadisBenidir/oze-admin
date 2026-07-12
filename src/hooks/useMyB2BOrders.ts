@@ -14,8 +14,6 @@ export interface MyB2BOrder {
   id: string;
   order_number: string;
   status: string;
-  approval_status: 'pending_approval' | 'approved' | 'rejected' | null;
-  rejection_reason: string | null;
   subtotal: number;
   total_amount: number;
   created_at: string;
@@ -34,7 +32,7 @@ export const useMyB2BOrders = (isAuthenticated: boolean = false) => {
 
       const { data, error: fetchError } = await supabase
         .from('orders')
-        .select('id, order_number, status, approval_status, rejection_reason, subtotal, total_amount, created_at, order_items(*)')
+        .select('id, order_number, status, subtotal, total_amount, created_at, order_items(*)')
         .eq('order_channel', 'b2b')
         .order('created_at', { ascending: false });
 

@@ -5,14 +5,16 @@ import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useMyB2BOrders } from '../../../hooks/useMyB2BOrders';
 import { ShoppingBag, ImageOff, AlertCircle } from 'lucide-react';
 
-const approvalBadge = (status: string | null) => {
+const statusBadge = (status: string) => {
   switch (status) {
-    case 'approved':
-      return <Badge variant="success">Validée</Badge>;
-    case 'rejected':
-      return <Badge variant="danger">Rejetée</Badge>;
+    case 'shipped':
+      return <Badge variant="info">Expédiée</Badge>;
+    case 'delivered':
+      return <Badge variant="success">Livrée</Badge>;
+    case 'cancelled':
+      return <Badge variant="danger">Annulée</Badge>;
     default:
-      return <Badge variant="warning">En attente de validation</Badge>;
+      return <Badge variant="success">Confirmée</Badge>;
   }
 };
 
@@ -61,14 +63,10 @@ export const MyOrders: React.FC = () => {
                       <p className="text-xs text-gray-500">{new Date(order.created_at).toLocaleDateString('fr-FR')}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {approvalBadge(order.approval_status)}
+                      {statusBadge(order.status)}
                       <span className="text-base font-semibold text-gray-900">{order.total_amount.toFixed(0)} €</span>
                     </div>
                   </div>
-
-                  {order.approval_status === 'rejected' && order.rejection_reason && (
-                    <p className="text-xs text-red-600 mb-3">Motif du rejet : {order.rejection_reason}</p>
-                  )}
 
                   <div className="flex flex-wrap gap-2">
                     {order.order_items.map((item) => {
