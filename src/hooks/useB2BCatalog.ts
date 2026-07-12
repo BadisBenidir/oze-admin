@@ -18,9 +18,7 @@ export interface B2BCatalogItem {
   material: string | null;
   status: string;
   created_at: string;
-  catalog_price: number;
-  discount_percent: number;
-  wholesale_price: number;
+  price: number;
   brand?: { id: string; name: string };
   category?: { id: string; name: string };
 }

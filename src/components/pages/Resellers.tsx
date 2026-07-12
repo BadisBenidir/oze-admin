@@ -12,7 +12,6 @@ import {
   AlertCircle,
   RefreshCw,
   X,
-  Percent,
   Pause,
   Play,
   Users,
@@ -33,7 +32,6 @@ const generateRandomPassword = (): string => {
 const emptyForm: ResellerFormData = {
   company_name: '',
   legal_id: '',
-  discount_percent: 10,
   contact_email: '',
   contact_phone: '',
   notes: '',
@@ -121,7 +119,6 @@ export const Resellers: React.FC = () => {
     setFormData({
       company_name: reseller.company_name,
       legal_id: reseller.legal_id || '',
-      discount_percent: reseller.discount_percent,
       contact_email: reseller.contact_email || '',
       contact_phone: reseller.contact_phone || '',
       notes: reseller.notes || '',
@@ -141,10 +138,6 @@ export const Resellers: React.FC = () => {
 
     if (!formData.company_name.trim()) {
       setFormError('Le nom de l\'entreprise est obligatoire');
-      return;
-    }
-    if (formData.discount_percent < 0 || formData.discount_percent > 100) {
-      setFormError('La remise doit être comprise entre 0 et 100');
       return;
     }
 
@@ -375,7 +368,6 @@ export const Resellers: React.FC = () => {
                   <tr className="border-b border-gray-100">
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Entreprise</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden sm:table-cell">Statut</th>
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden md:table-cell">Remise</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden lg:table-cell">Contacts</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Actions</th>
                   </tr>
@@ -389,9 +381,6 @@ export const Resellers: React.FC = () => {
                         </td>
                         <td className="py-4 px-4 md:px-6 hidden sm:table-cell">
                           <div className="h-6 w-16 bg-gray-200 rounded animate-pulse" />
-                        </td>
-                        <td className="py-4 px-4 md:px-6 hidden md:table-cell">
-                          <div className="h-4 w-12 bg-gray-200 rounded animate-pulse" />
                         </td>
                         <td className="py-4 px-4 md:px-6 hidden lg:table-cell">
                           <div className="h-4 w-8 bg-gray-200 rounded animate-pulse" />
@@ -420,12 +409,6 @@ export const Resellers: React.FC = () => {
                           </div>
                         </td>
                         <td className="py-4 px-4 md:px-6 hidden sm:table-cell">{statusBadge(reseller.status)}</td>
-                        <td className="py-4 px-4 md:px-6 hidden md:table-cell">
-                          <div className="flex items-center gap-1 text-sm font-semibold text-gray-900">
-                            <Percent className="h-4 w-4 text-gray-400" />
-                            {reseller.discount_percent}%
-                          </div>
-                        </td>
                         <td className="py-4 px-4 md:px-6 hidden lg:table-cell">
                           <div className="flex items-center gap-1 text-sm text-gray-600">
                             <Users className="h-4 w-4 text-gray-400" />
@@ -552,32 +535,14 @@ export const Resellers: React.FC = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">SIRET / TVA</label>
-                    <input
-                      type="text"
-                      value={formData.legal_id}
-                      onChange={(e) => setFormData({ ...formData, legal_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Remise accordée *</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={formData.discount_percent}
-                        onChange={(e) => setFormData({ ...formData, discount_percent: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent pr-8"
-                        min="0"
-                        max="100"
-                        step="0.5"
-                        required
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
-                    </div>
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">SIRET / TVA</label>
+                  <input
+                    type="text"
+                    value={formData.legal_id}
+                    onChange={(e) => setFormData({ ...formData, legal_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

@@ -7,8 +7,7 @@ export interface B2BCartItem {
   name: string;
   product_code: string;
   image: string | null;
-  catalog_price: number;
-  wholesale_price: number;
+  price: number;
 }
 
 interface SubmitResult {
@@ -23,8 +22,7 @@ const toCartItem = (product: B2BCatalogItem): B2BCartItem => ({
   name: product.name,
   product_code: product.product_code,
   image: product.images?.[product.main_image_index] || product.images?.[0] || null,
-  catalog_price: product.catalog_price,
-  wholesale_price: product.wholesale_price,
+  price: product.price,
 });
 
 export const useB2BCart = (resellerId: string | undefined) => {
@@ -64,7 +62,7 @@ export const useB2BCart = (resellerId: string | undefined) => {
 
   const isInCart = (id: string) => items.some((i) => i.id === id);
 
-  const subtotal = items.reduce((sum, i) => sum + i.wholesale_price, 0);
+  const subtotal = items.reduce((sum, i) => sum + i.price, 0);
 
   const submitOrder = async (shippingAddress: Record<string, unknown>): Promise<SubmitResult> => {
     if (items.length === 0) {

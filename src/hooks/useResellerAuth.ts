@@ -10,7 +10,6 @@ export interface ResellerProfile {
   role: string
   reseller_id: string
   company_name: string
-  discount_percent: number
   reseller_status: 'pending' | 'active' | 'suspended'
   /** Contact principal de l'entreprise : seul rôle autorisé à gérer les autres comptes de son équipe */
   is_primary: boolean
@@ -48,7 +47,7 @@ export const useResellerAuth = () => {
           id, email, first_name, last_name, role,
           reseller_contacts!inner(
             reseller_id, is_primary,
-            resellers!inner(company_name, discount_percent, status)
+            resellers!inner(company_name, status)
           )
         `)
         .eq('id', userId)
@@ -82,7 +81,6 @@ export const useResellerAuth = () => {
           role: data.role,
           reseller_id: contact.reseller_id,
           company_name: reseller.company_name,
-          discount_percent: reseller.discount_percent,
           reseller_status: reseller.status,
           is_primary: Boolean(contact.is_primary),
         },

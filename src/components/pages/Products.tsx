@@ -457,22 +457,28 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
                         'draft': 'Brouillon',
                         'for-sale-online': 'En vente en ligne',
                         'for-sale-other-platform': 'Autre plateforme',
+                        'for-sale-b2b': 'Revendeurs B2B',
                         'sold-online': 'Vendu en ligne',
                         'sold-other-platform': 'Vendu ailleurs',
                         'sold-display': 'Vendu - Affiché',
                         'for-auction-live': 'Live enchères',
-                        'sold-auction': 'Vendu (live)'
+                        'sold-auction': 'Vendu (live)',
+                        'reserved-b2b': 'Réservé (B2B)',
+                        'sold-b2b': 'Vendu (B2B)'
                       };
 
                       const statusColors: { [key: string]: string } = {
                         'draft': 'bg-gray-100 text-gray-800',
                         'for-sale-online': 'bg-green-100 text-green-800',
                         'for-sale-other-platform': 'bg-blue-100 text-blue-800',
+                        'for-sale-b2b': 'bg-teal-100 text-teal-800',
                         'sold-online': 'bg-orange-100 text-orange-800',
                         'sold-other-platform': 'bg-yellow-100 text-yellow-800',
                         'sold-display': 'bg-purple-100 text-purple-800',
                         'for-auction-live': 'bg-indigo-100 text-indigo-800',
-                        'sold-auction': 'bg-pink-100 text-pink-800'
+                        'sold-auction': 'bg-pink-100 text-pink-800',
+                        'reserved-b2b': 'bg-amber-100 text-amber-800',
+                        'sold-b2b': 'bg-teal-100 text-teal-800'
                       };
 
                       const marginPercentage = status.totalSaleValue > 0 
@@ -973,7 +979,7 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
         </div>
       )}
 
-{/* Search and Filters */}      <div className="mb-4 md:mb-6 space-y-4">        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">          <div className="relative w-full md:max-w-md">            <input              type="text"              placeholder="Rechercher par nom, marque ou SKU..."              value={filters.search || ''}              onChange={(e) => setFilters({ ...filters, search: e.target.value || undefined })}              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"            />            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">              <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />              </svg>            </div>          </div>          <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-3">            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"              value={filters.categoryId || ''}              onChange={(e) => setFilters({ ...filters, categoryId: e.target.value || undefined })}            >              <option value="">Toutes catégories</option>              {categories.map((category) => (                <option key={category.id} value={category.id}>{category.name}</option>              ))}            </select>            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"              value={filters.status || ''}              onChange={(e) => setFilters({ ...filters, status: e.target.value || undefined })}            >              <option value="">Tous statuts</option>              <option value="draft">Brouillon</option>              <option value="for-sale-online">En vente en ligne</option>              <option value="for-sale-other-platform">Autre plateforme</option>              <option value="for-auction-live">Live enchères</option>              <option value="sold-online">Vendu en ligne</option>              <option value="sold-other-platform">Vendu ailleurs</option>              <option value="sold-display">Vendu - Affiché</option>              <option value="sold-auction">Vendu (live)</option>            </select>            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm md:col-span-1 col-span-2"              value={filters.sortBy || 'recent'}              onChange={(e) => setFilters({ ...filters, sortBy: e.target.value as ProductFilters['sortBy'] })}            >              <option value="recent">Récent</option>              <option value="oldest">Plus ancien</option>              <option value="price-asc">Prix croissant</option>              <option value="price-desc">Prix décroissant</option>            </select>            <select className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm hidden md:block">              <option>20 par page</option>              <option>50 par page</option>              <option>100 par page</option>            </select>          </div>        </div>      </div>      <Card>
+{/* Search and Filters */}      <div className="mb-4 md:mb-6 space-y-4">        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">          <div className="relative w-full md:max-w-md">            <input              type="text"              placeholder="Rechercher par nom, marque ou SKU..."              value={filters.search || ''}              onChange={(e) => setFilters({ ...filters, search: e.target.value || undefined })}              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"            />            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">              <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />              </svg>            </div>          </div>          <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-3">            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"              value={filters.categoryId || ''}              onChange={(e) => setFilters({ ...filters, categoryId: e.target.value || undefined })}            >              <option value="">Toutes catégories</option>              {categories.map((category) => (                <option key={category.id} value={category.id}>{category.name}</option>              ))}            </select>            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"              value={filters.status || ''}              onChange={(e) => setFilters({ ...filters, status: e.target.value || undefined })}            >              <option value="">Tous statuts</option>              <option value="draft">Brouillon</option>              <option value="for-sale-online">En vente en ligne</option>              <option value="for-sale-other-platform">Autre plateforme</option>              <option value="for-sale-b2b">Revendeurs B2B</option>              <option value="for-auction-live">Live enchères</option>              <option value="sold-online">Vendu en ligne</option>              <option value="sold-other-platform">Vendu ailleurs</option>              <option value="sold-display">Vendu - Affiché</option>              <option value="sold-auction">Vendu (live)</option>            </select>            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm md:col-span-1 col-span-2"              value={filters.sortBy || 'recent'}              onChange={(e) => setFilters({ ...filters, sortBy: e.target.value as ProductFilters['sortBy'] })}            >              <option value="recent">Récent</option>              <option value="oldest">Plus ancien</option>              <option value="price-asc">Prix croissant</option>              <option value="price-desc">Prix décroissant</option>            </select>            <select className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm hidden md:block">              <option>20 par page</option>              <option>50 par page</option>              <option>100 par page</option>            </select>          </div>        </div>      </div>      <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto -mx-4 md:mx-0">
             <table className="w-full">
@@ -1074,15 +1080,18 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
                       </td>
                       <td className="py-3 md:py-4 px-4 md:px-6">
                         <Badge variant={
-                          product.status === 'for-sale-online' ? 'success' :
-                          product.status === 'sold-online' || product.status === 'sold-other-platform' || product.status === 'sold-auction' ? 'warning' :
-                          product.status === 'sold-display' || product.status === 'for-auction-live' ? 'info' :
+                          product.status === 'for-sale-online' || product.status === 'for-sale-b2b' ? 'success' :
+                          product.status === 'sold-online' || product.status === 'sold-other-platform' || product.status === 'sold-auction' || product.status === 'sold-b2b' ? 'warning' :
+                          product.status === 'sold-display' || product.status === 'for-auction-live' || product.status === 'reserved-b2b' ? 'info' :
                           product.status === 'draft' ? 'default' :
                           'info'
                         }>
                           {product.status === 'draft' ? 'Brouillon' :
                            product.status === 'for-sale-online' ? 'En vente' :
                            product.status === 'for-sale-other-platform' ? 'Autre plateforme' :
+                           product.status === 'for-sale-b2b' ? 'Revendeurs B2B' :
+                           product.status === 'reserved-b2b' ? 'Réservé (B2B)' :
+                           product.status === 'sold-b2b' ? 'Vendu (B2B)' :
                            product.status === 'for-auction-live' ? 'Live enchères' :
                            product.status === 'sold-online' ? 'Vendu' :
                            product.status === 'sold-display' ? 'Vendu - Affiché' :

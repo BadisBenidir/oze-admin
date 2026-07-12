@@ -1162,6 +1162,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId 
             </optgroup>
             <optgroup label="🏪 Disponible à la vente">
               <option value="for-sale-other-platform">À vendre sur une autre plateforme</option>
+              <option value="for-sale-b2b">Revendeurs B2B uniquement</option>
             </optgroup>
             <optgroup label="🔨 Live enchères">
               <option value="for-auction-live">À vendre en live enchères</option>

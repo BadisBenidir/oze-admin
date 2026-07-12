@@ -60,7 +60,6 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
                   <div className="px-4 py-3 border-b border-gray-100">
                     <p className="text-sm font-medium text-gray-900">{profile ? `${profile.first_name} ${profile.last_name}` : 'Revendeur'}</p>
                     <p className="text-xs text-gray-500">{profile?.email}</p>
-                    <p className="text-xs text-blue-600 mt-1">Remise : {profile?.discount_percent}%</p>
                   </div>
                   <button
                     onClick={() => {

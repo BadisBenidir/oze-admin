@@ -85,7 +85,7 @@ export const CartPanel: React.FC<CartPanelProps> = ({ isOpen, onClose, cart }) =
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                        <p className="text-xs text-gray-500">{item.wholesale_price.toFixed(0)} €</p>
+                        <p className="text-xs text-gray-500">{item.price.toFixed(0)} €</p>
                       </div>
                     </div>
                     <button

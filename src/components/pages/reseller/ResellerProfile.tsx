@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { supabase } from '../../../lib/supabase';
-import { Building2, Percent, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Building2, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export const ResellerProfile: React.FC = () => {
   const { profile } = useResellerAuth();
@@ -51,10 +51,6 @@ export const ResellerProfile: React.FC = () => {
           <div className="flex items-center gap-2 text-sm text-gray-700">
             <Building2 className="h-4 w-4 text-gray-400" />
             <span className="font-medium">{profile.company_name}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-700">
-            <Percent className="h-4 w-4 text-gray-400" />
-            <span>Remise accordée : <span className="font-semibold">{profile.discount_percent}%</span></span>
           </div>
         </CardContent>
       </Card>

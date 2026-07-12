@@ -1,58 +1,51 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
-export interface ResellerMargin {
+export interface ResellerRevenue {
   reseller_id: string;
   company_name: string;
   orders_count: number;
-  wholesale_total: number;
-  catalog_total: number;
-  margin_total: number;
+  total_revenue: number;
 }
 
-export const useB2BMargins = (isAuthenticated: boolean = false) => {
-  const [margins, setMargins] = useState<ResellerMargin[]>([]);
+export const useB2BRevenue = (isAuthenticated: boolean = false) => {
+  const [revenue, setRevenue] = useState<ResellerRevenue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchMargins = useCallback(async () => {
+  const fetchRevenue = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
       const { data, error: fetchError } = await supabase
-        .from('b2b_order_margins')
-        .select('reseller_id, wholesale_subtotal, catalog_subtotal, resellers(company_name)');
+        .from('b2b_reseller_revenue')
+        .select('reseller_id, subtotal, resellers(company_name)');
 
       if (fetchError) {
         throw new Error(fetchError.message);
       }
 
-      const byReseller = new Map<string, ResellerMargin>();
+      const byReseller = new Map<string, ResellerRevenue>();
       for (const row of (data || []) as unknown as Array<{
         reseller_id: string;
-        wholesale_subtotal: number;
-        catalog_subtotal: number;
+        subtotal: number;
         resellers: { company_name: string } | null;
       }>) {
         const existing = byReseller.get(row.reseller_id) || {
           reseller_id: row.reseller_id,
           company_name: row.resellers?.company_name || '—',
           orders_count: 0,
-          wholesale_total: 0,
-          catalog_total: 0,
-          margin_total: 0,
+          total_revenue: 0,
         };
         existing.orders_count += 1;
-        existing.wholesale_total += Number(row.wholesale_subtotal) || 0;
-        existing.catalog_total += Number(row.catalog_subtotal) || 0;
-        existing.margin_total = existing.catalog_total - existing.wholesale_total;
+        existing.total_revenue += Number(row.subtotal) || 0;
         byReseller.set(row.reseller_id, existing);
       }
 
-      setMargins(Array.from(byReseller.values()).sort((a, b) => b.margin_total - a.margin_total));
+      setRevenue(Array.from(byReseller.values()).sort((a, b) => b.total_revenue - a.total_revenue));
     } catch (err) {
-      console.error('Erreur lors du chargement des marges B2B:', err);
+      console.error('Erreur lors du chargement du chiffre d\'affaires B2B:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
     } finally {
       setLoading(false);
@@ -64,8 +57,8 @@ export const useB2BMargins = (isAuthenticated: boolean = false) => {
       setLoading(false);
       return;
     }
-    fetchMargins();
-  }, [isAuthenticated, fetchMargins]);
+    fetchRevenue();
+  }, [isAuthenticated, fetchRevenue]);
 
-  return { margins, loading, error, refresh: fetchMargins };
+  return { revenue, loading, error, refresh: fetchRevenue };
 };

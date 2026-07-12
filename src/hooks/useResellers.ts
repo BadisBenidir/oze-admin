@@ -6,7 +6,6 @@ export interface Reseller {
   company_name: string;
   legal_id: string | null;
   status: 'pending' | 'active' | 'suspended';
-  discount_percent: number;
   contact_email: string | null;
   contact_phone: string | null;
   billing_address: Record<string, unknown> | null;
@@ -19,7 +18,6 @@ export interface Reseller {
 export interface ResellerFormData {
   company_name: string;
   legal_id: string;
-  discount_percent: number;
   contact_email: string;
   contact_phone: string;
   notes: string;
@@ -94,7 +92,6 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
         .insert([{
           company_name: data.company_name.trim(),
           legal_id: data.legal_id || null,
-          discount_percent: data.discount_percent,
           contact_email: data.contact_email || null,
           contact_phone: data.contact_phone || null,
           notes: data.notes || null,

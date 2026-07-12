@@ -17,9 +17,7 @@ export const Catalog: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Catalogue</h3>
-          <p className="text-sm text-gray-500">
-            Remise appliquée : <span className="font-semibold text-gray-900">{profile?.discount_percent}%</span>
-          </p>
+          <p className="text-sm text-gray-500">Pièces réservées aux revendeurs</p>
         </div>
         <button
           onClick={() => setShowCart(true)}
@@ -121,10 +119,7 @@ const ProductCard: React.FC<{ product: B2BCatalogItem; inCart: boolean; onAdd: (
         {product.brand?.name && <p className="text-xs text-gray-500 mb-2">{product.brand.name}</p>}
         <div className="mt-auto space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-base font-semibold text-gray-900">{product.wholesale_price.toFixed(0)} €</span>
-            {product.discount_percent > 0 && (
-              <span className="text-xs text-gray-400 line-through">{product.catalog_price.toFixed(0)} €</span>
-            )}
+            <span className="text-base font-semibold text-gray-900">{product.price.toFixed(0)} €</span>
           </div>
           <button
             onClick={onAdd}
