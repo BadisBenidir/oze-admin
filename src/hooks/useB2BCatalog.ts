@@ -14,6 +14,8 @@ export interface B2BCatalogItem {
   main_image_index: number;
   condition: string;
   description: string | null;
+  defects: string | null;
+  defect_images: string[] | null;
   colors: string[];
   material: string | null;
   status: string;
