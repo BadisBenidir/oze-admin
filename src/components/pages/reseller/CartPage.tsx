@@ -26,6 +26,16 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack, onExpired }) =
 
   const hasAddress = Boolean(profile?.address && profile?.city && profile?.postal_code);
 
+  // Le panier a expiré pendant que la page était fermée/rechargée : le hook
+  // l'a déjà vidé au chargement, on ne fait ici que déclencher la
+  // redirection + le message d'expiration côté catalogue.
+  useEffect(() => {
+    if (cart.expiredOnLoad) {
+      onExpired();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart.expiredOnLoad]);
+
   // Compte à rebours de la session de réservation du panier : suspendu
   // pendant le traitement du paiement pour ne pas vider le panier sous les
   // pieds du revendeur au moment où il attend la redirection Stripe.

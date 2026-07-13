@@ -28,60 +28,114 @@ const toCartItem = (product: B2BCatalogItem): B2BCartItem => ({
 });
 
 export const useB2BCart = (resellerId: string | undefined) => {
-  const storageKey = resellerId ? `b2b_cart_${resellerId}` : null;
+  // Deux clés séparées et volontairement indépendantes : le panier survit à
+  // une expiration ratée côté anti-spam, l'expiration se recalcule seule si
+  // le panier a été vidé ailleurs. Scopées par revendeur pour ne pas mélanger
+  // deux sessions sur un même navigateur.
+  const cartKey = resellerId ? `b2b_cart_${resellerId}` : null;
+  const expirationKey = resellerId ? `oze_cart_expiration_${resellerId}` : null;
+
   const [items, setItems] = useState<B2BCartItem[]>([]);
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
+  // Signal ponctuel : le panier a été vidé automatiquement au chargement de
+  // la page car le délai de réservation était déjà écoulé pendant que la
+  // page était fermée/rechargée. Le composant appelant (CartPage) l'observe
+  // pour déclencher immédiatement la redirection + le message d'expiration.
+  const [expiredOnLoad, setExpiredOnLoad] = useState(false);
 
   useEffect(() => {
-    if (!storageKey) {
+    setExpiredOnLoad(false);
+
+    if (!cartKey || !expirationKey) {
       setItems([]);
       setExpiresAt(null);
       return;
     }
+
+    let loadedItems: B2BCartItem[] = [];
     try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) {
-        setItems([]);
-        setExpiresAt(null);
-        return;
+      const rawCart = localStorage.getItem(cartKey);
+      if (rawCart) {
+        const parsed = JSON.parse(rawCart);
+        // Rétrocompatibilité : une ancienne version stockait { items, expiresAt }
+        // dans la même clé que le panier.
+        loadedItems = Array.isArray(parsed) ? parsed : (parsed.items ?? []);
       }
-      const parsed = JSON.parse(raw);
-      // Rétrocompatibilité : les paniers existants stockaient un simple tableau.
-      const loadedItems: B2BCartItem[] = Array.isArray(parsed) ? parsed : (parsed.items ?? []);
-      let loadedExpiresAt: number | null = Array.isArray(parsed) ? null : (parsed.expiresAt ?? null);
-      if (loadedItems.length > 0 && (!loadedExpiresAt || loadedExpiresAt <= Date.now())) {
-        loadedExpiresAt = Date.now() + CART_SESSION_MS;
-      }
-      setItems(loadedItems);
-      setExpiresAt(loadedItems.length > 0 ? loadedExpiresAt : null);
     } catch {
+      loadedItems = [];
+    }
+
+    if (loadedItems.length === 0) {
       setItems([]);
       setExpiresAt(null);
+      localStorage.removeItem(expirationKey);
+      return;
     }
-  }, [storageKey]);
 
-  const persist = (nextItems: B2BCartItem[], nextExpiresAt: number | null) => {
+    const rawExpiration = localStorage.getItem(expirationKey);
+    let expirationTimestamp = rawExpiration ? parseInt(rawExpiration, 10) : NaN;
+
+    if (!rawExpiration || isNaN(expirationTimestamp)) {
+      // Panier non vide mais aucune expiration enregistrée (premier chargement
+      // après cette mise à jour, ou clé perdue) : on démarre une session fraîche.
+      expirationTimestamp = Date.now() + CART_SESSION_MS;
+      localStorage.setItem(expirationKey, String(expirationTimestamp));
+    }
+
+    const remainingMs = expirationTimestamp - Date.now();
+
+    if (remainingMs <= 0) {
+      // Le temps est passé pendant que la page était fermée/rechargée : on
+      // nettoie immédiatement plutôt que d'attendre le premier tick du timer.
+      localStorage.removeItem(cartKey);
+      localStorage.removeItem(expirationKey);
+      setItems([]);
+      setExpiresAt(null);
+      setExpiredOnLoad(true);
+      return;
+    }
+
+    setItems(loadedItems);
+    setExpiresAt(expirationTimestamp);
+  }, [cartKey, expirationKey]);
+
+  const persistItems = (nextItems: B2BCartItem[]) => {
     setItems(nextItems);
-    setExpiresAt(nextExpiresAt);
-    if (storageKey) {
-      localStorage.setItem(storageKey, JSON.stringify({ items: nextItems, expiresAt: nextExpiresAt }));
+    if (!cartKey || !expirationKey) return;
+
+    if (nextItems.length === 0) {
+      localStorage.removeItem(cartKey);
+      localStorage.removeItem(expirationKey);
+      setExpiresAt(null);
+      return;
+    }
+
+    localStorage.setItem(cartKey, JSON.stringify(nextItems));
+
+    // Le compte à rebours court pour toute la session panier, pas par
+    // article : on ne (re)calcule une expiration que s'il n'y en a pas déjà
+    // une valide en localStorage.
+    const rawExpiration = localStorage.getItem(expirationKey);
+    const existing = rawExpiration ? parseInt(rawExpiration, 10) : NaN;
+    if (!rawExpiration || isNaN(existing) || existing <= Date.now()) {
+      const fresh = Date.now() + CART_SESSION_MS;
+      localStorage.setItem(expirationKey, String(fresh));
+      setExpiresAt(fresh);
+    } else {
+      setExpiresAt(existing);
     }
   };
 
   const addItem = (product: B2BCatalogItem) => {
     if (items.some((i) => i.id === product.id)) return;
-    // Le compte à rebours court pour toute la session panier, pas par article :
-    // il ne redémarre donc que lorsqu'on part d'un panier vide.
-    const nextExpiresAt = items.length === 0 ? Date.now() + CART_SESSION_MS : expiresAt;
-    persist([...items, toCartItem(product)], nextExpiresAt);
+    persistItems([...items, toCartItem(product)]);
   };
 
   const removeItem = (id: string) => {
-    const next = items.filter((i) => i.id !== id);
-    persist(next, next.length > 0 ? expiresAt : null);
+    persistItems(items.filter((i) => i.id !== id));
   };
 
-  const clear = () => persist([], null);
+  const clear = () => persistItems([]);
 
   const isInCart = (id: string) => items.some((i) => i.id === id);
 
@@ -113,8 +167,7 @@ export const useB2BCart = (resellerId: string | undefined) => {
 
     if (data?.unavailable_ids?.length) {
       const unavailableIds = data.unavailable_ids;
-      const next = items.filter((i) => !unavailableIds.includes(i.id));
-      persist(next, next.length > 0 ? expiresAt : null);
+      persistItems(items.filter((i) => !unavailableIds.includes(i.id)));
     }
 
     if (!data?.url) {
@@ -125,5 +178,5 @@ export const useB2BCart = (resellerId: string | undefined) => {
     return { success: true };
   };
 
-  return { items, expiresAt, addItem, removeItem, clear, isInCart, subtotal, startCheckout };
+  return { items, expiresAt, expiredOnLoad, addItem, removeItem, clear, isInCart, subtotal, startCheckout };
 };
