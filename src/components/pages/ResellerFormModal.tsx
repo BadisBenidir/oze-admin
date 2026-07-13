@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useResellers, Reseller, ResellerFormData, emptyShippingAddress } from '../../hooks/useResellers';
+import { useGooglePlacesAutocomplete } from '../../hooks/useGooglePlacesAutocomplete';
 import { AlertCircle, X } from 'lucide-react';
 
 const generateRandomPassword = (): string => {
@@ -44,6 +45,20 @@ export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, re
   const [createdOwnerCredentials, setCreatedOwnerCredentials] = useState<{ email: string; password: string } | null>(null);
 
   const isEditing = Boolean(reseller);
+
+  const addressInputRef = useRef<HTMLInputElement>(null);
+  useGooglePlacesAutocomplete(addressInputRef, (address) => {
+    setFormData((prev) => ({
+      ...prev,
+      shipping_address: {
+        ...prev.shipping_address,
+        line1: address.line1 || prev.shipping_address.line1,
+        city: address.city || prev.shipping_address.city,
+        postal_code: address.postal_code || prev.shipping_address.postal_code,
+        country: address.country || prev.shipping_address.country,
+      },
+    }));
+  });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -294,11 +309,13 @@ export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, re
                 <label className="block text-sm font-medium text-gray-700 mb-2">Adresse de livraison</label>
                 <div className="space-y-2">
                   <input
+                    ref={addressInputRef}
                     type="text"
-                    placeholder="Adresse"
+                    placeholder="Commence à taper une adresse..."
                     value={formData.shipping_address.line1}
                     onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, line1: e.target.value } })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                    autoComplete="off"
                   />
                   <input
                     type="text"
