@@ -72,7 +72,7 @@ export const AcceptInvite: React.FC = () => {
 
     await supabase
       .from('profiles')
-      .update({ first_name: firstName.trim(), last_name: lastName.trim() })
+      .update({ first_name: firstName.trim(), last_name: lastName.trim(), activated_at: new Date().toISOString() })
       .eq('id', userData.user.id);
 
     setSubmitting(false);

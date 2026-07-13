@@ -97,65 +97,51 @@ Deno.serve(async (req: Request) => {
     // créé par un revendeur pour son équipe n'est jamais principal.
     const finalIsPrimary = isAdmin ? Boolean(is_primary) : false;
 
-    // Client admin (clé service-role) : seul habilité à créer un utilisateur Auth.
+    // Client admin (clé service-role) : seul habilité à créer/modifier un utilisateur Auth.
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Deux modes : soit l'admin fixe lui-même le mot de passe (le revendeur
-    // peut se connecter immédiatement, aucun email envoyé), soit on envoie
-    // une invitation par email classique (le revendeur choisit son mot de
-    // passe via le lien reçu).
-    const { data: created, error: createError } = password
-      ? await adminClient.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: { first_name: first_name ?? '', last_name: last_name ?? '' },
-        })
-      : await adminClient.auth.admin.inviteUserByEmail(email, {
-          data: { first_name: first_name ?? '', last_name: last_name ?? '' },
-          redirectTo: 'https://pro.ozeparis.com/accept-invite',
-        });
+    const COOLDOWN_MS = 30 * 1000;
+    const inviteRedirectTo = 'https://pro.ozeparis.com/accept-invite';
+
+    // On vérifie D'ABORD si un compte existe déjà pour cet email, pour
+    // pouvoir gérer proprement le renvoi d'invitation et l'anti-spam avant
+    // toute tentative de création (qui échouerait sinon sur "email déjà
+    // utilisé" sans aucun moyen de s'en sortir).
+    const { data: listResult, error: listError } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+    if (listError) {
+      return new Response(JSON.stringify({ error: listError.message }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const existingUser = listResult?.users.find((u) => u.email?.toLowerCase() === String(email).toLowerCase());
 
     let newUserId: string;
+    // Le mot de passe est fixé directement par l'admin : le compte est donc
+    // utilisable immédiatement, sans étape d'activation par email.
+    const activatedAt: string | null = password ? new Date().toISOString() : null;
+    let contactAlreadyLinked = false;
 
-    if (createError || !created?.user) {
-      const emailAlreadyUsed =
-        createError?.code === 'email_exists' || /already.*registered/i.test(createError?.message ?? '');
-
-      if (!emailAlreadyUsed) {
-        return new Response(JSON.stringify({ error: createError?.message ?? "Échec de la création de l'utilisateur" }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // L'email correspond déjà à un utilisateur Auth existant : plutôt que
-      // d'échouer sans recours, on va voir si ce compte peut être "adopté"
-      // comme contact revendeur (cas fréquent : une tentative précédente a
-      // échoué à mi-chemin et a laissé le compte Auth orphelin, sans profil
-      // ni rattachement). On ne l'adopte QUE s'il n'a aucun rôle conflictuel
-      // ni contact revendeur existant, pour ne jamais réassigner le compte
-      // de quelqu'un d'autre (client ou admin) silencieusement.
-      const { data: listResult, error: listError } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
-      const existingUser = listError
-        ? undefined
-        : listResult?.users.find((u) => u.email?.toLowerCase() === String(email).toLowerCase());
-
-      if (!existingUser) {
-        return new Response(JSON.stringify({ error: createError?.message ?? "Échec de la création de l'utilisateur" }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
+    if (existingUser) {
       const { data: existingProfile } = await adminClient
         .from('profiles')
-        .select('role')
+        .select('role, activated_at, last_invited_at')
         .eq('id', existingUser.id)
         .maybeSingle();
 
+      // Compte existant d'un autre type (admin/client) : jamais réassigné
+      // silencieusement à un rôle revendeur.
       if (existingProfile && existingProfile.role !== 'reseller') {
         return new Response(JSON.stringify({ error: `Cet email est déjà utilisé par un compte existant (rôle : ${existingProfile.role}). Utilise une autre adresse email.` }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Compte revendeur déjà pleinement activé : rien à faire, il doit se
+      // connecter normalement (ou passer par "mot de passe oublié").
+      if (existingProfile?.activated_at) {
+        return new Response(JSON.stringify({ error: 'Ce compte est déjà actif.' }), {
           status: 409,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -167,16 +153,16 @@ Deno.serve(async (req: Request) => {
         .eq('profile_id', existingUser.id)
         .maybeSingle();
 
-      if (existingContact) {
-        return new Response(JSON.stringify({ error: existingContact.reseller_id === reseller_id ? 'Ce contact existe déjà pour ce revendeur.' : 'Cet email est déjà rattaché à un autre revendeur.' }), {
+      if (existingContact && existingContact.reseller_id !== reseller_id) {
+        return new Response(JSON.stringify({ error: 'Cet email est déjà rattaché à un autre revendeur.' }), {
           status: 409,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      // Compte orphelin sûr à adopter : on met à jour le mot de passe si
-      // fourni, puis on continue le flux normal (upsert profil + contact).
       if (password) {
+        // Compte jamais activé, sûr à réutiliser : l'admin lui fixe un mot
+        // de passe directement, le compte devient utilisable tout de suite.
         const { error: updateError } = await adminClient.auth.admin.updateUserById(existingUser.id, {
           password,
           email_confirm: true,
@@ -187,10 +173,73 @@ Deno.serve(async (req: Request) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
-      }
+        newUserId = existingUser.id;
+        contactAlreadyLinked = Boolean(existingContact);
+      } else {
+        // Renvoi d'invitation par email : protégé par un cooldown pour
+        // éviter le spam en cas de double-clic ou de tentatives répétées.
+        if (existingProfile?.last_invited_at) {
+          const elapsedMs = Date.now() - new Date(existingProfile.last_invited_at).getTime();
+          if (elapsedMs < COOLDOWN_MS) {
+            return new Response(JSON.stringify({ error: 'Veuillez patienter 30 secondes avant de renvoyer une nouvelle invitation.' }), {
+              status: 429,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
 
-      newUserId = existingUser.id;
+        // Supabase n'offre pas de "renvoyer l'invitation" pour un compte
+        // existant : on supprime le compte jamais activé (aucune perte,
+        // aucun contact ni commande n'a jamais pu lui être rattaché) puis on
+        // en recrée un, ce qui régénère un token frais et redéclenche
+        // l'envoi de l'email (même modèle FR, même lien signé). La
+        // suppression du profil entraîne aussi celle de l'éventuel contact
+        // orphelin (contrainte ON DELETE CASCADE).
+        const { error: deleteError } = await adminClient.auth.admin.deleteUser(existingUser.id);
+        if (deleteError) {
+          return new Response(JSON.stringify({ error: deleteError.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        await adminClient.from('profiles').delete().eq('id', existingUser.id);
+
+        const { data: recreated, error: recreateError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+          data: { first_name: first_name ?? '', last_name: last_name ?? '' },
+          redirectTo: inviteRedirectTo,
+        });
+        if (recreateError || !recreated?.user) {
+          return new Response(JSON.stringify({ error: recreateError?.message ?? "Échec du renvoi de l'invitation" }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        newUserId = recreated.user.id;
+      }
     } else {
+      // Aucun compte existant pour cet email : création normale. Deux modes
+      // — soit l'admin fixe lui-même le mot de passe (compte utilisable
+      // immédiatement, aucun email envoyé), soit on envoie une invitation
+      // par email classique (le revendeur choisit son mot de passe via le
+      // lien reçu, voir AcceptInvite.tsx).
+      const { data: created, error: createError } = password
+        ? await adminClient.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { first_name: first_name ?? '', last_name: last_name ?? '' },
+          })
+        : await adminClient.auth.admin.inviteUserByEmail(email, {
+            data: { first_name: first_name ?? '', last_name: last_name ?? '' },
+            redirectTo: inviteRedirectTo,
+          });
+
+      if (createError || !created?.user) {
+        return new Response(JSON.stringify({ error: createError?.message ?? "Échec de la création de l'utilisateur" }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       newUserId = created.user.id;
     }
 
@@ -202,6 +251,8 @@ Deno.serve(async (req: Request) => {
         first_name: first_name ?? '',
         last_name: last_name ?? '',
         role: 'reseller',
+        activated_at: activatedAt,
+        last_invited_at: password ? null : new Date().toISOString(),
       });
 
     if (profileError) {
@@ -211,15 +262,17 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { error: contactError } = await adminClient
-      .from('reseller_contacts')
-      .insert({ reseller_id, profile_id: newUserId, is_primary: finalIsPrimary });
+    if (!contactAlreadyLinked) {
+      const { error: contactError } = await adminClient
+        .from('reseller_contacts')
+        .insert({ reseller_id, profile_id: newUserId, is_primary: finalIsPrimary });
 
-    if (contactError) {
-      return new Response(JSON.stringify({ error: contactError.message }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      if (contactError) {
+        return new Response(JSON.stringify({ error: contactError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     return new Response(JSON.stringify({ success: true, user_id: newUserId }), {
