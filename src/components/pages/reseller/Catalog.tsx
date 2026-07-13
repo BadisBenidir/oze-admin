@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from '../../ui/Card';
+import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useB2BCatalog, B2BCatalogItem } from '../../../hooks/useB2BCatalog';
 import { useB2BCart } from '../../../hooks/useB2BCart';
+import { ProductDetailModal, GRADE_VARIANTS, isGrade } from './ProductDetailModal';
 import { Search, ShoppingCart, ImageOff, Check, Package, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface CatalogProps {
@@ -13,6 +15,7 @@ export const Catalog: React.FC<CatalogProps> = ({ onOpenCart }) => {
   const { isReseller, profile } = useResellerAuth();
   const { items, loading, error, currentPage, totalPages, hasNextPage, hasPreviousPage, search, setSearch, setPage } = useB2BCatalog(isReseller);
   const cart = useB2BCart(profile?.reseller_id);
+  const [selectedProduct, setSelectedProduct] = useState<B2BCatalogItem | null>(null);
 
   return (
     <div className="p-4 md:p-6">
@@ -75,6 +78,7 @@ export const Catalog: React.FC<CatalogProps> = ({ onOpenCart }) => {
                 product={product}
                 inCart={cart.isInCart(product.id)}
                 onAdd={() => cart.addItem(product)}
+                onView={() => setSelectedProduct(product)}
               />
             ))}
       </div>
@@ -98,15 +102,24 @@ export const Catalog: React.FC<CatalogProps> = ({ onOpenCart }) => {
           </button>
         </div>
       )}
+
+      {selectedProduct && (
+        <ProductDetailModal
+          product={selectedProduct}
+          inCart={cart.isInCart(selectedProduct.id)}
+          onClose={() => setSelectedProduct(null)}
+          onAdd={() => cart.addItem(selectedProduct)}
+        />
+      )}
     </div>
   );
 };
 
-const ProductCard: React.FC<{ product: B2BCatalogItem; inCart: boolean; onAdd: () => void }> = ({ product, inCart, onAdd }) => {
+const ProductCard: React.FC<{ product: B2BCatalogItem; inCart: boolean; onAdd: () => void; onView: () => void }> = ({ product, inCart, onAdd, onView }) => {
   const image = product.images?.[product.main_image_index] || product.images?.[0];
 
   return (
-    <Card hover className="overflow-hidden flex flex-col">
+    <Card hover className="overflow-hidden flex flex-col cursor-pointer" onClick={onView}>
       <div className="h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
         {image ? (
           <img src={image} alt={product.name} className="w-full h-full object-cover" />
@@ -118,11 +131,17 @@ const ProductCard: React.FC<{ product: B2BCatalogItem; inCart: boolean; onAdd: (
         <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-1">{product.name}</p>
         {product.brand?.name && <p className="text-xs text-gray-500 mb-2">{product.brand.name}</p>}
         <div className="mt-auto space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-base font-semibold text-gray-900">{product.price.toFixed(0)} €</span>
+            {isGrade(product.condition) && (
+              <Badge variant={GRADE_VARIANTS[product.condition]}>Grade {product.condition}</Badge>
+            )}
           </div>
           <button
-            onClick={onAdd}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd();
+            }}
             disabled={inCart}
             className={`w-full flex items-center justify-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
               inCart ? 'bg-green-50 text-green-700 cursor-default' : 'bg-gray-900 text-white hover:bg-gray-800'
