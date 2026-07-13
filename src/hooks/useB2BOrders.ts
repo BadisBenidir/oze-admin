@@ -4,9 +4,10 @@ import { supabase } from '../lib/supabase';
 export interface B2BOrderItem {
   id: string;
   product_id: string;
+  quantity: number;
   unit_price: number;
   line_total: number;
-  product_snapshot: { name?: string; images?: string[]; main_image_index?: number };
+  product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string; reference?: string | null };
 }
 
 export interface B2BOrder {
@@ -15,6 +16,7 @@ export interface B2BOrder {
   status: string;
   email: string;
   subtotal: number;
+  shipping_cost: number;
   total_amount: number;
   shipping_address: Record<string, unknown>;
   created_at: string;
@@ -36,7 +38,7 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
       let query = supabase
         .from('orders')
         .select(
-          'id, order_number, status, email, subtotal, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), order_items(*)'
+          'id, order_number, status, email, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), order_items(*)'
         )
         .eq('order_channel', 'b2b');
 
