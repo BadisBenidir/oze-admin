@@ -1,15 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
+import { Modal } from '../ui/Modal';
 import { useResellers, Reseller, ResellerContact } from '../../hooks/useResellers';
 import { useB2BOrders } from '../../hooks/useB2BOrders';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-import { ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail } from 'lucide-react';
+import { ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound } from 'lucide-react';
 
 interface ResellerDetailProps {
   reseller: Reseller;
   onBack: () => void;
 }
+
+const generateTempPassword = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `Oze-${code}-${new Date().getFullYear()}`;
+};
 
 const resellerStatusBadge = (status: Reseller['status']) => {
   switch (status) {
@@ -37,13 +47,19 @@ const orderStatusBadge = (status: string) => {
 
 export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack }) => {
   const { isAdmin } = useAdminAuth();
-  const { fetchContacts } = useResellers(false);
+  const { fetchContacts, resetContactPassword } = useResellers(false);
   const { orders, loading: ordersLoading, error: ordersError } = useB2BOrders(isAdmin, reseller.id);
 
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [contactsError, setContactsError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'team' | 'orders'>('team');
+
+  const [resettingContact, setResettingContact] = useState<ResellerContact | null>(null);
+  const [newPassword, setNewPassword] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -65,6 +81,44 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   }, [reseller.id]);
 
   const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
+
+  const openResetModal = (contact: ResellerContact) => {
+    setResettingContact(contact);
+    setNewPassword(null);
+    setResetError(null);
+    setCopied(false);
+  };
+
+  const closeResetModal = () => {
+    if (resetting) return;
+    setResettingContact(null);
+    setNewPassword(null);
+    setResetError(null);
+    setCopied(false);
+  };
+
+  const handleConfirmReset = async () => {
+    if (!resettingContact) return;
+    setResetting(true);
+    setResetError(null);
+
+    const password = generateTempPassword();
+    const result = await resetContactPassword(resettingContact.profile_id, password);
+
+    setResetting(false);
+    if (result.success) {
+      setNewPassword(password);
+    } else {
+      setResetError(result.error || 'Erreur lors de la réinitialisation');
+    }
+  };
+
+  const handleCopyPassword = () => {
+    if (!newPassword) return;
+    navigator.clipboard.writeText(newPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="p-4 md:p-6">
@@ -162,20 +216,21 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Email</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Rôle</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Statut</th>
+                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {contactsLoading ? (
                     [...Array(2)].map((_, i) => (
                       <tr key={`skeleton-${i}`} className="border-b border-gray-50">
-                        <td className="py-4 px-4 md:px-6" colSpan={4}>
+                        <td className="py-4 px-4 md:px-6" colSpan={5}>
                           <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
                         </td>
                       </tr>
                     ))
                   ) : contacts.length === 0 ? (
                     <tr>
-                      <td className="py-8 px-4 md:px-6 text-center text-sm text-gray-500" colSpan={4}>
+                      <td className="py-8 px-4 md:px-6 text-center text-sm text-gray-500" colSpan={5}>
                         Aucun sous-compte pour ce revendeur.
                       </td>
                     </tr>
@@ -194,6 +249,15 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                         </td>
                         <td className="py-3 px-4 md:px-6">
                           <Badge variant="success">Actif</Badge>
+                        </td>
+                        <td className="py-3 px-4 md:px-6">
+                          <button
+                            onClick={() => openResetModal(c)}
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Régénérer le mot de passe"
+                          >
+                            <Key className="h-4 w-4" />
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -263,6 +327,83 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
           </CardContent>
         </Card>
       )}
+
+      {/* Modal réinitialisation mot de passe */}
+      <Modal
+        isOpen={!!resettingContact}
+        onClose={closeResetModal}
+        title="Régénérer le mot de passe"
+      >
+        <div className="space-y-4">
+          {!newPassword ? (
+            <>
+              <p className="text-sm text-gray-700">
+                Réinitialiser le mot de passe de{' '}
+                <strong>{resettingContact?.first_name} {resettingContact?.last_name}</strong> ({resettingContact?.email}) ?
+                Un nouveau mot de passe temporaire sera généré et son ancien mot de passe ne fonctionnera plus.
+              </p>
+
+              {resetError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-700">{resetError}</p>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeResetModal}
+                  disabled={resetting}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmReset}
+                  disabled={resetting}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
+                >
+                  <KeyRound className="h-4 w-4" />
+                  <span>{resetting ? 'Génération...' : 'Confirmer la régénération'}</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+                <p className="text-sm font-medium text-green-800">
+                  Nouveau mot de passe généré pour {resettingContact?.first_name} {resettingContact?.last_name} :
+                </p>
+                <div className="flex items-center justify-between bg-white rounded-lg border border-green-200 px-4 py-3">
+                  <span className="text-lg font-mono font-semibold text-gray-900 tracking-wide">{newPassword}</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyPassword}
+                    className="flex items-center space-x-1 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-xs flex-shrink-0 ml-3"
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copied ? 'Copié' : 'Copier'}</span>
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Ce mot de passe ne sera plus affiché ensuite — copie-le et transmets-le directement à {resettingContact?.first_name}.
+                </p>
+              </div>
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={closeResetModal}
+                  className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                  Fermer
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };

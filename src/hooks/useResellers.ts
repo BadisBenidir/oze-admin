@@ -46,6 +46,7 @@ interface UseResellersResult {
   fetchContacts: (resellerId: string) => Promise<ResellerContact[]>;
   inviteContact: (resellerId: string, email: string, firstName: string, lastName: string, password?: string, isPrimary?: boolean) => Promise<{ success: boolean; error?: string }>;
   removeContact: (contactId: string) => Promise<{ success: boolean; error?: string }>;
+  resetContactPassword: (profileId: string, password: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useResellers = (isAuthenticated: boolean = false): UseResellersResult => {
@@ -232,6 +233,28 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     }
   };
 
+  const resetContactPassword = async (profileId: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('reset-reseller-password', {
+        body: { profile_id: profileId, password },
+      });
+
+      if (invokeError) {
+        const message = (data && (data.error || data.message)) || invokeError.message || 'Échec de la réinitialisation';
+        throw new Error(message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error('Erreur lors de la réinitialisation du mot de passe:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
+    }
+  };
+
   const removeContact = async (contactId: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const { error: deleteError } = await supabase
@@ -271,5 +294,6 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     fetchContacts,
     inviteContact,
     removeContact,
+    resetContactPassword,
   };
 };
