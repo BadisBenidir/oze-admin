@@ -16,6 +16,9 @@ interface CheckoutResult {
   unavailableIds?: string[];
 }
 
+/** Durée de la session de réservation affichée au revendeur avant expiration du panier. */
+const CART_SESSION_MS = 15 * 60 * 1000;
+
 const toCartItem = (product: B2BCatalogItem): B2BCartItem => ({
   id: product.id,
   name: product.name,
@@ -27,37 +30,58 @@ const toCartItem = (product: B2BCatalogItem): B2BCartItem => ({
 export const useB2BCart = (resellerId: string | undefined) => {
   const storageKey = resellerId ? `b2b_cart_${resellerId}` : null;
   const [items, setItems] = useState<B2BCartItem[]>([]);
+  const [expiresAt, setExpiresAt] = useState<number | null>(null);
 
   useEffect(() => {
     if (!storageKey) {
       setItems([]);
+      setExpiresAt(null);
       return;
     }
     try {
       const raw = localStorage.getItem(storageKey);
-      setItems(raw ? JSON.parse(raw) : []);
+      if (!raw) {
+        setItems([]);
+        setExpiresAt(null);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      // Rétrocompatibilité : les paniers existants stockaient un simple tableau.
+      const loadedItems: B2BCartItem[] = Array.isArray(parsed) ? parsed : (parsed.items ?? []);
+      let loadedExpiresAt: number | null = Array.isArray(parsed) ? null : (parsed.expiresAt ?? null);
+      if (loadedItems.length > 0 && (!loadedExpiresAt || loadedExpiresAt <= Date.now())) {
+        loadedExpiresAt = Date.now() + CART_SESSION_MS;
+      }
+      setItems(loadedItems);
+      setExpiresAt(loadedItems.length > 0 ? loadedExpiresAt : null);
     } catch {
       setItems([]);
+      setExpiresAt(null);
     }
   }, [storageKey]);
 
-  const persist = (next: B2BCartItem[]) => {
-    setItems(next);
+  const persist = (nextItems: B2BCartItem[], nextExpiresAt: number | null) => {
+    setItems(nextItems);
+    setExpiresAt(nextExpiresAt);
     if (storageKey) {
-      localStorage.setItem(storageKey, JSON.stringify(next));
+      localStorage.setItem(storageKey, JSON.stringify({ items: nextItems, expiresAt: nextExpiresAt }));
     }
   };
 
   const addItem = (product: B2BCatalogItem) => {
     if (items.some((i) => i.id === product.id)) return;
-    persist([...items, toCartItem(product)]);
+    // Le compte à rebours court pour toute la session panier, pas par article :
+    // il ne redémarre donc que lorsqu'on part d'un panier vide.
+    const nextExpiresAt = items.length === 0 ? Date.now() + CART_SESSION_MS : expiresAt;
+    persist([...items, toCartItem(product)], nextExpiresAt);
   };
 
   const removeItem = (id: string) => {
-    persist(items.filter((i) => i.id !== id));
+    const next = items.filter((i) => i.id !== id);
+    persist(next, next.length > 0 ? expiresAt : null);
   };
 
-  const clear = () => persist([]);
+  const clear = () => persist([], null);
 
   const isInCart = (id: string) => items.some((i) => i.id === id);
 
@@ -89,7 +113,8 @@ export const useB2BCart = (resellerId: string | undefined) => {
 
     if (data?.unavailable_ids?.length) {
       const unavailableIds = data.unavailable_ids;
-      persist(items.filter((i) => !unavailableIds.includes(i.id)));
+      const next = items.filter((i) => !unavailableIds.includes(i.id));
+      persist(next, next.length > 0 ? expiresAt : null);
     }
 
     if (!data?.url) {
@@ -100,5 +125,5 @@ export const useB2BCart = (resellerId: string | undefined) => {
     return { success: true };
   };
 
-  return { items, addItem, removeItem, clear, isInCart, subtotal, startCheckout };
+  return { items, expiresAt, addItem, removeItem, clear, isInCart, subtotal, startCheckout };
 };

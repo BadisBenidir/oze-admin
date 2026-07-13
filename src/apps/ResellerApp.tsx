@@ -7,6 +7,7 @@ import { MainLayout } from '../components/layout/layMainLayout';
 import { ResellerHeader } from '../components/layout/resHeader';
 import { resellerNavigationItems, resellerTeamNavItem } from '../config/resellerNavigation';
 import { Catalog } from '../components/pages/reseller/Catalog';
+import { CartPage } from '../components/pages/reseller/CartPage';
 import { MyOrders } from '../components/pages/reseller/MyOrders';
 import { ResellerProfile } from '../components/pages/reseller/ResellerProfile';
 import { Team } from '../components/pages/reseller/Team';
@@ -21,6 +22,7 @@ function ResellerApp() {
 
   const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'cancel' | null>(null);
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
+  const [cartExpired, setCartExpired] = useState(false);
 
   // Retour depuis Stripe : lu une seule fois au montage, puis l'URL est
   // nettoyée pour ne pas re-déclencher au rafraîchissement de la page.
@@ -46,12 +48,19 @@ function ResellerApp() {
     navigateTo('my-orders', '');
   };
 
+  const handleCartExpired = () => {
+    setCartExpired(true);
+    navigateTo('catalog', '');
+  };
+
   const renderContent = () => {
     if (checkoutStatus === 'success') {
       return <CheckoutSuccess sessionId={checkoutSessionId} onGoToOrders={handleGoToOrders} />;
     }
 
     switch (currentTab) {
+      case 'cart':
+        return <CartPage cart={cart} onBack={() => navigateTo('catalog', '')} onExpired={handleCartExpired} />;
       case 'my-orders':
         return <MyOrders />;
       case 'profile':
@@ -60,7 +69,7 @@ function ResellerApp() {
         return <Team />;
       case 'catalog':
       default:
-        return <Catalog />;
+        return <Catalog onOpenCart={() => navigateTo('cart', '')} />;
     }
   };
 
@@ -71,6 +80,7 @@ function ResellerApp() {
         activeSubTab={activeSubTab}
         onTabChange={(tab) => {
           setCheckoutStatus(null);
+          setCartExpired(false);
           navigateTo(tab, '');
         }}
         onSubTabChange={() => {}}
@@ -81,6 +91,14 @@ function ResellerApp() {
           <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
             <p className="text-sm text-amber-800">Paiement annulé — votre panier a été conservé.</p>
             <button onClick={() => setCheckoutStatus(null)} className="p-1 text-amber-600 hover:text-amber-800">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        {cartExpired && (
+          <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+            <p className="text-sm text-amber-800">Votre session de réservation a expiré, vos articles ont été remis en vente.</p>
+            <button onClick={() => setCartExpired(false)} className="p-1 text-amber-600 hover:text-amber-800">
               <X className="h-4 w-4" />
             </button>
           </div>

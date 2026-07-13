@@ -1,16 +1,18 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useB2BCatalog, B2BCatalogItem } from '../../../hooks/useB2BCatalog';
 import { useB2BCart } from '../../../hooks/useB2BCart';
-import { CartPanel } from './CartPanel';
 import { Search, ShoppingCart, ImageOff, Check, Package, ChevronLeft, ChevronRight } from 'lucide-react';
 
-export const Catalog: React.FC = () => {
+interface CatalogProps {
+  onOpenCart: () => void;
+}
+
+export const Catalog: React.FC<CatalogProps> = ({ onOpenCart }) => {
   const { isReseller, profile } = useResellerAuth();
   const { items, loading, error, currentPage, totalPages, hasNextPage, hasPreviousPage, search, setSearch, setPage } = useB2BCatalog(isReseller);
   const cart = useB2BCart(profile?.reseller_id);
-  const [showCart, setShowCart] = useState(false);
 
   return (
     <div className="p-4 md:p-6">
@@ -20,7 +22,7 @@ export const Catalog: React.FC = () => {
           <p className="text-sm text-gray-500">Pièces réservées aux revendeurs</p>
         </div>
         <button
-          onClick={() => setShowCart(true)}
+          onClick={onOpenCart}
           className="relative flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors self-start md:self-auto"
         >
           <ShoppingCart className="h-4 w-4" />
@@ -96,8 +98,6 @@ export const Catalog: React.FC = () => {
           </button>
         </div>
       )}
-
-      <CartPanel isOpen={showCart} onClose={() => setShowCart(false)} cart={cart} />
     </div>
   );
 };
