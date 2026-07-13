@@ -113,6 +113,7 @@ Deno.serve(async (req: Request) => {
         })
       : await adminClient.auth.admin.inviteUserByEmail(email, {
           data: { first_name: first_name ?? '', last_name: last_name ?? '' },
+          redirectTo: 'https://pro.ozeparis.com/accept-invite',
         });
 
     let newUserId: string;

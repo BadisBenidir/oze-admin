@@ -1,12 +1,21 @@
 import React from 'react';
 import { useSessionRole } from './hooks/useSessionRole';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { AcceptInvite } from './components/auth/AcceptInvite';
 import { supabase } from './lib/supabase';
 import AdminApp from './apps/AdminApp';
 import ResellerApp from './apps/ResellerApp';
 
 function App() {
   const { status, role } = useSessionRole();
+
+  // Priorité absolue, indépendante de l'état de session : c'est la page de
+  // destination du lien d'invitation par email (voir `redirectTo` dans
+  // invite-reseller-contact). Elle gère elle-même son propre chargement de
+  // session, avant même que useSessionRole ait fini de se résoudre.
+  if (window.location.pathname === '/accept-invite') {
+    return <AcceptInvite />;
+  }
 
   if (status === 'loading') {
     return (
