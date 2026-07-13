@@ -13,6 +13,7 @@ export interface B2BOrder {
   id: string;
   order_number: string;
   status: string;
+  email: string;
   subtotal: number;
   total_amount: number;
   shipping_address: Record<string, unknown>;
@@ -22,7 +23,7 @@ export interface B2BOrder {
   order_items: B2BOrderItem[];
 }
 
-export const useB2BOrders = (isAuthenticated: boolean = false) => {
+export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: string) => {
   const [orders, setOrders] = useState<B2BOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,13 +33,18 @@ export const useB2BOrders = (isAuthenticated: boolean = false) => {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('orders')
         .select(
-          'id, order_number, status, subtotal, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), order_items(*)'
+          'id, order_number, status, email, subtotal, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), order_items(*)'
         )
-        .eq('order_channel', 'b2b')
-        .order('created_at', { ascending: false });
+        .eq('order_channel', 'b2b');
+
+      if (resellerId) {
+        query = query.eq('reseller_id', resellerId);
+      }
+
+      const { data, error: fetchError } = await query.order('created_at', { ascending: false });
 
       if (fetchError) {
         throw new Error(fetchError.message);
@@ -51,7 +57,7 @@ export const useB2BOrders = (isAuthenticated: boolean = false) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [resellerId]);
 
   useEffect(() => {
     if (!isAuthenticated) {

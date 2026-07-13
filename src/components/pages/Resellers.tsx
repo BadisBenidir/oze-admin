@@ -4,10 +4,12 @@ import { Badge } from '../ui/Badge';
 import { Modal } from '../ui/Modal';
 import { useResellers, Reseller, ResellerFormData, ResellerContact } from '../../hooks/useResellers';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
+import { ResellerDetail } from './ResellerDetail';
 import {
   Building2,
   Plus,
   Edit,
+  Eye,
   Trash2,
   AlertCircle,
   RefreshCw,
@@ -66,6 +68,7 @@ export const Resellers: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Reseller['status']>('all');
+  const [viewingReseller, setViewingReseller] = useState<Reseller | null>(null);
 
   const [showModal, setShowModal] = useState(false);
   const [editingReseller, setEditingReseller] = useState<Reseller | null>(null);
@@ -279,6 +282,10 @@ export const Resellers: React.FC = () => {
     }
   };
 
+  if (viewingReseller) {
+    return <ResellerDetail reseller={viewingReseller} onBack={() => setViewingReseller(null)} />;
+  }
+
   return (
     <div className="p-4 md:p-6">
       {/* Header */}
@@ -417,6 +424,13 @@ export const Resellers: React.FC = () => {
                         </td>
                         <td className="py-4 px-4 md:px-6">
                           <div className="flex items-center space-x-1">
+                            <button
+                              onClick={() => setViewingReseller(reseller)}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Détails"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
                             <button
                               onClick={() => openContactsModal(reseller)}
                               className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
