@@ -65,6 +65,7 @@ export const Resellers: React.FC = () => {
     fetchContacts,
     inviteContact,
     removeContact,
+    updateContactEmail,
   } = useResellers(isAdmin);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -150,11 +151,31 @@ export const Resellers: React.FC = () => {
     try {
       if (editingReseller) {
         const result = await updateReseller(editingReseller.id, formData);
-        if (result.success) {
-          closeModal();
-        } else {
+        if (!result.success) {
           setFormError(result.error || 'Une erreur est survenue');
+          return;
         }
+
+        // Si l'email principal a changé, on synchronise aussi l'identifiant
+        // de connexion réel du contact principal (sinon le champ ne serait
+        // qu'informatif et ne changerait rien à la connexion).
+        const newEmail = formData.contact_email.trim();
+        const previousEmail = (editingReseller.contact_email || '').trim();
+        if (newEmail && newEmail !== previousEmail) {
+          const contactsList = await fetchContacts(editingReseller.id);
+          const primaryContact = contactsList.find((c) => c.is_primary);
+          if (primaryContact) {
+            const emailResult = await updateContactEmail(primaryContact.profile_id, newEmail);
+            if (!emailResult.success) {
+              setFormError(
+                `Les informations ont été enregistrées, mais la synchronisation de l'email de connexion a échoué : ${emailResult.error || 'erreur inconnue'}.`
+              );
+              return;
+            }
+          }
+        }
+
+        closeModal();
         return;
       }
 
@@ -563,13 +584,18 @@ export const Resellers: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email de contact</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email principal {editingReseller && <span className="text-gray-400 font-normal">(connexion)</span>}
+                    </label>
                     <input
                       type="email"
                       value={formData.contact_email}
                       onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                     />
+                    {editingReseller && (
+                      <p className="text-xs text-gray-500 mt-1">Modifier cet email met aussi à jour l'identifiant de connexion du contact principal.</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
@@ -645,13 +671,22 @@ export const Resellers: React.FC = () => {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                       />
                     </div>
-                    <input
-                      type="text"
-                      placeholder="Pays"
+                    <select
                       value={formData.shipping_address.country}
                       onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, country: e.target.value } })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                    />
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
+                    >
+                      <option value="France">France</option>
+                      <option value="Belgique">Belgique</option>
+                      <option value="Suisse">Suisse</option>
+                      <option value="Luxembourg">Luxembourg</option>
+                      <option value="Monaco">Monaco</option>
+                      <option value="Allemagne">Allemagne</option>
+                      <option value="Italie">Italie</option>
+                      <option value="Espagne">Espagne</option>
+                      <option value="Royaume-Uni">Royaume-Uni</option>
+                      <option value="Autre">Autre</option>
+                    </select>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Utilisée pour toutes les commandes de cette entreprise (contact principal et sous-comptes).</p>
                 </div>
@@ -680,7 +715,7 @@ export const Resellers: React.FC = () => {
                     disabled={saving}
                     className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
                   >
-                    {saving ? 'Enregistrement...' : editingReseller ? 'Modifier' : 'Créer'}
+                    {saving ? 'Enregistrement...' : editingReseller ? 'Sauvegarder les modifications' : 'Créer'}
                   </button>
                 </div>
               </form>

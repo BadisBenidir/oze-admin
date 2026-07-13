@@ -59,6 +59,7 @@ interface UseResellersResult {
   inviteContact: (resellerId: string, email: string, firstName: string, lastName: string, password?: string, isPrimary?: boolean) => Promise<{ success: boolean; error?: string }>;
   removeContact: (contactId: string) => Promise<{ success: boolean; error?: string }>;
   resetContactPassword: (profileId: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  updateContactEmail: (profileId: string, newEmail: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useResellers = (isAuthenticated: boolean = false): UseResellersResult => {
@@ -273,6 +274,28 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     }
   };
 
+  const updateContactEmail = async (profileId: string, newEmail: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('update-reseller-contact-email', {
+        body: { profile_id: profileId, new_email: newEmail },
+      });
+
+      if (invokeError) {
+        const message = (data && (data.error || data.message)) || invokeError.message || "Échec du changement d'email";
+        throw new Error(message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error("Erreur lors du changement d'email:", err);
+      return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
+    }
+  };
+
   const removeContact = async (contactId: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const { error: deleteError } = await supabase
@@ -313,5 +336,6 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     inviteContact,
     removeContact,
     resetContactPassword,
+    updateContactEmail,
   };
 };
