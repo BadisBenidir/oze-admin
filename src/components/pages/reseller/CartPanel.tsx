@@ -15,8 +15,7 @@ export const CartPanel: React.FC<CartPanelProps> = ({ isOpen, onClose, cart }) =
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const address = profile?.shipping_address;
-  const hasAddress = Boolean(address?.line1 && address?.city && address?.postal_code);
+  const hasAddress = Boolean(profile?.address && profile?.city && profile?.postal_code);
 
   const handleClose = () => {
     if (submitting) return;
@@ -25,10 +24,16 @@ export const CartPanel: React.FC<CartPanelProps> = ({ isOpen, onClose, cart }) =
   };
 
   const handlePay = async () => {
-    if (!hasAddress || !address) return;
+    if (!hasAddress || !profile) return;
     setError(null);
     setSubmitting(true);
-    const result = await cart.startCheckout(address);
+    const result = await cart.startCheckout({
+      line1: profile.address || '',
+      line2: '',
+      city: profile.city || '',
+      postal_code: profile.postal_code || '',
+      country: profile.country || 'France',
+    });
     // En cas de succès, startCheckout redirige immédiatement vers Stripe —
     // on ne repasse jamais ici. setSubmitting(false) ne sert donc que le cas
     // d'erreur (ex : article devenu indisponible).
@@ -88,12 +93,11 @@ export const CartPanel: React.FC<CartPanelProps> = ({ isOpen, onClose, cart }) =
 
             <div className="border-t border-gray-100 pt-3">
               <p className="text-sm font-medium text-gray-700 mb-2">Adresse de livraison</p>
-              {hasAddress && address ? (
+              {hasAddress && profile ? (
                 <div className="bg-gray-50 rounded-lg p-3 flex items-start gap-2">
                   <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-gray-900">
-                    Livré à : {profile?.company_name}, {address.line1}
-                    {address.line2 ? `, ${address.line2}` : ''}, {address.postal_code} {address.city}, {address.country}
+                    Livré à : {profile.company_name}, {profile.address}, {profile.postal_code} {profile.city}, {profile.country}
                   </p>
                 </div>
               ) : (

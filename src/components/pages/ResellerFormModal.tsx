@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useResellers, Reseller, ResellerFormData, emptyShippingAddress } from '../../hooks/useResellers';
+import { useResellers, Reseller, ResellerFormData, emptyResellerForm } from '../../hooks/useResellers';
 import { useGooglePlacesAutocomplete } from '../../hooks/useGooglePlacesAutocomplete';
 import { AlertCircle, X } from 'lucide-react';
 
@@ -10,15 +10,6 @@ const generateRandomPassword = (): string => {
     result += chars[Math.floor(Math.random() * chars.length)];
   }
   return result;
-};
-
-const emptyForm: ResellerFormData = {
-  company_name: '',
-  legal_id: '',
-  contact_email: '',
-  contact_phone: '',
-  notes: '',
-  shipping_address: emptyShippingAddress,
 };
 
 interface ResellerFormModalProps {
@@ -37,7 +28,7 @@ interface ResellerFormModalProps {
 export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, reseller, onClose, onSaved }) => {
   const { createReseller, updateReseller, fetchContacts, inviteContact, updateContactEmail } = useResellers(false);
 
-  const [formData, setFormData] = useState<ResellerFormData>(emptyForm);
+  const [formData, setFormData] = useState<ResellerFormData>(emptyResellerForm);
   const [ownerFirstName, setOwnerFirstName] = useState('');
   const [ownerLastName, setOwnerLastName] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -47,16 +38,13 @@ export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, re
   const isEditing = Boolean(reseller);
 
   const addressInputRef = useRef<HTMLInputElement>(null);
-  useGooglePlacesAutocomplete(addressInputRef, (address) => {
+  useGooglePlacesAutocomplete(addressInputRef, (place) => {
     setFormData((prev) => ({
       ...prev,
-      shipping_address: {
-        ...prev.shipping_address,
-        line1: address.line1 || prev.shipping_address.line1,
-        city: address.city || prev.shipping_address.city,
-        postal_code: address.postal_code || prev.shipping_address.postal_code,
-        country: address.country || prev.shipping_address.country,
-      },
+      address: place.address || prev.address,
+      city: place.city || prev.city,
+      postal_code: place.postal_code || prev.postal_code,
+      country: place.country || prev.country,
     }));
   });
 
@@ -74,9 +62,12 @@ export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, re
             contact_email: reseller.contact_email || '',
             contact_phone: reseller.contact_phone || '',
             notes: reseller.notes || '',
-            shipping_address: reseller.shipping_address || emptyShippingAddress,
+            address: reseller.address || '',
+            postal_code: reseller.postal_code || '',
+            city: reseller.city || '',
+            country: reseller.country || 'France',
           }
-        : emptyForm
+        : emptyResellerForm
     );
   }, [isOpen, reseller]);
 
@@ -312,37 +303,30 @@ export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, re
                     ref={addressInputRef}
                     type="text"
                     placeholder="Commence à taper une adresse..."
-                    value={formData.shipping_address.line1}
-                    onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, line1: e.target.value } })}
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                     autoComplete="off"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Complément d'adresse"
-                    value={formData.shipping_address.line2}
-                    onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, line2: e.target.value } })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="text"
                       placeholder="Code postal"
-                      value={formData.shipping_address.postal_code}
-                      onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, postal_code: e.target.value } })}
+                      value={formData.postal_code}
+                      onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                     />
                     <input
                       type="text"
                       placeholder="Ville"
-                      value={formData.shipping_address.city}
-                      onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, city: e.target.value } })}
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                     />
                   </div>
                   <select
-                    value={formData.shipping_address.country}
-                    onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, country: e.target.value } })}
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
                   >
                     <option value="France">France</option>

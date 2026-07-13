@@ -1,16 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
-export interface ShippingAddress {
-  line1: string;
-  line2: string;
-  city: string;
-  postal_code: string;
-  country: string;
-}
-
-export const emptyShippingAddress: ShippingAddress = { line1: '', line2: '', city: '', postal_code: '', country: 'France' };
-
 export interface Reseller {
   id: string;
   company_name: string;
@@ -19,7 +9,10 @@ export interface Reseller {
   contact_email: string | null;
   contact_phone: string | null;
   billing_address: Record<string, unknown> | null;
-  shipping_address: ShippingAddress | null;
+  address: string | null;
+  postal_code: string | null;
+  city: string | null;
+  country: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -32,8 +25,23 @@ export interface ResellerFormData {
   contact_email: string;
   contact_phone: string;
   notes: string;
-  shipping_address: ShippingAddress;
+  address: string;
+  postal_code: string;
+  city: string;
+  country: string;
 }
+
+export const emptyResellerForm: ResellerFormData = {
+  company_name: '',
+  legal_id: '',
+  contact_email: '',
+  contact_phone: '',
+  notes: '',
+  address: '',
+  postal_code: '',
+  city: '',
+  country: 'France',
+};
 
 export interface ResellerContact {
   id: string;
@@ -109,7 +117,10 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
           contact_email: data.contact_email || null,
           contact_phone: data.contact_phone || null,
           notes: data.notes || null,
-          shipping_address: data.shipping_address.line1.trim() ? data.shipping_address : null,
+          address: data.address.trim() || null,
+          postal_code: data.postal_code.trim() || null,
+          city: data.city.trim() || null,
+          country: data.country.trim() || null,
         }])
         .select('id')
         .single();
@@ -128,10 +139,15 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
 
   const updateReseller = async (id: string, data: Partial<ResellerFormData>): Promise<{ success: boolean; error?: string }> => {
     try {
-      const payload: Partial<ResellerFormData> & { shipping_address?: ShippingAddress | null } = { ...data };
-      if (data.shipping_address) {
-        payload.shipping_address = data.shipping_address.line1.trim() ? data.shipping_address : null;
-      }
+      const payload: Record<string, unknown> = { ...data };
+      if (data.legal_id !== undefined) payload.legal_id = data.legal_id || null;
+      if (data.contact_email !== undefined) payload.contact_email = data.contact_email || null;
+      if (data.contact_phone !== undefined) payload.contact_phone = data.contact_phone || null;
+      if (data.notes !== undefined) payload.notes = data.notes || null;
+      if (data.address !== undefined) payload.address = data.address.trim() || null;
+      if (data.postal_code !== undefined) payload.postal_code = data.postal_code.trim() || null;
+      if (data.city !== undefined) payload.city = data.city.trim() || null;
+      if (data.country !== undefined) payload.country = data.country.trim() || null;
 
       const { error: updateError } = await supabase
         .from('resellers')

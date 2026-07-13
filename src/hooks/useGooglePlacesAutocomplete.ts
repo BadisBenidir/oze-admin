@@ -34,7 +34,7 @@ const loadGoogleMapsScript = (apiKey: string): Promise<void> => {
 };
 
 export interface AutocompletedAddress {
-  line1: string;
+  address: string;
   city: string;
   postal_code: string;
   country: string;
@@ -86,7 +86,7 @@ export const useGooglePlacesAutocomplete = (
           const country = getComponent(components, 'country');
 
           onSelectRef.current({
-            line1: [streetNumber, route].filter(Boolean).join(' '),
+            address: [streetNumber, route].filter(Boolean).join(' '),
             city,
             postal_code: postalCode,
             country: country || 'France',
