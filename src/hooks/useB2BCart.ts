@@ -10,11 +10,10 @@ export interface B2BCartItem {
   price: number;
 }
 
-interface SubmitResult {
+interface CheckoutResult {
   success: boolean;
   error?: string;
   unavailableIds?: string[];
-  orderNumber?: string;
 }
 
 const toCartItem = (product: B2BCatalogItem): B2BCartItem => ({
@@ -64,37 +63,48 @@ export const useB2BCart = (resellerId: string | undefined) => {
 
   const subtotal = items.reduce((sum, i) => sum + i.price, 0);
 
-  const submitOrder = async (shippingAddress: Record<string, unknown>): Promise<SubmitResult> => {
+  /**
+   * Crée une session de paiement Stripe et redirige immédiatement vers la
+   * page de paiement hébergée par Stripe. La commande n'est créée qu'après
+   * confirmation du paiement (webhook côté serveur) — le panier local n'est
+   * donc volontairement PAS vidé ici, seulement au retour en cas de succès.
+   */
+  const startCheckout = async (
+    shippingAddress: Record<string, unknown>,
+    billingAddress?: Record<string, unknown>
+  ): Promise<CheckoutResult> => {
     if (items.length === 0) {
       return { success: false, error: 'Le panier est vide' };
     }
 
-    const { data, error } = await supabase.rpc('submit_b2b_order', {
-      p_product_ids: items.map((i) => i.id),
-      p_shipping_address: shippingAddress,
+    const { data, error } = await supabase.functions.invoke('b2b-checkout', {
+      body: {
+        product_ids: items.map((i) => i.id),
+        shipping_address: shippingAddress,
+        billing_address: billingAddress,
+      },
     });
 
     if (error) {
-      const match = error.message.match(/B2B_UNAVAILABLE_ITEMS:(\[.*\])/);
-      if (match) {
-        try {
-          const unavailableIds: string[] = JSON.parse(match[1]);
-          persist(items.filter((i) => !unavailableIds.includes(i.id)));
-          return {
-            success: false,
-            error: 'Certains articles ont été achetés entre-temps et ont été retirés de votre panier. Vérifiez et soumettez à nouveau.',
-            unavailableIds,
-          };
-        } catch {
-          // format inattendu, on retombe sur le message brut ci-dessous
-        }
-      }
-      return { success: false, error: error.message };
+      const message = (data && (data.error || data.message)) || error.message || 'Échec de la création du paiement';
+      return { success: false, error: message };
     }
 
-    clear();
-    return { success: true, orderNumber: data?.order_number };
+    if (data?.error) {
+      return { success: false, error: data.error };
+    }
+
+    if (data?.unavailable_ids?.length) {
+      persist(items.filter((i) => !data.unavailable_ids.includes(i.id)));
+    }
+
+    if (!data?.url) {
+      return { success: false, error: 'Réponse de paiement invalide' };
+    }
+
+    window.location.href = data.url;
+    return { success: true };
   };
 
-  return { items, addItem, removeItem, clear, isInCart, subtotal, submitOrder };
+  return { items, addItem, removeItem, clear, isInCart, subtotal, startCheckout };
 };
