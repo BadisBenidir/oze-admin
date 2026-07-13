@@ -2,18 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Modal } from '../ui/Modal';
-import { useResellers, Reseller, ResellerContact } from '../../hooks/useResellers';
+import { useResellers, Reseller, ResellerContact, ResellerFormData } from '../../hooks/useResellers';
 import { useB2BOrders } from '../../hooks/useB2BOrders';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
+import { ResellerFormModal } from './ResellerFormModal';
 import {
   ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
-  Eye, X, Package, Building2, User,
+  Eye, X, Package, Building2, User, Edit,
 } from 'lucide-react';
 import type { B2BOrder } from '../../hooks/useB2BOrders';
 
 interface ResellerDetailProps {
   reseller: Reseller;
   onBack: () => void;
+  /** Remonte la version à jour au parent (liste principale) après une édition. */
+  onResellerUpdated?: (updated: Reseller) => void;
 }
 
 const generateTempPassword = (): string => {
@@ -49,15 +52,24 @@ const orderStatusBadge = (status: string) => {
   }
 };
 
-export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack }) => {
+export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack, onResellerUpdated }) => {
   const { isAdmin } = useAdminAuth();
   const { fetchContacts, resetContactPassword } = useResellers(false);
-  const { orders, loading: ordersLoading, error: ordersError } = useB2BOrders(isAdmin, reseller.id);
+
+  // Copie locale pour refléter immédiatement une édition sans devoir
+  // recharger toute la liste des revendeurs depuis le parent.
+  const [currentReseller, setCurrentReseller] = useState<Reseller>(reseller);
+  useEffect(() => {
+    setCurrentReseller(reseller);
+  }, [reseller]);
+
+  const { orders, loading: ordersLoading, error: ordersError } = useB2BOrders(isAdmin, currentReseller.id);
 
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [contactsError, setContactsError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'team' | 'orders'>('team');
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const [resettingContact, setResettingContact] = useState<ResellerContact | null>(null);
   const [newPassword, setNewPassword] = useState<string | null>(null);
@@ -70,7 +82,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   useEffect(() => {
     let mounted = true;
     setContactsLoading(true);
-    fetchContacts(reseller.id)
+    fetchContacts(currentReseller.id)
       .then((data) => {
         if (mounted) setContacts(data);
       })
@@ -84,7 +96,13 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reseller.id]);
+  }, [currentReseller.id]);
+
+  const handleResellerSaved = (_id: string, data: ResellerFormData) => {
+    const updated: Reseller = { ...currentReseller, ...data };
+    setCurrentReseller(updated);
+    onResellerUpdated?.(updated);
+  };
 
   const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
 
@@ -143,14 +161,23 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">{reseller.company_name}</h2>
-          {reseller.contact_email && (
+          <h2 className="text-xl font-semibold text-gray-900">{currentReseller.company_name}</h2>
+          {currentReseller.contact_email && (
             <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-              <Mail className="h-3.5 w-3.5" /> {reseller.contact_email}
+              <Mail className="h-3.5 w-3.5" /> {currentReseller.contact_email}
             </p>
           )}
         </div>
-        {resellerStatusBadge(reseller.status)}
+        <div className="flex items-center gap-3">
+          {resellerStatusBadge(currentReseller.status)}
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="flex items-center space-x-2 px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+          >
+            <Edit className="h-3.5 w-3.5" />
+            <span>Modifier le profil</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -467,7 +494,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                     </div>
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                      <span className="text-sm text-gray-900">{viewingOrder.reseller?.company_name || reseller.company_name}</span>
+                      <span className="text-sm text-gray-900">{viewingOrder.reseller?.company_name || currentReseller.company_name}</span>
                     </div>
                   </div>
                 </div>
@@ -554,6 +581,13 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
           </div>
         </div>
       )}
+
+      <ResellerFormModal
+        isOpen={showEditModal}
+        reseller={currentReseller}
+        onClose={() => setShowEditModal(false)}
+        onSaved={handleResellerSaved}
+      />
     </div>
   );
 };
