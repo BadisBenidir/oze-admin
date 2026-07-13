@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
+import { Toast } from '../../ui/Toast';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useResellerTeam } from '../../../hooks/useResellerTeam';
 import { generateSecurePassword } from '../../../utils/generatePassword';
 import { Users, UserPlus, Trash2, AlertCircle, Mail, Crown } from 'lucide-react';
+
+const INVITE_COOLDOWN_SECONDS = 30;
 
 export const Team: React.FC = () => {
   const { profile } = useResellerAuth();
@@ -16,6 +19,14 @@ export const Team: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
   const [convertedNotice, setConvertedNotice] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   if (!profile?.is_primary) {
     return (
@@ -59,6 +70,9 @@ export const Team: React.FC = () => {
           setCreatedCredentials({ email: form.email.trim(), password: form.password.trim() });
         } else if (result.convertedExistingAccount) {
           setConvertedNotice(`${form.email.trim()} avait déjà un compte OZË Paris : accès pro activé immédiatement, aucun email envoyé — cette personne se connecte avec son mot de passe habituel.`);
+        } else {
+          setSuccessToast("L'invitation a bien été envoyée avec succès !");
+          setCooldown(INVITE_COOLDOWN_SECONDS);
         }
         setForm({ email: '', first_name: '', last_name: '', password: '' });
       } else {
@@ -227,15 +241,25 @@ export const Team: React.FC = () => {
 
             <button
               type="submit"
-              disabled={inviting}
+              disabled={inviting || cooldown > 0}
               className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
             >
               <UserPlus className="h-4 w-4" />
-              <span>{inviting ? 'Création...' : mode === 'password' ? 'Créer le compte' : "Envoyer l'invitation"}</span>
+              <span>
+                {inviting
+                  ? 'Chargement...'
+                  : cooldown > 0
+                  ? `Patientez ${cooldown}s...`
+                  : mode === 'password'
+                  ? 'Créer le compte'
+                  : "Envoyer l'invitation"}
+              </span>
             </button>
           </form>
         </CardContent>
       </Card>
+
+      {successToast && <Toast message={successToast} onDismiss={() => setSuccessToast(null)} />}
     </div>
   );
 };

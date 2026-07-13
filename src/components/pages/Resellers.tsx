@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Modal } from '../ui/Modal';
+import { Toast } from '../ui/Toast';
 import { useResellers, Reseller, ResellerContact } from '../../hooks/useResellers';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { ResellerDetail } from './ResellerDetail';
@@ -62,6 +63,14 @@ export const Resellers: React.FC = () => {
   const [inviting, setInviting] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
   const [convertedNotice, setConvertedNotice] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [inviteCooldown, setInviteCooldown] = useState(0);
+
+  useEffect(() => {
+    if (inviteCooldown <= 0) return;
+    const timer = setInterval(() => setInviteCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [inviteCooldown]);
 
   const generatePassword = () => {
     setInviteForm((f) => ({ ...f, password: generateSecurePassword() }));
@@ -115,6 +124,7 @@ export const Resellers: React.FC = () => {
     setContactsError(null);
     setCreatedCredentials(null);
     setConvertedNotice(null);
+    setInviteCooldown(0);
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -146,6 +156,9 @@ export const Resellers: React.FC = () => {
           setCreatedCredentials({ email: inviteForm.email.trim(), password: inviteForm.password.trim() });
         } else if (result.convertedExistingAccount) {
           setConvertedNotice(`${inviteForm.email.trim()} avait déjà un compte OZË Paris : accès pro activé immédiatement, aucun email envoyé — cette personne se connecte avec son mot de passe habituel.`);
+        } else {
+          setSuccessToast("L'invitation a bien été envoyée avec succès !");
+          setInviteCooldown(30);
         }
         setInviteForm({ email: '', first_name: '', last_name: '', password: '' });
         const data = await fetchContacts(contactsReseller.id);
@@ -517,15 +530,25 @@ export const Resellers: React.FC = () => {
 
             <button
               type="submit"
-              disabled={inviting}
+              disabled={inviting || inviteCooldown > 0}
               className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
             >
               <UserPlus className="h-4 w-4" />
-              <span>{inviting ? 'Création...' : inviteMode === 'password' ? 'Créer le compte' : "Envoyer l'invitation"}</span>
+              <span>
+                {inviting
+                  ? 'Chargement...'
+                  : inviteCooldown > 0
+                  ? `Patientez ${inviteCooldown}s...`
+                  : inviteMode === 'password'
+                  ? 'Créer le compte'
+                  : "Envoyer l'invitation"}
+              </span>
             </button>
           </form>
         </div>
       </Modal>
+
+      {successToast && <Toast message={successToast} onDismiss={() => setSuccessToast(null)} />}
     </div>
   );
 };
