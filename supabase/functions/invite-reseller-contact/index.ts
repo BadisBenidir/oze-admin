@@ -115,14 +115,83 @@ Deno.serve(async (req: Request) => {
           data: { first_name: first_name ?? '', last_name: last_name ?? '' },
         });
 
-    if (createError || !created?.user) {
-      return new Response(JSON.stringify({ error: createError?.message ?? "Échec de la création de l'utilisateur" }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    let newUserId: string;
 
-    const newUserId = created.user.id;
+    if (createError || !created?.user) {
+      const emailAlreadyUsed =
+        createError?.code === 'email_exists' || /already.*registered/i.test(createError?.message ?? '');
+
+      if (!emailAlreadyUsed) {
+        return new Response(JSON.stringify({ error: createError?.message ?? "Échec de la création de l'utilisateur" }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // L'email correspond déjà à un utilisateur Auth existant : plutôt que
+      // d'échouer sans recours, on va voir si ce compte peut être "adopté"
+      // comme contact revendeur (cas fréquent : une tentative précédente a
+      // échoué à mi-chemin et a laissé le compte Auth orphelin, sans profil
+      // ni rattachement). On ne l'adopte QUE s'il n'a aucun rôle conflictuel
+      // ni contact revendeur existant, pour ne jamais réassigner le compte
+      // de quelqu'un d'autre (client ou admin) silencieusement.
+      const { data: listResult, error: listError } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+      const existingUser = listError
+        ? undefined
+        : listResult?.users.find((u) => u.email?.toLowerCase() === String(email).toLowerCase());
+
+      if (!existingUser) {
+        return new Response(JSON.stringify({ error: createError?.message ?? "Échec de la création de l'utilisateur" }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: existingProfile } = await adminClient
+        .from('profiles')
+        .select('role')
+        .eq('id', existingUser.id)
+        .maybeSingle();
+
+      if (existingProfile && existingProfile.role !== 'reseller') {
+        return new Response(JSON.stringify({ error: `Cet email est déjà utilisé par un compte existant (rôle : ${existingProfile.role}). Utilise une autre adresse email.` }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: existingContact } = await adminClient
+        .from('reseller_contacts')
+        .select('reseller_id')
+        .eq('profile_id', existingUser.id)
+        .maybeSingle();
+
+      if (existingContact) {
+        return new Response(JSON.stringify({ error: existingContact.reseller_id === reseller_id ? 'Ce contact existe déjà pour ce revendeur.' : 'Cet email est déjà rattaché à un autre revendeur.' }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Compte orphelin sûr à adopter : on met à jour le mot de passe si
+      // fourni, puis on continue le flux normal (upsert profil + contact).
+      if (password) {
+        const { error: updateError } = await adminClient.auth.admin.updateUserById(existingUser.id, {
+          password,
+          email_confirm: true,
+        });
+        if (updateError) {
+          return new Response(JSON.stringify({ error: updateError.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      newUserId = existingUser.id;
+    } else {
+      newUserId = created.user.id;
+    }
 
     const { error: profileError } = await adminClient
       .from('profiles')
