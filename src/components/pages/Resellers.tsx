@@ -61,6 +61,7 @@ export const Resellers: React.FC = () => {
   const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', password: '' });
   const [inviting, setInviting] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [convertedNotice, setConvertedNotice] = useState<string | null>(null);
 
   const generatePassword = () => {
     setInviteForm((f) => ({ ...f, password: generateSecurePassword() }));
@@ -113,6 +114,7 @@ export const Resellers: React.FC = () => {
     setContacts([]);
     setContactsError(null);
     setCreatedCredentials(null);
+    setConvertedNotice(null);
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -130,6 +132,7 @@ export const Resellers: React.FC = () => {
     setInviting(true);
     setContactsError(null);
     setCreatedCredentials(null);
+    setConvertedNotice(null);
     try {
       const result = await inviteContact(
         contactsReseller.id,
@@ -141,6 +144,8 @@ export const Resellers: React.FC = () => {
       if (result.success) {
         if (inviteMode === 'password') {
           setCreatedCredentials({ email: inviteForm.email.trim(), password: inviteForm.password.trim() });
+        } else if (result.convertedExistingAccount) {
+          setConvertedNotice(`${inviteForm.email.trim()} avait déjà un compte OZË Paris : accès pro activé immédiatement, aucun email envoyé — cette personne se connecte avec son mot de passe habituel.`);
         }
         setInviteForm({ email: '', first_name: '', last_name: '', password: '' });
         const data = await fetchContacts(contactsReseller.id);
@@ -430,6 +435,12 @@ export const Resellers: React.FC = () => {
               >
                 Copier
               </button>
+            </div>
+          )}
+
+          {convertedNotice && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-800">{convertedNotice}</p>
             </div>
           )}
 

@@ -119,7 +119,8 @@ Deno.serve(async (req: Request) => {
     let newUserId: string;
     // Le mot de passe est fixé directement par l'admin : le compte est donc
     // utilisable immédiatement, sans étape d'activation par email.
-    const activatedAt: string | null = password ? new Date().toISOString() : null;
+    let activatedAt: string | null = password ? new Date().toISOString() : null;
+    let lastInvitedAt: string | null = password ? null : new Date().toISOString();
     let contactAlreadyLinked = false;
 
     if (existingUser) {
@@ -129,14 +130,81 @@ Deno.serve(async (req: Request) => {
         .eq('id', existingUser.id)
         .maybeSingle();
 
-      // Compte existant d'un autre type (admin/client) : jamais réassigné
-      // silencieusement à un rôle revendeur.
-      if (existingProfile && existingProfile.role !== 'reseller') {
-        return new Response(JSON.stringify({ error: `Cet email est déjà utilisé par un compte existant (rôle : ${existingProfile.role}). Utilise une autre adresse email.` }), {
+      // Compte administrateur : jamais touché, sous aucun prétexte.
+      if (existingProfile?.role === 'admin') {
+        return new Response(JSON.stringify({ error: 'Cet email est déjà utilisé par un compte administrateur. Utilise une autre adresse email.' }), {
           status: 409,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
+      if (existingProfile && existingProfile.role !== 'reseller') {
+        // Compte réel préexistant d'un autre type (typiquement un compte
+        // client du site public ozeparis.com) : c'est un compte actif avec
+        // ses propres identifiants, jamais un artefact de notre flux
+        // d'invitation — on ne le supprime donc JAMAIS. On lui accorde
+        // simplement l'accès à l'espace pro immédiatement, avec son mot de
+        // passe habituel ; aucun email n'est envoyé, aucun mot de passe
+        // n'est modifié.
+        const { data: existingContact } = await adminClient
+          .from('reseller_contacts')
+          .select('reseller_id')
+          .eq('profile_id', existingUser.id)
+          .maybeSingle();
+
+        if (existingContact && existingContact.reseller_id !== reseller_id) {
+          return new Response(JSON.stringify({ error: 'Cet email est déjà rattaché à un autre revendeur.' }), {
+            status: 409,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        newUserId = existingUser.id;
+        contactAlreadyLinked = Boolean(existingContact);
+        activatedAt = new Date().toISOString();
+        lastInvitedAt = null;
+
+        const { error: profileError } = await adminClient
+          .from('profiles')
+          .upsert({
+            id: newUserId,
+            email,
+            first_name: first_name ?? existingUser.user_metadata?.first_name ?? '',
+            last_name: last_name ?? existingUser.user_metadata?.last_name ?? '',
+            role: 'reseller',
+            activated_at: activatedAt,
+            last_invited_at: lastInvitedAt,
+          });
+
+        if (profileError) {
+          return new Response(JSON.stringify({ error: profileError.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (!contactAlreadyLinked) {
+          const { error: contactError } = await adminClient
+            .from('reseller_contacts')
+            .insert({ reseller_id, profile_id: newUserId, is_primary: finalIsPrimary });
+
+          if (contactError) {
+            return new Response(JSON.stringify({ error: contactError.message }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        return new Response(JSON.stringify({ success: true, user_id: newUserId, converted_existing_account: true }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // À partir d'ici, role est 'reseller' ou absent : uniquement des
+      // comptes qui ne peuvent provenir que de notre propre flux
+      // d'invitation, donc sûrs à recréer si jamais activés.
 
       // Compte revendeur déjà pleinement activé : rien à faire, il doit se
       // connecter normalement (ou passer par "mot de passe oublié").
@@ -252,7 +320,7 @@ Deno.serve(async (req: Request) => {
         last_name: last_name ?? '',
         role: 'reseller',
         activated_at: activatedAt,
-        last_invited_at: password ? null : new Date().toISOString(),
+        last_invited_at: lastInvitedAt,
       });
 
     if (profileError) {

@@ -15,6 +15,7 @@ export const Team: React.FC = () => {
   const [inviting, setInviting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [convertedNotice, setConvertedNotice] = useState<string | null>(null);
 
   if (!profile?.is_primary) {
     return (
@@ -34,6 +35,7 @@ export const Team: React.FC = () => {
     e.preventDefault();
     setFormError(null);
     setCreatedCredentials(null);
+    setConvertedNotice(null);
 
     if (!form.email.trim()) {
       setFormError("L'email est obligatoire");
@@ -55,6 +57,8 @@ export const Team: React.FC = () => {
       if (result.success) {
         if (mode === 'password') {
           setCreatedCredentials({ email: form.email.trim(), password: form.password.trim() });
+        } else if (result.convertedExistingAccount) {
+          setConvertedNotice(`${form.email.trim()} avait déjà un compte OZË Paris : accès pro activé immédiatement, aucun email envoyé — cette personne se connecte avec son mot de passe habituel.`);
         }
         setForm({ email: '', first_name: '', last_name: '', password: '' });
       } else {
@@ -136,6 +140,12 @@ export const Team: React.FC = () => {
             <p className="text-xs text-gray-500 mt-1">Mot de passe</p>
             <p className="text-sm font-mono text-gray-900">{createdCredentials.password}</p>
           </div>
+        </div>
+      )}
+
+      {convertedNotice && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-sm text-blue-800">{convertedNotice}</p>
         </div>
       )}
 

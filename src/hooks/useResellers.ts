@@ -65,7 +65,7 @@ interface UseResellersResult {
   updateResellerStatus: (id: string, status: Reseller['status']) => Promise<{ success: boolean; error?: string }>;
   deleteReseller: (id: string) => Promise<{ success: boolean; error?: string }>;
   fetchContacts: (resellerId: string) => Promise<ResellerContact[]>;
-  inviteContact: (resellerId: string, email: string, firstName: string, lastName: string, password?: string, isPrimary?: boolean) => Promise<{ success: boolean; error?: string }>;
+  inviteContact: (resellerId: string, email: string, firstName: string, lastName: string, password?: string, isPrimary?: boolean) => Promise<{ success: boolean; error?: string; convertedExistingAccount?: boolean }>;
   removeContact: (contactId: string) => Promise<{ success: boolean; error?: string }>;
   resetContactPassword: (profileId: string, password: string) => Promise<{ success: boolean; error?: string }>;
   updateContactEmail: (profileId: string, newEmail: string) => Promise<{ success: boolean; error?: string }>;
@@ -247,8 +247,8 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     lastName: string,
     password?: string,
     isPrimary?: boolean
-  ): Promise<{ success: boolean; error?: string }> => {
-    const { error } = await invokeEdgeFunction('invite-reseller-contact', {
+  ): Promise<{ success: boolean; error?: string; convertedExistingAccount?: boolean }> => {
+    const { data, error } = await invokeEdgeFunction<{ converted_existing_account?: boolean }>('invite-reseller-contact', {
       reseller_id: resellerId,
       email,
       first_name: firstName,
@@ -261,7 +261,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       console.error("Erreur lors de l'invitation du contact:", error);
       return { success: false, error };
     }
-    return { success: true };
+    return { success: true, convertedExistingAccount: data?.converted_existing_account };
   };
 
   const resetContactPassword = async (profileId: string, password: string): Promise<{ success: boolean; error?: string }> => {

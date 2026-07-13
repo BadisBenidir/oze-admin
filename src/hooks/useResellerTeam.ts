@@ -69,10 +69,10 @@ export const useResellerTeam = (resellerId: string | undefined) => {
     firstName: string,
     lastName: string,
     password?: string
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{ success: boolean; error?: string; convertedExistingAccount?: boolean }> => {
     if (!resellerId) return { success: false, error: 'Compte revendeur introuvable' };
 
-    const { error } = await invokeEdgeFunction('invite-reseller-contact', {
+    const { data, error } = await invokeEdgeFunction<{ converted_existing_account?: boolean }>('invite-reseller-contact', {
       reseller_id: resellerId,
       email,
       first_name: firstName,
@@ -85,7 +85,7 @@ export const useResellerTeam = (resellerId: string | undefined) => {
     }
 
     await fetchTeam();
-    return { success: true };
+    return { success: true, convertedExistingAccount: data?.converted_existing_account };
   };
 
   const removeTeammate = async (contactId: string): Promise<{ success: boolean; error?: string }> => {
