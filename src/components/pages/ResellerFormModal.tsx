@@ -1,16 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useResellers, Reseller, ResellerFormData, emptyResellerForm } from '../../hooks/useResellers';
 import { useGooglePlacesAutocomplete } from '../../hooks/useGooglePlacesAutocomplete';
+import { generateSecurePassword } from '../../utils/generatePassword';
 import { AlertCircle, X } from 'lucide-react';
-
-const generateRandomPassword = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  let result = '';
-  for (let i = 0; i < 12; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return result;
-};
 
 interface ResellerFormModalProps {
   isOpen: boolean;
@@ -128,7 +120,7 @@ export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, re
       // connexion principal de l'entreprise (mot de passe généré), pour ne
       // pas avoir à repasser par la modale "Gérer les contacts" ensuite.
       if (formData.contact_email.trim()) {
-        const password = generateRandomPassword();
+        const password = generateSecurePassword();
         const contactResult = await inviteContact(
           result.id,
           formData.contact_email.trim(),

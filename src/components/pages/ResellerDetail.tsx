@@ -6,6 +6,7 @@ import { useResellers, Reseller, ResellerContact, ResellerFormData } from '../..
 import { useB2BOrders } from '../../hooks/useB2BOrders';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { ResellerFormModal } from './ResellerFormModal';
+import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
   Eye, X, Package, Building2, User, Edit,
@@ -18,15 +19,6 @@ interface ResellerDetailProps {
   /** Remonte la version à jour au parent (liste principale) après une édition. */
   onResellerUpdated?: (updated: Reseller) => void;
 }
-
-const generateTempPassword = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 4; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return `Oze-${code}-${new Date().getFullYear()}`;
-};
 
 const resellerStatusBadge = (status: Reseller['status']) => {
   switch (status) {
@@ -126,7 +118,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
     setResetting(true);
     setResetError(null);
 
-    const password = generateTempPassword();
+    const password = generateSecurePassword();
     const result = await resetContactPassword(resettingContact.profile_id, password);
 
     setResetting(false);

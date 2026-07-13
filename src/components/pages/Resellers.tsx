@@ -6,6 +6,7 @@ import { useResellers, Reseller, ResellerContact } from '../../hooks/useReseller
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { ResellerDetail } from './ResellerDetail';
 import { ResellerFormModal } from './ResellerFormModal';
+import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   Building2,
   Plus,
@@ -20,15 +21,6 @@ import {
   Search,
   Mail,
 } from 'lucide-react';
-
-const generateRandomPassword = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  let result = '';
-  for (let i = 0; i < 12; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return result;
-};
 
 const statusBadge = (status: Reseller['status']) => {
   switch (status) {
@@ -71,7 +63,7 @@ export const Resellers: React.FC = () => {
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
 
   const generatePassword = () => {
-    setInviteForm((f) => ({ ...f, password: generateRandomPassword() }));
+    setInviteForm((f) => ({ ...f, password: generateSecurePassword() }));
   };
 
   const filteredResellers = resellers.filter((r) => {

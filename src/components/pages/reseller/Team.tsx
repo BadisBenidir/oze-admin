@@ -3,16 +3,8 @@ import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useResellerTeam } from '../../../hooks/useResellerTeam';
+import { generateSecurePassword } from '../../../utils/generatePassword';
 import { Users, UserPlus, Trash2, AlertCircle, Mail, Crown } from 'lucide-react';
-
-const generateRandomPassword = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  let result = '';
-  for (let i = 0; i < 12; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return result;
-};
 
 export const Team: React.FC = () => {
   const { profile } = useResellerAuth();
@@ -36,7 +28,7 @@ export const Team: React.FC = () => {
     );
   }
 
-  const generatePassword = () => setForm((f) => ({ ...f, password: generateRandomPassword() }));
+  const generatePassword = () => setForm((f) => ({ ...f, password: generateSecurePassword() }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
