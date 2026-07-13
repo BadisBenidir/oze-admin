@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 
 export interface TeamMember {
   id: string;
@@ -70,24 +71,21 @@ export const useResellerTeam = (resellerId: string | undefined) => {
     password?: string
   ): Promise<{ success: boolean; error?: string }> => {
     if (!resellerId) return { success: false, error: 'Compte revendeur introuvable' };
-    try {
-      const { data, error: invokeError } = await supabase.functions.invoke('invite-reseller-contact', {
-        body: { reseller_id: resellerId, email, first_name: firstName, last_name: lastName, password: password || undefined },
-      });
 
-      if (invokeError) {
-        const message = (data && (data.error || data.message)) || invokeError.message || "Échec de la création du compte";
-        throw new Error(message);
-      }
-      if (data?.error) {
-        throw new Error(data.error);
-      }
+    const { error } = await invokeEdgeFunction('invite-reseller-contact', {
+      reseller_id: resellerId,
+      email,
+      first_name: firstName,
+      last_name: lastName,
+      password: password || undefined,
+    });
 
-      await fetchTeam();
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
+    if (error) {
+      return { success: false, error };
     }
+
+    await fetchTeam();
+    return { success: true };
   };
 
   const removeTeammate = async (contactId: string): Promise<{ success: boolean; error?: string }> => {

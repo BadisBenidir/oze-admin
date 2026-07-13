@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 
 export interface Reseller {
   id: string;
@@ -247,69 +248,40 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     password?: string,
     isPrimary?: boolean
   ): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { data, error: invokeError } = await supabase.functions.invoke('invite-reseller-contact', {
-        body: { reseller_id: resellerId, email, first_name: firstName, last_name: lastName, password: password || undefined, is_primary: Boolean(isPrimary) },
-      });
+    const { error } = await invokeEdgeFunction('invite-reseller-contact', {
+      reseller_id: resellerId,
+      email,
+      first_name: firstName,
+      last_name: lastName,
+      password: password || undefined,
+      is_primary: Boolean(isPrimary),
+    });
 
-      if (invokeError) {
-        const message = (data && (data.error || data.message)) || invokeError.message || "Échec de l'invitation";
-        throw new Error(message);
-      }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      return { success: true };
-    } catch (err) {
-      console.error("Erreur lors de l'invitation du contact:", err);
-      return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
+    if (error) {
+      console.error("Erreur lors de l'invitation du contact:", error);
+      return { success: false, error };
     }
+    return { success: true };
   };
 
   const resetContactPassword = async (profileId: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { data, error: invokeError } = await supabase.functions.invoke('reset-reseller-password', {
-        body: { profile_id: profileId, password },
-      });
+    const { error } = await invokeEdgeFunction('reset-reseller-password', { profile_id: profileId, password });
 
-      if (invokeError) {
-        const message = (data && (data.error || data.message)) || invokeError.message || 'Échec de la réinitialisation';
-        throw new Error(message);
-      }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      return { success: true };
-    } catch (err) {
-      console.error('Erreur lors de la réinitialisation du mot de passe:', err);
-      return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
+    if (error) {
+      console.error('Erreur lors de la réinitialisation du mot de passe:', error);
+      return { success: false, error };
     }
+    return { success: true };
   };
 
   const updateContactEmail = async (profileId: string, newEmail: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { data, error: invokeError } = await supabase.functions.invoke('update-reseller-contact-email', {
-        body: { profile_id: profileId, new_email: newEmail },
-      });
+    const { error } = await invokeEdgeFunction('update-reseller-contact-email', { profile_id: profileId, new_email: newEmail });
 
-      if (invokeError) {
-        const message = (data && (data.error || data.message)) || invokeError.message || "Échec du changement d'email";
-        throw new Error(message);
-      }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      return { success: true };
-    } catch (err) {
-      console.error("Erreur lors du changement d'email:", err);
-      return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
+    if (error) {
+      console.error("Erreur lors du changement d'email:", error);
+      return { success: false, error };
     }
+    return { success: true };
   };
 
   const removeContact = async (contactId: string): Promise<{ success: boolean; error?: string }> => {

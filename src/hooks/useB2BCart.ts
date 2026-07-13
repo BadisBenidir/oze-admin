@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
 import { B2BCatalogItem } from './useB2BCatalog';
+import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 
 export interface B2BCartItem {
   id: string;
@@ -77,25 +77,19 @@ export const useB2BCart = (resellerId: string | undefined) => {
       return { success: false, error: 'Le panier est vide' };
     }
 
-    const { data, error } = await supabase.functions.invoke('b2b-checkout', {
-      body: {
-        product_ids: items.map((i) => i.id),
-        shipping_address: shippingAddress,
-        billing_address: billingAddress,
-      },
+    const { data, error } = await invokeEdgeFunction<{ url: string; unavailable_ids?: string[] }>('b2b-checkout', {
+      product_ids: items.map((i) => i.id),
+      shipping_address: shippingAddress,
+      billing_address: billingAddress,
     });
 
     if (error) {
-      const message = (data && (data.error || data.message)) || error.message || 'Échec de la création du paiement';
-      return { success: false, error: message };
-    }
-
-    if (data?.error) {
-      return { success: false, error: data.error };
+      return { success: false, error };
     }
 
     if (data?.unavailable_ids?.length) {
-      persist(items.filter((i) => !data.unavailable_ids.includes(i.id)));
+      const unavailableIds = data.unavailable_ids;
+      persist(items.filter((i) => !unavailableIds.includes(i.id)));
     }
 
     if (!data?.url) {
