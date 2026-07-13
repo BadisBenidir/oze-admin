@@ -11,13 +11,13 @@ export interface Product {
   name: string
   brand_id: string | null
   category_id: string | null
-  genre: 'femme' | 'homme' | 'fille' | 'garcon'
+  genre: 'femme' | 'homme' | 'fille' | 'garcon' | null
   purchase_price: number | null
   sale_price: number
   weight: number | null
   images: string[]
   main_image_index: number
-  condition: 'neuf' | 'excellent' | 'very-good' | 'good' | 'fair' | 'A' | 'AB' | 'B' | 'BC' | 'C' | 'D'
+  condition: 'neuf' | 'excellent' | 'very-good' | 'good' | 'fair' | 'S' | 'A' | 'AB' | 'B' | 'BC' | 'C' | 'D'
   description: string | null
   defects: string | null
   colors: string[]

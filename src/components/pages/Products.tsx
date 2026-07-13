@@ -1074,8 +1074,8 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
                            product.condition === 'very-good' ? 'Très bon' :
                            product.condition === 'good' ? 'Bon' :
                            product.condition === 'fair' ? 'Correct' :
-                           ['A','AB','B','BC','C','D'].includes(product.condition) ? `État ${product.condition}` :
-                           'Correct'}
+                           ['S','A','AB','B','BC','C','D'].includes(product.condition) ? `Grade ${product.condition}` :
+                           product.condition}
                         </Badge>
                       </td>
                       <td className="py-3 md:py-4 px-4 md:px-6">

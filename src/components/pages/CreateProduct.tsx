@@ -156,6 +156,18 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
     setProductData(prev => ({ ...prev, ...updates }));
   };
 
+  // Vrai pour tout statut de la famille B2B ('for-sale-b2b', 'reserved-b2b',
+  // 'sold-b2b', ...), pas seulement à la création : en édition, un produit
+  // déjà réservé/vendu B2B doit garder le formulaire simplifié plutôt que de
+  // basculer sur le formulaire générique du site public.
+  const isB2B = productData.status.endsWith('-b2b');
+
+  const B2B_STATUS_LABELS: Record<string, string> = {
+    'for-sale-b2b': 'Revendeurs B2B uniquement',
+    'reserved-b2b': 'Réservé (B2B)',
+    'sold-b2b': 'Vendu (B2B)',
+  };
+
   // Effet pour charger toutes les marques au début
   useEffect(() => {
     const loadAllBrands = async () => {
@@ -317,7 +329,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
   const canProceedToNextStep = () => {
     switch (currentStep) {
       case 1:
-        return productData.name && productData.brand && productData.category && productData.genre;
+        return productData.name && productData.brand && productData.category && (isB2B || productData.genre);
       case 2:
         return true; // Photos optionnelles à la création (à ajouter ensuite depuis « En attente »).
       case 3:
@@ -335,7 +347,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
     return productData.name.trim() &&
            productData.brand &&
            productData.category &&
-           productData.genre &&
+           (isB2B || productData.genre) &&
            productData.condition &&
            productData.status;
   };
@@ -355,7 +367,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
         name: productData.name.trim(),
         brand_id: productData.brand || null,
         category_id: productData.category || null,
-        genre: productData.genre,
+        genre: productData.genre || null,
         purchase_price: parseAmount(productData.purchasePrice) || null,
         sale_price: parseAmount(productData.salePrice),
         original_price: parseAmount(productData.originalPrice) || null,
@@ -586,26 +598,28 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Genre *
-          </label>
-          <select
-            value={productData.genre}
-            onChange={(e) => updateProductData({ genre: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Sélectionner un genre</option>
-            <optgroup label="👨‍👩‍ Adultes">
-              <option value="femme">Femme</option>
-              <option value="homme">Homme</option>
-            </optgroup>
-            <optgroup label="👶 Enfants">
-              <option value="fille">Fille</option>
-              <option value="garcon">Garçon</option>
-            </optgroup>
-          </select>
-        </div>
+        {!isB2B && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Genre *
+            </label>
+            <select
+              value={productData.genre}
+              onChange={(e) => updateProductData({ genre: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Sélectionner un genre</option>
+              <optgroup label="👨‍👩‍ Adultes">
+                <option value="femme">Femme</option>
+                <option value="homme">Homme</option>
+              </optgroup>
+              <optgroup label="👶 Enfants">
+                <option value="fille">Fille</option>
+                <option value="garcon">Garçon</option>
+              </optgroup>
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1132,19 +1146,34 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            État/Condition *
+            {isB2B ? 'Grade *' : 'État/Condition *'}
           </label>
           <select
             value={productData.condition}
             onChange={(e) => updateProductData({ condition: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">Sélectionner l'état</option>
-            <option value="neuf">Neuf</option>
-            <option value="excellent">Excellent</option>
-            <option value="very-good">Très bon</option>
-            <option value="good">Bon</option>
-            <option value="fair">Correct</option>
+            {isB2B ? (
+              <>
+                <option value="">Sélectionner un grade</option>
+                <option value="S">Grade S</option>
+                <option value="A">Grade A</option>
+                <option value="AB">Grade AB</option>
+                <option value="B">Grade B</option>
+                <option value="BC">Grade BC</option>
+                <option value="C">Grade C</option>
+                <option value="D">Grade D</option>
+              </>
+            ) : (
+              <>
+                <option value="">Sélectionner l'état</option>
+                <option value="neuf">Neuf</option>
+                <option value="excellent">Excellent</option>
+                <option value="very-good">Très bon</option>
+                <option value="good">Bon</option>
+                <option value="fair">Correct</option>
+              </>
+            )}
           </select>
         </div>
 
@@ -1152,230 +1181,240 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Statut *
           </label>
-          <select
-            value={productData.status}
-            onChange={(e) => updateProductData({ status: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Sélectionner un statut</option>
-            <optgroup label="📝 En préparation">
-              <option value="draft">À valider (mise en ligne après scan)</option>
-            </optgroup>
-            <optgroup label="🏪 Disponible à la vente">
-              <option value="for-sale-other-platform">À vendre sur une autre plateforme</option>
-              <option value="for-sale-b2b">Revendeurs B2B uniquement</option>
-            </optgroup>
-            <optgroup label="🔨 Live enchères">
-              <option value="for-auction-live">À vendre en live enchères</option>
-            </optgroup>
-            <optgroup label="✅ Vendu">
-              <option value="sold-online">Vendu en ligne</option>
-              <option value="sold-other-platform">Vendu sur une autre plateforme</option>
-              <option value="sold-display">Vendu - Affiché sur le site</option>
-              <option value="sold-auction">Vendu en live enchères</option>
-            </optgroup>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Matière
-          </label>
-          <select
-            value={productData.material}
-            onChange={(e) => updateProductData({ material: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Sélectionner une matière</option>
-            <optgroup label="🐄 Cuirs">
-              <option value="agneau">Agneau</option>
-              <option value="chevreau">Chevreau</option>
-              <option value="cuir">Cuir</option>
-              <option value="cuir-grainé">Cuir grainé</option>
-              <option value="cuir-lisse">Cuir lisse</option>
-              <option value="cuir-nappa">Cuir Nappa</option>
-              <option value="cuir-saffiano">Cuir Saffiano</option>
-              <option value="cuir-verni">Cuir verni</option>
-              <option value="daim">Daim</option>
-              <option value="nubuck">Nubuck</option>
-              <option value="veau">Veau</option>
-            </optgroup>
-            <optgroup label="🧵 Textiles">
-              <option value="cachemire">Cachemire</option>
-              <option value="canvas">Canvas</option>
-              <option value="coton">Coton</option>
-              <option value="denim">Denim</option>
-              <option value="jacquard">Jacquard</option>
-              <option value="laine">Laine</option>
-              <option value="lin">Lin</option>
-              <option value="satin">Satin</option>
-              <option value="soie">Soie</option>
-              <option value="toile">Toile</option>
-              <option value="velours">Velours</option>
-            </optgroup>
-            <optgroup label="🐍 Cuirs exotiques">
-              <option value="alligator">Alligator</option>
-              <option value="autruche">Autruche</option>
-              <option value="crocodile">Crocodile</option>
-              <option value="lezard">Lézard</option>
-              <option value="python">Python</option>
-              <option value="serpent">Serpent</option>
-            </optgroup>
-            <optgroup label="🔗 Métaux et synthétiques">
-              <option value="acier">Acier</option>
-              <option value="aluminium">Aluminium</option>
-              <option value="caoutchouc">Caoutchouc</option>
-              <option value="cuir-synthetique">Cuir synthétique</option>
-              <option value="metal">Métal</option>
-              <option value="plastique">Plastique</option>
-              <option value="vinyle">Vinyle</option>
-            </optgroup>
-            <optgroup label="🌟 Matières de luxe">
-              <option value="cristal">Cristal</option>
-              <option value="fourrure">Fourrure</option>
-              <option value="lapin">Lapin</option>
-              <option value="plumes">Plumes</option>
-              <option value="renard">Renard</option>
-              <option value="strass">Strass</option>
-              <option value="vison">Vison</option>
-            </optgroup>
-            <optgroup label="🎨 Autres">
-              <option value="autre">Autre</option>
-              <option value="mixte">Mixte</option>
-            </optgroup>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Couleurs
-          </label>
-          <div className="space-y-3">
-            {/* Menu déroulant pour sélectionner les couleurs */}
+          {isB2B ? (
+            <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 flex items-center">
+              <Badge variant="info">{B2B_STATUS_LABELS[productData.status] || productData.status}</Badge>
+            </div>
+          ) : (
             <select
-              onChange={(e) => {
-                const selectedColor = e.target.value;
-                if (selectedColor && !productData.colors.includes(selectedColor)) {
-                  updateProductData({ colors: [...productData.colors, selectedColor] });
-                }
-                e.target.value = ''; // Reset selection
-              }}
+              value={productData.status}
+              onChange={(e) => updateProductData({ status: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Sélectionner une couleur...</option>
-              <optgroup label="🔴 Rouges">
-                <option value="rouge">Rouge</option>
-                <option value="bordeaux">Bordeaux</option>
-                <option value="cerise">Cerise</option>
-                <option value="corail">Corail</option>
-                <option value="fuchsia">Fuchsia</option>
-                <option value="grenat">Grenat</option>
-                <option value="magenta">Magenta</option>
-                <option value="rose">Rose</option>
-                <option value="saumon">Saumon</option>
+              <option value="">Sélectionner un statut</option>
+              <optgroup label="📝 En préparation">
+                <option value="draft">À valider (mise en ligne après scan)</option>
               </optgroup>
-              <optgroup label="🔵 Bleus">
-                <option value="bleu">Bleu</option>
-                <option value="azur">Azur</option>
-                <option value="bleu-ciel">Bleu ciel</option>
-                <option value="bleu-marine">Bleu marine</option>
-                <option value="bleu-roi">Bleu roi</option>
-                <option value="cobalt">Cobalt</option>
-                <option value="cyan">Cyan</option>
-                <option value="indigo">Indigo</option>
-                <option value="turquoise">Turquoise</option>
+              <optgroup label="🏪 Disponible à la vente">
+                <option value="for-sale-other-platform">À vendre sur une autre plateforme</option>
+                <option value="for-sale-b2b">Revendeurs B2B uniquement</option>
               </optgroup>
-              <optgroup label="🟢 Verts">
-                <option value="vert">Vert</option>
-                <option value="emeraude">Émeraude</option>
-                <option value="jade">Jade</option>
-                <option value="kaki">Kaki</option>
-                <option value="menthe">Menthe</option>
-                <option value="olive">Olive</option>
-                <option value="sapin">Sapin</option>
-                <option value="vert-eau">Vert d'eau</option>
-                <option value="vert-pomme">Vert pomme</option>
+              <optgroup label="🔨 Live enchères">
+                <option value="for-auction-live">À vendre en live enchères</option>
               </optgroup>
-              <optgroup label="🟡 Jaunes">
-                <option value="jaune">Jaune</option>
-                <option value="ambre">Ambre</option>
-                <option value="citron">Citron</option>
-                <option value="dore">Doré</option>
-                <option value="miel">Miel</option>
-                <option value="moutarde">Moutarde</option>
-                <option value="ocre">Ocre</option>
-                <option value="safran">Safran</option>
-              </optgroup>
-              <optgroup label="🟠 Oranges">
-                <option value="orange">Orange</option>
-                <option value="abricot">Abricot</option>
-                <option value="bronze">Bronze</option>
-                <option value="cuivre">Cuivre</option>
-                <option value="mandarine">Mandarine</option>
-                <option value="peche">Pêche</option>
-                <option value="rouille">Rouille</option>
-              </optgroup>
-              <optgroup label="🟣 Violets">
-                <option value="violet">Violet</option>
-                <option value="aubergine">Aubergine</option>
-                <option value="lavande">Lavande</option>
-                <option value="lilas">Lilas</option>
-                <option value="mauve">Mauve</option>
-                <option value="parme">Parme</option>
-                <option value="pourpre">Pourpre</option>
-                <option value="prune">Prune</option>
-              </optgroup>
-              <optgroup label="🤎 Bruns">
-                <option value="brun">Brun</option>
-                <option value="beige">Beige</option>
-                <option value="camel">Camel</option>
-                <option value="chocolat">Chocolat</option>
-                <option value="cognac">Cognac</option>
-                <option value="marron">Marron</option>
-                <option value="noisette">Noisette</option>
-                <option value="tabac">Tabac</option>
-                <option value="taupe">Taupe</option>
-              </optgroup>
-              <optgroup label="⚫ Neutres">
-                <option value="noir">Noir</option>
-                <option value="blanc">Blanc</option>
-                <option value="gris">Gris</option>
-                <option value="argent">Argenté</option>
-                <option value="anthracite">Anthracite</option>
-                <option value="ecru">Écru</option>
-                <option value="ivoire">Ivoire</option>
-              </optgroup>
-              <optgroup label="✨ Spéciaux">
-                <option value="multicolore">Multicolore</option>
-                <option value="transparente">Transparente</option>
-                <option value="holographique">Holographique</option>
-                <option value="metallique">Métallique</option>
-                <option value="nacre">Nacré</option>
+              <optgroup label="✅ Vendu">
+                <option value="sold-online">Vendu en ligne</option>
+                <option value="sold-other-platform">Vendu sur une autre plateforme</option>
+                <option value="sold-display">Vendu - Affiché sur le site</option>
+                <option value="sold-auction">Vendu en live enchères</option>
               </optgroup>
             </select>
-            
-            {/* Liste des couleurs sélectionnées */}
-            {productData.colors.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {productData.colors.map((color, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
-                  >
-                    {color}
-                    <button
-                      type="button"
-                      onClick={() => removeColor(color)}
-                      className="ml-2 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
         </div>
+
+        {!isB2B && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Matière
+            </label>
+            <select
+              value={productData.material}
+              onChange={(e) => updateProductData({ material: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Sélectionner une matière</option>
+              <optgroup label="🐄 Cuirs">
+                <option value="agneau">Agneau</option>
+                <option value="chevreau">Chevreau</option>
+                <option value="cuir">Cuir</option>
+                <option value="cuir-grainé">Cuir grainé</option>
+                <option value="cuir-lisse">Cuir lisse</option>
+                <option value="cuir-nappa">Cuir Nappa</option>
+                <option value="cuir-saffiano">Cuir Saffiano</option>
+                <option value="cuir-verni">Cuir verni</option>
+                <option value="daim">Daim</option>
+                <option value="nubuck">Nubuck</option>
+                <option value="veau">Veau</option>
+              </optgroup>
+              <optgroup label="🧵 Textiles">
+                <option value="cachemire">Cachemire</option>
+                <option value="canvas">Canvas</option>
+                <option value="coton">Coton</option>
+                <option value="denim">Denim</option>
+                <option value="jacquard">Jacquard</option>
+                <option value="laine">Laine</option>
+                <option value="lin">Lin</option>
+                <option value="satin">Satin</option>
+                <option value="soie">Soie</option>
+                <option value="toile">Toile</option>
+                <option value="velours">Velours</option>
+              </optgroup>
+              <optgroup label="🐍 Cuirs exotiques">
+                <option value="alligator">Alligator</option>
+                <option value="autruche">Autruche</option>
+                <option value="crocodile">Crocodile</option>
+                <option value="lezard">Lézard</option>
+                <option value="python">Python</option>
+                <option value="serpent">Serpent</option>
+              </optgroup>
+              <optgroup label="🔗 Métaux et synthétiques">
+                <option value="acier">Acier</option>
+                <option value="aluminium">Aluminium</option>
+                <option value="caoutchouc">Caoutchouc</option>
+                <option value="cuir-synthetique">Cuir synthétique</option>
+                <option value="metal">Métal</option>
+                <option value="plastique">Plastique</option>
+                <option value="vinyle">Vinyle</option>
+              </optgroup>
+              <optgroup label="🌟 Matières de luxe">
+                <option value="cristal">Cristal</option>
+                <option value="fourrure">Fourrure</option>
+                <option value="lapin">Lapin</option>
+                <option value="plumes">Plumes</option>
+                <option value="renard">Renard</option>
+                <option value="strass">Strass</option>
+                <option value="vison">Vison</option>
+              </optgroup>
+              <optgroup label="🎨 Autres">
+                <option value="autre">Autre</option>
+                <option value="mixte">Mixte</option>
+              </optgroup>
+            </select>
+          </div>
+        )}
+
+        {!isB2B && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Couleurs
+            </label>
+            <div className="space-y-3">
+              {/* Menu déroulant pour sélectionner les couleurs */}
+              <select
+                onChange={(e) => {
+                  const selectedColor = e.target.value;
+                  if (selectedColor && !productData.colors.includes(selectedColor)) {
+                    updateProductData({ colors: [...productData.colors, selectedColor] });
+                  }
+                  e.target.value = ''; // Reset selection
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Sélectionner une couleur...</option>
+                <optgroup label="🔴 Rouges">
+                  <option value="rouge">Rouge</option>
+                  <option value="bordeaux">Bordeaux</option>
+                  <option value="cerise">Cerise</option>
+                  <option value="corail">Corail</option>
+                  <option value="fuchsia">Fuchsia</option>
+                  <option value="grenat">Grenat</option>
+                  <option value="magenta">Magenta</option>
+                  <option value="rose">Rose</option>
+                  <option value="saumon">Saumon</option>
+                </optgroup>
+                <optgroup label="🔵 Bleus">
+                  <option value="bleu">Bleu</option>
+                  <option value="azur">Azur</option>
+                  <option value="bleu-ciel">Bleu ciel</option>
+                  <option value="bleu-marine">Bleu marine</option>
+                  <option value="bleu-roi">Bleu roi</option>
+                  <option value="cobalt">Cobalt</option>
+                  <option value="cyan">Cyan</option>
+                  <option value="indigo">Indigo</option>
+                  <option value="turquoise">Turquoise</option>
+                </optgroup>
+                <optgroup label="🟢 Verts">
+                  <option value="vert">Vert</option>
+                  <option value="emeraude">Émeraude</option>
+                  <option value="jade">Jade</option>
+                  <option value="kaki">Kaki</option>
+                  <option value="menthe">Menthe</option>
+                  <option value="olive">Olive</option>
+                  <option value="sapin">Sapin</option>
+                  <option value="vert-eau">Vert d'eau</option>
+                  <option value="vert-pomme">Vert pomme</option>
+                </optgroup>
+                <optgroup label="🟡 Jaunes">
+                  <option value="jaune">Jaune</option>
+                  <option value="ambre">Ambre</option>
+                  <option value="citron">Citron</option>
+                  <option value="dore">Doré</option>
+                  <option value="miel">Miel</option>
+                  <option value="moutarde">Moutarde</option>
+                  <option value="ocre">Ocre</option>
+                  <option value="safran">Safran</option>
+                </optgroup>
+                <optgroup label="🟠 Oranges">
+                  <option value="orange">Orange</option>
+                  <option value="abricot">Abricot</option>
+                  <option value="bronze">Bronze</option>
+                  <option value="cuivre">Cuivre</option>
+                  <option value="mandarine">Mandarine</option>
+                  <option value="peche">Pêche</option>
+                  <option value="rouille">Rouille</option>
+                </optgroup>
+                <optgroup label="🟣 Violets">
+                  <option value="violet">Violet</option>
+                  <option value="aubergine">Aubergine</option>
+                  <option value="lavande">Lavande</option>
+                  <option value="lilas">Lilas</option>
+                  <option value="mauve">Mauve</option>
+                  <option value="parme">Parme</option>
+                  <option value="pourpre">Pourpre</option>
+                  <option value="prune">Prune</option>
+                </optgroup>
+                <optgroup label="🤎 Bruns">
+                  <option value="brun">Brun</option>
+                  <option value="beige">Beige</option>
+                  <option value="camel">Camel</option>
+                  <option value="chocolat">Chocolat</option>
+                  <option value="cognac">Cognac</option>
+                  <option value="marron">Marron</option>
+                  <option value="noisette">Noisette</option>
+                  <option value="tabac">Tabac</option>
+                  <option value="taupe">Taupe</option>
+                </optgroup>
+                <optgroup label="⚫ Neutres">
+                  <option value="noir">Noir</option>
+                  <option value="blanc">Blanc</option>
+                  <option value="gris">Gris</option>
+                  <option value="argent">Argenté</option>
+                  <option value="anthracite">Anthracite</option>
+                  <option value="ecru">Écru</option>
+                  <option value="ivoire">Ivoire</option>
+                </optgroup>
+                <optgroup label="✨ Spéciaux">
+                  <option value="multicolore">Multicolore</option>
+                  <option value="transparente">Transparente</option>
+                  <option value="holographique">Holographique</option>
+                  <option value="metallique">Métallique</option>
+                  <option value="nacre">Nacré</option>
+                </optgroup>
+              </select>
+
+              {/* Liste des couleurs sélectionnées */}
+              {productData.colors.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {productData.colors.map((color, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+                    >
+                      {color}
+                      <button
+                        type="button"
+                        onClick={() => removeColor(color)}
+                        className="ml-2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div>

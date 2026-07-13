@@ -163,6 +163,8 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
       case 'very-good': return 'Très bon';
       case 'good': return 'Bon';
       case 'fair': return 'Correct';
+      case 'S': case 'A': case 'AB': case 'B': case 'BC': case 'C': case 'D':
+        return `Grade ${condition}`;
       default: return condition;
     }
   };
@@ -373,7 +375,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Genre</label>
-                  <p className="text-gray-900">{formatGenre(product.genre)}</p>
+                  <p className="text-gray-900">{product.genre ? formatGenre(product.genre) : '—'}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Prix d'achat</label>
