@@ -7,15 +7,20 @@ export interface MyB2BOrderItem {
   quantity: number;
   unit_price: number;
   line_total: number;
-  product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string };
+  product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string; reference?: string | null };
 }
 
 export interface MyB2BOrder {
   id: string;
   order_number: string;
   status: string;
+  payment_status: string;
   subtotal: number;
+  shipping_cost: number;
   total_amount: number;
+  shipping_address: Record<string, unknown>;
+  tracking_number: string | null;
+  tracking_url: string | null;
   created_at: string;
   order_items: MyB2BOrderItem[];
 }
@@ -32,7 +37,9 @@ export const useMyB2BOrders = (isAuthenticated: boolean = false) => {
 
       const { data, error: fetchError } = await supabase
         .from('orders')
-        .select('id, order_number, status, subtotal, total_amount, created_at, order_items(*)')
+        .select(
+          'id, order_number, status, payment_status, subtotal, shipping_cost, total_amount, shipping_address, tracking_number, tracking_url, created_at, order_items(*)'
+        )
         .eq('order_channel', 'b2b')
         .order('created_at', { ascending: false });
 
