@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Modal } from '../../ui/Modal';
 import { useB2BCart } from '../../../hooks/useB2BCart';
-import { AlertCircle, Trash2, ImageOff, CreditCard } from 'lucide-react';
+import { useResellerAuth } from '../../../hooks/useResellerAuth';
+import { AlertCircle, Trash2, ImageOff, CreditCard, MapPin } from 'lucide-react';
 
 interface CartPanelProps {
   isOpen: boolean;
@@ -9,14 +10,13 @@ interface CartPanelProps {
   cart: ReturnType<typeof useB2BCart>;
 }
 
-const emptyAddress = { line1: '', line2: '', city: '', postal_code: '', country: 'France' };
-
 export const CartPanel: React.FC<CartPanelProps> = ({ isOpen, onClose, cart }) => {
-  const [address, setAddress] = useState(emptyAddress);
+  const { profile } = useResellerAuth();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isAddressValid = Boolean(address.line1.trim() && address.city.trim() && address.postal_code.trim());
+  const address = profile?.shipping_address;
+  const hasAddress = Boolean(address?.line1 && address?.city && address?.postal_code);
 
   const handleClose = () => {
     if (submitting) return;
@@ -24,20 +24,14 @@ export const CartPanel: React.FC<CartPanelProps> = ({ isOpen, onClose, cart }) =
     onClose();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePay = async () => {
+    if (!hasAddress || !address) return;
     setError(null);
-
-    if (!isAddressValid) {
-      setError('Merci de renseigner une adresse de livraison complète (adresse, code postal, ville)');
-      return;
-    }
-
     setSubmitting(true);
     const result = await cart.startCheckout(address);
     // En cas de succès, startCheckout redirige immédiatement vers Stripe —
     // on ne repasse jamais ici. setSubmitting(false) ne sert donc que le cas
-    // d'erreur (ex : article devenu indisponible entre-temps).
+    // d'erreur (ex : article devenu indisponible).
     if (!result.success) {
       setSubmitting(false);
       setError(result.error || 'Une erreur est survenue');
@@ -92,70 +86,41 @@ export const CartPanel: React.FC<CartPanelProps> = ({ isOpen, onClose, cart }) =
               <span className="text-lg font-semibold text-gray-900">{cart.subtotal.toFixed(0)} €</span>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3 border-t border-gray-100 pt-3">
-              <p className="text-sm font-medium text-gray-700">Adresse de livraison</p>
-              <input
-                type="text"
-                placeholder="Adresse *"
-                value={address.line1}
-                onChange={(e) => setAddress({ ...address, line1: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                disabled={submitting}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Complément d'adresse"
-                value={address.line2}
-                onChange={(e) => setAddress({ ...address, line2: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                disabled={submitting}
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="Code postal *"
-                  value={address.postal_code}
-                  onChange={(e) => setAddress({ ...address, postal_code: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                  disabled={submitting}
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Ville *"
-                  value={address.city}
-                  onChange={(e) => setAddress({ ...address, city: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                  disabled={submitting}
-                  required
-                />
-              </div>
-              <input
-                type="text"
-                placeholder="Pays"
-                value={address.country}
-                onChange={(e) => setAddress({ ...address, country: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                disabled={submitting}
-              />
+            <div className="border-t border-gray-100 pt-3">
+              <p className="text-sm font-medium text-gray-700 mb-2">Adresse de livraison</p>
+              {hasAddress && address ? (
+                <div className="bg-gray-50 rounded-lg p-3 flex items-start gap-2">
+                  <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-gray-900">
+                    Livré à : {profile?.company_name}, {address.line1}
+                    {address.line2 ? `, ${address.line2}` : ''}, {address.postal_code} {address.city}, {address.country}
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-800">
+                    Aucune adresse de livraison configurée. Veuillez contacter votre administrateur.
+                  </p>
+                </div>
+              )}
+            </div>
 
-              <button
-                type="submit"
-                disabled={submitting || !isAddressValid}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              >
-                {submitting ? (
-                  <span>Traitement en cours...</span>
-                ) : (
-                  <>
-                    <CreditCard className="h-4 w-4" />
-                    <span>Procéder au paiement</span>
-                  </>
-                )}
-              </button>
-              <p className="text-xs text-gray-400 text-center">Paiement sécurisé par Stripe.</p>
-            </form>
+            <button
+              onClick={handlePay}
+              disabled={submitting || !hasAddress}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {submitting ? (
+                <span>Traitement du paiement...</span>
+              ) : (
+                <>
+                  <CreditCard className="h-4 w-4" />
+                  <span>Payer la commande ({cart.subtotal.toFixed(0)} €)</span>
+                </>
+              )}
+            </button>
+            <p className="text-xs text-gray-400 text-center">Paiement sécurisé par Stripe.</p>
           </>
         )}
       </div>

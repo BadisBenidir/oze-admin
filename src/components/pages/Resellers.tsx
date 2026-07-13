@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Modal } from '../ui/Modal';
-import { useResellers, Reseller, ResellerFormData, ResellerContact } from '../../hooks/useResellers';
+import { useResellers, Reseller, ResellerFormData, ResellerContact, emptyShippingAddress } from '../../hooks/useResellers';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { ResellerDetail } from './ResellerDetail';
 import {
@@ -37,6 +37,7 @@ const emptyForm: ResellerFormData = {
   contact_email: '',
   contact_phone: '',
   notes: '',
+  shipping_address: emptyShippingAddress,
 };
 
 const statusBadge = (status: Reseller['status']) => {
@@ -125,6 +126,7 @@ export const Resellers: React.FC = () => {
       contact_email: reseller.contact_email || '',
       contact_phone: reseller.contact_phone || '',
       notes: reseller.notes || '',
+      shipping_address: reseller.shipping_address || emptyShippingAddress,
     });
     setFormError(null);
     setShowModal(true);
@@ -609,6 +611,50 @@ export const Resellers: React.FC = () => {
                     )}
                   </div>
                 )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Adresse de livraison</label>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Adresse"
+                      value={formData.shipping_address.line1}
+                      onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, line1: e.target.value } })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Complément d'adresse"
+                      value={formData.shipping_address.line2}
+                      onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, line2: e.target.value } })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Code postal"
+                        value={formData.shipping_address.postal_code}
+                        onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, postal_code: e.target.value } })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Ville"
+                        value={formData.shipping_address.city}
+                        onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, city: e.target.value } })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Pays"
+                      value={formData.shipping_address.country}
+                      onChange={(e) => setFormData({ ...formData, shipping_address: { ...formData.shipping_address, country: e.target.value } })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Utilisée pour toutes les commandes de cette entreprise (contact principal et sous-comptes).</p>
+                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes internes</label>

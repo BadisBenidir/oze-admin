@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
+export interface ShippingAddress {
+  line1: string;
+  line2: string;
+  city: string;
+  postal_code: string;
+  country: string;
+}
+
+export const emptyShippingAddress: ShippingAddress = { line1: '', line2: '', city: '', postal_code: '', country: 'France' };
+
 export interface Reseller {
   id: string;
   company_name: string;
@@ -9,6 +19,7 @@ export interface Reseller {
   contact_email: string | null;
   contact_phone: string | null;
   billing_address: Record<string, unknown> | null;
+  shipping_address: ShippingAddress | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -21,6 +32,7 @@ export interface ResellerFormData {
   contact_email: string;
   contact_phone: string;
   notes: string;
+  shipping_address: ShippingAddress;
 }
 
 export interface ResellerContact {
@@ -96,6 +108,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
           contact_email: data.contact_email || null,
           contact_phone: data.contact_phone || null,
           notes: data.notes || null,
+          shipping_address: data.shipping_address.line1.trim() ? data.shipping_address : null,
         }])
         .select('id')
         .single();
@@ -114,9 +127,14 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
 
   const updateReseller = async (id: string, data: Partial<ResellerFormData>): Promise<{ success: boolean; error?: string }> => {
     try {
+      const payload: Partial<ResellerFormData> & { shipping_address?: ShippingAddress | null } = { ...data };
+      if (data.shipping_address) {
+        payload.shipping_address = data.shipping_address.line1.trim() ? data.shipping_address : null;
+      }
+
       const { error: updateError } = await supabase
         .from('resellers')
-        .update(data)
+        .update(payload)
         .eq('id', id);
 
       if (updateError) {

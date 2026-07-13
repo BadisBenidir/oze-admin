@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import type { ShippingAddress } from './useResellers'
 
 export interface ResellerProfile {
   id: string
@@ -13,6 +14,8 @@ export interface ResellerProfile {
   reseller_status: 'pending' | 'active' | 'suspended'
   /** Contact principal de l'entreprise : seul rôle autorisé à gérer les autres comptes de son équipe */
   is_primary: boolean
+  /** Configurée par l'admin OZË sur la fiche entreprise, jamais saisie par le revendeur */
+  shipping_address: ShippingAddress | null
 }
 
 interface ResellerAuthState {
@@ -47,7 +50,7 @@ export const useResellerAuth = () => {
           id, email, first_name, last_name, role,
           reseller_contacts!inner(
             reseller_id, is_primary,
-            resellers!inner(company_name, status)
+            resellers!inner(company_name, status, shipping_address)
           )
         `)
         .eq('id', userId)
@@ -83,6 +86,7 @@ export const useResellerAuth = () => {
           company_name: reseller.company_name,
           reseller_status: reseller.status,
           is_primary: Boolean(contact.is_primary),
+          shipping_address: reseller.shipping_address || null,
         },
         pendingReason: null,
       }
