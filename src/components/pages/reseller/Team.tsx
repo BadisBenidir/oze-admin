@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { Toast } from '../../ui/Toast';
+import { ConfirmModal } from '../../ui/ConfirmModal';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useResellerTeam, TeamMember } from '../../../hooks/useResellerTeam';
 import { generateSecurePassword } from '../../../utils/generatePassword';
@@ -23,6 +24,9 @@ export const Team: React.FC = () => {
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const [viewingMember, setViewingMember] = useState<TeamMember | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -86,11 +90,16 @@ export const Team: React.FC = () => {
     }
   };
 
-  const handleRemove = async (memberId: string, name: string) => {
-    if (!window.confirm(`Retirer l'accès de ${name} ?`)) return;
-    const result = await removeTeammate(memberId);
-    if (!result.success) {
-      setFormError(result.error || 'Erreur lors de la suppression');
+  const handleConfirmRemove = async () => {
+    if (!memberToRemove) return;
+    setRemoving(true);
+    setRemoveError(null);
+    const result = await removeTeammate(memberToRemove.id);
+    setRemoving(false);
+    if (result.success) {
+      setMemberToRemove(null);
+    } else {
+      setRemoveError(result.error || 'Erreur lors de la suppression');
     }
   };
 
@@ -144,9 +153,9 @@ export const Team: React.FC = () => {
                     </button>
                     {!m.is_primary && (
                       <button
-                        onClick={() => handleRemove(m.id, `${m.first_name} ${m.last_name}`)}
+                        onClick={() => { setRemoveError(null); setMemberToRemove(m); }}
                         className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Retirer l'accès"
+                        title="Supprimer ce collaborateur"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -284,6 +293,16 @@ export const Team: React.FC = () => {
       </Card>
 
       {successToast && <Toast message={successToast} onDismiss={() => setSuccessToast(null)} />}
+
+      <ConfirmModal
+        isOpen={Boolean(memberToRemove)}
+        title="Supprimer ce collaborateur"
+        message="Êtes-vous sûr de vouloir supprimer ce collaborateur ? Cette action est irréversible."
+        isConfirming={removing}
+        error={removeError}
+        onConfirm={handleConfirmRemove}
+        onCancel={() => { setMemberToRemove(null); setRemoveError(null); }}
+      />
     </div>
   );
 };

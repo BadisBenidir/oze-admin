@@ -95,16 +95,12 @@ export const useResellerTeam = (resellerId: string | undefined) => {
   };
 
   const removeTeammate = async (contactId: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { error: deleteError } = await supabase.from('reseller_contacts').delete().eq('id', contactId);
-      if (deleteError) {
-        throw new Error(deleteError.message);
-      }
-      await fetchTeam();
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
+    const { error } = await invokeEdgeFunction('delete-reseller-contact', { contact_id: contactId });
+    if (error) {
+      return { success: false, error };
     }
+    await fetchTeam();
+    return { success: true };
   };
 
   useEffect(() => {

@@ -285,21 +285,12 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
   };
 
   const removeContact = async (contactId: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { error: deleteError } = await supabase
-        .from('reseller_contacts')
-        .delete()
-        .eq('id', contactId);
-
-      if (deleteError) {
-        throw new Error(deleteError.message);
-      }
-
-      return { success: true };
-    } catch (err) {
-      console.error('Erreur lors de la suppression du contact:', err);
-      return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
+    const { error } = await invokeEdgeFunction('delete-reseller-contact', { contact_id: contactId });
+    if (error) {
+      console.error('Erreur lors de la suppression du contact:', error);
+      return { success: false, error };
     }
+    return { success: true };
   };
 
   useEffect(() => {

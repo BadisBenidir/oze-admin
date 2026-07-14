@@ -3,6 +3,7 @@ import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Modal } from '../ui/Modal';
 import { Toast } from '../ui/Toast';
+import { ConfirmModal } from '../ui/ConfirmModal';
 import { useResellers, Reseller, ResellerContact } from '../../hooks/useResellers';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { ResellerDetail } from './ResellerDetail';
@@ -65,6 +66,9 @@ export const Resellers: React.FC = () => {
   const [convertedNotice, setConvertedNotice] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [inviteCooldown, setInviteCooldown] = useState(0);
+  const [contactToRemove, setContactToRemove] = useState<ResellerContact | null>(null);
+  const [removingContact, setRemovingContact] = useState(false);
+  const [removeContactError, setRemoveContactError] = useState<string | null>(null);
 
   useEffect(() => {
     if (inviteCooldown <= 0) return;
@@ -125,6 +129,8 @@ export const Resellers: React.FC = () => {
     setCreatedCredentials(null);
     setConvertedNotice(null);
     setInviteCooldown(0);
+    setContactToRemove(null);
+    setRemoveContactError(null);
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -172,17 +178,21 @@ export const Resellers: React.FC = () => {
     }
   };
 
-  const handleRemoveContact = async (contact: ResellerContact) => {
-    if (!contactsReseller) return;
-    if (!window.confirm(`Retirer l'accès de ${contact.first_name} ${contact.last_name} ?`)) return;
+  const handleConfirmRemoveContact = async () => {
+    if (!contactsReseller || !contactToRemove) return;
+    setRemovingContact(true);
+    setRemoveContactError(null);
 
-    const result = await removeContact(contact.id);
+    const result = await removeContact(contactToRemove.id);
+    setRemovingContact(false);
+
     if (result.success) {
+      setContactToRemove(null);
       const data = await fetchContacts(contactsReseller.id);
       setContacts(data);
       await refreshResellers();
     } else {
-      setContactsError(result.error || 'Erreur lors de la suppression du contact');
+      setRemoveContactError(result.error || 'Erreur lors de la suppression du contact');
     }
   };
 
@@ -414,17 +424,22 @@ export const Resellers: React.FC = () => {
             <ul className="space-y-2">
               {contacts.map((c) => (
                 <li key={c.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{c.first_name} {c.last_name}</p>
-                    <p className="text-xs text-gray-500">{c.email}</p>
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{c.first_name} {c.last_name}</p>
+                      <p className="text-xs text-gray-500">{c.email}</p>
+                    </div>
+                    {c.is_primary && <Badge variant="info">Principal</Badge>}
                   </div>
-                  <button
-                    onClick={() => handleRemoveContact(c)}
-                    className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                    title="Retirer l'accès"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {!c.is_primary && (
+                    <button
+                      onClick={() => { setRemoveContactError(null); setContactToRemove(c); }}
+                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                      title="Supprimer ce contact"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -549,6 +564,16 @@ export const Resellers: React.FC = () => {
       </Modal>
 
       {successToast && <Toast message={successToast} onDismiss={() => setSuccessToast(null)} />}
+
+      <ConfirmModal
+        isOpen={Boolean(contactToRemove)}
+        title="Supprimer ce contact"
+        message="Êtes-vous sûr de vouloir supprimer ce collaborateur ? Cette action est irréversible."
+        isConfirming={removingContact}
+        error={removeContactError}
+        onConfirm={handleConfirmRemoveContact}
+        onCancel={() => { setContactToRemove(null); setRemoveContactError(null); }}
+      />
     </div>
   );
 };
