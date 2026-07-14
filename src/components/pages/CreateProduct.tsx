@@ -421,11 +421,13 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
       console.log(`Produit ${isEditMode ? 'modifié' : 'créé'} avec succès:`, data);
       
       // Afficher la modal de succès
+      const baseMessage = isEditMode
+        ? 'Les modifications ont été sauvegardées avec succès.'
+        : 'Votre produit a été ajouté au catalogue et est maintenant disponible.';
+
       setModalData({
         title: isEditMode ? 'Produit modifié avec succès !' : 'Produit créé avec succès !',
-        message: isEditMode
-          ? 'Les modifications ont été sauvegardées avec succès.'
-          : 'Votre produit a été ajouté au catalogue et est maintenant disponible.',
+        message: data.b2b_reference ? `${baseMessage} Référence B2B : ${data.b2b_reference}` : baseMessage,
         productCode: data.product_code,
         reference: data.reference,
         name: data.name,

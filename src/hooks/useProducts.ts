@@ -7,6 +7,8 @@ export interface Product {
   product_code: string
   // Référence auto-générée « OZ-[MARQUE]-[NNN] » + code-barres (trigger BDD à la création).
   reference: string | null
+  // SKU exclusif B2B « OZE-B2B-[ANNÉE]-[NNNN] », distinct de `reference` (trigger BDD).
+  b2b_reference: string | null
   barcode: string | null
   name: string
   brand_id: string | null

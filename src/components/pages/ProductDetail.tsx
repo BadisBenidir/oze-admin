@@ -261,6 +261,9 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
               </Badge>
             </div>
             <p className="text-gray-600">{product.brand?.name || 'Sans marque'} • {product.product_code}</p>
+            {product.b2b_reference && (
+              <p className="text-sm text-gray-500 font-mono mt-1">SKU B2B : {product.b2b_reference}</p>
+            )}
           </div>
           
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 lg:flex-shrink-0">

@@ -5,6 +5,7 @@ export interface B2BCatalogItem {
   id: string;
   product_code: string;
   reference: string | null;
+  b2b_reference: string | null;
   name: string;
   brand_id: string | null;
   category_id: string | null;

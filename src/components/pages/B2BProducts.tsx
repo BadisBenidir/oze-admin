@@ -170,7 +170,7 @@ export const B2BProducts: React.FC = () => {
                 <thead>
                   <tr className="border-b border-gray-100">
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Article</th>
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden sm:table-cell">Code</th>
+                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden sm:table-cell">Référence B2B</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Prix</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Statut</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Actions</th>
@@ -204,7 +204,7 @@ export const B2BProducts: React.FC = () => {
                           </div>
                         </td>
                         <td className="py-3 md:py-4 px-4 md:px-6 hidden sm:table-cell">
-                          <span className="font-mono text-xs text-gray-900">{product.product_code}</span>
+                          <span className="font-mono text-xs text-gray-900">{product.b2b_reference || '—'}</span>
                         </td>
                         <td className="py-3 md:py-4 px-4 md:px-6 text-sm font-semibold text-gray-900">{product.sale_price.toFixed(0)} €</td>
                         <td className="py-3 md:py-4 px-4 md:px-6">{statusBadge(product.status)}</td>

@@ -203,9 +203,9 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
                 Grade {product.condition}
               </Badge>
             )}
-            <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+            <span className="inline-flex items-center gap-1 text-xs text-gray-400 font-mono">
               <Tag className="h-3 w-3" />
-              {product.reference || product.product_code}
+              {product.b2b_reference || product.reference || product.product_code}
             </span>
           </div>
 
