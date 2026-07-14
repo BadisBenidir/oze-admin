@@ -20,6 +20,7 @@ export interface Product {
   condition: 'neuf' | 'excellent' | 'very-good' | 'good' | 'fair' | 'S' | 'A' | 'AB' | 'B' | 'BC' | 'C' | 'D'
   description: string | null
   defects: string | null
+  defect_images: string[] | null
   colors: string[]
   material: string | null
   status: 'draft' | 'for-sale-online' | 'for-sale-other-platform' | 'sold-online' | 'sold-other-platform' | 'sold-display' | 'for-auction-live' | 'sold-auction' | 'for-sale-b2b' | 'reserved-b2b' | 'sold-b2b'

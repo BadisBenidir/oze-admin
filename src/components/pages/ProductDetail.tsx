@@ -7,8 +7,8 @@ import { ProductLabel } from '../products/ProductLabel';
 import { BarcodeScanner } from '../products/BarcodeScanner';
 import { Modal } from '../ui/Modal';
 import { validateProductByBarcode } from '../../services/productValidationService';
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   Package,
   Calendar,
   Tag,
@@ -19,7 +19,10 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  ScanLine
+  ScanLine,
+  AlertTriangle,
+  ZoomIn,
+  X
 } from 'lucide-react';
 
 interface ProductDetailProps {
@@ -35,6 +38,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [zoomedDefectImage, setZoomedDefectImage] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [statusUpdateSuccess, setStatusUpdateSuccess] = useState(false);
 
@@ -490,6 +494,30 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                   <p className="text-gray-900 mt-1 whitespace-pre-line">{product.defects}</p>
                 </div>
               )}
+
+              {product.defect_images && product.defect_images.length > 0 && (
+                <div>
+                  <label className="text-sm font-medium text-gray-500 flex items-center">
+                    <AlertTriangle className="h-4 w-4 mr-1" />
+                    Photos des défauts ({product.defect_images.length})
+                  </label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {product.defect_images.map((img, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => setZoomedDefectImage(img)}
+                        className="relative h-20 w-20 rounded-md overflow-hidden border border-red-200 group"
+                      >
+                        <img src={img} alt={`Défaut ${index + 1}`} className="w-full h-full object-cover" />
+                        <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center transition-colors">
+                          <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover:opacity-100" />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -565,6 +593,26 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
           )}
         </div>
       </Modal>
+
+      {zoomedDefectImage && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-6"
+          onClick={() => setZoomedDefectImage(null)}
+        >
+          <button
+            onClick={() => setZoomedDefectImage(null)}
+            className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white hover:bg-white/20"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <img
+            src={zoomedDefectImage}
+            alt="Défaut agrandi"
+            className="max-w-full max-h-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 };
