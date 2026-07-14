@@ -4,18 +4,18 @@ import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useB2BCatalog, B2BCatalogItem } from '../../../hooks/useB2BCatalog';
 import { useB2BCart } from '../../../hooks/useB2BCart';
-import { ProductDetailModal, GRADE_VARIANTS, isGrade } from './ProductDetailModal';
-import { Search, ShoppingCart, ImageOff, Check, Package, ChevronLeft, ChevronRight } from 'lucide-react';
+import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
+import { Search, ShoppingCart, ImageOff, Check, Package, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 
 interface CatalogProps {
   onOpenCart: () => void;
+  onOpenProduct: (productId: string) => void;
 }
 
-export const Catalog: React.FC<CatalogProps> = ({ onOpenCart }) => {
+export const Catalog: React.FC<CatalogProps> = ({ onOpenCart, onOpenProduct }) => {
   const { isReseller, profile } = useResellerAuth();
   const { items, loading, error, currentPage, totalPages, hasNextPage, hasPreviousPage, search, setSearch, setPage } = useB2BCatalog(isReseller);
   const cart = useB2BCart(profile?.reseller_id);
-  const [selectedProduct, setSelectedProduct] = useState<B2BCatalogItem | null>(null);
 
   return (
     <div className="p-4 md:p-6">
@@ -78,7 +78,7 @@ export const Catalog: React.FC<CatalogProps> = ({ onOpenCart }) => {
                 product={product}
                 inCart={cart.isInCart(product.id)}
                 onAdd={() => cart.addItem(product)}
-                onView={() => setSelectedProduct(product)}
+                onView={() => onOpenProduct(product.id)}
               />
             ))}
       </div>
@@ -102,21 +102,35 @@ export const Catalog: React.FC<CatalogProps> = ({ onOpenCart }) => {
           </button>
         </div>
       )}
-
-      {selectedProduct && (
-        <ProductDetailModal
-          product={selectedProduct}
-          inCart={cart.isInCart(selectedProduct.id)}
-          onClose={() => setSelectedProduct(null)}
-          onAdd={() => cart.addItem(selectedProduct)}
-        />
-      )}
     </div>
   );
 };
 
-const ProductCard: React.FC<{ product: B2BCatalogItem; inCart: boolean; onAdd: () => void; onView: () => void }> = ({ product, inCart, onAdd, onView }) => {
+interface ProductCardProps {
+  product: B2BCatalogItem;
+  inCart: boolean;
+  onAdd: () => Promise<{ success: boolean; error?: string }>;
+  onView: () => void;
+}
+
+const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onView }) => {
   const image = product.images?.[product.main_image_index] || product.images?.[0];
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  const held = product.held_by_other && !inCart;
+  const disabled = adding || inCart || held;
+
+  const handleAdd = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAddError(null);
+    setAdding(true);
+    const result = await onAdd();
+    setAdding(false);
+    if (!result.success) {
+      setAddError(result.error || 'Erreur');
+    }
+  };
 
   return (
     <Card hover className="overflow-hidden flex flex-col cursor-pointer" onClick={onView}>
@@ -138,13 +152,14 @@ const ProductCard: React.FC<{ product: B2BCatalogItem; inCart: boolean; onAdd: (
             )}
           </div>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onAdd();
-            }}
-            disabled={inCart}
+            onClick={handleAdd}
+            disabled={disabled}
             className={`w-full flex items-center justify-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-              inCart ? 'bg-green-50 text-green-700 cursor-default' : 'bg-gray-900 text-white hover:bg-gray-800'
+              inCart
+                ? 'bg-green-50 text-green-700 cursor-default'
+                : disabled
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-900 text-white hover:bg-gray-800'
             }`}
           >
             {inCart ? (
@@ -152,13 +167,19 @@ const ProductCard: React.FC<{ product: B2BCatalogItem; inCart: boolean; onAdd: (
                 <Check className="h-3 w-3" />
                 <span>Dans le panier</span>
               </>
+            ) : held ? (
+              <>
+                <Clock className="h-3 w-3" />
+                <span>En cours de réservation</span>
+              </>
             ) : (
               <>
                 <ShoppingCart className="h-3 w-3" />
-                <span>Ajouter</span>
+                <span>{adding ? 'Ajout...' : 'Ajouter'}</span>
               </>
             )}
           </button>
+          {addError && <p className="text-[11px] text-red-600">{addError}</p>}
         </div>
       </CardContent>
     </Card>

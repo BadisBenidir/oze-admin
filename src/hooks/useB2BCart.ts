@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { B2BCatalogItem } from './useB2BCatalog';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 
@@ -15,6 +16,23 @@ interface CheckoutResult {
   error?: string;
   unavailableIds?: string[];
 }
+
+interface AddItemResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Verrou logiciel best-effort (pas la réservation réelle de l'inventaire,
+ * toujours faite atomiquement au paiement) : signale aux autres revendeurs
+ * que l'article est dans un panier actif. Échec silencieux volontaire côté
+ * release — un hold orphelin expire de lui-même sous 15 min.
+ */
+const releaseHold = (productId: string) => {
+  supabase.rpc('release_b2b_cart_item', { p_product_id: productId }).then(({ error }) => {
+    if (error) console.error('Erreur lors de la libération du verrou panier:', error);
+  });
+};
 
 /** Durée de la session de réservation affichée au revendeur avant expiration du panier. */
 const CART_SESSION_MS = 15 * 60 * 1000;
@@ -126,16 +144,29 @@ export const useB2BCart = (resellerId: string | undefined) => {
     }
   };
 
-  const addItem = (product: B2BCatalogItem) => {
-    if (items.some((i) => i.id === product.id)) return;
+  const addItem = async (product: B2BCatalogItem): Promise<AddItemResult> => {
+    if (items.some((i) => i.id === product.id)) return { success: true };
+
+    // Pose le verrou côté serveur AVANT d'ajouter localement : si un autre
+    // revendeur a déjà cet article dans son panier, la fonction refuse.
+    const { error } = await supabase.rpc('hold_b2b_cart_item', { p_product_id: product.id });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
     persistItems([...items, toCartItem(product)]);
+    return { success: true };
   };
 
   const removeItem = (id: string) => {
     persistItems(items.filter((i) => i.id !== id));
+    releaseHold(id);
   };
 
-  const clear = () => persistItems([]);
+  const clear = () => {
+    items.forEach((i) => releaseHold(i.id));
+    persistItems([]);
+  };
 
   const isInCart = (id: string) => items.some((i) => i.id === id);
 

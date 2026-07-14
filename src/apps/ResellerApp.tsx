@@ -7,12 +7,21 @@ import { MainLayout } from '../components/layout/layMainLayout';
 import { ResellerHeader } from '../components/layout/resHeader';
 import { resellerNavigationItems, resellerTeamNavItem } from '../config/resellerNavigation';
 import { Catalog } from '../components/pages/reseller/Catalog';
+import { ProductPage } from '../components/pages/reseller/ProductPage';
 import { CartPage } from '../components/pages/reseller/CartPage';
 import { MyOrders } from '../components/pages/reseller/MyOrders';
 import { ResellerProfile } from '../components/pages/reseller/ResellerProfile';
 import { Team } from '../components/pages/reseller/Team';
 import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
 import { X } from 'lucide-react';
+
+// Seule route "réelle" (URL adressable) de l'app revendeur : la fiche
+// produit du catalogue B2B. Tout le reste continue de fonctionner par état
+// d'onglet (voir useNavigation), sans dépendance à react-router.
+const parseProductId = (pathname: string): string | null => {
+  const match = pathname.match(/^\/catalogue\/([^/]+)\/?$/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
 
 function ResellerApp() {
   const { activeTab, activeSubTab, navigateTo } = useNavigation();
@@ -23,6 +32,25 @@ function ResellerApp() {
   const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'cancel' | null>(null);
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
   const [cartExpired, setCartExpired] = useState(false);
+  const [pathname, setPathname] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const onPopState = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const openProduct = (productId: string) => {
+    window.history.pushState({}, '', `/catalogue/${productId}`);
+    setPathname(`/catalogue/${productId}`);
+  };
+
+  const closeProduct = () => {
+    window.history.pushState({}, '', '/');
+    setPathname('/');
+  };
+
+  const productId = parseProductId(pathname);
 
   // Retour depuis Stripe : lu une seule fois au montage, puis l'URL est
   // nettoyée pour ne pas re-déclencher au rafraîchissement de la page.
@@ -58,6 +86,10 @@ function ResellerApp() {
       return <CheckoutSuccess sessionId={checkoutSessionId} onGoToOrders={handleGoToOrders} />;
     }
 
+    if (productId) {
+      return <ProductPage productId={productId} cart={cart} onBack={closeProduct} />;
+    }
+
     switch (currentTab) {
       case 'cart':
         return <CartPage cart={cart} onBack={() => navigateTo('catalog', '')} onExpired={handleCartExpired} />;
@@ -69,7 +101,7 @@ function ResellerApp() {
         return <Team />;
       case 'catalog':
       default:
-        return <Catalog onOpenCart={() => navigateTo('cart', '')} />;
+        return <Catalog onOpenCart={() => navigateTo('cart', '')} onOpenProduct={openProduct} />;
     }
   };
 
@@ -81,6 +113,7 @@ function ResellerApp() {
         onTabChange={(tab) => {
           setCheckoutStatus(null);
           setCartExpired(false);
+          if (productId) closeProduct();
           navigateTo(tab, '');
         }}
         onSubTabChange={() => {}}
