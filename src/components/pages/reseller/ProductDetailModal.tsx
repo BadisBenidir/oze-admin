@@ -22,9 +22,39 @@ export const GRADE_VARIANTS: Record<string, 'success' | 'info' | 'warning' | 'de
 
 export const isGrade = (condition: string) => Object.prototype.hasOwnProperty.call(GRADE_VARIANTS, condition);
 
+/**
+ * `defect_images` est une colonne Postgres `text[]` (contrairement à `images`,
+ * en `jsonb`) exposée via la vue `b2b_catalog` : PostgREST la sérialise
+ * normalement en tableau JS, mais certains chemins (cache de schéma pas
+ * encore rafraîchi côté PostgREST, colonne fraîchement ajoutée à la vue)
+ * peuvent la renvoyer sous forme de chaîne — soit en JSON (`'["url1","url2"]'`),
+ * soit au format littéral Postgres (`'{"url1","url2"}'`). On normalise ici
+ * pour ne jamais dépendre du format exact renvoyé par l'API.
+ */
+const normalizeImageArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return normalizeImageArray(parsed);
+    } catch {
+      // Pas du JSON valide : on tente le format littéral Postgres `{a,b,c}`.
+      const inner = value.trim().replace(/^\{/, '').replace(/\}$/, '');
+      if (!inner) return [];
+      return inner
+        .split(',')
+        .map((s) => s.trim().replace(/^"/, '').replace(/"$/, ''))
+        .filter(Boolean);
+    }
+  }
+  return [];
+};
+
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, inCart, onClose, onAdd }) => {
   const images = product.images?.length ? product.images : [];
-  const defectImages = product.defect_images?.length ? product.defect_images : [];
+  const defectImages = normalizeImageArray(product.defect_images);
   const defectLines = (product.defects || '')
     .split('\n')
     .map((line) => line.trim())
