@@ -3,9 +3,10 @@ import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { Toast } from '../../ui/Toast';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
-import { useResellerTeam } from '../../../hooks/useResellerTeam';
+import { useResellerTeam, TeamMember } from '../../../hooks/useResellerTeam';
 import { generateSecurePassword } from '../../../utils/generatePassword';
-import { Users, UserPlus, Trash2, AlertCircle, Mail, Crown } from 'lucide-react';
+import { TeamMemberDetail } from './TeamMemberDetail';
+import { Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye } from 'lucide-react';
 
 const INVITE_COOLDOWN_SECONDS = 30;
 
@@ -14,13 +15,14 @@ export const Team: React.FC = () => {
   const { members, loading, error, inviteTeammate, removeTeammate } = useResellerTeam(profile?.reseller_id);
 
   const [mode, setMode] = useState<'email' | 'password'>('email');
-  const [form, setForm] = useState({ email: '', first_name: '', last_name: '', password: '' });
+  const [form, setForm] = useState({ email: '', first_name: '', last_name: '', password: '', phone: '' });
   const [inviting, setInviting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
   const [convertedNotice, setConvertedNotice] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
+  const [viewingMember, setViewingMember] = useState<TeamMember | null>(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -63,7 +65,8 @@ export const Team: React.FC = () => {
         form.email.trim(),
         form.first_name.trim(),
         form.last_name.trim(),
-        mode === 'password' ? form.password.trim() : undefined
+        mode === 'password' ? form.password.trim() : undefined,
+        form.phone.trim() || undefined
       );
       if (result.success) {
         if (mode === 'password') {
@@ -74,7 +77,7 @@ export const Team: React.FC = () => {
           setSuccessToast("L'invitation a bien été envoyée avec succès !");
           setCooldown(INVITE_COOLDOWN_SECONDS);
         }
-        setForm({ email: '', first_name: '', last_name: '', password: '' });
+        setForm({ email: '', first_name: '', last_name: '', password: '', phone: '' });
       } else {
         setFormError(result.error || 'Erreur lors de la création du compte');
       }
@@ -90,6 +93,10 @@ export const Team: React.FC = () => {
       setFormError(result.error || 'Erreur lors de la suppression');
     }
   };
+
+  if (viewingMember) {
+    return <TeamMemberDetail member={viewingMember} onBack={() => setViewingMember(null)} />;
+  }
 
   return (
     <div className="p-4 md:p-6 max-w-2xl">
@@ -128,6 +135,13 @@ export const Team: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     {m.is_primary && <Badge variant="info">Principal</Badge>}
+                    <button
+                      onClick={() => setViewingMember(m)}
+                      className="p-1 text-gray-400 hover:text-gray-900 transition-colors"
+                      title="Voir les détails"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
                     {!m.is_primary && (
                       <button
                         onClick={() => handleRemove(m.id, `${m.first_name} ${m.last_name}`)}
@@ -217,6 +231,16 @@ export const Team: React.FC = () => {
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                 required
+              />
+            </div>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="tel"
+                placeholder="Téléphone (optionnel)"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
               />
             </div>
 

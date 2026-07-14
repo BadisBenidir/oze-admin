@@ -44,7 +44,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { reseller_id, email, first_name, last_name, password, is_primary } = await req.json();
+    const { reseller_id, email, first_name, last_name, password, is_primary, phone } = await req.json();
     if (!reseller_id || !email) {
       return new Response(JSON.stringify({ error: 'reseller_id et email sont requis' }), {
         status: 400,
@@ -318,6 +318,7 @@ Deno.serve(async (req: Request) => {
         email,
         first_name: first_name ?? '',
         last_name: last_name ?? '',
+        phone: phone || null,
         role: 'reseller',
         activated_at: activatedAt,
         last_invited_at: lastInvitedAt,

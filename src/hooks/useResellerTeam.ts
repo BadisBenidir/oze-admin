@@ -10,6 +10,8 @@ export interface TeamMember {
   first_name: string;
   last_name: string;
   email: string;
+  phone: string | null;
+  activated_at: string | null;
 }
 
 type ContactRow = {
@@ -17,7 +19,7 @@ type ContactRow = {
   profile_id: string;
   is_primary: boolean;
   created_at: string;
-  profiles: { first_name: string; last_name: string; email: string };
+  profiles: { first_name: string; last_name: string; email: string; phone: string | null; activated_at: string | null };
 };
 
 export const useResellerTeam = (resellerId: string | undefined) => {
@@ -37,7 +39,7 @@ export const useResellerTeam = (resellerId: string | undefined) => {
 
       const { data, error: fetchError } = await supabase
         .from('reseller_contacts')
-        .select('id, profile_id, is_primary, created_at, profiles!inner(first_name, last_name, email)')
+        .select('id, profile_id, is_primary, created_at, profiles!inner(first_name, last_name, email, phone, activated_at)')
         .eq('reseller_id', resellerId)
         .order('created_at', { ascending: true });
 
@@ -54,6 +56,8 @@ export const useResellerTeam = (resellerId: string | undefined) => {
           first_name: c.profiles.first_name,
           last_name: c.profiles.last_name,
           email: c.profiles.email,
+          phone: c.profiles.phone,
+          activated_at: c.profiles.activated_at,
         }))
       );
     } catch (err) {
@@ -68,7 +72,8 @@ export const useResellerTeam = (resellerId: string | undefined) => {
     email: string,
     firstName: string,
     lastName: string,
-    password?: string
+    password?: string,
+    phone?: string
   ): Promise<{ success: boolean; error?: string; convertedExistingAccount?: boolean }> => {
     if (!resellerId) return { success: false, error: 'Compte revendeur introuvable' };
 
@@ -78,6 +83,7 @@ export const useResellerTeam = (resellerId: string | undefined) => {
       first_name: firstName,
       last_name: lastName,
       password: password || undefined,
+      phone: phone || undefined,
     });
 
     if (error) {

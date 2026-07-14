@@ -125,6 +125,7 @@ Deno.serve(async (req: Request) => {
       customer_email: email || undefined,
       metadata: {
         reseller_id: resellerId,
+        placed_by_profile_id: user.id,
         product_ids: JSON.stringify(products.map((p) => p.id)),
         shipping_address: JSON.stringify(shipping_address),
         billing_address: JSON.stringify(billing_address || shipping_address),

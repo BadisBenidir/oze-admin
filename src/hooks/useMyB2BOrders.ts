@@ -25,12 +25,23 @@ export interface MyB2BOrder {
   order_items: MyB2BOrderItem[];
 }
 
-export const useMyB2BOrders = (isAuthenticated: boolean = false) => {
+/**
+ * Commandes B2B d'UN profil précis (filtre explicite, ne compte pas
+ * seulement sur la RLS) : `profileId` vaut le profil du revendeur connecté
+ * pour "Mes commandes", ou celui d'un coéquipier pour la vue détail d'un
+ * membre de l'équipe (accessible uniquement au contact principal, via RLS).
+ */
+export const useMyB2BOrders = (isAuthenticated: boolean = false, profileId: string | undefined = undefined) => {
   const [orders, setOrders] = useState<MyB2BOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
+    if (!profileId) {
+      setOrders([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -41,6 +52,7 @@ export const useMyB2BOrders = (isAuthenticated: boolean = false) => {
           'id, order_number, status, payment_status, subtotal, shipping_cost, total_amount, shipping_address, tracking_number, tracking_url, created_at, order_items(*)'
         )
         .eq('order_channel', 'b2b')
+        .eq('placed_by_profile_id', profileId)
         .order('created_at', { ascending: false });
 
       if (fetchError) {
@@ -49,20 +61,20 @@ export const useMyB2BOrders = (isAuthenticated: boolean = false) => {
 
       setOrders((data || []) as unknown as MyB2BOrder[]);
     } catch (err) {
-      console.error('Erreur lors du chargement de mes commandes:', err);
+      console.error('Erreur lors du chargement des commandes:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profileId]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !profileId) {
       setLoading(false);
       return;
     }
     fetchOrders();
-  }, [isAuthenticated, fetchOrders]);
+  }, [isAuthenticated, profileId, fetchOrders]);
 
   return { orders, loading, error, refresh: fetchOrders };
 };

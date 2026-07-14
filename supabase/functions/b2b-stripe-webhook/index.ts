@@ -70,6 +70,7 @@ Deno.serve(async (req: Request) => {
       p_stripe_session_id: session.id,
       p_stripe_payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : null,
       p_email: metadata.email || session.customer_email || '',
+      p_placed_by_profile_id: metadata.placed_by_profile_id || null,
     });
 
     if (error) {
