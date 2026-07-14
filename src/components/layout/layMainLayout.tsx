@@ -14,6 +14,10 @@ interface MainLayoutProps {
   onSubTabChange: (subTab: string) => void;
   navigationItems?: MenuItem[];
   renderHeader?: (props: { activeTab: string; onMenuToggle: () => void }) => React.ReactNode;
+  /** Contenu additionnel aligné à droite de la barre de navigation sombre (desktop uniquement). */
+  navRightContent?: React.ReactNode;
+  /** Contenu additionnel affiché en bas de la liste du menu mobile (hamburger). */
+  mobileExtra?: React.ReactNode;
 }
 
 export const MainLayout: React.FC<MainLayoutProps> = ({
@@ -24,6 +28,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   onSubTabChange,
   navigationItems = defaultNavigationItems,
   renderHeader,
+  navRightContent,
+  mobileExtra,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -110,13 +116,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                   );
                 })}
               </nav>
+              {mobileExtra && <div className="px-4 mt-2 pt-2 border-t border-gray-100">{mobileExtra}</div>}
             </div>
           </div>
         </div>
       )}
-      
+
       <div className="hidden md:block">
-        <HorizontalNav activeTab={activeTab} onTabChange={onTabChange} navigationItems={navigationItems} />
+        <HorizontalNav activeTab={activeTab} onTabChange={onTabChange} navigationItems={navigationItems} rightContent={navRightContent} />
       </div>
 
       <div className="md:flex md:h-[calc(100vh-140px)]">

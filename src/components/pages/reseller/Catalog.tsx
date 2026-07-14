@@ -8,34 +8,19 @@ import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
 import { Search, ShoppingCart, ImageOff, Check, Package, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 
 interface CatalogProps {
-  onOpenCart: () => void;
   onOpenProduct: (productId: string) => void;
 }
 
-export const Catalog: React.FC<CatalogProps> = ({ onOpenCart, onOpenProduct }) => {
+export const Catalog: React.FC<CatalogProps> = ({ onOpenProduct }) => {
   const { isReseller, profile } = useResellerAuth();
   const { items, loading, error, currentPage, totalPages, hasNextPage, hasPreviousPage, search, setSearch, setPage } = useB2BCatalog(isReseller);
   const cart = useB2BCart(profile?.reseller_id);
 
   return (
     <div className="p-4 md:p-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Catalogue</h3>
-          <p className="text-sm text-gray-500">Pièces réservées aux revendeurs</p>
-        </div>
-        <button
-          onClick={onOpenCart}
-          className="relative flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors self-start md:self-auto"
-        >
-          <ShoppingCart className="h-4 w-4" />
-          <span>Panier</span>
-          {cart.items.length > 0 && (
-            <span className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
-              {cart.items.length}
-            </span>
-          )}
-        </button>
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold text-gray-900">Catalogue</h3>
+        <p className="text-sm text-gray-500">Pièces réservées aux revendeurs</p>
       </div>
 
       <div className="relative mb-6">

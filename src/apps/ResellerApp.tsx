@@ -13,11 +13,12 @@ import { MyOrders } from '../components/pages/reseller/MyOrders';
 import { ResellerProfile } from '../components/pages/reseller/ResellerProfile';
 import { Team } from '../components/pages/reseller/Team';
 import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
-import { X } from 'lucide-react';
+import { ShoppingCart, X } from 'lucide-react';
 
-// Seule route "réelle" (URL adressable) de l'app revendeur : la fiche
-// produit du catalogue B2B. Tout le reste continue de fonctionner par état
-// d'onglet (voir useNavigation), sans dépendance à react-router.
+// Deux routes "réelles" (URL adressables) de l'app revendeur : la fiche
+// produit du catalogue B2B et le panier. Tout le reste continue de
+// fonctionner par état d'onglet (voir useNavigation), sans dépendance à
+// react-router.
 const parseProductId = (pathname: string): string | null => {
   const match = pathname.match(/^\/catalogue\/([^/]+)\/?$/);
   return match ? decodeURIComponent(match[1]) : null;
@@ -40,17 +41,17 @@ function ResellerApp() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  const openProduct = (productId: string) => {
-    window.history.pushState({}, '', `/catalogue/${productId}`);
-    setPathname(`/catalogue/${productId}`);
+  const navigatePath = (path: string) => {
+    window.history.pushState({}, '', path);
+    setPathname(path);
   };
 
-  const closeProduct = () => {
-    window.history.pushState({}, '', '/');
-    setPathname('/');
-  };
+  const openProduct = (productId: string) => navigatePath(`/catalogue/${productId}`);
+  const openCart = () => navigatePath('/panier');
+  const closeToRoot = () => navigatePath('/');
 
   const productId = parseProductId(pathname);
+  const isCartRoute = pathname === '/panier' || pathname === '/panier/';
 
   // Retour depuis Stripe : lu une seule fois au montage, puis l'URL est
   // nettoyée pour ne pas re-déclencher au rafraîchissement de la page.
@@ -78,6 +79,7 @@ function ResellerApp() {
 
   const handleCartExpired = () => {
     setCartExpired(true);
+    closeToRoot();
     navigateTo('catalog', '');
   };
 
@@ -87,12 +89,14 @@ function ResellerApp() {
     }
 
     if (productId) {
-      return <ProductPage productId={productId} cart={cart} onBack={closeProduct} />;
+      return <ProductPage productId={productId} cart={cart} onBack={closeToRoot} />;
+    }
+
+    if (isCartRoute) {
+      return <CartPage cart={cart} onBack={closeToRoot} onExpired={handleCartExpired} />;
     }
 
     switch (currentTab) {
-      case 'cart':
-        return <CartPage cart={cart} onBack={() => navigateTo('catalog', '')} onExpired={handleCartExpired} />;
       case 'my-orders':
         return <MyOrders />;
       case 'profile':
@@ -101,9 +105,43 @@ function ResellerApp() {
         return <Team />;
       case 'catalog':
       default:
-        return <Catalog onOpenCart={() => navigateTo('cart', '')} onOpenProduct={openProduct} />;
+        return <Catalog onOpenProduct={openProduct} />;
     }
   };
+
+  const cartBadgeCount = cart.items.length;
+
+  const desktopCartButton = (
+    <button
+      onClick={openCart}
+      className="relative flex items-center space-x-2 px-3 md:px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+    >
+      <ShoppingCart className="h-4 w-4" />
+      <span className="hidden sm:inline">Panier</span>
+      {cartBadgeCount > 0 && (
+        <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
+          {cartBadgeCount}
+        </span>
+      )}
+    </button>
+  );
+
+  const mobileCartButton = (
+    <button
+      onClick={openCart}
+      className="w-full flex items-center justify-between px-3 py-3 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+    >
+      <span className="flex items-center space-x-3">
+        <ShoppingCart className="h-5 w-5" />
+        <span>Panier</span>
+      </span>
+      {cartBadgeCount > 0 && (
+        <span className="h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
+          {cartBadgeCount}
+        </span>
+      )}
+    </button>
+  );
 
   return (
     <ResellerProtectedRoute>
@@ -113,12 +151,14 @@ function ResellerApp() {
         onTabChange={(tab) => {
           setCheckoutStatus(null);
           setCartExpired(false);
-          if (productId) closeProduct();
+          if (productId || isCartRoute) closeToRoot();
           navigateTo(tab, '');
         }}
         onSubTabChange={() => {}}
         navigationItems={navItems}
         renderHeader={(props) => <ResellerHeader {...props} />}
+        navRightContent={desktopCartButton}
+        mobileExtra={mobileCartButton}
       >
         {checkoutStatus === 'cancel' && (
           <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
