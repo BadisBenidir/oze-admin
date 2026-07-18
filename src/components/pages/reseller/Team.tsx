@@ -7,13 +7,13 @@ import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useResellerTeam, TeamMember } from '../../../hooks/useResellerTeam';
 import { generateSecurePassword } from '../../../utils/generatePassword';
 import { TeamMemberDetail } from './TeamMemberDetail';
-import { Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye } from 'lucide-react';
+import { Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check } from 'lucide-react';
 
 const INVITE_COOLDOWN_SECONDS = 30;
 
 export const Team: React.FC = () => {
   const { profile } = useResellerAuth();
-  const { members, loading, error, inviteTeammate, removeTeammate } = useResellerTeam(profile?.reseller_id);
+  const { members, loading, error, inviteTeammate, removeTeammate, resetTeammatePassword } = useResellerTeam(profile?.reseller_id);
 
   const [mode, setMode] = useState<'email' | 'password'>('email');
   const [form, setForm] = useState({ email: '', first_name: '', last_name: '', password: '', phone: '' });
@@ -27,6 +27,11 @@ export const Team: React.FC = () => {
   const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [memberToReset, setMemberToReset] = useState<TeamMember | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{ member: TeamMember; password: string; sessionsRevoked: boolean } | null>(null);
+  const [passwordCopied, setPasswordCopied] = useState(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -103,6 +108,27 @@ export const Team: React.FC = () => {
     }
   };
 
+  const handleConfirmReset = async () => {
+    if (!memberToReset) return;
+    setResetting(true);
+    setResetError(null);
+    const result = await resetTeammatePassword(memberToReset.profile_id);
+    setResetting(false);
+    if (result.success && result.password) {
+      setResetResult({ member: memberToReset, password: result.password, sessionsRevoked: result.sessionsRevoked !== false });
+      setMemberToReset(null);
+    } else {
+      setResetError(result.error || 'Erreur lors de la réinitialisation');
+    }
+  };
+
+  const handleCopyPassword = () => {
+    if (!resetResult) return;
+    navigator.clipboard.writeText(resetResult.password);
+    setPasswordCopied(true);
+    setTimeout(() => setPasswordCopied(false), 2000);
+  };
+
   if (viewingMember) {
     return <TeamMemberDetail member={viewingMember} onBack={() => setViewingMember(null)} />;
   }
@@ -132,18 +158,35 @@ export const Team: React.FC = () => {
           ) : (
             <ul className="divide-y divide-gray-100">
               {members.map((m) => (
-                <li key={m.id} className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center space-x-3">
+                <li key={m.id} className="flex items-center justify-between px-4 py-3 gap-3">
+                  <div className="flex items-center space-x-3 min-w-0">
                     <div className="h-8 w-8 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
                       {m.is_primary ? <Crown className="h-4 w-4 text-white" /> : <span className="text-white text-xs font-medium">{m.first_name[0]}{m.last_name[0]}</span>}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{m.first_name} {m.last_name}</p>
-                      <p className="text-xs text-gray-500">{m.email}</p>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-gray-900">{m.first_name} {m.last_name}</p>
+                        {m.activated_at ? (
+                          <Badge variant="success">Actif</Badge>
+                        ) : (
+                          <Badge variant="warning">En attente</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 truncate">{m.email}</p>
+                      <p className="text-[11px] text-gray-400">Inscrit le {new Date(m.created_at).toLocaleDateString('fr-FR')}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     {m.is_primary && <Badge variant="info">Principal</Badge>}
+                    {m.activated_at && !m.is_primary && (
+                      <button
+                        onClick={() => { setResetError(null); setMemberToReset(m); }}
+                        className="p-1 text-gray-400 hover:text-gray-900 transition-colors"
+                        title="Générer un nouveau mot de passe"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => setViewingMember(m)}
                       className="p-1 text-gray-400 hover:text-gray-900 transition-colors"
@@ -183,6 +226,38 @@ export const Team: React.FC = () => {
       {convertedNotice && (
         <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
           <p className="text-sm text-blue-800">{convertedNotice}</p>
+        </div>
+      )}
+
+      {resetResult && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
+          <p className="text-sm font-medium text-green-800">
+            Nouveau mot de passe généré pour {resetResult.member.first_name} {resetResult.member.last_name} — transmets-le lui :
+          </p>
+          <div className="bg-white rounded-lg border border-green-200 p-2 flex items-center justify-between gap-2">
+            <span className="text-sm font-mono text-gray-900 break-all">{resetResult.password}</span>
+            <button
+              onClick={handleCopyPassword}
+              className="p-1.5 text-gray-400 hover:text-gray-900 transition-colors flex-shrink-0"
+              title="Copier"
+            >
+              {passwordCopied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+            </button>
+          </div>
+          {resetResult.sessionsRevoked ? (
+            <p className="text-xs text-green-700">Sa session précédente a été invalidée : il devra se reconnecter avec ce nouveau mot de passe.</p>
+          ) : (
+            <p className="text-xs text-amber-700 flex items-center gap-1">
+              <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+              Le mot de passe a bien été changé, mais l'invalidation de sa session précédente a échoué — vérifie manuellement si besoin.
+            </p>
+          )}
+          <button
+            onClick={() => setResetResult(null)}
+            className="text-xs text-green-700 hover:text-green-900 underline"
+          >
+            Fermer
+          </button>
         </div>
       )}
 
@@ -302,6 +377,21 @@ export const Team: React.FC = () => {
         error={removeError}
         onConfirm={handleConfirmRemove}
         onCancel={() => { setMemberToRemove(null); setRemoveError(null); }}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(memberToReset)}
+        title="Générer un nouveau mot de passe"
+        message={
+          memberToReset
+            ? `Un nouveau mot de passe temporaire va être généré pour ${memberToReset.first_name} ${memberToReset.last_name}. Sa session actuelle sera immédiatement déconnectée et son ancien mot de passe cessera de fonctionner.`
+            : ''
+        }
+        confirmLabel="Générer"
+        isConfirming={resetting}
+        error={resetError}
+        onConfirm={handleConfirmReset}
+        onCancel={() => { setMemberToReset(null); setResetError(null); }}
       />
     </div>
   );

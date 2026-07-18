@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
+import { generateSecurePassword } from '../utils/generatePassword';
 
 export interface TeamMember {
   id: string;
@@ -103,9 +104,25 @@ export const useResellerTeam = (resellerId: string | undefined) => {
     return { success: true };
   };
 
+  const resetTeammatePassword = async (
+    profileId: string
+  ): Promise<{ success: boolean; error?: string; password?: string; sessionsRevoked?: boolean }> => {
+    const password = generateSecurePassword();
+    const { data, error } = await invokeEdgeFunction<{ sessions_revoked?: boolean }>('reset-reseller-password', {
+      profile_id: profileId,
+      password,
+    });
+
+    if (error) {
+      return { success: false, error };
+    }
+
+    return { success: true, password, sessionsRevoked: data?.sessions_revoked !== false };
+  };
+
   useEffect(() => {
     fetchTeam();
   }, [fetchTeam]);
 
-  return { members, loading, error, refresh: fetchTeam, inviteTeammate, removeTeammate };
+  return { members, loading, error, refresh: fetchTeam, inviteTeammate, removeTeammate, resetTeammatePassword };
 };
