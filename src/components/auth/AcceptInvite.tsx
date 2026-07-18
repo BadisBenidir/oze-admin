@@ -1,28 +1,31 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Mail, ArrowRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Mail, KeyRound, ArrowRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 
-// Page de destination du lien d'invitation envoyé par email (voir
-// `redirectTo` dans l'Edge Function invite-reseller-contact).
+// Page de destination de l'invitation envoyée par email (voir
+// invite-reseller-contact). Ancienne version : suivait le lien magique
+// Supabase (token dans l'URL). Abandonné — les scanners de sécurité des
+// messageries (Microsoft Defender for Office 365, etc.) suivent
+// automatiquement les liens des emails pour les analyser, ce qui consomme le
+// lien à usage unique avant même que le destinataire ne clique dessus
+// ("Email link is invalid or has expired").
 //
-// `inviteUserByEmail` fait transiter la session par le endpoint /verify de
-// GoTrue, qui redirige toujours vers `redirectTo` avec les tokens dans le
-// hash (#access_token&refresh_token&type=invite) — même avec flowType
-// 'pkce' côté client (ce flag ne régit que les flux *initiés* par le
-// navigateur, pas les liens générés côté admin). S'appuyer uniquement sur
-// `detectSessionInUrl` + `getSession()` est donc fragile : on parse le hash
-// nous-mêmes en priorité, avec un fallback PKCE (?code=) et un dernier
-// recours getSession()/onAuthStateChange, sur le même modèle que
-// oze-storefront/ResetPasswordPage.tsx.
-type Status = 'checking' | 'ready' | 'invalid' | 'success';
+// À la place : le même token d'invitation est affiché en clair dans l'email
+// (variable `{{ .Token }}` du template "Invite user", à configurer dans le
+// dashboard Supabase) et l'employé le RECOPIE ici. Un scanner ne peut pas «
+// cliquer » un code affiché en texte — la vérification de propriété de la
+// boîte mail reste donc intacte, contrairement à un simple statut "en
+// attente" en base. Voir supabase.auth.verifyOtp({ type: 'invite' }).
+type Step = 'verify' | 'details' | 'success';
 
 const isPasswordStrongEnough = (password: string): boolean =>
   password.length >= 8 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /[0-9]/.test(password);
 
 export const AcceptInvite: React.FC = () => {
-  const [status, setStatus] = useState<Status>('checking');
-  const [step, setStep] = useState<'welcome' | 'details'>('welcome');
+  const [step, setStep] = useState<Step>('verify');
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
   const [invitedEmail, setInvitedEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -32,102 +35,38 @@ export const AcceptInvite: React.FC = () => {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Empêche une double consommation du token (StrictMode double-invoque les
-  // effets en dev, et setSession/exchangeCodeForSession sont à usage unique).
-  const hasProcessed = useRef(false);
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
 
-  useEffect(() => {
-    if (hasProcessed.current) return;
-    hasProcessed.current = true;
-
-    const applySession = (session: NonNullable<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']>) => {
-      const meta = session.user.user_metadata as { first_name?: string; last_name?: string };
-      setFirstName(meta?.first_name ?? '');
-      setLastName(meta?.last_name ?? '');
-      setInvitedEmail(session.user.email ?? '');
-      setStatus('ready');
-    };
-
-    console.log('[AcceptInvite] Initialisation — URL complète:', window.location.href);
-
-    // ── 1. Paramètres d'erreur (query string ET hash) ──
-    const searchParams = new URLSearchParams(window.location.search);
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-
-    const urlError = searchParams.get('error') ?? hashParams.get('error');
-    const urlErrorCode = searchParams.get('error_code') ?? hashParams.get('error_code');
-    if (urlError || urlErrorCode) {
-      console.warn('[AcceptInvite] Erreur dans l\'URL — error:', urlError, '| code:', urlErrorCode);
-      setStatus('invalid');
+    if (!email.trim() || !code.trim()) {
+      setError('Veuillez renseigner votre email et le code reçu par email');
       return;
     }
 
-    // ── 2. Flux hash token (inviteUserByEmail → type=invite) ──
-    const accessToken = hashParams.get('access_token');
-    const refreshToken = hashParams.get('refresh_token');
-    const tokenType = hashParams.get('type');
-
-    if (accessToken && refreshToken && (tokenType === 'invite' || tokenType === 'signup')) {
-      console.log('[AcceptInvite] Tokens invite trouvés dans le hash → setSession()');
-      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
-        .then(({ data, error: sessionError }) => {
-          if (sessionError || !data.session) {
-            console.error('[AcceptInvite] setSession error:', sessionError?.message);
-            setStatus('invalid');
-          } else {
-            applySession(data.session);
-          }
-        });
-      return;
-    }
-
-    // ── 3. Flux PKCE : ?code= dans la query string ──
-    const code = searchParams.get('code');
-    if (code) {
-      console.log('[AcceptInvite] Code PKCE trouvé → exchangeCodeForSession()');
-      supabase.auth.exchangeCodeForSession(code)
-        .then(({ data, error: exchangeError }) => {
-          if (exchangeError || !data.session) {
-            console.error('[AcceptInvite] exchangeCodeForSession error:', exchangeError?.message);
-            setStatus('invalid');
-          } else {
-            applySession(data.session);
-          }
-        });
-      return;
-    }
-
-    // ── 4. Session déjà active (detectSessionInUrl a déjà traité l'URL) ──
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        console.log('[AcceptInvite] Session active trouvée via getSession ✓');
-        applySession(session);
-        return;
-      }
-
-      // ── 5. onAuthStateChange comme dernier recours ──
-      console.log('[AcceptInvite] Pas de session → écoute onAuthStateChange...');
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
-        if (event === 'SIGNED_IN' && newSession) {
-          console.log('[AcceptInvite] Session établie via onAuthStateChange ✓');
-          applySession(newSession);
-          subscription.unsubscribe();
-        }
-      });
-
-      // ── 6. Timeout : rien après 8s → lien invalide ──
-      setTimeout(() => {
-        setStatus((current) => {
-          if (current === 'checking') {
-            console.error('[AcceptInvite] Timeout — aucune session établie après 8s');
-            subscription.unsubscribe();
-            return 'invalid';
-          }
-          return current;
-        });
-      }, 8000);
+    setSubmitting(true);
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: code.trim(),
+      type: 'invite',
     });
-  }, []);
+    setSubmitting(false);
+
+    if (verifyError || !data.session) {
+      setError(
+        verifyError?.message.includes('expired') || verifyError?.message.includes('invalid')
+          ? 'Code invalide ou expiré. Vérifiez votre saisie ou demandez un nouveau code à votre administrateur.'
+          : "Impossible de vérifier l'invitation : " + (verifyError?.message ?? 'erreur inconnue')
+      );
+      return;
+    }
+
+    const meta = data.session.user.user_metadata as { first_name?: string; last_name?: string };
+    setFirstName(meta?.first_name ?? '');
+    setLastName(meta?.last_name ?? '');
+    setInvitedEmail(data.session.user.email ?? email.trim());
+    setStep('details');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,7 +107,7 @@ export const AcceptInvite: React.FC = () => {
     }
 
     setSubmitting(false);
-    setStatus('success');
+    setStep('success');
 
     // Repart sur l'accueil pour laisser App.tsx router normalement vers
     // ResellerApp maintenant que la session est pleinement active.
@@ -177,37 +116,7 @@ export const AcceptInvite: React.FC = () => {
     }, 1500);
   };
 
-  if (status === 'checking') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-gray-900 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
-
-  if (status === 'invalid') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
-        <div className="max-w-md w-full bg-white rounded-lg border border-gray-100 shadow-sm p-8 text-center">
-          <div className="mx-auto h-12 w-12 bg-red-50 rounded-full flex items-center justify-center mb-4">
-            <AlertCircle className="h-6 w-6 text-red-600" />
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Lien invalide</h2>
-          <p className="text-sm text-gray-500 mb-6">
-            Ce lien d'invitation a expiré ou n'est plus valide. Veuillez demander une nouvelle invitation à votre administrateur.
-          </p>
-          <button
-            onClick={() => (window.location.href = '/')}
-            className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
-          >
-            Retour à l'accueil
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === 'success') {
+  if (step === 'success') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
         <div className="max-w-md w-full bg-white rounded-lg border border-gray-100 shadow-sm p-8 text-center">
@@ -233,35 +142,96 @@ export const AcceptInvite: React.FC = () => {
         </div>
 
         <div className="flex items-center justify-center gap-2">
-          <StepDot active={step === 'welcome'} done={step === 'details'} label="1" />
+          <StepDot active={step === 'verify'} done={step === 'details'} label="1" />
           <div className={`h-0.5 w-10 ${step === 'details' ? 'bg-gray-900' : 'bg-gray-200'}`} />
           <StepDot active={step === 'details'} done={false} label="2" />
         </div>
 
-        {step === 'welcome' ? (
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-8 text-center space-y-4">
-            <div className="mx-auto h-12 w-12 bg-green-50 rounded-full flex items-center justify-center">
-              <CheckCircle className="h-6 w-6 text-green-600" />
+        {step === 'verify' ? (
+          <form className="bg-white rounded-lg border border-gray-100 shadow-sm p-8 space-y-6" onSubmit={handleVerifyCode}>
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-semibold text-gray-900">Vérifiez votre invitation</h3>
+              <p className="text-sm text-gray-500">
+                Saisissez votre email et le code reçu dans l'email d'invitation.
+              </p>
             </div>
+
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">Invitation vérifiée</h3>
-              <p className="text-sm text-gray-500">Votre adresse email a bien été confirmée :</p>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                Email
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Mail className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400 text-sm"
+                  placeholder="vous@entreprise.com"
+                />
+              </div>
             </div>
-            <div className="flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-              <Mail className="h-4 w-4 text-gray-400 flex-shrink-0" />
-              <span className="text-sm font-medium text-gray-900 break-all">{invitedEmail}</span>
+
+            <div>
+              <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-2">
+                Code d'invitation
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <KeyRound className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  required
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400 text-sm tracking-widest"
+                  placeholder="123456"
+                />
+              </div>
+              <p className="mt-1 text-xs text-gray-400">Le code se trouve dans l'email d'invitation reçu.</p>
             </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
             <button
-              type="button"
-              onClick={() => setStep('details')}
-              className="group w-full flex items-center justify-center gap-2 py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-gray-900 hover:bg-gray-800 transition-colors"
+              type="submit"
+              disabled={submitting}
+              className="group w-full flex items-center justify-center gap-2 py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-gray-900 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Continuer
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+              {submitting ? (
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Vérification...</span>
+                </div>
+              ) : (
+                <>
+                  Continuer
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                </>
+              )}
             </button>
-          </div>
+          </form>
         ) : (
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div className="flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+            <Mail className="h-4 w-4 text-gray-400 flex-shrink-0" />
+            <span className="text-sm font-medium text-gray-900 break-all">{invitedEmail}</span>
+          </div>
+
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -373,7 +343,7 @@ export const AcceptInvite: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setStep('welcome')}
+            onClick={() => setStep('verify')}
             disabled={submitting}
             className="w-full text-center text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
           >
