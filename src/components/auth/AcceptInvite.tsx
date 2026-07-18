@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Mail, ArrowRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 // Page de destination du lien d'invitation envoyé par email (voir
@@ -17,6 +17,8 @@ const isPasswordStrongEnough = (password: string): boolean =>
 
 export const AcceptInvite: React.FC = () => {
   const [status, setStatus] = useState<Status>('checking');
+  const [step, setStep] = useState<'welcome' | 'details'>('welcome');
+  const [invitedEmail, setInvitedEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [password, setPassword] = useState('');
@@ -35,6 +37,7 @@ export const AcceptInvite: React.FC = () => {
       const meta = data.session.user.user_metadata as { first_name?: string; last_name?: string };
       setFirstName(meta?.first_name ?? '');
       setLastName(meta?.last_name ?? '');
+      setInvitedEmail(data.session.user.email ?? '');
       setStatus('ready');
     };
     checkSession();
@@ -140,6 +143,35 @@ export const AcceptInvite: React.FC = () => {
           <p className="mt-2 text-sm text-gray-600">Activez votre accès à l'espace professionnel</p>
         </div>
 
+        <div className="flex items-center justify-center gap-2">
+          <StepDot active={step === 'welcome'} done={step === 'details'} label="1" />
+          <div className={`h-0.5 w-10 ${step === 'details' ? 'bg-gray-900' : 'bg-gray-200'}`} />
+          <StepDot active={step === 'details'} done={false} label="2" />
+        </div>
+
+        {step === 'welcome' ? (
+          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-8 text-center space-y-4">
+            <div className="mx-auto h-12 w-12 bg-green-50 rounded-full flex items-center justify-center">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">Invitation vérifiée</h3>
+              <p className="text-sm text-gray-500">Votre adresse email a bien été confirmée :</p>
+            </div>
+            <div className="flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+              <Mail className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              <span className="text-sm font-medium text-gray-900 break-all">{invitedEmail}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStep('details')}
+              className="group w-full flex items-center justify-center gap-2 py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-gray-900 hover:bg-gray-800 transition-colors"
+            >
+              Continuer
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </button>
+          </div>
+        ) : (
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -249,7 +281,17 @@ export const AcceptInvite: React.FC = () => {
               'Activer mon compte'
             )}
           </button>
+
+          <button
+            type="button"
+            onClick={() => setStep('welcome')}
+            disabled={submitting}
+            className="w-full text-center text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+          >
+            ← Retour
+          </button>
         </form>
+        )}
 
         <div className="text-center">
           <p className="text-xs text-gray-500">OZË PARIS</p>
@@ -258,3 +300,13 @@ export const AcceptInvite: React.FC = () => {
     </div>
   );
 };
+
+const StepDot: React.FC<{ active: boolean; done: boolean; label: string }> = ({ active, done, label }) => (
+  <div
+    className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium ${
+      done ? 'bg-green-500 text-white' : active ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-500'
+    }`}
+  >
+    {done ? <CheckCircle className="h-3.5 w-3.5" /> : label}
+  </div>
+);
