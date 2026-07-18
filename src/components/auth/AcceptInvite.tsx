@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Mail, ArrowRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 
 // Page de destination du lien d'invitation envoyé par email (voir
 // `redirectTo` dans l'Edge Function invite-reseller-contact).
@@ -147,21 +148,24 @@ export const AcceptInvite: React.FC = () => {
 
     setSubmitting(true);
 
-    const { data: userData, error: updateError } = await supabase.auth.updateUser({
+    // On passe par une Edge Function (clé service-role) plutôt que
+    // supabase.auth.updateUser() : sur une session d'invitation, GoTrue
+    // applique la même validation que pour un changement de mot de passe
+    // volontaire ("New password should be different from the old
+    // password"), y compris pour un compte qui n'en a jamais eu. L'API
+    // admin fixe le mot de passe directement sans cette vérification (même
+    // pattern que reset-reseller-password).
+    const { error: acceptError } = await invokeEdgeFunction('accept-invite', {
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
       password,
-      data: { first_name: firstName.trim(), last_name: lastName.trim() },
     });
 
-    if (updateError || !userData.user) {
+    if (acceptError) {
       setSubmitting(false);
-      setError("Impossible d'activer le compte : " + (updateError?.message ?? 'erreur inconnue'));
+      setError("Impossible d'activer le compte : " + acceptError);
       return;
     }
-
-    await supabase
-      .from('profiles')
-      .update({ first_name: firstName.trim(), last_name: lastName.trim(), activated_at: new Date().toISOString() })
-      .eq('id', userData.user.id);
 
     setSubmitting(false);
     setStatus('success');
