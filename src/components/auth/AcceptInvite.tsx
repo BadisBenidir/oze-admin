@@ -1,15 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Mail, ArrowRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 // Page de destination du lien d'invitation envoyé par email (voir
-// `redirectTo` dans l'Edge Function invite-reseller-contact). Le SDK
-// Supabase (detectSessionInUrl + flowType 'pkce', voir lib/supabase.ts)
-// consomme et décode automatiquement le token présent dans l'URL avant que
-// ce composant ne s'exécute — getSession() ci-dessous attend cette étape
-// interne et renvoie directement la session déjà établie, sans qu'on ait à
-// parser l'URL nous-mêmes (c'est cette absence de parsing manuel qui évitait
-// tout risque de bug de décodage).
+// `redirectTo` dans l'Edge Function invite-reseller-contact).
+//
+// `inviteUserByEmail` fait transiter la session par le endpoint /verify de
+// GoTrue, qui redirige toujours vers `redirectTo` avec les tokens dans le
+// hash (#access_token&refresh_token&type=invite) — même avec flowType
+// 'pkce' côté client (ce flag ne régit que les flux *initiés* par le
+// navigateur, pas les liens générés côté admin). S'appuyer uniquement sur
+// `detectSessionInUrl` + `getSession()` est donc fragile : on parse le hash
+// nous-mêmes en priorité, avec un fallback PKCE (?code=) et un dernier
+// recours getSession()/onAuthStateChange, sur le même modèle que
+// oze-storefront/ResetPasswordPage.tsx.
 type Status = 'checking' | 'ready' | 'invalid' | 'success';
 
 const isPasswordStrongEnough = (password: string): boolean =>
@@ -27,20 +31,101 @@ export const AcceptInvite: React.FC = () => {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Empêche une double consommation du token (StrictMode double-invoque les
+  // effets en dev, et setSession/exchangeCodeForSession sont à usage unique).
+  const hasProcessed = useRef(false);
+
   useEffect(() => {
-    const checkSession = async () => {
-      const { data, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !data.session) {
-        setStatus('invalid');
-        return;
-      }
-      const meta = data.session.user.user_metadata as { first_name?: string; last_name?: string };
+    if (hasProcessed.current) return;
+    hasProcessed.current = true;
+
+    const applySession = (session: NonNullable<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']>) => {
+      const meta = session.user.user_metadata as { first_name?: string; last_name?: string };
       setFirstName(meta?.first_name ?? '');
       setLastName(meta?.last_name ?? '');
-      setInvitedEmail(data.session.user.email ?? '');
+      setInvitedEmail(session.user.email ?? '');
       setStatus('ready');
     };
-    checkSession();
+
+    console.log('[AcceptInvite] Initialisation — URL complète:', window.location.href);
+
+    // ── 1. Paramètres d'erreur (query string ET hash) ──
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+
+    const urlError = searchParams.get('error') ?? hashParams.get('error');
+    const urlErrorCode = searchParams.get('error_code') ?? hashParams.get('error_code');
+    if (urlError || urlErrorCode) {
+      console.warn('[AcceptInvite] Erreur dans l\'URL — error:', urlError, '| code:', urlErrorCode);
+      setStatus('invalid');
+      return;
+    }
+
+    // ── 2. Flux hash token (inviteUserByEmail → type=invite) ──
+    const accessToken = hashParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token');
+    const tokenType = hashParams.get('type');
+
+    if (accessToken && refreshToken && (tokenType === 'invite' || tokenType === 'signup')) {
+      console.log('[AcceptInvite] Tokens invite trouvés dans le hash → setSession()');
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .then(({ data, error: sessionError }) => {
+          if (sessionError || !data.session) {
+            console.error('[AcceptInvite] setSession error:', sessionError?.message);
+            setStatus('invalid');
+          } else {
+            applySession(data.session);
+          }
+        });
+      return;
+    }
+
+    // ── 3. Flux PKCE : ?code= dans la query string ──
+    const code = searchParams.get('code');
+    if (code) {
+      console.log('[AcceptInvite] Code PKCE trouvé → exchangeCodeForSession()');
+      supabase.auth.exchangeCodeForSession(code)
+        .then(({ data, error: exchangeError }) => {
+          if (exchangeError || !data.session) {
+            console.error('[AcceptInvite] exchangeCodeForSession error:', exchangeError?.message);
+            setStatus('invalid');
+          } else {
+            applySession(data.session);
+          }
+        });
+      return;
+    }
+
+    // ── 4. Session déjà active (detectSessionInUrl a déjà traité l'URL) ──
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        console.log('[AcceptInvite] Session active trouvée via getSession ✓');
+        applySession(session);
+        return;
+      }
+
+      // ── 5. onAuthStateChange comme dernier recours ──
+      console.log('[AcceptInvite] Pas de session → écoute onAuthStateChange...');
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+        if (event === 'SIGNED_IN' && newSession) {
+          console.log('[AcceptInvite] Session établie via onAuthStateChange ✓');
+          applySession(newSession);
+          subscription.unsubscribe();
+        }
+      });
+
+      // ── 6. Timeout : rien après 8s → lien invalide ──
+      setTimeout(() => {
+        setStatus((current) => {
+          if (current === 'checking') {
+            console.error('[AcceptInvite] Timeout — aucune session établie après 8s');
+            subscription.unsubscribe();
+            return 'invalid';
+          }
+          return current;
+        });
+      }, 8000);
+    });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
