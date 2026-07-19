@@ -137,10 +137,14 @@ export const useResellerAuth = () => {
 
     supabase.auth.getSession().then(({ data: { session } }) => handleSession(session))
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        setAuthState({ user: null, profile: null, session: null, loading: false, isReseller: false, pendingReason: null })
-      }
+    // Re-résout le profil sur CHAQUE changement de session, pas seulement à
+    // la déconnexion : sinon, passer d'un compte à l'autre dans le même
+    // onglet (ex. déconnexion + connexion sur un sous-compte) laisse
+    // `profile` bloqué sur les données du compte précédent (nom affiché,
+    // reseller_id, adresse...) jusqu'au prochain rechargement complet de la
+    // page. Même pattern que useSessionRole.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      handleSession(session)
     })
 
     return () => {

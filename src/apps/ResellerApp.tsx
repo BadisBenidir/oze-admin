@@ -27,7 +27,7 @@ const parseProductId = (pathname: string): string | null => {
 function ResellerApp() {
   const { activeTab, activeSubTab, navigateTo } = useNavigation();
   const { profile } = useResellerAuth();
-  const cart = useB2BCart(profile?.reseller_id);
+  const cart = useB2BCart(profile?.id);
   const currentTab = activeTab || 'catalog';
 
   const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'cancel' | null>(null);

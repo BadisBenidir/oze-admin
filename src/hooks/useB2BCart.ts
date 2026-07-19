@@ -52,9 +52,13 @@ const toCartItem = (product: B2BCatalogItem): B2BCartItem => ({
 
 const isExpired = (item: B2BCartItem) => item.added_at + CART_ITEM_SESSION_MS <= Date.now();
 
-export const useB2BCart = (resellerId: string | undefined) => {
-  // Scopée par revendeur pour ne pas mélanger deux sessions sur un même navigateur.
-  const cartKey = resellerId ? `b2b_cart_${resellerId}` : null;
+export const useB2BCart = (profileId: string | undefined) => {
+  // Scopée par PROFIL INDIVIDUEL, pas par entreprise/reseller_id : deux
+  // collègues d'un même revendeur (ex. le contact principal et un
+  // sous-compte invité) ont chacun leur propre panier, leur propre adresse
+  // et leur propre paiement — reseller_id est partagé entre eux, profile.id
+  // ne l'est jamais (contrainte unique sur reseller_contacts.profile_id).
+  const cartKey = profileId ? `b2b_cart_${profileId}` : null;
 
   const [items, setItems] = useState<B2BCartItem[]>([]);
   // Noms des articles retirés automatiquement (chrono écoulé), affichés
