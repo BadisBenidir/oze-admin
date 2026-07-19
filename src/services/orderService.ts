@@ -32,6 +32,10 @@ export interface DatabaseOrder {
   // en cours") — pas d'étiquette séparée à générer pour elle.
   grouped_with_order_id?: string | null;
   order_channel?: string;
+  // Remise dégressive B2B sur volume d'articles (paliers stricts, sur la
+  // valeur des articles uniquement — jamais livraison ni assurance).
+  discount_rate?: number;
+  discount_amount?: number;
 }
 
 export interface DatabaseOrderItem {

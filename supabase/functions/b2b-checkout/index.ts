@@ -133,6 +133,17 @@ Deno.serve(async (req: Request) => {
     // distincte de la prime insuranceCost payée par le client.
     const insuredValue = insuredProducts.reduce((sum, p) => sum + Number(p.sale_price), 0);
 
+    // Remise dégressive sur volume, paliers stricts : <5 articles = 0%,
+    // 5-9 = 5%, 10+ = 10% (plafond absolu). Recalculée ici sur le NOMBRE
+    // RÉEL de produits disponibles, jamais sur celui envoyé par le client, et
+    // ne porte que sur la valeur des articles — jamais sur la livraison ni
+    // l'assurance. Doit rester alignée avec volumeDiscount.ts (front,
+    // affichage uniquement).
+    const itemCount = products.length;
+    const discountRate = itemCount >= 10 ? 0.1 : itemCount >= 5 ? 0.05 : 0;
+    const rawSubtotal = products.reduce((sum, p) => sum + Number(p.sale_price), 0);
+    const discountAmount = Math.round(rawSubtotal * discountRate * 100) / 100;
+
     // Commande groupée : livraison gratuite si le client rattache cette
     // commande à une commande précédente déjà payée et pas encore expédiée.
     // Revalidé entièrement ici — jamais de confiance sur un "c'est gratuit"
@@ -209,10 +220,14 @@ Deno.serve(async (req: Request) => {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: p.name,
+              name: discountRate > 0 ? `${p.name} (remise volume -${discountRate * 100}%)` : p.name,
               images: p.images?.[p.main_image_index ?? 0] ? [p.images[p.main_image_index ?? 0]] : undefined,
             },
-            unit_amount: Math.round(Number(p.sale_price) * 100),
+            // La remise est appliquée directement sur chaque ligne produit :
+            // Stripe Checkout n'accepte pas de line_item à montant négatif,
+            // donc pas de ligne "Remise" séparée possible ici (elle reste
+            // visible dans notre propre récapitulatif et sur la commande).
+            unit_amount: Math.round(Number(p.sale_price) * (1 - discountRate) * 100),
           },
           quantity: 1,
         })),
@@ -250,6 +265,8 @@ Deno.serve(async (req: Request) => {
         insured_product_ids: JSON.stringify(insuredProducts.map((p) => p.id)),
         insurance_cost: String(insuranceCost),
         insured_value: String(insuredValue),
+        discount_rate: String(discountRate),
+        discount_amount: String(discountAmount),
         grouped_with_order_id: validGroupedOrderId || '',
         email,
       },

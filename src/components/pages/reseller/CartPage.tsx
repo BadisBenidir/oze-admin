@@ -4,6 +4,7 @@ import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useGroupableOrder } from '../../../hooks/useGroupableOrder';
 import ShippingForm, { ShippingSelection, SHIPPING_RATES } from './ShippingForm';
 import CheckoutSummary from './CheckoutSummary';
+import { VolumeDiscountBanner } from './VolumeDiscountBanner';
 import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Package, CheckCircle } from 'lucide-react';
 
 interface CartPageProps {
@@ -94,7 +95,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
   }
 
   const shippingCost = groupWithOrder ? 0 : SHIPPING_RATES[shipping.deliveryType];
-  const total = cart.subtotal + shippingCost + cart.insuranceTotal;
+  const total = cart.subtotal - cart.discountAmount + shippingCost + cart.insuranceTotal;
 
   return (
     <div className="p-4 md:p-6">
@@ -176,6 +177,8 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
             onChange={setShipping}
           />
 
+          <VolumeDiscountBanner itemCount={cart.items.length} />
+
           <ul className="space-y-2">
             {cart.items.map((item) => {
               const remainingMs = item.added_at + CART_ITEM_SESSION_MS - Date.now();
@@ -240,6 +243,8 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
             total={total}
             deliveryType={shipping.deliveryType}
             grouped={groupWithOrder}
+            discountRate={cart.discountRate}
+            discountAmount={cart.discountAmount}
           />
 
           <button

@@ -8,6 +8,8 @@ interface CheckoutSummaryProps {
   total: number;
   deliveryType: DeliveryType;
   grouped?: boolean;
+  discountRate?: number;
+  discountAmount?: number;
 }
 
 // Adapté de oze-storefront/CheckoutSummary.tsx : la liste des articles vit
@@ -15,7 +17,16 @@ interface CheckoutSummaryProps {
 // article) pour ne pas la dupliquer — ce composant ne porte plus que le
 // détail chiffré (sous-total, livraison, assurance, total). Pas de code
 // promo côté B2B (aucun système de coupon pour les revendeurs).
-const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ subtotal, shipping, insurance, total, deliveryType, grouped }) => {
+const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({
+  subtotal,
+  shipping,
+  insurance,
+  total,
+  deliveryType,
+  grouped,
+  discountRate = 0,
+  discountAmount = 0,
+}) => {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
       <h4 className="text-sm font-semibold text-gray-900">Récapitulatif</h4>
@@ -25,6 +36,17 @@ const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ subtotal, shipping, i
           <span className="text-gray-500">Sous-total</span>
           <span className="text-gray-900">{subtotal.toFixed(2)} €</span>
         </div>
+        {discountAmount > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400 flex items-center gap-1.5">
+              Remise Volume B2B
+              <span className="text-[11px] font-medium text-gray-500 bg-gray-100 rounded-full px-1.5 py-0.5">
+                -{discountRate * 100}%
+              </span>
+            </span>
+            <span className="text-gray-400">-{discountAmount.toFixed(2)} €</span>
+          </div>
+        )}
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-500">
             Livraison

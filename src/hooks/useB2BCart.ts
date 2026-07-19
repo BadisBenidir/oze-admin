@@ -4,6 +4,7 @@ import { B2BCatalogItem } from './useB2BCatalog';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 import { DeliveryType } from '../components/pages/reseller/ShippingForm';
 import { ChronopostPickupPoint } from '../services/chronopostService';
+import { getVolumeDiscountRate } from '../utils/volumeDiscount';
 
 export interface B2BCartItem {
   id: string;
@@ -182,6 +183,12 @@ export const useB2BCart = (profileId: string | undefined) => {
 
   const subtotal = items.reduce((sum, i) => sum + i.price, 0);
   const insuranceTotal = items.reduce((sum, i) => (i.insured ? sum + i.price * INSURANCE_RATE : sum), 0);
+  // Remise dégressive sur volume : porte uniquement sur la valeur des
+  // articles, jamais sur la livraison ni l'assurance. Affichage uniquement —
+  // recalculée côté serveur dans b2b-checkout à partir du panier réellement
+  // disponible, jamais acceptée telle quelle d'ici.
+  const discountRate = getVolumeDiscountRate(items.length);
+  const discountAmount = Math.round(subtotal * discountRate * 100) / 100;
 
   /**
    * Crée une session de paiement Stripe et redirige immédiatement vers la
@@ -238,6 +245,8 @@ export const useB2BCart = (profileId: string | undefined) => {
     toggleInsurance,
     subtotal,
     insuranceTotal,
+    discountRate,
+    discountAmount,
     startCheckout,
   };
 };
