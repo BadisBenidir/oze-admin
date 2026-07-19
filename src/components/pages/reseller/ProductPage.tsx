@@ -44,7 +44,7 @@ const normalizeImageArray = (value: unknown): string[] => {
 
 export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBack }) => {
   const { isReseller } = useResellerAuth();
-  const { product, loading, error } = useB2BProduct(productId, isReseller);
+  const { product, loading, error, refresh } = useB2BProduct(productId, isReseller);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
@@ -94,6 +94,9 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
     setAdding(false);
     if (!result.success) {
       setAddError(result.error || "Impossible d'ajouter cet article");
+      // Un autre utilisateur vient de réserver ce produit entre-temps : on
+      // rafraîchit immédiatement pour refléter held_by_other sans attendre.
+      refresh();
     }
   };
 

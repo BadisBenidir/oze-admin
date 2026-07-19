@@ -178,7 +178,16 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
                     key={product.id}
                     product={product}
                     inCart={cart.isInCart(product.id)}
-                    onAdd={() => cart.addItem(product)}
+                    onAdd={async () => {
+                      const result = await cart.addItem(product);
+                      // Un autre utilisateur (même collègue) vient de
+                      // réserver ce produit entre-temps : on rafraîchit
+                      // immédiatement plutôt que d'attendre le prochain poll
+                      // (20s), pour que le produit passe en grisé "Dans un
+                      // panier" tout de suite sur cet écran.
+                      if (!result.success) refresh();
+                      return result;
+                    }}
                     onView={() => onOpenProduct(product.id)}
                   />
                 ))}
