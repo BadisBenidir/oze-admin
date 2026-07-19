@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { B2BCatalogItem } from './useB2BCatalog';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
@@ -9,6 +9,8 @@ export interface B2BCartItem {
   product_code: string;
   image: string | null;
   price: number;
+  /** Horodatage d'ajout : sert de base au chrono de 15 min, indépendant par article. */
+  added_at: number;
 }
 
 interface CheckoutResult {
@@ -34,8 +36,8 @@ const releaseHold = (productId: string) => {
   });
 };
 
-/** Durée de la session de réservation affichée au revendeur avant expiration du panier. */
-const CART_SESSION_MS = 15 * 60 * 1000;
+/** Durée de réservation par article, indépendante pour chacun (aligné sur le hold serveur, voir hold_b2b_cart_item). */
+export const CART_ITEM_SESSION_MS = 15 * 60 * 1000;
 
 const toCartItem = (product: B2BCatalogItem): B2BCartItem => ({
   id: product.id,
@@ -43,106 +45,93 @@ const toCartItem = (product: B2BCatalogItem): B2BCartItem => ({
   product_code: product.product_code,
   image: product.images?.[product.main_image_index] || product.images?.[0] || null,
   price: product.price,
+  added_at: Date.now(),
 });
 
+const isExpired = (item: B2BCartItem) => item.added_at + CART_ITEM_SESSION_MS <= Date.now();
+
 export const useB2BCart = (resellerId: string | undefined) => {
-  // Deux clés séparées et volontairement indépendantes : le panier survit à
-  // une expiration ratée côté anti-spam, l'expiration se recalcule seule si
-  // le panier a été vidé ailleurs. Scopées par revendeur pour ne pas mélanger
-  // deux sessions sur un même navigateur.
+  // Scopée par revendeur pour ne pas mélanger deux sessions sur un même navigateur.
   const cartKey = resellerId ? `b2b_cart_${resellerId}` : null;
-  const expirationKey = resellerId ? `oze_cart_expiration_${resellerId}` : null;
 
   const [items, setItems] = useState<B2BCartItem[]>([]);
-  const [expiresAt, setExpiresAt] = useState<number | null>(null);
-  // Signal ponctuel : le panier a été vidé automatiquement au chargement de
-  // la page car le délai de réservation était déjà écoulé pendant que la
-  // page était fermée/rechargée. Le composant appelant (CartPage) l'observe
-  // pour déclencher immédiatement la redirection + le message d'expiration.
-  const [expiredOnLoad, setExpiredOnLoad] = useState(false);
+  // Noms des articles retirés automatiquement (chrono écoulé), affichés
+  // transitoirement par CartPage puis effacés — purement informatif, ne
+  // bloque rien.
+  const [recentlyExpiredNames, setRecentlyExpiredNames] = useState<string[]>([]);
+  const itemsRef = useRef<B2BCartItem[]>([]);
+  itemsRef.current = items;
 
+  const write = (nextItems: B2BCartItem[]) => {
+    setItems(nextItems);
+    if (!cartKey) return;
+    if (nextItems.length === 0) {
+      localStorage.removeItem(cartKey);
+    } else {
+      localStorage.setItem(cartKey, JSON.stringify(nextItems));
+    }
+  };
+
+  // Charge le panier au montage / changement de revendeur, en retirant
+  // immédiatement (et individuellement) tout article dont le chrono de 15
+  // min est déjà écoulé — par ex. si l'onglet est resté fermé longtemps.
   useEffect(() => {
-    setExpiredOnLoad(false);
+    setRecentlyExpiredNames([]);
 
-    if (!cartKey || !expirationKey) {
+    if (!cartKey) {
       setItems([]);
-      setExpiresAt(null);
       return;
     }
 
     let loadedItems: B2BCartItem[] = [];
     try {
-      const rawCart = localStorage.getItem(cartKey);
-      if (rawCart) {
-        const parsed = JSON.parse(rawCart);
-        // Rétrocompatibilité : une ancienne version stockait { items, expiresAt }
-        // dans la même clé que le panier.
-        loadedItems = Array.isArray(parsed) ? parsed : (parsed.items ?? []);
+      const raw = localStorage.getItem(cartKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Rétrocompatibilité : anciennes versions stockaient un objet
+        // { items, expiresAt } ou des articles sans added_at (chrono
+        // partagé pour tout le panier) — on démarre alors un chrono neuf
+        // par article plutôt que de les considérer expirés d'office.
+        const rawItems: unknown[] = Array.isArray(parsed) ? parsed : (parsed?.items ?? []);
+        loadedItems = rawItems.map((raw) => {
+          const it = raw as Partial<B2BCartItem>;
+          return { ...it, added_at: typeof it.added_at === 'number' ? it.added_at : Date.now() } as B2BCartItem;
+        });
       }
     } catch {
       loadedItems = [];
     }
 
-    if (loadedItems.length === 0) {
-      setItems([]);
-      setExpiresAt(null);
-      localStorage.removeItem(expirationKey);
-      return;
+    const stillValid = loadedItems.filter((i) => !isExpired(i));
+    const expired = loadedItems.filter((i) => isExpired(i));
+
+    if (expired.length > 0) {
+      expired.forEach((i) => releaseHold(i.id));
+      setRecentlyExpiredNames(expired.map((i) => i.name));
     }
 
-    const rawExpiration = localStorage.getItem(expirationKey);
-    let expirationTimestamp = rawExpiration ? parseInt(rawExpiration, 10) : NaN;
+    write(stillValid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartKey]);
 
-    if (!rawExpiration || isNaN(expirationTimestamp)) {
-      // Panier non vide mais aucune expiration enregistrée (premier chargement
-      // après cette mise à jour, ou clé perdue) : on démarre une session fraîche.
-      expirationTimestamp = Date.now() + CART_SESSION_MS;
-      localStorage.setItem(expirationKey, String(expirationTimestamp));
-    }
+  // Vérifie chaque seconde si un article a atteint son propre chrono de 15
+  // min : si oui, seul CET article est retiré (et son hold libéré), le
+  // reste du panier n'est pas affecté.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const current = itemsRef.current;
+      if (current.length === 0) return;
 
-    const remainingMs = expirationTimestamp - Date.now();
+      const expired = current.filter(isExpired);
+      if (expired.length === 0) return;
 
-    if (remainingMs <= 0) {
-      // Le temps est passé pendant que la page était fermée/rechargée : on
-      // nettoie immédiatement plutôt que d'attendre le premier tick du timer.
-      localStorage.removeItem(cartKey);
-      localStorage.removeItem(expirationKey);
-      setItems([]);
-      setExpiresAt(null);
-      setExpiredOnLoad(true);
-      return;
-    }
+      expired.forEach((i) => releaseHold(i.id));
+      setRecentlyExpiredNames(expired.map((i) => i.name));
+      write(current.filter((i) => !isExpired(i)));
+    }, 1000);
 
-    setItems(loadedItems);
-    setExpiresAt(expirationTimestamp);
-  }, [cartKey, expirationKey]);
-
-  const persistItems = (nextItems: B2BCartItem[]) => {
-    setItems(nextItems);
-    if (!cartKey || !expirationKey) return;
-
-    if (nextItems.length === 0) {
-      localStorage.removeItem(cartKey);
-      localStorage.removeItem(expirationKey);
-      setExpiresAt(null);
-      return;
-    }
-
-    localStorage.setItem(cartKey, JSON.stringify(nextItems));
-
-    // Le compte à rebours court pour toute la session panier, pas par
-    // article : on ne (re)calcule une expiration que s'il n'y en a pas déjà
-    // une valide en localStorage.
-    const rawExpiration = localStorage.getItem(expirationKey);
-    const existing = rawExpiration ? parseInt(rawExpiration, 10) : NaN;
-    if (!rawExpiration || isNaN(existing) || existing <= Date.now()) {
-      const fresh = Date.now() + CART_SESSION_MS;
-      localStorage.setItem(expirationKey, String(fresh));
-      setExpiresAt(fresh);
-    } else {
-      setExpiresAt(existing);
-    }
-  };
+    return () => clearInterval(interval);
+  }, [cartKey]);
 
   const addItem = async (product: B2BCatalogItem): Promise<AddItemResult> => {
     if (items.some((i) => i.id === product.id)) return { success: true };
@@ -154,18 +143,18 @@ export const useB2BCart = (resellerId: string | undefined) => {
       return { success: false, error: error.message };
     }
 
-    persistItems([...items, toCartItem(product)]);
+    write([...items, toCartItem(product)]);
     return { success: true };
   };
 
   const removeItem = (id: string) => {
-    persistItems(items.filter((i) => i.id !== id));
+    write(items.filter((i) => i.id !== id));
     releaseHold(id);
   };
 
   const clear = () => {
     items.forEach((i) => releaseHold(i.id));
-    persistItems([]);
+    write([]);
   };
 
   const isInCart = (id: string) => items.some((i) => i.id === id);
@@ -198,7 +187,7 @@ export const useB2BCart = (resellerId: string | undefined) => {
 
     if (data?.unavailable_ids?.length) {
       const unavailableIds = data.unavailable_ids;
-      persistItems(items.filter((i) => !unavailableIds.includes(i.id)));
+      write(items.filter((i) => !unavailableIds.includes(i.id)));
     }
 
     if (!data?.url) {
@@ -209,5 +198,15 @@ export const useB2BCart = (resellerId: string | undefined) => {
     return { success: true };
   };
 
-  return { items, expiresAt, expiredOnLoad, addItem, removeItem, clear, isInCart, subtotal, startCheckout };
+  return {
+    items,
+    recentlyExpiredNames,
+    clearRecentlyExpired: () => setRecentlyExpiredNames([]),
+    addItem,
+    removeItem,
+    clear,
+    isInCart,
+    subtotal,
+    startCheckout,
+  };
 };

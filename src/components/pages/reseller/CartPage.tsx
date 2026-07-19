@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useB2BCart } from '../../../hooks/useB2BCart';
+import { useB2BCart, CART_ITEM_SESSION_MS } from '../../../hooks/useB2BCart';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
-import { AlertCircle, Trash2, ImageOff, CreditCard, MapPin, Clock, ArrowLeft, ShoppingBag } from 'lucide-react';
+import { AlertCircle, Trash2, ImageOff, CreditCard, MapPin, Clock, ArrowLeft, ShoppingBag, X } from 'lucide-react';
 
 interface CartPageProps {
   cart: ReturnType<typeof useB2BCart>;
   onBack: () => void;
-  onExpired: () => void;
 }
 
 const formatCountdown = (ms: number): string => {
@@ -16,46 +15,21 @@ const formatCountdown = (ms: number): string => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-export const CartPage: React.FC<CartPageProps> = ({ cart, onBack, onExpired }) => {
+export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
   const { profile } = useResellerAuth();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [remainingMs, setRemainingMs] = useState<number | null>(
-    cart.expiresAt ? cart.expiresAt - Date.now() : null
-  );
+  // Force le recalcul du chrono de chaque article à l'affichage (added_at
+  // ne change pas, seul "maintenant" avance) — le retrait effectif d'un
+  // article expiré est lui géré par useB2BCart, pas ici.
+  const [, setTick] = useState(0);
 
   const hasAddress = Boolean(profile?.address && profile?.city && profile?.postal_code);
 
-  // Le panier a expiré pendant que la page était fermée/rechargée : le hook
-  // l'a déjà vidé au chargement, on ne fait ici que déclencher la
-  // redirection + le message d'expiration côté catalogue.
   useEffect(() => {
-    if (cart.expiredOnLoad) {
-      onExpired();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart.expiredOnLoad]);
-
-  // Compte à rebours de la session de réservation du panier : suspendu
-  // pendant le traitement du paiement pour ne pas vider le panier sous les
-  // pieds du revendeur au moment où il attend la redirection Stripe.
-  useEffect(() => {
-    if (!cart.expiresAt || submitting) return;
-
-    const tick = () => {
-      const remaining = (cart.expiresAt as number) - Date.now();
-      setRemainingMs(remaining);
-      if (remaining <= 0) {
-        cart.clear();
-        onExpired();
-      }
-    };
-
-    tick();
-    const interval = setInterval(tick, 1000);
+    const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart.expiresAt, submitting]);
+  }, []);
 
   const handlePay = async () => {
     if (!hasAddress || !profile) return;
@@ -76,8 +50,6 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack, onExpired }) =
       setError(result.error || 'Une erreur est survenue');
     }
   };
-
-  const isUrgent = remainingMs !== null && remainingMs < 2 * 60 * 1000;
 
   if (cart.items.length === 0) {
     return (
@@ -113,17 +85,17 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack, onExpired }) =
         <p className="text-sm text-gray-500">{cart.items.length} article{cart.items.length > 1 ? 's' : ''} réservé{cart.items.length > 1 ? 's' : ''}</p>
       </div>
 
-      {remainingMs !== null && (
-        <div
-          className={`mb-6 rounded-lg border p-3 flex items-center gap-2 ${
-            isUrgent ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800'
-          }`}
-        >
-          <Clock className="h-4 w-4 flex-shrink-0" />
-          <p className="text-sm">
-            Temps restant pour finaliser votre commande :{' '}
-            <span className="font-semibold tabular-nums">{formatCountdown(Math.max(0, remainingMs))}</span>
+      {cart.recentlyExpiredNames.length > 0 && (
+        <div className="mb-6 rounded-lg border bg-amber-50 border-amber-200 text-amber-800 p-3 flex items-start gap-2">
+          <Clock className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <p className="text-sm flex-1">
+            {cart.recentlyExpiredNames.length === 1
+              ? `"${cart.recentlyExpiredNames[0]}" a expiré et a été retiré de votre panier.`
+              : `${cart.recentlyExpiredNames.length} articles ont expiré et ont été retirés de votre panier.`}
           </p>
+          <button onClick={cart.clearRecentlyExpired} className="p-0.5 text-amber-600 hover:text-amber-800 flex-shrink-0">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -137,31 +109,39 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack, onExpired }) =
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <div className="lg:col-span-2">
           <ul className="space-y-2">
-            {cart.items.map((item) => (
-              <li key={item.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center space-x-3 min-w-0">
-                  <div className="h-16 w-16 bg-gray-100 rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
-                    {item.image ? (
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <ImageOff className="h-5 w-5 text-gray-300" />
-                    )}
+            {cart.items.map((item) => {
+              const remainingMs = item.added_at + CART_ITEM_SESSION_MS - Date.now();
+              const isUrgent = remainingMs < 2 * 60 * 1000;
+              return (
+                <li key={item.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <div className="h-16 w-16 bg-gray-100 rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {item.image ? (
+                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageOff className="h-5 w-5 text-gray-300" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                      <p className="text-xs text-gray-400">{item.product_code}</p>
+                      <p className="text-sm text-gray-700 mt-1">{item.price.toFixed(0)} €</p>
+                      <p className={`text-xs mt-1 flex items-center gap-1 tabular-nums ${isUrgent ? 'text-red-600' : 'text-gray-400'}`}>
+                        <Clock className="h-3 w-3 flex-shrink-0" />
+                        Réservé encore {formatCountdown(Math.max(0, remainingMs))}
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                    <p className="text-xs text-gray-400">{item.product_code}</p>
-                    <p className="text-sm text-gray-700 mt-1">{item.price.toFixed(0)} €</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => cart.removeItem(item.id)}
-                  disabled={submitting}
-                  className="p-2 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 disabled:opacity-40"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
+                  <button
+                    onClick={() => cart.removeItem(item.id)}
+                    disabled={submitting}
+                    className="p-2 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 disabled:opacity-40"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
 

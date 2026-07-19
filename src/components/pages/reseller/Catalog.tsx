@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
@@ -57,8 +57,18 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
     resetFilters,
     setPage,
     facets,
+    refresh,
   } = useB2BCatalog(isReseller);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  // Le statut "Dans un panier" d'un article (held_by_other) dépend d'un hold
+  // posé par un AUTRE revendeur : rafraîchir périodiquement pour refléter sa
+  // libération (chrono écoulé côté serveur ou panier vidé) sans attendre un
+  // changement de filtre/page.
+  useEffect(() => {
+    const interval = setInterval(refresh, 20000);
+    return () => clearInterval(interval);
+  }, [refresh]);
 
   const toggleInList = (id: string, list: string[]) =>
     list.includes(id) ? list.filter((v) => v !== id) : [...list, id];
@@ -398,11 +408,23 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
 
   return (
     <Card hover className="overflow-hidden flex flex-col cursor-pointer" onClick={onView}>
-      <div className="h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
+      <div className="relative h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
         {image ? (
-          <img src={image} alt={product.name} className="w-full h-full object-cover" />
+          <img
+            src={image}
+            alt={product.name}
+            className={`w-full h-full object-cover ${held ? 'opacity-30' : ''}`}
+          />
         ) : (
           <ImageOff className="h-8 w-8 text-gray-300" />
+        )}
+        {held && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="flex items-center gap-1 px-2.5 py-1 bg-gray-900 text-white text-xs font-medium rounded-full">
+              <Clock className="h-3 w-3" />
+              Dans un panier
+            </span>
+          </div>
         )}
       </div>
       <CardContent className="p-3 flex-1 flex flex-col">
@@ -434,7 +456,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
             ) : held ? (
               <>
                 <Clock className="h-3 w-3" />
-                <span>En cours de réservation</span>
+                <span>Dans un panier</span>
               </>
             ) : (
               <>
