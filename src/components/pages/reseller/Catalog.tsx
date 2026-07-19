@@ -4,6 +4,11 @@ import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useB2BCatalog, B2BCatalogItem } from '../../../hooks/useB2BCatalog';
 import { useB2BCart } from '../../../hooks/useB2BCart';
+// ⚠️ `cart` doit toujours venir de l'instance unique créée dans ResellerApp
+// et reçue ici en prop, jamais d'un nouvel appel local à useB2BCart() : deux
+// instances = deux états séparés qui écrivent le même localStorage sans se
+// notifier l'une l'autre. C'est ce qui causait un panier "ajouté" qui ne se
+// reflétait dans le badge/la page panier qu'après rechargement complet.
 import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
 import {
   Search,
@@ -33,11 +38,12 @@ const priceBracketId = (min: number | null, max: number | null): string => {
 };
 
 interface CatalogProps {
+  cart: ReturnType<typeof useB2BCart>;
   onOpenProduct: (productId: string) => void;
 }
 
-export const Catalog: React.FC<CatalogProps> = ({ onOpenProduct }) => {
-  const { isReseller, profile } = useResellerAuth();
+export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
+  const { isReseller } = useResellerAuth();
   const {
     items,
     loading,
@@ -52,7 +58,6 @@ export const Catalog: React.FC<CatalogProps> = ({ onOpenProduct }) => {
     setPage,
     facets,
   } = useB2BCatalog(isReseller);
-  const cart = useB2BCart(profile?.reseller_id);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const toggleInList = (id: string, list: string[]) =>

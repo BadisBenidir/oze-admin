@@ -105,7 +105,7 @@ function ResellerApp() {
         return <Team />;
       case 'catalog':
       default:
-        return <Catalog onOpenProduct={openProduct} />;
+        return <Catalog cart={cart} onOpenProduct={openProduct} />;
     }
   };
 
