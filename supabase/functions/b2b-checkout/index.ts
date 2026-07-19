@@ -260,7 +260,14 @@ Deno.serve(async (req: Request) => {
         reseller_id: resellerId,
         placed_by_profile_id: user.id,
         product_ids: JSON.stringify(products.map((p) => p.id)),
-        shipping_address: JSON.stringify({ ...deliveryAddress, delivery_type, parcel_point: parcel_point || null }),
+        // deliveryAddress porte déjà tout ce dont Sendcloud/l'admin ont
+        // besoin (pickup_point_code/network/name/address/zip/city, ou
+        // address/city/postcode pour une livraison entreprise) : ne PAS
+        // aussi sérialiser l'objet parcel_point brut à côté (lat/lng/
+        // distance inutiles + adresse/nom dupliqués) — Stripe limite chaque
+        // valeur de metadata à 500 caractères, et l'objet complet dépassait
+        // largement cette limite pour un point relais.
+        shipping_address: JSON.stringify({ ...deliveryAddress, delivery_type }),
         billing_address: JSON.stringify(billing_address || shipping_address),
         shipping_cost: String(finalShippingCost),
         insured_product_ids: JSON.stringify(insuredProducts.map((p) => p.id)),
