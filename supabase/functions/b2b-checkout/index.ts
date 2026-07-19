@@ -190,6 +190,15 @@ Deno.serve(async (req: Request) => {
     // l'adresse de facturation.
     const deliveryAddress = delivery_type === 'point_relais'
       ? {
+          // sendcloud-label lit sa.address pour to_address.address_line_1 —
+          // un champ obligatoire côté Sendcloud même pour un envoi en point
+          // relais (il identifie l'adresse du colis, to_service_point ne
+          // fait que le router physiquement vers le relais). pickup_point_*
+          // reste dupliqué pour l'affichage/l'email, mais SEUL `address`
+          // (et non pickup_point_address) est réellement lu pour l'API —
+          // l'oublier laissait ce champ vide et faisait échouer la création
+          // du colis ("This field cannot be blank", source address_1).
+          address: parcel_point.address || parcel_point.name,
           pickup_point_code: parcel_point.code,
           pickup_point_network: parcel_point.network,
           pickup_point_name: parcel_point.name,
