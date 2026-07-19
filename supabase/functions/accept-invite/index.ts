@@ -54,7 +54,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { first_name, last_name, password } = await req.json();
+    const { first_name, last_name, password, phone, address, city, postal_code, country } = await req.json();
     if (!first_name?.trim() || !last_name?.trim()) {
       return new Response(JSON.stringify({ error: 'Prénom et nom sont requis' }), {
         status: 400,
@@ -63,6 +63,12 @@ Deno.serve(async (req: Request) => {
     }
     if (!password || password.length < 8) {
       return new Response(JSON.stringify({ error: 'Le mot de passe doit contenir au moins 8 caractères' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (!phone?.trim() || !address?.trim() || !city?.trim() || !postal_code?.trim() || !country?.trim()) {
+      return new Response(JSON.stringify({ error: 'Téléphone et adresse complète sont requis' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -103,6 +109,11 @@ Deno.serve(async (req: Request) => {
       .update({
         first_name: first_name.trim(),
         last_name: last_name.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        city: city.trim(),
+        postal_code: postal_code.trim(),
+        country: country.trim(),
         activated_at: new Date().toISOString(),
       })
       .eq('id', user.id);

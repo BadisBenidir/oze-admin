@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Mail, KeyRound, ArrowRight } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Mail, KeyRound, ArrowRight, Phone, MapPin } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
+import { useGooglePlacesAutocomplete } from '../../hooks/useGooglePlacesAutocomplete';
 
 // Page de destination de l'invitation envoyée par email (voir
 // invite-reseller-contact). Ancienne version : suivait le lien magique
@@ -29,11 +30,24 @@ export const AcceptInvite: React.FC = () => {
   const [invitedEmail, setInvitedEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [country, setCountry] = useState('France');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const addressInputRef = useRef<HTMLInputElement>(null);
+  useGooglePlacesAutocomplete(addressInputRef, (place) => {
+    setAddress(place.address || address);
+    setCity(place.city || city);
+    setPostalCode(place.postal_code || postalCode);
+    setCountry(place.country || country);
+  });
 
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +90,14 @@ export const AcceptInvite: React.FC = () => {
       setError('Veuillez renseigner votre nom et votre prénom');
       return;
     }
+    if (!phone.trim()) {
+      setError('Veuillez renseigner votre numéro de téléphone');
+      return;
+    }
+    if (!address.trim() || !city.trim() || !postalCode.trim() || !country.trim()) {
+      setError('Veuillez renseigner votre adresse complète');
+      return;
+    }
     if (!isPasswordStrongEnough(password)) {
       setError('Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule et un chiffre');
       return;
@@ -98,6 +120,11 @@ export const AcceptInvite: React.FC = () => {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       password,
+      phone: phone.trim(),
+      address: address.trim(),
+      city: city.trim(),
+      postal_code: postalCode.trim(),
+      country: country.trim(),
     });
 
     if (acceptError) {
@@ -262,6 +289,99 @@ export const AcceptInvite: React.FC = () => {
                   placeholder="Nom"
                 />
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
+                Téléphone
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Phone className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="phone"
+                  type="tel"
+                  autoComplete="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400 text-sm"
+                  placeholder="06 12 34 56 78"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
+                Adresse
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <MapPin className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  ref={addressInputRef}
+                  id="address"
+                  type="text"
+                  autoComplete="off"
+                  required
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400 text-sm"
+                  placeholder="Commencez à taper votre adresse..."
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="postalCode" className="block text-sm font-medium text-gray-700 mb-2">
+                  Code postal
+                </label>
+                <input
+                  id="postalCode"
+                  type="text"
+                  required
+                  value={postalCode}
+                  onChange={(e) => setPostalCode(e.target.value)}
+                  className="block w-full px-3 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400 text-sm"
+                  placeholder="75001"
+                />
+              </div>
+              <div>
+                <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-2">
+                  Ville
+                </label>
+                <input
+                  id="city"
+                  type="text"
+                  required
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  className="block w-full px-3 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400 text-sm"
+                  placeholder="Paris"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-2">
+                Pays
+              </label>
+              <select
+                id="country"
+                required
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                className="block w-full px-3 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400 text-sm bg-white"
+              >
+                <option value="France">France</option>
+                <option value="Belgique">Belgique</option>
+                <option value="Suisse">Suisse</option>
+                <option value="Luxembourg">Luxembourg</option>
+                <option value="Monaco">Monaco</option>
+              </select>
             </div>
 
             <div>
