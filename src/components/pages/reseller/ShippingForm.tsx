@@ -7,8 +7,10 @@ export type DeliveryType = 'point_relais' | 'domicile';
 
 // Tarifs affichés côté client à titre indicatif — le prix réellement facturé
 // est toujours recalculé côté serveur (b2b-checkout), jamais accepté tel quel.
+// ⚠️ TEMPORAIRE : point_relais à 0€ pour un test en cours — remettre à 4.9
+// une fois le test terminé (voir aussi b2b-checkout/index.ts, même valeur).
 export const SHIPPING_RATES: Record<DeliveryType, number> = {
-  point_relais: 4.9,
+  point_relais: 0,
   domicile: 14.9,
 };
 

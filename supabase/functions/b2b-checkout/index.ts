@@ -80,7 +80,8 @@ Deno.serve(async (req: Request) => {
     // Tarif recalculé ici, jamais accepté depuis le client — même logique de
     // confiance que les prix produits ci-dessous. Doit rester aligné avec
     // SHIPPING_RATES dans ShippingForm.tsx (front, affichage uniquement).
-    const SHIPPING_RATES: Record<string, number> = { point_relais: 4.9, domicile: 14.9 };
+    // ⚠️ TEMPORAIRE : point_relais à 0€ pour un test en cours — remettre à 4.9.
+    const SHIPPING_RATES: Record<string, number> = { point_relais: 0, domicile: 14.9 };
     if (delivery_type !== 'point_relais' && delivery_type !== 'domicile') {
       return new Response(JSON.stringify({ error: 'Mode de livraison invalide' }), {
         status: 400,
