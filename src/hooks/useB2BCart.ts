@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { B2BCatalogItem } from './useB2BCatalog';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
+import { DeliveryType } from '../components/pages/reseller/ShippingForm';
+import { ChronopostPickupPoint } from '../services/chronopostService';
 
 export interface B2BCartItem {
   id: string;
@@ -169,6 +171,8 @@ export const useB2BCart = (resellerId: string | undefined) => {
    */
   const startCheckout = async (
     shippingAddress: Record<string, unknown>,
+    deliveryType: DeliveryType,
+    parcelPoint: ChronopostPickupPoint | null,
     billingAddress?: Record<string, unknown>
   ): Promise<CheckoutResult> => {
     if (items.length === 0) {
@@ -179,6 +183,8 @@ export const useB2BCart = (resellerId: string | undefined) => {
       product_ids: items.map((i) => i.id),
       shipping_address: shippingAddress,
       billing_address: billingAddress,
+      delivery_type: deliveryType,
+      parcel_point: parcelPoint,
     });
 
     if (error) {

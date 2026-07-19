@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { product_ids, shipping_address, billing_address } = await req.json();
+    const { product_ids, shipping_address, billing_address, delivery_type, parcel_point } = await req.json();
     if (!Array.isArray(product_ids) || product_ids.length === 0) {
       return new Response(JSON.stringify({ error: 'Le panier est vide' }), {
         status: 400,
@@ -76,6 +76,36 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Tarif recalculé ici, jamais accepté depuis le client — même logique de
+    // confiance que les prix produits ci-dessous. Doit rester aligné avec
+    // SHIPPING_RATES dans ShippingForm.tsx (front, affichage uniquement).
+    const SHIPPING_RATES: Record<string, number> = { point_relais: 4.9, domicile: 14.9 };
+    if (delivery_type !== 'point_relais' && delivery_type !== 'domicile') {
+      return new Response(JSON.stringify({ error: 'Mode de livraison invalide' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (delivery_type === 'point_relais' && (!parcel_point?.name || !parcel_point?.zipCode || !parcel_point?.city)) {
+      return new Response(JSON.stringify({ error: 'Point relais incomplet' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const shippingCost = SHIPPING_RATES[delivery_type];
+
+    // Destination réelle de l'expédition : le point relais si ce mode est
+    // choisi, l'adresse de l'entreprise sinon. L'adresse entreprise reste
+    // toujours l'adresse de facturation.
+    const deliveryAddress = delivery_type === 'point_relais'
+      ? {
+          line1: `${parcel_point.name}${parcel_point.address ? ' - ' + parcel_point.address : ''}`,
+          city: parcel_point.city,
+          postal_code: parcel_point.zipCode,
+          country: parcel_point.country || 'FR',
+        }
+      : shipping_address;
 
     // Client service-role : products est en RLS deny-all pour le rôle
     // revendeur (l'accès catalogue passe par la vue b2b_catalog), donc on lit
@@ -111,24 +141,37 @@ Deno.serve(async (req: Request) => {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: products.map((p) => ({
-        price_data: {
-          currency: 'eur',
-          product_data: {
-            name: p.name,
-            images: p.images?.[p.main_image_index ?? 0] ? [p.images[p.main_image_index ?? 0]] : undefined,
+      line_items: [
+        ...products.map((p) => ({
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: p.name,
+              images: p.images?.[p.main_image_index ?? 0] ? [p.images[p.main_image_index ?? 0]] : undefined,
+            },
+            unit_amount: Math.round(Number(p.sale_price) * 100),
           },
-          unit_amount: Math.round(Number(p.sale_price) * 100),
+          quantity: 1,
+        })),
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: delivery_type === 'point_relais' ? 'Livraison — Point Relais' : 'Livraison — À l\'entreprise',
+            },
+            unit_amount: Math.round(shippingCost * 100),
+          },
+          quantity: 1,
         },
-        quantity: 1,
-      })),
+      ],
       customer_email: email || undefined,
       metadata: {
         reseller_id: resellerId,
         placed_by_profile_id: user.id,
         product_ids: JSON.stringify(products.map((p) => p.id)),
-        shipping_address: JSON.stringify(shipping_address),
+        shipping_address: JSON.stringify({ ...deliveryAddress, delivery_type, parcel_point: parcel_point || null }),
         billing_address: JSON.stringify(billing_address || shipping_address),
+        shipping_cost: String(shippingCost),
         email,
       },
       success_url: `${origin}/?b2b_checkout=success&session_id={CHECKOUT_SESSION_ID}`,

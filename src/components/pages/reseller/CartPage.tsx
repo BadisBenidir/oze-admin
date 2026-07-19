@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useB2BCart, CART_ITEM_SESSION_MS } from '../../../hooks/useB2BCart';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
-import { AlertCircle, Trash2, ImageOff, CreditCard, MapPin, Clock, ArrowLeft, ShoppingBag, X } from 'lucide-react';
+import ShippingForm, { ShippingSelection, SHIPPING_RATES } from './ShippingForm';
+import CheckoutSummary from './CheckoutSummary';
+import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, CheckCircle } from 'lucide-react';
 
 interface CartPageProps {
   cart: ReturnType<typeof useB2BCart>;
@@ -15,8 +17,12 @@ const formatCountdown = (ms: number): string => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
+type Step = 'shipping' | 'review';
+
 export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
   const { profile } = useResellerAuth();
+  const [step, setStep] = useState<Step>('shipping');
+  const [shipping, setShipping] = useState<ShippingSelection | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Force le recalcul du chrono de chaque article à l'affichage (added_at
@@ -31,17 +37,26 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
     return () => clearInterval(interval);
   }, []);
 
+  const handleShippingSubmit = (selection: ShippingSelection) => {
+    setShipping(selection);
+    setStep('review');
+  };
+
   const handlePay = async () => {
-    if (!hasAddress || !profile) return;
+    if (!profile || !shipping) return;
     setError(null);
     setSubmitting(true);
-    const result = await cart.startCheckout({
-      line1: profile.address || '',
-      line2: '',
-      city: profile.city || '',
-      postal_code: profile.postal_code || '',
-      country: profile.country || 'France',
-    });
+    const result = await cart.startCheckout(
+      {
+        line1: profile.address || '',
+        line2: '',
+        city: profile.city || '',
+        postal_code: profile.postal_code || '',
+        country: profile.country || 'France',
+      },
+      shipping.deliveryType,
+      shipping.parcelPoint
+    );
     // En cas de succès, startCheckout redirige immédiatement vers Stripe —
     // on ne repasse jamais ici. setSubmitting(false) ne sert donc que le cas
     // d'erreur (ex : article devenu indisponible).
@@ -73,16 +88,29 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
     );
   }
 
+  const shippingCost = shipping ? SHIPPING_RATES[shipping.deliveryType] : 0;
+  const total = cart.subtotal + shippingCost;
+
   return (
     <div className="p-4 md:p-6">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 mb-4">
+      <button
+        onClick={() => (step === 'review' ? setStep('shipping') : onBack())}
+        className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 mb-4"
+      >
         <ArrowLeft className="h-4 w-4" />
-        <span>Retour au catalogue</span>
+        <span>{step === 'review' ? 'Modifier la livraison' : 'Retour au catalogue'}</span>
       </button>
 
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">Mon panier</h3>
-        <p className="text-sm text-gray-500">{cart.items.length} article{cart.items.length > 1 ? 's' : ''} réservé{cart.items.length > 1 ? 's' : ''}</p>
+      <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Mon panier</h3>
+          <p className="text-sm text-gray-500">{cart.items.length} article{cart.items.length > 1 ? 's' : ''} réservé{cart.items.length > 1 ? 's' : ''}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <StepDot active={step === 'shipping'} done={step === 'review'} label="1" />
+          <div className={`h-0.5 w-8 ${step === 'review' ? 'bg-gray-900' : 'bg-gray-200'}`} />
+          <StepDot active={step === 'review'} done={false} label="2" />
+        </div>
       </div>
 
       {cart.recentlyExpiredNames.length > 0 && (
@@ -106,99 +134,117 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
         </div>
       )}
 
+      {!hasAddress && step === 'shipping' && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-800">
+            Aucune adresse enregistrée pour votre entreprise : seul le Point Relais est disponible. Contactez votre administrateur pour l'ajouter.
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        <div className="lg:col-span-2">
-          <ul className="space-y-2">
-            {cart.items.map((item) => {
-              const remainingMs = item.added_at + CART_ITEM_SESSION_MS - Date.now();
-              const isUrgent = remainingMs < 2 * 60 * 1000;
-              return (
-                <li key={item.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
-                  <div className="flex items-center space-x-3 min-w-0">
-                    <div className="h-16 w-16 bg-gray-100 rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
-                      {item.image ? (
-                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <ImageOff className="h-5 w-5 text-gray-300" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                      <p className="text-xs text-gray-400">{item.product_code}</p>
-                      <p className="text-sm text-gray-700 mt-1">{item.price.toFixed(0)} €</p>
-                      <p className={`text-xs mt-1 flex items-center gap-1 tabular-nums ${isUrgent ? 'text-red-600' : 'text-gray-400'}`}>
-                        <Clock className="h-3 w-3 flex-shrink-0" />
-                        Réservé encore {formatCountdown(Math.max(0, remainingMs))}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => cart.removeItem(item.id)}
-                    disabled={submitting}
-                    className="p-2 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 disabled:opacity-40"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+        <div className="lg:col-span-2 space-y-4">
+          {step === 'shipping' ? (
+            <ShippingForm
+              companyAddress={{
+                address: profile?.address || '',
+                city: profile?.city || '',
+                postalCode: profile?.postal_code || '',
+                country: profile?.country || 'France',
+              }}
+              onSubmit={handleShippingSubmit}
+            />
+          ) : (
+            <>
+              {shipping && (
+                <div className="bg-white border border-gray-200 rounded-lg p-3 flex items-center gap-2 text-sm text-gray-700">
+                  <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <span>
+                    Livraison choisie :{' '}
+                    <span className="font-medium">
+                      {shipping.deliveryType === 'point_relais' ? `Point Relais — ${shipping.parcelPoint?.name}` : "À l'entreprise"}
+                    </span>
+                  </span>
+                </div>
+              )}
+              <ul className="space-y-2">
+                {cart.items.map((item) => {
+                  const remainingMs = item.added_at + CART_ITEM_SESSION_MS - Date.now();
+                  const isUrgent = remainingMs < 2 * 60 * 1000;
+                  return (
+                    <li key={item.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <div className="h-16 w-16 bg-gray-100 rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {item.image ? (
+                            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <ImageOff className="h-5 w-5 text-gray-300" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                          <p className="text-xs text-gray-400">{item.product_code}</p>
+                          <p className="text-sm text-gray-700 mt-1">{item.price.toFixed(0)} €</p>
+                          <p className={`text-xs mt-1 flex items-center gap-1 tabular-nums ${isUrgent ? 'text-red-600' : 'text-gray-400'}`}>
+                            <Clock className="h-3 w-3 flex-shrink-0" />
+                            Réservé encore {formatCountdown(Math.max(0, remainingMs))}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => cart.removeItem(item.id)}
+                        disabled={submitting}
+                        className="p-2 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 disabled:opacity-40"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
         </div>
 
-        <div className="lg:sticky lg:top-6 bg-white border border-gray-200 rounded-lg p-4 space-y-4">
-          <h4 className="text-sm font-semibold text-gray-900">Récapitulatif</h4>
+        {step === 'review' && shipping && (
+          <div className="lg:sticky lg:top-6 space-y-4">
+            <CheckoutSummary
+              items={cart.items}
+              subtotal={cart.subtotal}
+              shipping={shippingCost}
+              total={total}
+              deliveryType={shipping.deliveryType}
+            />
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">Sous-total</span>
-              <span className="text-gray-900">{cart.subtotal.toFixed(0)} €</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">Taxes</span>
-              <span className="text-gray-400">Incluses</span>
-            </div>
-            <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-              <span className="text-sm font-medium text-gray-700">Total</span>
-              <span className="text-lg font-semibold text-gray-900">{cart.subtotal.toFixed(0)} €</span>
-            </div>
+            <button
+              onClick={handlePay}
+              disabled={submitting}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              {submitting ? (
+                <span>Traitement du paiement...</span>
+              ) : (
+                <>
+                  <CreditCard className="h-4 w-4" />
+                  <span>Payer la commande ({total.toFixed(2)} €)</span>
+                </>
+              )}
+            </button>
+            <p className="text-xs text-gray-400 text-center">Paiement sécurisé par Stripe.</p>
           </div>
-
-          <div className="border-t border-gray-100 pt-4">
-            <p className="text-sm font-medium text-gray-700 mb-2">Adresse de livraison</p>
-            {hasAddress && profile ? (
-              <div className="bg-gray-50 rounded-lg p-3 flex items-start gap-2">
-                <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-gray-900">
-                  Livré à : {profile.company_name}, {profile.address}, {profile.postal_code} {profile.city}, {profile.country}
-                </p>
-              </div>
-            ) : (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-800">
-                  Aucune adresse de livraison configurée. Veuillez contacter votre administrateur.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={handlePay}
-            disabled={submitting || !hasAddress}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-          >
-            {submitting ? (
-              <span>Traitement du paiement...</span>
-            ) : (
-              <>
-                <CreditCard className="h-4 w-4" />
-                <span>Payer la commande ({cart.subtotal.toFixed(0)} €)</span>
-              </>
-            )}
-          </button>
-          <p className="text-xs text-gray-400 text-center">Paiement sécurisé par Stripe.</p>
-        </div>
+        )}
       </div>
     </div>
   );
 };
+
+const StepDot: React.FC<{ active: boolean; done: boolean; label: string }> = ({ active, done, label }) => (
+  <div
+    className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium ${
+      done ? 'bg-green-500 text-white' : active ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-500'
+    }`}
+  >
+    {done ? <CheckCircle className="h-3 w-3" /> : label}
+  </div>
+);
