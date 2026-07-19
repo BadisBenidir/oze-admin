@@ -7,6 +7,7 @@ interface CheckoutSummaryProps {
   insurance: number;
   total: number;
   deliveryType: DeliveryType;
+  grouped?: boolean;
 }
 
 // Adapté de oze-storefront/CheckoutSummary.tsx : la liste des articles vit
@@ -14,7 +15,7 @@ interface CheckoutSummaryProps {
 // article) pour ne pas la dupliquer — ce composant ne porte plus que le
 // détail chiffré (sous-total, livraison, assurance, total). Pas de code
 // promo côté B2B (aucun système de coupon pour les revendeurs).
-const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ subtotal, shipping, insurance, total, deliveryType }) => {
+const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ subtotal, shipping, insurance, total, deliveryType, grouped }) => {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
       <h4 className="text-sm font-semibold text-gray-900">Récapitulatif</h4>
@@ -28,10 +29,12 @@ const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ subtotal, shipping, i
           <span className="text-gray-500">
             Livraison
             <span className="block text-xs text-gray-400">
-              {deliveryType === 'point_relais' ? 'Point Relais' : "Livraison à l'entreprise"}
+              {grouped ? 'Groupée avec une commande existante' : deliveryType === 'point_relais' ? 'Point Relais' : "Livraison à l'entreprise"}
             </span>
           </span>
-          <span className="text-gray-900">{shipping.toFixed(2)} €</span>
+          <span className={grouped ? 'text-green-600 font-medium' : 'text-gray-900'}>
+            {grouped ? 'Gratuite' : `${shipping.toFixed(2)} €`}
+          </span>
         </div>
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-500">Assurance colis</span>

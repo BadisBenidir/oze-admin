@@ -75,6 +75,7 @@ Deno.serve(async (req: Request) => {
       p_shipping_cost: metadata.shipping_cost ? Number(metadata.shipping_cost) : 0,
       p_insured_product_ids: insuredProductIds,
       p_insurance_cost: metadata.insurance_cost ? Number(metadata.insurance_cost) : 0,
+      p_grouped_with_order_id: metadata.grouped_with_order_id || null,
     });
 
     if (error) {

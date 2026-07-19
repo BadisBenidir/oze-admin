@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useB2BCart, CART_ITEM_SESSION_MS, INSURANCE_RATE } from '../../../hooks/useB2BCart';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
+import { useGroupableOrder } from '../../../hooks/useGroupableOrder';
 import ShippingForm, { ShippingSelection, SHIPPING_RATES } from './ShippingForm';
 import CheckoutSummary from './CheckoutSummary';
-import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck } from 'lucide-react';
+import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Package, CheckCircle } from 'lucide-react';
 
 interface CartPageProps {
   cart: ReturnType<typeof useB2BCart>;
@@ -20,11 +21,13 @@ const formatCountdown = (ms: number): string => {
 export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
   const { profile } = useResellerAuth();
   const hasAddress = Boolean(profile?.address && profile?.city && profile?.postal_code);
+  const { groupableOrder } = useGroupableOrder(profile?.id);
 
   const [shipping, setShipping] = useState<ShippingSelection>({
     deliveryType: hasAddress ? 'domicile' : 'point_relais',
     parcelPoint: null,
   });
+  const [groupWithOrder, setGroupWithOrder] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Force le recalcul du chrono de chaque article à l'affichage (added_at
@@ -55,7 +58,9 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
         country: profile.country || 'France',
       },
       shipping.deliveryType,
-      shipping.parcelPoint
+      shipping.parcelPoint,
+      undefined,
+      groupWithOrder && groupableOrder ? groupableOrder.id : null
     );
     // En cas de succès, startCheckout redirige immédiatement vers Stripe —
     // on ne repasse jamais ici. setSubmitting(false) ne sert donc que le cas
@@ -88,7 +93,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
     );
   }
 
-  const shippingCost = SHIPPING_RATES[shipping.deliveryType];
+  const shippingCost = groupWithOrder ? 0 : SHIPPING_RATES[shipping.deliveryType];
   const total = cart.subtotal + shippingCost + cart.insuranceTotal;
 
   return (
@@ -126,6 +131,40 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <div className="lg:col-span-2 space-y-4">
+          {groupableOrder && (
+            <div
+              onClick={() => setGroupWithOrder((v) => !v)}
+              role="checkbox"
+              aria-checked={groupWithOrder}
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setGroupWithOrder((v) => !v); } }}
+              className={`rounded-lg border-2 p-4 flex items-start gap-3 cursor-pointer transition-colors ${
+                groupWithOrder ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={groupWithOrder}
+                onChange={() => setGroupWithOrder((v) => !v)}
+                onClick={(e) => e.stopPropagation()}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0"
+              />
+              <Package className="h-4 w-4 text-gray-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900">Grouper avec ma commande en cours</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  N° {groupableOrder.order_number} — du {new Date(groupableOrder.created_at).toLocaleDateString('fr-FR')}
+                </p>
+              </div>
+              {groupWithOrder && (
+                <span className="flex items-center gap-1 text-sm font-semibold text-green-600 flex-shrink-0">
+                  <CheckCircle className="h-4 w-4" />
+                  Livraison offerte
+                </span>
+              )}
+            </div>
+          )}
+
           <ShippingForm
             companyAddress={{
               address: profile?.address || '',
@@ -200,6 +239,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
             insurance={cart.insuranceTotal}
             total={total}
             deliveryType={shipping.deliveryType}
+            grouped={groupWithOrder}
           />
 
           <button

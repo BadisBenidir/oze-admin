@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { product_ids, shipping_address, billing_address, delivery_type, parcel_point, insured_product_ids } = await req.json();
+    const { product_ids, shipping_address, billing_address, delivery_type, parcel_point, insured_product_ids, grouped_with_order_id } = await req.json();
     if (!Array.isArray(product_ids) || product_ids.length === 0) {
       return new Response(JSON.stringify({ error: 'Le panier est vide' }), {
         status: 400,
@@ -142,6 +142,33 @@ Deno.serve(async (req: Request) => {
     const insuredProducts = products.filter((p) => insuredIds.includes(p.id));
     const insuranceCost = insuredProducts.reduce((sum, p) => sum + Math.round(Number(p.sale_price) * INSURANCE_RATE * 100) / 100, 0);
 
+    // Commande groupée : livraison gratuite si le client rattache cette
+    // commande à une commande précédente déjà payée et pas encore expédiée.
+    // Revalidé entièrement ici — jamais de confiance sur un "c'est gratuit"
+    // envoyé par le client, même logique que les prix produits/livraison.
+    let finalShippingCost = shippingCost;
+    let validGroupedOrderId: string | null = null;
+    if (grouped_with_order_id) {
+      const { data: groupOrder } = await adminClient
+        .from('orders')
+        .select('id, placed_by_profile_id, payment_status, status, created_at')
+        .eq('id', grouped_with_order_id)
+        .maybeSingle();
+
+      const cutoff = Date.now() - 21 * 24 * 60 * 60 * 1000;
+      const isEligible =
+        groupOrder &&
+        groupOrder.placed_by_profile_id === user.id &&
+        groupOrder.payment_status === 'paid' &&
+        !['shipped', 'delivered', 'cancelled'].includes(groupOrder.status) &&
+        new Date(groupOrder.created_at).getTime() >= cutoff;
+
+      if (isEligible) {
+        finalShippingCost = 0;
+        validGroupedOrderId = groupOrder.id;
+      }
+    }
+
     const { data: profile } = await adminClient.from('profiles').select('email').eq('id', user.id).single();
     const email = profile?.email || user.email || '';
 
@@ -166,9 +193,11 @@ Deno.serve(async (req: Request) => {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: delivery_type === 'point_relais' ? 'Livraison — Point Relais' : 'Livraison — À l\'entreprise',
+              name: validGroupedOrderId
+                ? 'Livraison — Groupée (gratuite)'
+                : delivery_type === 'point_relais' ? 'Livraison — Point Relais' : 'Livraison — À l\'entreprise',
             },
-            unit_amount: Math.round(shippingCost * 100),
+            unit_amount: Math.round(finalShippingCost * 100),
           },
           quantity: 1,
         },
@@ -190,9 +219,10 @@ Deno.serve(async (req: Request) => {
         product_ids: JSON.stringify(products.map((p) => p.id)),
         shipping_address: JSON.stringify({ ...deliveryAddress, delivery_type, parcel_point: parcel_point || null }),
         billing_address: JSON.stringify(billing_address || shipping_address),
-        shipping_cost: String(shippingCost),
+        shipping_cost: String(finalShippingCost),
         insured_product_ids: JSON.stringify(insuredProducts.map((p) => p.id)),
         insurance_cost: String(insuranceCost),
+        grouped_with_order_id: validGroupedOrderId || '',
         email,
       },
       success_url: `${origin}/?b2b_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
