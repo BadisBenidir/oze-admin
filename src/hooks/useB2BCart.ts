@@ -13,7 +13,13 @@ export interface B2BCartItem {
   price: number;
   /** Horodatage d'ajout : sert de base au chrono de 15 min, indépendant par article. */
   added_at: number;
+  /** Assurance Sendcloud optionnelle, 0.6% de la valeur de l'article. */
+  insured: boolean;
 }
+
+/** Taux d'assurance Sendcloud (0.6% de la valeur de l'article). Recalculé
+ * côté serveur dans b2b-checkout — jamais accepté tel quel du client. */
+export const INSURANCE_RATE = 0.006;
 
 interface CheckoutResult {
   success: boolean;
@@ -48,6 +54,7 @@ const toCartItem = (product: B2BCatalogItem): B2BCartItem => ({
   image: product.images?.[product.main_image_index] || product.images?.[0] || null,
   price: product.price,
   added_at: Date.now(),
+  insured: false,
 });
 
 const isExpired = (item: B2BCartItem) => item.added_at + CART_ITEM_SESSION_MS <= Date.now();
@@ -101,7 +108,11 @@ export const useB2BCart = (profileId: string | undefined) => {
         const rawItems: unknown[] = Array.isArray(parsed) ? parsed : (parsed?.items ?? []);
         loadedItems = rawItems.map((raw) => {
           const it = raw as Partial<B2BCartItem>;
-          return { ...it, added_at: typeof it.added_at === 'number' ? it.added_at : Date.now() } as B2BCartItem;
+          return {
+            ...it,
+            added_at: typeof it.added_at === 'number' ? it.added_at : Date.now(),
+            insured: it.insured === true,
+          } as B2BCartItem;
         });
       }
     } catch {
@@ -165,7 +176,12 @@ export const useB2BCart = (profileId: string | undefined) => {
 
   const isInCart = (id: string) => items.some((i) => i.id === id);
 
+  const toggleInsurance = (id: string) => {
+    write(items.map((i) => (i.id === id ? { ...i, insured: !i.insured } : i)));
+  };
+
   const subtotal = items.reduce((sum, i) => sum + i.price, 0);
+  const insuranceTotal = items.reduce((sum, i) => (i.insured ? sum + i.price * INSURANCE_RATE : sum), 0);
 
   /**
    * Crée une session de paiement Stripe et redirige immédiatement vers la
@@ -189,6 +205,7 @@ export const useB2BCart = (profileId: string | undefined) => {
       billing_address: billingAddress,
       delivery_type: deliveryType,
       parcel_point: parcelPoint,
+      insured_product_ids: items.filter((i) => i.insured).map((i) => i.id),
     });
 
     if (error) {
@@ -216,7 +233,9 @@ export const useB2BCart = (profileId: string | undefined) => {
     removeItem,
     clear,
     isInCart,
+    toggleInsurance,
     subtotal,
+    insuranceTotal,
     startCheckout,
   };
 };

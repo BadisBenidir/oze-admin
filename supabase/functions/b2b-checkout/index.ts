@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { product_ids, shipping_address, billing_address, delivery_type, parcel_point } = await req.json();
+    const { product_ids, shipping_address, billing_address, delivery_type, parcel_point, insured_product_ids } = await req.json();
     if (!Array.isArray(product_ids) || product_ids.length === 0) {
       return new Response(JSON.stringify({ error: 'Le panier est vide' }), {
         status: 400,
@@ -133,6 +133,15 @@ Deno.serve(async (req: Request) => {
 
     const unavailableIds = product_ids.filter((id: string) => !products.some((p) => p.id === id));
 
+    // Assurance Sendcloud optionnelle (0.6% de la valeur de l'article),
+    // recalculée ici à partir des prix produits déjà vérifiés — jamais
+    // acceptée telle quelle du client. Doit rester alignée avec
+    // INSURANCE_RATE dans useB2BCart.ts (front, affichage uniquement).
+    const INSURANCE_RATE = 0.006;
+    const insuredIds: string[] = Array.isArray(insured_product_ids) ? insured_product_ids : [];
+    const insuredProducts = products.filter((p) => insuredIds.includes(p.id));
+    const insuranceCost = insuredProducts.reduce((sum, p) => sum + Math.round(Number(p.sale_price) * INSURANCE_RATE * 100) / 100, 0);
+
     const { data: profile } = await adminClient.from('profiles').select('email').eq('id', user.id).single();
     const email = profile?.email || user.email || '';
 
@@ -163,6 +172,16 @@ Deno.serve(async (req: Request) => {
           },
           quantity: 1,
         },
+        ...(insuranceCost > 0
+          ? [{
+              price_data: {
+                currency: 'eur',
+                product_data: { name: 'Assurance colis (Sendcloud)' },
+                unit_amount: Math.round(insuranceCost * 100),
+              },
+              quantity: 1,
+            }]
+          : []),
       ],
       customer_email: email || undefined,
       metadata: {
@@ -172,6 +191,8 @@ Deno.serve(async (req: Request) => {
         shipping_address: JSON.stringify({ ...deliveryAddress, delivery_type, parcel_point: parcel_point || null }),
         billing_address: JSON.stringify(billing_address || shipping_address),
         shipping_cost: String(shippingCost),
+        insured_product_ids: JSON.stringify(insuredProducts.map((p) => p.id)),
+        insurance_cost: String(insuranceCost),
         email,
       },
       success_url: `${origin}/?b2b_checkout=success&session_id={CHECKOUT_SESSION_ID}`,

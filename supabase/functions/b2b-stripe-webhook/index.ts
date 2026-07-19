@@ -59,6 +59,7 @@ Deno.serve(async (req: Request) => {
     const productIds = JSON.parse(metadata.product_ids || '[]');
     const shippingAddress = JSON.parse(metadata.shipping_address || '{}');
     const billingAddress = JSON.parse(metadata.billing_address || '{}');
+    const insuredProductIds = JSON.parse(metadata.insured_product_ids || '[]');
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
@@ -72,6 +73,8 @@ Deno.serve(async (req: Request) => {
       p_email: metadata.email || session.customer_email || '',
       p_placed_by_profile_id: metadata.placed_by_profile_id || null,
       p_shipping_cost: metadata.shipping_cost ? Number(metadata.shipping_cost) : 0,
+      p_insured_product_ids: insuredProductIds,
+      p_insurance_cost: metadata.insurance_cost ? Number(metadata.insurance_cost) : 0,
     });
 
     if (error) {

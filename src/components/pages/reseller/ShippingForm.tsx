@@ -26,17 +26,17 @@ interface CompanyAddress {
 
 interface ShippingFormProps {
   companyAddress: CompanyAddress;
-  onSubmit: (selection: ShippingSelection) => void;
+  value: ShippingSelection;
+  onChange: (selection: ShippingSelection) => void;
 }
 
 // Adapté de oze-storefront/ShippingForm.tsx : l'adresse d'un revendeur est
 // configurée par un admin OZË sur la fiche entreprise (voir
 // useResellerAuth/ResellerFormModal), jamais saisie par le revendeur — donc
 // pas de formulaire d'adresse ici, seulement le choix du mode de livraison.
-const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, onSubmit }) => {
-  const hasCompanyAddressInitially = Boolean(companyAddress.address && companyAddress.city && companyAddress.postalCode);
-  const [deliveryType, setDeliveryType] = useState<DeliveryType>(hasCompanyAddressInitially ? 'domicile' : 'point_relais');
-  const [selectedParcelPoint, setSelectedParcelPoint] = useState<ChronopostPickupPoint | null>(null);
+// Composant contrôlé (pas d'étape/soumission propre) : fait partie de la
+// page panier fusionnée, la sélection vit dans CartPage.
+const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, value, onChange }) => {
   const [searchPostalCode, setSearchPostalCode] = useState(companyAddress.postalCode);
   const [searchCity, setSearchCity] = useState(companyAddress.city);
   const [pickerLoading, setPickerLoading] = useState(false);
@@ -57,7 +57,9 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, onSubmit })
         city: searchCity,
         country: companyAddress.country,
       });
-      if (point) setSelectedParcelPoint(point);
+      if (point) {
+        onChange({ deliveryType: 'point_relais', parcelPoint: point });
+      }
     } catch (err) {
       setParcelPointError(err instanceof Error ? err.message : "Impossible d'ouvrir la carte des points relais");
     } finally {
@@ -65,44 +67,31 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, onSubmit })
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (deliveryType === 'point_relais' && !selectedParcelPoint) {
-      setParcelPointError('Veuillez sélectionner un point relais');
-      return;
-    }
-    if (deliveryType === 'domicile' && !hasCompanyAddress) {
-      return;
-    }
-    setParcelPointError('');
-    onSubmit({ deliveryType, parcelPoint: deliveryType === 'point_relais' ? selectedParcelPoint : null });
-  };
-
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-6">Mode de livraison</h2>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <button
             type="button"
-            onClick={() => setDeliveryType('domicile')}
+            onClick={() => onChange({ deliveryType: 'domicile', parcelPoint: null })}
             disabled={!hasCompanyAddress}
             className={`relative flex flex-col p-4 border-2 rounded-lg transition-all text-left disabled:opacity-40 disabled:cursor-not-allowed ${
-              deliveryType === 'domicile' ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
+              value.deliveryType === 'domicile' ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
             }`}
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center">
-                <Home className={`h-5 w-5 mr-2 ${deliveryType === 'domicile' ? 'text-gray-900' : 'text-gray-400'}`} />
-                <span className={`font-medium ${deliveryType === 'domicile' ? 'text-gray-900' : 'text-gray-700'}`}>
+                <Home className={`h-5 w-5 mr-2 ${value.deliveryType === 'domicile' ? 'text-gray-900' : 'text-gray-400'}`} />
+                <span className={`font-medium ${value.deliveryType === 'domicile' ? 'text-gray-900' : 'text-gray-700'}`}>
                   Livraison à l'entreprise
                 </span>
               </div>
               <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                deliveryType === 'domicile' ? 'border-gray-900' : 'border-gray-300'
+                value.deliveryType === 'domicile' ? 'border-gray-900' : 'border-gray-300'
               }`}>
-                {deliveryType === 'domicile' && <div className="w-3 h-3 rounded-full bg-gray-900" />}
+                {value.deliveryType === 'domicile' && <div className="w-3 h-3 rounded-full bg-gray-900" />}
               </div>
             </div>
             <p className="text-sm text-gray-500">Livrée à l'adresse enregistrée de votre entreprise.</p>
@@ -115,22 +104,22 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, onSubmit })
 
           <button
             type="button"
-            onClick={() => setDeliveryType('point_relais')}
+            onClick={() => onChange({ deliveryType: 'point_relais', parcelPoint: value.parcelPoint })}
             className={`relative flex flex-col p-4 border-2 rounded-lg transition-all text-left ${
-              deliveryType === 'point_relais' ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
+              value.deliveryType === 'point_relais' ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
             }`}
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center">
-                <Package className={`h-5 w-5 mr-2 ${deliveryType === 'point_relais' ? 'text-gray-900' : 'text-gray-400'}`} />
-                <span className={`font-medium ${deliveryType === 'point_relais' ? 'text-gray-900' : 'text-gray-700'}`}>
+                <Package className={`h-5 w-5 mr-2 ${value.deliveryType === 'point_relais' ? 'text-gray-900' : 'text-gray-400'}`} />
+                <span className={`font-medium ${value.deliveryType === 'point_relais' ? 'text-gray-900' : 'text-gray-700'}`}>
                   Point Relais
                 </span>
               </div>
               <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                deliveryType === 'point_relais' ? 'border-gray-900' : 'border-gray-300'
+                value.deliveryType === 'point_relais' ? 'border-gray-900' : 'border-gray-300'
               }`}>
-                {deliveryType === 'point_relais' && <div className="w-3 h-3 rounded-full bg-gray-900" />}
+                {value.deliveryType === 'point_relais' && <div className="w-3 h-3 rounded-full bg-gray-900" />}
               </div>
             </div>
             <p className="text-sm text-gray-500">Retrait en point relais proche de vous.</p>
@@ -142,7 +131,7 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, onSubmit })
           </button>
         </div>
 
-        {deliveryType === 'domicile' && (
+        {value.deliveryType === 'domicile' && (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-start gap-2">
             <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
             {hasCompanyAddress ? (
@@ -157,7 +146,7 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, onSubmit })
           </div>
         )}
 
-        {deliveryType === 'point_relais' && (
+        {value.deliveryType === 'point_relais' && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -182,17 +171,17 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, onSubmit })
               </div>
             </div>
 
-            {selectedParcelPoint ? (
+            {value.parcelPoint ? (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-start justify-between">
                 <div className="flex items-start">
                   <CheckCircle className="h-5 w-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-semibold text-green-800">{selectedParcelPoint.name}</p>
+                    <p className="text-sm font-semibold text-green-800">{value.parcelPoint.name}</p>
                     <p className="text-xs text-green-700">
-                      {selectedParcelPoint.address && `${selectedParcelPoint.address}, `}
-                      {selectedParcelPoint.zipCode} {selectedParcelPoint.city}
+                      {value.parcelPoint.address && `${value.parcelPoint.address}, `}
+                      {value.parcelPoint.zipCode} {value.parcelPoint.city}
                     </p>
-                    <p className="text-xs text-green-600 mt-0.5">{selectedParcelPoint.network}</p>
+                    <p className="text-xs text-green-600 mt-0.5">{value.parcelPoint.network}</p>
                   </div>
                 </div>
                 <button
@@ -222,14 +211,7 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, onSubmit })
             )}
           </div>
         )}
-
-        <button
-          type="submit"
-          className="w-full bg-gray-900 text-white py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors"
-        >
-          Continuer vers le récapitulatif
-        </button>
-      </form>
+      </div>
     </div>
   );
 };
