@@ -24,6 +24,14 @@ export interface DatabaseOrder {
   label_url?: string | null;
   tracking_number?: string | null;
   tracking_url?: string | null;
+  // Assurance colis optionnelle (0.6% de la valeur, revendeurs B2B)
+  insurance_cost?: number;
+  insured_value?: number;
+  // Commande groupée : cette commande part dans le même colis Sendcloud
+  // qu'une commande précédente (voir CartPage.tsx "Grouper avec ma commande
+  // en cours") — pas d'étiquette séparée à générer pour elle.
+  grouped_with_order_id?: string | null;
+  order_channel?: string;
 }
 
 export interface DatabaseOrderItem {

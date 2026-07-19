@@ -95,18 +95,6 @@ Deno.serve(async (req: Request) => {
     }
     const shippingCost = SHIPPING_RATES[delivery_type];
 
-    // Destination réelle de l'expédition : le point relais si ce mode est
-    // choisi, l'adresse de l'entreprise sinon. L'adresse entreprise reste
-    // toujours l'adresse de facturation.
-    const deliveryAddress = delivery_type === 'point_relais'
-      ? {
-          line1: `${parcel_point.name}${parcel_point.address ? ' - ' + parcel_point.address : ''}`,
-          city: parcel_point.city,
-          postal_code: parcel_point.zipCode,
-          country: parcel_point.country || 'FR',
-        }
-      : shipping_address;
-
     // Client service-role : products est en RLS deny-all pour le rôle
     // revendeur (l'accès catalogue passe par la vue b2b_catalog), donc on lit
     // ici avec des privilèges élevés pour recalculer les prix en confiance.
@@ -141,6 +129,9 @@ Deno.serve(async (req: Request) => {
     const insuredIds: string[] = Array.isArray(insured_product_ids) ? insured_product_ids : [];
     const insuredProducts = products.filter((p) => insuredIds.includes(p.id));
     const insuranceCost = insuredProducts.reduce((sum, p) => sum + Math.round(Number(p.sale_price) * INSURANCE_RATE * 100) / 100, 0);
+    // Valeur déclarée à assurer auprès de Sendcloud (insured_value du colis) —
+    // distincte de la prime insuranceCost payée par le client.
+    const insuredValue = insuredProducts.reduce((sum, p) => sum + Number(p.sale_price), 0);
 
     // Commande groupée : livraison gratuite si le client rattache cette
     // commande à une commande précédente déjà payée et pas encore expédiée.
@@ -169,8 +160,44 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const { data: profile } = await adminClient.from('profiles').select('email').eq('id', user.id).single();
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('email, first_name, last_name, phone')
+      .eq('id', user.id)
+      .single();
     const email = profile?.email || user.email || '';
+    const contactName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Revendeur';
+    const phone = profile?.phone || '';
+
+    // Destination réelle de l'expédition, dans le format attendu par
+    // l'intégration Sendcloud partagée (voir oze-storefront/supabase/functions/
+    // sendcloud-label et _shared/finalizeOrder.ts : sa.address, sa.postcode,
+    // sa.pickup_point_code/network, sa.name, sa.phone — mêmes noms de champs
+    // que côté B2C, pour réutiliser la même fonction de création de colis
+    // sans dupliquer l'intégration). L'adresse entreprise reste toujours
+    // l'adresse de facturation.
+    const deliveryAddress = delivery_type === 'point_relais'
+      ? {
+          pickup_point_code: parcel_point.code,
+          pickup_point_network: parcel_point.network,
+          pickup_point_name: parcel_point.name,
+          pickup_point_address: parcel_point.address,
+          pickup_point_zip: parcel_point.zipCode,
+          pickup_point_city: parcel_point.city,
+          city: parcel_point.city,
+          postcode: parcel_point.zipCode,
+          country: parcel_point.country || 'FR',
+          name: contactName,
+          phone,
+        }
+      : {
+          address: shipping_address.line1,
+          city: shipping_address.city,
+          postcode: shipping_address.postal_code,
+          country: shipping_address.country,
+          name: contactName,
+          phone,
+        };
 
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
     const origin = req.headers.get('origin') || 'https://admin.ozeparis.com';
@@ -222,6 +249,7 @@ Deno.serve(async (req: Request) => {
         shipping_cost: String(finalShippingCost),
         insured_product_ids: JSON.stringify(insuredProducts.map((p) => p.id)),
         insurance_cost: String(insuranceCost),
+        insured_value: String(insuredValue),
         grouped_with_order_id: validGroupedOrderId || '',
         email,
       },

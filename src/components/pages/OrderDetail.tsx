@@ -34,6 +34,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onBack }) => 
   const [error, setError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [groupedOrderNumber, setGroupedOrderNumber] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orderId) {
@@ -44,6 +45,16 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onBack }) => 
 
     fetchOrderDetails();
   }, [orderId]);
+
+  useEffect(() => {
+    if (!order?.grouped_with_order_id) {
+      setGroupedOrderNumber(null);
+      return;
+    }
+    orderService.getOrderById(order.grouped_with_order_id)
+      .then((grouped) => setGroupedOrderNumber(grouped?.order_number || null))
+      .catch(() => setGroupedOrderNumber(null));
+  }, [order?.grouped_with_order_id]);
 
   const fetchOrderDetails = async () => {
     if (!orderId) return;
@@ -503,22 +514,38 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onBack }) => 
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <ShippingLabelButton
-                  orderId={order.id}
-                  labelUrl={order.label_url}
-                  onLabelCreated={(data) =>
-                    setOrder((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            label_url: data.label_url,
-                            tracking_number: data.tracking_number,
-                            sendcloud_parcel_id: data.sendcloud_parcel_id,
-                          }
-                        : prev
-                    )
-                  }
-                />
+                {order.grouped_with_order_id ? (
+                  <div className="flex items-start space-x-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <Package className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-amber-800">
+                      Commande groupée avec {groupedOrderNumber ? <strong>{groupedOrderNumber}</strong> : 'une autre commande'} :
+                      à emballer et expédier dans le même colis, pas d'étiquette Sendcloud séparée à générer.
+                    </p>
+                  </div>
+                ) : (
+                  <ShippingLabelButton
+                    orderId={order.id}
+                    labelUrl={order.label_url}
+                    onLabelCreated={(data) =>
+                      setOrder((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              label_url: data.label_url,
+                              tracking_number: data.tracking_number,
+                              sendcloud_parcel_id: data.sendcloud_parcel_id,
+                            }
+                          : prev
+                      )
+                    }
+                  />
+                )}
+
+                {Number(order.insured_value) > 0 && (
+                  <p className="text-xs text-gray-500">
+                    Assurance colis : valeur déclarée {Number(order.insured_value).toFixed(2)} €
+                  </p>
+                )}
 
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Numéro de suivi</p>
