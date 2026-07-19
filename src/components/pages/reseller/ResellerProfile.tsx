@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
+import { useGooglePlacesAutocomplete } from '../../../hooks/useGooglePlacesAutocomplete';
 import { supabase } from '../../../lib/supabase';
 import { Building2, CheckCircle2, AlertCircle, Lock, Eye, EyeOff, Check, Circle } from 'lucide-react';
 
@@ -8,14 +9,32 @@ export const ResellerProfile: React.FC = () => {
   const { profile } = useResellerAuth();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [country, setCountry] = useState('France');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const addressInputRef = useRef<HTMLInputElement>(null);
+  useGooglePlacesAutocomplete(addressInputRef, (place) => {
+    setAddress(place.address || address);
+    setCity(place.city || city);
+    setPostalCode(place.postal_code || postalCode);
+    setCountry(place.country || country);
+  });
 
   useEffect(() => {
     if (profile) {
       setFirstName(profile.first_name);
       setLastName(profile.last_name);
+      setPhone(profile.phone || '');
+      setAddress(profile.address || '');
+      setCity(profile.city || '');
+      setPostalCode(profile.postal_code || '');
+      setCountry(profile.country || 'France');
     }
   }, [profile]);
 
@@ -29,7 +48,15 @@ export const ResellerProfile: React.FC = () => {
 
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ first_name: firstName.trim(), last_name: lastName.trim() })
+      .update({
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        phone: phone.trim() || null,
+        address: address.trim() || null,
+        city: city.trim() || null,
+        postal_code: postalCode.trim() || null,
+        country: country.trim() || null,
+      })
       .eq('id', profile.id);
 
     setSaving(false);
@@ -98,6 +125,58 @@ export const ResellerProfile: React.FC = () => {
             disabled
             className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500"
           />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+            placeholder="06 12 34 56 78"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
+          <div className="space-y-2">
+            <input
+              ref={addressInputRef}
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              autoComplete="off"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+              placeholder="Commencez à taper votre adresse..."
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={postalCode}
+                onChange={(e) => setPostalCode(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                placeholder="Code postal"
+              />
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                placeholder="Ville"
+              />
+            </div>
+            <select
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
+            >
+              <option value="France">France</option>
+              <option value="Belgique">Belgique</option>
+              <option value="Suisse">Suisse</option>
+              <option value="Luxembourg">Luxembourg</option>
+              <option value="Monaco">Monaco</option>
+            </select>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">Utilisée pour préremplir "Livrer à mon entreprise" au moment de la commande.</p>
         </div>
         <button
           type="submit"

@@ -140,7 +140,7 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, value, onCh
               </p>
             ) : (
               <p className="text-sm text-amber-700">
-                Aucune adresse enregistrée pour votre entreprise. Contactez votre administrateur OZË.
+                Aucune adresse enregistrée sur votre profil. Complétez-la dans "Mon profil" pour activer ce mode de livraison.
               </p>
             )}
           </div>

@@ -13,7 +13,14 @@ export interface ResellerProfile {
   reseller_status: 'pending' | 'active' | 'suspended'
   /** Contact principal de l'entreprise : seul rôle autorisé à gérer les autres comptes de son équipe */
   is_primary: boolean
-  /** Configurée par l'admin OZË sur la fiche entreprise, jamais saisie par le revendeur */
+  /**
+   * Coordonnées INDIVIDUELLES de ce contact (saisies à l'activation du
+   * compte via /accept-invite, modifiables ensuite dans "Mon profil") —
+   * distinctes de l'adresse de l'entreprise (table resellers, gérée par un
+   * admin OZË). C'est CETTE adresse qui préremplit "Livrer à mon
+   * entreprise" dans le checkout, pas celle de resellers.
+   */
+  phone: string | null
   address: string | null
   postal_code: string | null
   city: string | null
@@ -49,10 +56,10 @@ export const useResellerAuth = () => {
       const queryPromise = supabase
         .from('profiles')
         .select(`
-          id, email, first_name, last_name, role,
+          id, email, first_name, last_name, role, phone, address, postal_code, city, country,
           reseller_contacts!inner(
             reseller_id, is_primary,
-            resellers!inner(company_name, status, address, postal_code, city, country)
+            resellers!inner(company_name, status)
           )
         `)
         .eq('id', userId)
@@ -88,10 +95,11 @@ export const useResellerAuth = () => {
           company_name: reseller.company_name,
           reseller_status: reseller.status,
           is_primary: Boolean(contact.is_primary),
-          address: reseller.address || null,
-          postal_code: reseller.postal_code || null,
-          city: reseller.city || null,
-          country: reseller.country || null,
+          phone: data.phone || null,
+          address: data.address || null,
+          postal_code: data.postal_code || null,
+          city: data.city || null,
+          country: data.country || null,
         },
         pendingReason: null,
       }
