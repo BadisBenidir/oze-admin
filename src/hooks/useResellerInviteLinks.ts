@@ -13,9 +13,14 @@ export interface ResellerInviteLink {
   revoked_at: string | null;
 }
 
+// Toujours pro.ozeparis.com, même quand le lien est généré depuis
+// admin.ozeparis.com (même projet Vercel, deux domaines) : c'est le domaine
+// destiné aux revendeurs/collègues, pas celui de l'admin OZË.
+const INVITE_LINK_ORIGIN = 'https://pro.ozeparis.com';
+
 /** URL publique à transmettre au contact principal ou à ses collègues. */
 export const buildResellerInviteUrl = (token: string): string => {
-  return `${window.location.origin}/invite/team?token=${token}`;
+  return `${INVITE_LINK_ORIGIN}/invite/team?token=${token}`;
 };
 
 export const useResellerInviteLinks = (resellerId: string | undefined) => {
