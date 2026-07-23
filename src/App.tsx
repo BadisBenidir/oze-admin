@@ -2,6 +2,7 @@ import React from 'react';
 import { useSessionRole } from './hooks/useSessionRole';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { AcceptInvite } from './components/auth/AcceptInvite';
+import { AcceptTeamInviteLink } from './components/auth/AcceptTeamInviteLink';
 import { supabase } from './lib/supabase';
 import AdminApp from './apps/AdminApp';
 import ResellerApp from './apps/ResellerApp';
@@ -15,6 +16,13 @@ function App() {
   // session, avant même que useSessionRole ait fini de se résoudre.
   if (window.location.pathname === '/accept-invite') {
     return <AcceptInvite />;
+  }
+
+  // Page de destination du lien d'invitation d'équipe réutilisable (voir
+  // InviteLinkPanel / accept-reseller-invite-link) — publique, doit
+  // s'afficher avant toute vérification de session.
+  if (window.location.pathname === '/invite/team') {
+    return <AcceptTeamInviteLink />;
   }
 
   if (status === 'loading') {

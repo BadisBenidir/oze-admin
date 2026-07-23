@@ -8,6 +8,7 @@ import { useResellers, Reseller, ResellerContact } from '../../hooks/useReseller
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { ResellerDetail } from './ResellerDetail';
 import { ResellerFormModal } from './ResellerFormModal';
+import { InviteLinkPanel } from '../reseller/InviteLinkPanel';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   Building2,
@@ -469,6 +470,12 @@ export const Resellers: React.FC = () => {
           {convertedNotice && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-sm text-blue-800">{convertedNotice}</p>
+            </div>
+          )}
+
+          {contactsReseller && (
+            <div className="border-t border-gray-100 pt-3">
+              <InviteLinkPanel resellerId={contactsReseller.id} />
             </div>
           )}
 

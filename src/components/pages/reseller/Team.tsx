@@ -7,6 +7,7 @@ import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useResellerTeam, TeamMember } from '../../../hooks/useResellerTeam';
 import { generateSecurePassword } from '../../../utils/generatePassword';
 import { TeamMemberDetail } from './TeamMemberDetail';
+import { InviteLinkPanel } from '../../reseller/InviteLinkPanel';
 import { Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check } from 'lucide-react';
 
 const INVITE_COOLDOWN_SECONDS = 30;
@@ -259,6 +260,14 @@ export const Team: React.FC = () => {
             Fermer
           </button>
         </div>
+      )}
+
+      {profile?.reseller_id && (
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <InviteLinkPanel resellerId={profile.reseller_id} />
+          </CardContent>
+        </Card>
       )}
 
       <Card>
