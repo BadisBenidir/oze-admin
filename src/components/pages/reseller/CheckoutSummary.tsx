@@ -10,13 +10,14 @@ interface CheckoutSummaryProps {
   grouped?: boolean;
   discountRate?: number;
   discountAmount?: number;
+  promoCode?: string | null;
+  promoDiscountAmount?: number;
 }
 
 // Adapté de oze-storefront/CheckoutSummary.tsx : la liste des articles vit
 // désormais directement dans CartPage (avec la case à cocher assurance par
 // article) pour ne pas la dupliquer — ce composant ne porte plus que le
-// détail chiffré (sous-total, livraison, assurance, total). Pas de code
-// promo côté B2B (aucun système de coupon pour les revendeurs).
+// détail chiffré (sous-total, remises, livraison, assurance, total).
 const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({
   subtotal,
   shipping,
@@ -26,6 +27,8 @@ const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({
   grouped,
   discountRate = 0,
   discountAmount = 0,
+  promoCode = null,
+  promoDiscountAmount = 0,
 }) => {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
@@ -45,6 +48,12 @@ const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({
               </span>
             </span>
             <span className="text-gray-400">-{discountAmount.toFixed(2)} €</span>
+          </div>
+        )}
+        {promoDiscountAmount > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400">Remise ({promoCode})</span>
+            <span className="text-gray-400">-{promoDiscountAmount.toFixed(2)} €</span>
           </div>
         )}
         <div className="flex items-center justify-between text-sm">

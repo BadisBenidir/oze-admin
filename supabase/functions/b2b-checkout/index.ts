@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { product_ids, shipping_address, billing_address, delivery_type, parcel_point, insured_product_ids, grouped_with_order_id } = await req.json();
+    const { product_ids, shipping_address, billing_address, delivery_type, parcel_point, insured_product_ids, grouped_with_order_id, promo_code } = await req.json();
     if (!Array.isArray(product_ids) || product_ids.length === 0) {
       return new Response(JSON.stringify({ error: 'Le panier est vide' }), {
         status: 400,
@@ -144,6 +144,46 @@ Deno.serve(async (req: Request) => {
     const discountRate = itemCount >= 10 ? 0.1 : itemCount >= 5 ? 0.05 : 0;
     const rawSubtotal = products.reduce((sum, p) => sum + Number(p.sale_price), 0);
     const discountAmount = Math.round(rawSubtotal * discountRate * 100) / 100;
+
+    // Code promo B2B, optionnel : revalidé intégralement ici via la RPC
+    // validate_promo_code (mêmes règles que la vérification temps réel côté
+    // panier), avec le CALLER client pour que current_reseller_id()/auth.uid()
+    // résolvent bien le revendeur connecté — jamais de confiance sur un
+    // montant de remise envoyé par le client.
+    let promoCodeId: string | null = null;
+    let promoCodeLabel: string | null = null;
+    let promoDiscountAmount = 0;
+    if (promo_code && String(promo_code).trim()) {
+      const { data: promoResult, error: promoError } = await callerClient.rpc('validate_promo_code', {
+        p_code: String(promo_code).trim(),
+        p_subtotal: rawSubtotal,
+      });
+      if (promoError) {
+        return new Response(JSON.stringify({ error: promoError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!promoResult?.valid) {
+        return new Response(JSON.stringify({ error: promoResult?.error || 'Code promo invalide' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      promoCodeId = promoResult.promo_code_id;
+      promoCodeLabel = promoResult.code;
+      promoDiscountAmount = Number(promoResult.discount_amount);
+    }
+
+    // Sous-total après les DEUX remises (volume + code promo), jamais
+    // négatif. Chaque ligne produit est ensuite réduite dans cette même
+    // proportion (voir plus bas) : Stripe Checkout n'accepte pas de
+    // line_item à montant négatif, donc pas de ligne "Remise" séparée
+    // possible — la remise totale reste néanmoins visible telle quelle dans
+    // notre propre récapitulatif et sur la commande (discount_amount +
+    // promo_discount_amount).
+    const subtotalAfterDiscounts = Math.max(0, rawSubtotal - discountAmount - promoDiscountAmount);
+    const lineItemRatio = rawSubtotal > 0 ? subtotalAfterDiscounts / rawSubtotal : 1;
 
     // Commande groupée : livraison gratuite si le client rattache cette
     // commande à une commande précédente déjà payée et pas encore expédiée.
@@ -233,11 +273,7 @@ Deno.serve(async (req: Request) => {
               name: discountRate > 0 ? `${p.name} (remise volume -${discountRate * 100}%)` : p.name,
               images: p.images?.[p.main_image_index ?? 0] ? [p.images[p.main_image_index ?? 0]] : undefined,
             },
-            // La remise est appliquée directement sur chaque ligne produit :
-            // Stripe Checkout n'accepte pas de line_item à montant négatif,
-            // donc pas de ligne "Remise" séparée possible ici (elle reste
-            // visible dans notre propre récapitulatif et sur la commande).
-            unit_amount: Math.round(Number(p.sale_price) * (1 - discountRate) * 100),
+            unit_amount: Math.round(Number(p.sale_price) * lineItemRatio * 100),
           },
           quantity: 1,
         })),
@@ -284,6 +320,9 @@ Deno.serve(async (req: Request) => {
         insured_value: String(insuredValue),
         discount_rate: String(discountRate),
         discount_amount: String(discountAmount),
+        promo_code_id: promoCodeId || '',
+        promo_code: promoCodeLabel || '',
+        promo_discount_amount: String(promoDiscountAmount),
         grouped_with_order_id: validGroupedOrderId || '',
         email,
       },

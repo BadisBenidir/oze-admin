@@ -201,7 +201,8 @@ export const useB2BCart = (profileId: string | undefined) => {
     deliveryType: DeliveryType,
     parcelPoint: ChronopostPickupPoint | null,
     billingAddress?: Record<string, unknown>,
-    groupedWithOrderId?: string | null
+    groupedWithOrderId?: string | null,
+    promoCode?: string | null
   ): Promise<CheckoutResult> => {
     if (items.length === 0) {
       return { success: false, error: 'Le panier est vide' };
@@ -215,6 +216,7 @@ export const useB2BCart = (profileId: string | undefined) => {
       parcel_point: parcelPoint,
       insured_product_ids: items.filter((i) => i.insured).map((i) => i.id),
       grouped_with_order_id: groupedWithOrderId || null,
+      promo_code: promoCode || null,
     });
 
     if (error) {

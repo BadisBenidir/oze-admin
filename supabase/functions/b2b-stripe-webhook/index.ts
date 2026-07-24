@@ -126,6 +126,44 @@ Deno.serve(async (req: Request) => {
       console.log(`${LOG_PREFIX} Commande ${data.order_id} confirmée pour la session ${session.id} (already_processed: ${!!data.already_processed})`);
     }
 
+    // Code promo B2B : confirm_b2b_payment ignore encore le code promo (pour
+    // ne pas rouvrir sa signature déjà stabilisée, voir 0027_..._consolidated),
+    // donc l'application effective + l'incrément du compteur se font ICI,
+    // après coup, via record_promo_code_use — jamais si la session avait déjà
+    // été traitée (webhook Stripe potentiellement livré plusieurs fois).
+    if (!data?.already_processed && data?.order_id && metadata.promo_code_id) {
+      const promoDiscountAmount = Number(metadata.promo_discount_amount || 0);
+      console.log(`${LOG_PREFIX} Application du code promo ${metadata.promo_code} (${promoDiscountAmount}€) sur la commande ${data.order_id}`);
+
+      const { data: promoResult, error: promoRpcError } = await adminClient.rpc('record_promo_code_use', {
+        p_promo_code_id: metadata.promo_code_id,
+        p_order_id: data.order_id,
+        p_reseller_id: metadata.reseller_id,
+        p_profile_id: metadata.placed_by_profile_id || null,
+        p_discount_amount: promoDiscountAmount,
+      });
+
+      if (promoRpcError || !promoResult?.applied) {
+        // Le client a déjà payé le montant remisé (line items Stripe déjà
+        // réduits en conséquence côté b2b-checkout) mais le code s'est avéré
+        // invalide entre-temps (épuisé/désactivé/déjà utilisé par une
+        // commande concurrente) : on rembourse la remise plutôt que de
+        // garder l'argent sans l'avoir honorée, même logique que le
+        // remboursement des articles indisponibles ci-dessous.
+        console.error(`${LOG_PREFIX} Code promo non appliqué (${promoRpcError?.message || promoResult?.reason}), remboursement de ${promoDiscountAmount}€`);
+        if (promoDiscountAmount > 0 && typeof session.payment_intent === 'string') {
+          try {
+            await stripe.refunds.create({
+              payment_intent: session.payment_intent,
+              amount: Math.round(promoDiscountAmount * 100),
+            });
+          } catch (refundErr) {
+            console.error(`${LOG_PREFIX} Échec du remboursement du code promo:`, (refundErr as Error).message);
+          }
+        }
+      }
+    }
+
     const unavailableIds: string[] = data?.unavailable_ids || [];
 
     // Si certains articles facturés n'ont finalement pas pu être honorés

@@ -5,6 +5,7 @@ import { useGroupableOrder } from '../../../hooks/useGroupableOrder';
 import ShippingForm, { ShippingSelection, SHIPPING_RATES } from './ShippingForm';
 import CheckoutSummary from './CheckoutSummary';
 import { VolumeDiscountBanner } from './VolumeDiscountBanner';
+import { PromoCodeField, AppliedPromo } from './PromoCodeField';
 import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Package, CheckCircle } from 'lucide-react';
 
 interface CartPageProps {
@@ -31,6 +32,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
   const [groupWithOrder, setGroupWithOrder] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
   // Force le recalcul du chrono de chaque article à l'affichage (added_at
   // ne change pas, seul "maintenant" avance) — le retrait effectif d'un
   // article expiré est lui géré par useB2BCart, pas ici.
@@ -40,6 +42,15 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
     const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Le montant de la remise appliquée est figé au moment du clic sur
+  // "Appliquer" (contre le sous-total d'alors) : si le panier change ensuite
+  // (article retiré/ajouté), on retire le code pour forcer une revalidation
+  // contre le nouveau sous-total plutôt que de garder un montant obsolète.
+  useEffect(() => {
+    setAppliedPromo(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart.items.length]);
 
   const handlePay = async () => {
     if (!profile) return;
@@ -61,7 +72,8 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
       shipping.deliveryType,
       shipping.parcelPoint,
       undefined,
-      groupWithOrder && groupableOrder ? groupableOrder.id : null
+      groupWithOrder && groupableOrder ? groupableOrder.id : null,
+      appliedPromo?.code || null
     );
     // En cas de succès, startCheckout redirige immédiatement vers Stripe —
     // on ne repasse jamais ici. setSubmitting(false) ne sert donc que le cas
@@ -95,7 +107,8 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
   }
 
   const shippingCost = groupWithOrder ? 0 : SHIPPING_RATES[shipping.deliveryType];
-  const total = cart.subtotal - cart.discountAmount + shippingCost + cart.insuranceTotal;
+  const promoDiscountAmount = appliedPromo?.discountAmount || 0;
+  const total = cart.subtotal - cart.discountAmount - promoDiscountAmount + shippingCost + cart.insuranceTotal;
 
   return (
     <div className="p-4 md:p-6">
@@ -236,6 +249,13 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
         </div>
 
         <div className="lg:sticky lg:top-6 space-y-4">
+          <PromoCodeField
+            subtotal={cart.subtotal}
+            applied={appliedPromo}
+            onApply={setAppliedPromo}
+            onRemove={() => setAppliedPromo(null)}
+          />
+
           <CheckoutSummary
             subtotal={cart.subtotal}
             shipping={shippingCost}
@@ -245,6 +265,8 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
             grouped={groupWithOrder}
             discountRate={cart.discountRate}
             discountAmount={cart.discountAmount}
+            promoCode={appliedPromo?.code}
+            promoDiscountAmount={promoDiscountAmount}
           />
 
           <button

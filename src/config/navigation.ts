@@ -106,6 +106,7 @@ export const navigationItems: MenuItem[] = [
       { id: 'resellers', label: 'Revendeurs', path: '/b2b/resellers', icon: Users },
       { id: 'b2b-products', label: 'Produits B2B', path: '/b2b/products', icon: Package },
       { id: 'drops', label: 'Drops B2B', path: '/b2b/drops', icon: Rocket },
+      { id: 'promo-codes', label: 'Codes Promos', path: '/b2b/promo-codes', icon: Ticket },
       { id: 'b2b-orders', label: 'Commandes B2B', path: '/b2b/orders', icon: ShoppingCart },
       { id: 'commissions', label: 'Chiffre d\'affaires B2B', path: '/b2b/commissions', icon: Banknote },
       { id: 'portal', label: 'Portail B2B', path: '/b2b/portal', icon: LayoutGrid },
