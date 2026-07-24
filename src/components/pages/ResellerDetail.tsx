@@ -6,10 +6,11 @@ import { useResellers, Reseller, ResellerContact, ResellerFormData } from '../..
 import { useB2BOrders } from '../../hooks/useB2BOrders';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { ResellerFormModal } from './ResellerFormModal';
+import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
-  Eye, X, Package, Building2, User, Edit,
+  Eye, Edit,
 } from 'lucide-react';
 import type { B2BOrder } from '../../hooks/useB2BOrders';
 
@@ -55,7 +56,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
     setCurrentReseller(reseller);
   }, [reseller]);
 
-  const { orders, loading: ordersLoading, error: ordersError } = useB2BOrders(isAdmin, currentReseller.id);
+  const { orders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useB2BOrders(isAdmin, currentReseller.id);
 
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
@@ -70,6 +71,16 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   const [copied, setCopied] = useState(false);
 
   const [viewingOrder, setViewingOrder] = useState<B2BOrder | null>(null);
+
+  // Après annulation d'un article, `orders` se rafraîchit mais `viewingOrder`
+  // pointe encore sur l'ancien objet : on le resynchronise pour que la modal
+  // ouverte reflète immédiatement le nouveau total et le statut de l'article.
+  useEffect(() => {
+    if (!viewingOrder) return;
+    const updated = orders.find((o) => o.id === viewingOrder.id);
+    if (updated) setViewingOrder(updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
 
   useEffect(() => {
     let mounted = true;
@@ -134,11 +145,6 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
     navigator.clipboard.writeText(newPassword);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const buyerName = (email: string): string => {
-    const contact = contacts.find((c) => c.email.toLowerCase() === email.toLowerCase());
-    return contact ? `${contact.first_name} ${contact.last_name}` : email;
   };
 
   return (
@@ -445,134 +451,11 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
         </div>
       </Modal>
 
-      {/* Modal détail de commande */}
-      {viewingOrder && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black bg-opacity-25" onClick={() => setViewingOrder(null)}></div>
-
-            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-              {/* En-tête */}
-              <div className="flex items-start justify-between p-6 border-b border-gray-100">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">#{viewingOrder.order_number}</h3>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {new Date(viewingOrder.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {orderStatusBadge(viewingOrder.status)}
-                  <button
-                    onClick={() => setViewingOrder(null)}
-                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-6 space-y-6">
-                {/* Acheteur */}
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Acheteur</p>
-                  <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                      <span className="text-sm text-gray-900">{buyerName(viewingOrder.email)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                      <span className="text-sm text-gray-900">{viewingOrder.email}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                      <span className="text-sm text-gray-900">{viewingOrder.reseller?.company_name || currentReseller.company_name}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Articles */}
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Articles</p>
-                  <div className="border border-gray-100 rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-100">
-                          <th className="text-left py-2.5 px-4 font-medium text-gray-500 text-xs">Produit</th>
-                          <th className="text-left py-2.5 px-4 font-medium text-gray-500 text-xs hidden sm:table-cell">Référence</th>
-                          <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Prix unit.</th>
-                          <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Qté</th>
-                          <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {viewingOrder.order_items.map((item) => {
-                          const image = item.product_snapshot?.images?.[item.product_snapshot?.main_image_index ?? 0] || item.product_snapshot?.images?.[0];
-                          return (
-                            <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
-                              <td className="py-3 px-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-                                    {image ? (
-                                      <img src={image} alt={item.product_snapshot?.name} className="h-full w-full object-cover" />
-                                    ) : (
-                                      <Package className="h-4 w-4 text-gray-300" />
-                                    )}
-                                  </div>
-                                  <span className="text-sm font-medium text-gray-900">{item.product_snapshot?.name || 'Produit'}</span>
-                                </div>
-                              </td>
-                              <td className="py-3 px-4 hidden sm:table-cell">
-                                <span className="font-mono text-xs text-gray-500">
-                                  {item.product_snapshot?.reference || item.product_snapshot?.product_code || '—'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 text-right text-sm text-gray-600">{item.unit_price.toFixed(0)} €</td>
-                              <td className="py-3 px-4 text-right text-sm text-gray-600">{item.quantity}</td>
-                              <td className="py-3 px-4 text-right text-sm font-semibold text-gray-900">{item.line_total.toFixed(0)} €</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Totaux */}
-                <div className="flex justify-end">
-                  <div className="w-full sm:w-64 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Sous-total</span>
-                      <span className="text-gray-900">{viewingOrder.subtotal.toFixed(0)} €</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Livraison</span>
-                      <span className="text-gray-900">{viewingOrder.shipping_cost.toFixed(0)} €</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">TVA</span>
-                      <span className="text-gray-400">Non applicable</span>
-                    </div>
-                    <div className="flex justify-between text-base font-semibold border-t border-gray-100 pt-2">
-                      <span className="text-gray-900">Total net</span>
-                      <span className="text-gray-900">{viewingOrder.total_amount.toFixed(0)} €</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end p-6 pt-0">
-                <button
-                  onClick={() => setViewingOrder(null)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Fermer
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <B2BOrderDetailModal
+        order={viewingOrder}
+        onClose={() => setViewingOrder(null)}
+        onOrderUpdated={refreshOrders}
+      />
 
       <ResellerFormModal
         isOpen={showEditModal}

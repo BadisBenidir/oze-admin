@@ -92,17 +92,21 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
 
                   <div className="flex flex-wrap gap-2">
                     {order.order_items.map((item) => {
+                      const isCancelled = item.status === 'cancelled';
                       const image = item.product_snapshot?.images?.[item.product_snapshot?.main_image_index ?? 0] || item.product_snapshot?.images?.[0];
                       return (
-                        <div key={item.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-2 py-1">
-                          <div className="h-8 w-8 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <div key={item.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 ${isCancelled ? 'bg-red-50' : 'bg-gray-50'}`}>
+                          <div className={`h-8 w-8 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0 ${isCancelled ? 'opacity-40' : ''}`}>
                             {image ? (
                               <img src={image} alt={item.product_snapshot?.name} className="w-full h-full object-cover" />
                             ) : (
                               <ImageOff className="h-3 w-3 text-gray-300" />
                             )}
                           </div>
-                          <span className="text-xs text-gray-700 max-w-[120px] truncate">{item.product_snapshot?.name}</span>
+                          <span className={`text-xs max-w-[120px] truncate ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                            {item.product_snapshot?.name}
+                          </span>
+                          {isCancelled && <Badge variant="danger">Annulé</Badge>}
                         </div>
                       );
                     })}
@@ -192,19 +196,29 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                       </thead>
                       <tbody>
                         {viewingOrder.order_items.map((item) => {
+                          const isCancelled = item.status === 'cancelled';
                           const image = item.product_snapshot?.images?.[item.product_snapshot?.main_image_index ?? 0] || item.product_snapshot?.images?.[0];
                           return (
                             <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-3">
-                                  <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                                  <div className={`h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 ${isCancelled ? 'opacity-40' : ''}`}>
                                     {image ? (
                                       <img src={image} alt={item.product_snapshot?.name} className="h-full w-full object-cover" />
                                     ) : (
                                       <Package className="h-4 w-4 text-gray-300" />
                                     )}
                                   </div>
-                                  <span className="text-sm font-medium text-gray-900">{item.product_snapshot?.name || 'Produit'}</span>
+                                  <div>
+                                    <span className={`text-sm font-medium ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                                      {item.product_snapshot?.name || 'Produit'}
+                                    </span>
+                                    {isCancelled && (
+                                      <div className="mt-1">
+                                        <Badge variant="danger">Article annulé</Badge>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
                               <td className="py-3 px-4 hidden sm:table-cell">
@@ -212,9 +226,9 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                   {item.product_snapshot?.reference || item.product_snapshot?.product_code || '—'}
                                 </span>
                               </td>
-                              <td className="py-3 px-4 text-right text-sm text-gray-600">{item.unit_price.toFixed(0)} €</td>
-                              <td className="py-3 px-4 text-right text-sm text-gray-600">{item.quantity}</td>
-                              <td className="py-3 px-4 text-right text-sm font-semibold text-gray-900">{item.line_total.toFixed(0)} €</td>
+                              <td className={`py-3 px-4 text-right text-sm ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-600'}`}>{item.unit_price.toFixed(0)} €</td>
+                              <td className={`py-3 px-4 text-right text-sm ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-600'}`}>{item.quantity}</td>
+                              <td className={`py-3 px-4 text-right text-sm font-semibold ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.line_total.toFixed(0)} €</td>
                             </tr>
                           );
                         })}

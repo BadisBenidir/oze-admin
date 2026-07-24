@@ -8,6 +8,8 @@ export interface MyB2BOrderItem {
   unit_price: number;
   line_total: number;
   product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string; reference?: string | null };
+  status: 'active' | 'cancelled';
+  cancellation_reason: string | null;
 }
 
 export interface MyB2BOrder {

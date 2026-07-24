@@ -8,6 +8,11 @@ export interface B2BOrderItem {
   unit_price: number;
   line_total: number;
   product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string; reference?: string | null };
+  status: 'active' | 'cancelled';
+  cancellation_reason: string | null;
+  cancelled_at: string | null;
+  restock_action: 'draft' | 'for-sale-b2b' | 'archived' | null;
+  refund_status: 'not_applicable' | 'succeeded' | 'failed' | null;
 }
 
 export interface B2BOrder {

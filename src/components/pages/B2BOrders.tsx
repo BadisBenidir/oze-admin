@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-import { useB2BOrders } from '../../hooks/useB2BOrders';
-import { AlertCircle, RefreshCw, ShoppingBag } from 'lucide-react';
+import { useB2BOrders, B2BOrder } from '../../hooks/useB2BOrders';
+import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
+import { AlertCircle, RefreshCw, ShoppingBag, Eye } from 'lucide-react';
 
 const statusBadge = (status: string) => {
   switch (status) {
@@ -21,6 +22,17 @@ const statusBadge = (status: string) => {
 export const B2BOrders: React.FC = () => {
   const { isAdmin } = useAdminAuth();
   const { orders, loading, error, refresh } = useB2BOrders(isAdmin);
+  const [viewingOrder, setViewingOrder] = useState<B2BOrder | null>(null);
+
+  // Après annulation d'un article, `orders` se rafraîchit mais `viewingOrder`
+  // pointe encore sur l'ancien objet : on le resynchronise pour que la modal
+  // ouverte reflète immédiatement le nouveau total et le statut de l'article.
+  useEffect(() => {
+    if (!viewingOrder) return;
+    const updated = orders.find((o) => o.id === viewingOrder.id);
+    if (updated) setViewingOrder(updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
 
   return (
     <div className="p-4 md:p-6">
@@ -65,13 +77,14 @@ export const B2BOrders: React.FC = () => {
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden md:table-cell">Articles</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Total</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Statut</th>
+                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     [...Array(3)].map((_, i) => (
                       <tr key={`skeleton-${i}`} className="border-b border-gray-50">
-                        <td className="py-4 px-4 md:px-6" colSpan={5}>
+                        <td className="py-4 px-4 md:px-6" colSpan={6}>
                           <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
                         </td>
                       </tr>
@@ -87,6 +100,15 @@ export const B2BOrders: React.FC = () => {
                         <td className="py-4 px-4 md:px-6 hidden md:table-cell text-sm text-gray-600">{order.order_items.length} pièce{order.order_items.length > 1 ? 's' : ''}</td>
                         <td className="py-4 px-4 md:px-6 text-sm font-semibold text-gray-900">{order.total_amount.toFixed(0)} €</td>
                         <td className="py-4 px-4 md:px-6">{statusBadge(order.status)}</td>
+                        <td className="py-4 px-4 md:px-6">
+                          <button
+                            onClick={() => setViewingOrder(order)}
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Voir les détails de la commande"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -96,6 +118,12 @@ export const B2BOrders: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      <B2BOrderDetailModal
+        order={viewingOrder}
+        onClose={() => setViewingOrder(null)}
+        onOrderUpdated={refresh}
+      />
     </div>
   );
 };
