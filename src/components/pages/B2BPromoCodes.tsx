@@ -15,6 +15,7 @@ const emptyForm: PromoCodeFormData = {
   max_uses: null,
   valid_until: null,
   status: 'active',
+  is_single_use: false,
 };
 
 // datetime-local n'accepte pas le "Z" final ni les secondes — tronque au format attendu.
@@ -191,6 +192,9 @@ export const B2BPromoCodes: React.FC = () => {
                             <Users className="h-4 w-4 text-gray-400" />
                             <span>{code.uses_count}{code.max_uses ? ` / ${code.max_uses}` : ''}</span>
                           </div>
+                          {code.is_single_use && (
+                            <p className="text-xs text-gray-500 mt-0.5">Usage unique global</p>
+                          )}
                         </td>
                         <td className="py-4 px-4 md:px-6">{statusBadge(code)}</td>
                         <td className="py-4 px-4 md:px-6">
@@ -302,17 +306,51 @@ export const B2BPromoCodes: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre d'utilisations maximum (optionnel)</label>
-                  <input
-                    type="number"
-                    value={formData.max_uses ?? ''}
-                    onChange={(e) => setFormData({ ...formData, max_uses: e.target.value ? parseInt(e.target.value, 10) : null })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                    min="1"
-                    placeholder="Illimité"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Laisser vide = illimité. Un revendeur ne peut utiliser un même code qu'une fois.</p>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Règle d'exclusivité</label>
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2 text-sm text-gray-700">
+                      <input
+                        type="radio"
+                        name="exclusivity"
+                        checked={!formData.is_single_use}
+                        onChange={() => setFormData({ ...formData, is_single_use: false })}
+                        className="mt-0.5 h-4 w-4 text-gray-900 focus:ring-gray-900"
+                      />
+                      <span>
+                        Usage général
+                        <span className="block text-xs text-gray-500">Utilisable par tous les revendeurs (chacun une seule fois)</span>
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-2 text-sm text-gray-700">
+                      <input
+                        type="radio"
+                        name="exclusivity"
+                        checked={formData.is_single_use}
+                        onChange={() => setFormData({ ...formData, is_single_use: true, max_uses: 1 })}
+                        className="mt-0.5 h-4 w-4 text-gray-900 focus:ring-gray-900"
+                      />
+                      <span>
+                        Usage unique global (Premier arrivé, premier servi)
+                        <span className="block text-xs text-gray-500">Le code s'invalide définitivement dès la première utilisation</span>
+                      </span>
+                    </label>
+                  </div>
                 </div>
+
+                {!formData.is_single_use && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre d'utilisations maximum (optionnel)</label>
+                    <input
+                      type="number"
+                      value={formData.max_uses ?? ''}
+                      onChange={(e) => setFormData({ ...formData, max_uses: e.target.value ? parseInt(e.target.value, 10) : null })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                      min="1"
+                      placeholder="Illimité"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Laisser vide = illimité. Un revendeur ne peut utiliser un même code qu'une fois.</p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date d'expiration (optionnel)</label>

@@ -11,6 +11,9 @@ export interface PromoCode {
   uses_count: number;
   valid_until: string | null;
   status: 'active' | 'inactive';
+  /** Usage unique global (premier arrivé, premier servi) : le code s'invalide
+   * définitivement dès qu'un revendeur l'utilise, indépendamment de max_uses. */
+  is_single_use: boolean;
   created_at: string;
 }
 
@@ -22,6 +25,7 @@ export interface PromoCodeFormData {
   max_uses: number | null;
   valid_until: string | null;
   status: 'active' | 'inactive';
+  is_single_use: boolean;
 }
 
 interface UseB2BPromoCodesResult {
@@ -65,9 +69,10 @@ export const useB2BPromoCodes = (isAdmin: boolean = false): UseB2BPromoCodesResu
       discount_type: data.discount_type,
       discount_value: data.discount_value,
       min_order_amount: data.min_order_amount,
-      max_uses: data.max_uses,
+      max_uses: data.is_single_use ? 1 : data.max_uses,
       valid_until: data.valid_until,
       status: data.status,
+      is_single_use: data.is_single_use,
       created_by: userData?.user?.id ?? null,
     });
 
