@@ -445,6 +445,9 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                         <option value="for-sale-other-platform">À vendre sur autre plateforme</option>
                         <option value="for-sale-b2b">Revendeurs B2B uniquement</option>
                       </optgroup>
+                      <optgroup label="🎁 Programme fidélité B2B">
+                        <option value="cadeau">Cadeau fidélité (en attente d'attribution)</option>
+                      </optgroup>
                       <optgroup label="✅ Vendu">
                         <option value="sold-online">Vendu en ligne</option>
                         <option value="sold-other-platform">Vendu sur autre plateforme</option>
