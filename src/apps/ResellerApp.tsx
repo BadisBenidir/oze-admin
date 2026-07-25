@@ -26,6 +26,19 @@ const parseProductId = (pathname: string): string | null => {
   return match ? decodeURIComponent(match[1]) : null;
 };
 
+// Onglet du navigateur : index.html est partagé avec AdminApp (même build,
+// séparation par rôle), donc son <title> statique ne peut pas porter la
+// marque B2B sans aussi changer celui de l'admin — on le pilote ici en JS,
+// uniquement pour cette app.
+const TAB_TITLES: Record<string, string> = {
+  catalog: 'Catalogue B2B | OZË Paris',
+  'my-orders': 'Mes Commandes | OZË Paris',
+  wallet: 'Mon Portefeuille | OZË Paris',
+  profile: 'Mon Profil | OZË Paris',
+};
+const DEFAULT_TITLE = 'Portail B2B | OZË Paris';
+const DEFAULT_DESCRIPTION = 'Espace professionnel exclusif OZË Paris - Maroquinerie de luxe de seconde main.';
+
 function ResellerApp() {
   const { activeTab, activeSubTab, navigateTo } = useNavigation();
   const { profile } = useResellerAuth();
@@ -44,6 +57,22 @@ function ResellerApp() {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  // Description : posée une seule fois (pas de variante par page demandée).
+  useEffect(() => {
+    let meta = document.querySelector('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'description');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', DEFAULT_DESCRIPTION);
+  }, []);
+
+  // Titre de l'onglet : reflète la page active du portail revendeur.
+  useEffect(() => {
+    document.title = TAB_TITLES[currentTab] || DEFAULT_TITLE;
+  }, [currentTab]);
 
   const navigatePath = (path: string) => {
     window.history.pushState({}, '', path);
