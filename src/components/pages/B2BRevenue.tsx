@@ -2,13 +2,15 @@ import React from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useB2BRevenue } from '../../hooks/useB2BRevenue';
-import { AlertCircle, RefreshCw, Banknote } from 'lucide-react';
+import { AlertCircle, RefreshCw, Banknote, ShoppingBag, TrendingUp, Receipt } from 'lucide-react';
 
 export const B2BRevenue: React.FC = () => {
   const { isAdmin } = useAdminAuth();
   const { revenue, loading, error, refresh } = useB2BRevenue(isAdmin);
 
+  const totalPurchasePrice = revenue.reduce((sum, r) => sum + r.total_purchase_price, 0);
   const totalRevenue = revenue.reduce((sum, r) => sum + r.total_revenue, 0);
+  const totalProfit = totalRevenue - totalPurchasePrice;
   const totalOrders = revenue.reduce((sum, r) => sum + r.orders_count, 0);
 
   return (
@@ -28,16 +30,40 @@ export const B2BRevenue: React.FC = () => {
       </div>
 
       {!loading && !error && (
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-gray-500 mb-1">Chiffre d'affaires total</p>
+              <div className="flex items-center gap-2 mb-1">
+                <Receipt className="h-4 w-4 text-gray-400" />
+                <p className="text-xs text-gray-500">Prix d'achat total</p>
+              </div>
+              <p className="text-xl font-semibold text-gray-900">{totalPurchasePrice.toFixed(0)} €</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Banknote className="h-4 w-4 text-gray-400" />
+                <p className="text-xs text-gray-500">Chiffre d'affaires total</p>
+              </div>
               <p className="text-xl font-semibold text-gray-900">{totalRevenue.toFixed(0)} €</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-gray-500 mb-1">Commandes B2B</p>
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="h-4 w-4 text-green-500" />
+                <p className="text-xs text-gray-500">Bénéfice total</p>
+              </div>
+              <p className="text-xl font-semibold text-green-600">{totalProfit.toFixed(0)} €</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <ShoppingBag className="h-4 w-4 text-gray-400" />
+                <p className="text-xs text-gray-500">Commandes B2B</p>
+              </div>
               <p className="text-xl font-semibold text-gray-900">{totalOrders}</p>
             </CardContent>
           </Card>
@@ -68,14 +94,16 @@ export const B2BRevenue: React.FC = () => {
                   <tr className="border-b border-gray-100">
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Revendeur</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Commandes</th>
+                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Prix d'achat</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Chiffre d'affaires</th>
+                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Bénéfice</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     [...Array(3)].map((_, i) => (
                       <tr key={`skeleton-${i}`} className="border-b border-gray-50">
-                        <td className="py-4 px-4 md:px-6" colSpan={3}>
+                        <td className="py-4 px-4 md:px-6" colSpan={5}>
                           <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
                         </td>
                       </tr>
@@ -85,7 +113,9 @@ export const B2BRevenue: React.FC = () => {
                       <tr key={r.reseller_id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="py-4 px-4 md:px-6 text-sm font-medium text-gray-900">{r.company_name}</td>
                         <td className="py-4 px-4 md:px-6 text-sm text-gray-600">{r.orders_count}</td>
+                        <td className="py-4 px-4 md:px-6 text-sm text-gray-600">{r.total_purchase_price.toFixed(0)} €</td>
                         <td className="py-4 px-4 md:px-6 text-sm font-semibold text-gray-900">{r.total_revenue.toFixed(0)} €</td>
+                        <td className="py-4 px-4 md:px-6 text-sm font-semibold text-green-600">{r.total_profit.toFixed(0)} €</td>
                       </tr>
                     ))
                   )}
