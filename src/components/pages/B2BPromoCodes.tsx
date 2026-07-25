@@ -29,6 +29,7 @@ export const B2BPromoCodes: React.FC = () => {
   const [formData, setFormData] = useState<PromoCodeFormData>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const openCreateModal = () => {
     setFormData(emptyForm);
@@ -72,7 +73,11 @@ export const B2BPromoCodes: React.FC = () => {
 
   const handleDelete = async (code: PromoCode) => {
     if (window.confirm(`Supprimer le code promo "${code.code}" ? Cette action est irréversible.`)) {
-      await deletePromoCode(code.id);
+      setDeleteError(null);
+      const result = await deletePromoCode(code.id);
+      if (!result.success) {
+        setDeleteError(result.error || 'Impossible de supprimer ce code promo');
+      }
     }
   };
 
@@ -119,6 +124,16 @@ export const B2BPromoCodes: React.FC = () => {
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
           <p className="text-sm text-red-700">Erreur : {error}</p>
+        </div>
+      )}
+
+      {deleteError && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start space-x-3">
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700 flex-1">{deleteError}</p>
+          <button onClick={() => setDeleteError(null)} className="p-0.5 text-red-600 hover:text-red-800 flex-shrink-0">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 

@@ -10,7 +10,7 @@ export interface ResellerProfile {
   role: string
   reseller_id: string
   company_name: string
-  reseller_status: 'pending' | 'active' | 'suspended'
+  reseller_status: 'pending' | 'active' | 'suspended' | 'deleted'
   /** Contact principal de l'entreprise : seul rôle autorisé à gérer les autres comptes de son équipe */
   is_primary: boolean
   /**
@@ -39,8 +39,8 @@ interface ResellerAuthState {
   session: Session | null
   loading: boolean
   isReseller: boolean
-  /** Compte revendeur trouvé mais pas encore actif (en attente/suspendu) */
-  pendingReason: 'pending' | 'suspended' | null
+  /** Compte revendeur trouvé mais pas encore actif (en attente/suspendu/supprimé) */
+  pendingReason: 'pending' | 'suspended' | 'deleted' | null
 }
 
 export const useResellerAuth = () => {
@@ -53,7 +53,7 @@ export const useResellerAuth = () => {
     pendingReason: null,
   })
 
-  const fetchResellerProfile = async (userId: string): Promise<{ profile: ResellerProfile | null; pendingReason: 'pending' | 'suspended' | null }> => {
+  const fetchResellerProfile = async (userId: string): Promise<{ profile: ResellerProfile | null; pendingReason: 'pending' | 'suspended' | 'deleted' | null }> => {
     try {
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Timeout: requête trop longue')), 10000)
@@ -88,7 +88,10 @@ export const useResellerAuth = () => {
       }
 
       if (reseller.status !== 'active') {
-        return { profile: null, pendingReason: reseller.status === 'suspended' ? 'suspended' : 'pending' }
+        return {
+          profile: null,
+          pendingReason: reseller.status === 'suspended' ? 'suspended' : reseller.status === 'deleted' ? 'deleted' : 'pending',
+        }
       }
 
       return {

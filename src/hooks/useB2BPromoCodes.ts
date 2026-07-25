@@ -50,6 +50,7 @@ export const useB2BPromoCodes = (isAdmin: boolean = false): UseB2BPromoCodesResu
       const { data, error: fetchError } = await supabase
         .from('promo_codes')
         .select('*')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (fetchError) throw new Error(fetchError.message);
@@ -95,7 +96,25 @@ export const useB2BPromoCodes = (isAdmin: boolean = false): UseB2BPromoCodesResu
 
   const deletePromoCode = async (id: string): Promise<{ success: boolean; error?: string }> => {
     const { error: deleteError } = await supabase.from('promo_codes').delete().eq('id', id);
-    if (deleteError) return { success: false, error: deleteError.message };
+
+    if (deleteError) {
+      // 23503 = violation de clé étrangère : ce code a déjà été utilisé dans
+      // au moins une commande (orders.promo_code_id le référence, sans
+      // cascade — voir 0033/0043). Impossible de le supprimer physiquement
+      // sans casser l'historique comptable de ces commandes : on le masque
+      // à la place (soft delete), il n'apparaîtra plus jamais dans la liste.
+      if (deleteError.code === '23503') {
+        const { error: softDeleteError } = await supabase
+          .from('promo_codes')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', id);
+        if (softDeleteError) return { success: false, error: softDeleteError.message };
+        await fetchPromoCodes();
+        return { success: true };
+      }
+      return { success: false, error: deleteError.message };
+    }
+
     await fetchPromoCodes();
     return { success: true };
   };

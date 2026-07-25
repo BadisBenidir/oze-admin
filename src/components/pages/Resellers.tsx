@@ -93,7 +93,11 @@ export const Resellers: React.FC = () => {
   const pendingCount = resellers.filter((r) => r.status === 'pending').length;
 
   const handleDelete = async (reseller: Reseller) => {
-    if (window.confirm(`Supprimer le revendeur "${reseller.company_name}" ? Cette action est irréversible.`)) {
+    if (
+      window.confirm(
+        `Supprimer le revendeur "${reseller.company_name}" ?\n\nCe revendeur disparaîtra de la liste et tous ses contacts perdront l'accès à pro.ozeparis.com. Ses commandes, son portefeuille et son historique restent conservés pour la comptabilité.`
+      )
+    ) {
       const result = await deleteReseller(reseller.id);
       if (!result.success) {
         alert(result.error || 'Erreur lors de la suppression');

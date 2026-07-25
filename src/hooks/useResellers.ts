@@ -6,7 +6,7 @@ export interface Reseller {
   id: string;
   company_name: string;
   legal_id: string | null;
-  status: 'pending' | 'active' | 'suspended';
+  status: 'pending' | 'active' | 'suspended' | 'deleted';
   contact_email: string | null;
   contact_phone: string | null;
   billing_address: Record<string, unknown> | null;
@@ -86,6 +86,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       const { data, error: fetchError } = await supabase
         .from('resellers')
         .select('*, reseller_contacts(count)')
+        .neq('status', 'deleted')
         .order('created_at', { ascending: false });
 
       if (fetchError) {
@@ -188,26 +189,20 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     }
   };
 
+  // "Supprimer" un revendeur ne l'efface JAMAIS physiquement : dès qu'il a la
+  // moindre commande, transaction de portefeuille ou cadeau fidélité (donc
+  // presque toujours), un vrai DELETE échoue sur une contrainte FK — et même
+  // sans ça, effacer cet historique casserait la comptabilité. La fonction
+  // désactive à la place : accès Auth de tous ses contacts révoqué, statut
+  // passé à 'deleted' (masqué de la liste), commandes/portefeuille/cadeaux
+  // intacts. Voir supabase/functions/deactivate-reseller.
   const deleteReseller = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { error: deleteError } = await supabase
-        .from('resellers')
-        .delete()
-        .eq('id', id);
-
-      if (deleteError) {
-        if (deleteError.code === '23503') {
-          return { success: false, error: 'Impossible de supprimer : ce revendeur a des commandes ou contacts associés. Suspendez-le plutôt.' };
-        }
-        throw new Error(deleteError.message);
-      }
-
-      await fetchResellers();
-      return { success: true };
-    } catch (err) {
-      console.error('Erreur lors de la suppression du revendeur:', err);
-      return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
+    const { error } = await invokeEdgeFunction('deactivate-reseller', { reseller_id: id });
+    if (error) {
+      return { success: false, error };
     }
+    await fetchResellers();
+    return { success: true };
   };
 
   const fetchContacts = async (resellerId: string): Promise<ResellerContact[]> => {

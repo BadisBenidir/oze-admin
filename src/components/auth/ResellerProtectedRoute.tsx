@@ -24,11 +24,13 @@ export const ResellerProtectedRoute: React.FC<ResellerProtectedRouteProps> = ({ 
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-lg border border-gray-100 shadow-sm p-8 text-center">
           <h2 className="text-lg font-semibold text-gray-900 mb-2">
-            {pendingReason === 'suspended' ? 'Compte suspendu' : pendingReason === 'pending' ? 'Compte en attente d\'activation' : 'Accès non autorisé'}
+            {pendingReason === 'suspended' ? 'Compte suspendu' : pendingReason === 'deleted' ? 'Compte supprimé' : pendingReason === 'pending' ? 'Compte en attente d\'activation' : 'Accès non autorisé'}
           </h2>
           <p className="text-sm text-gray-500 mb-6">
             {pendingReason === 'suspended'
               ? 'Votre accès au portail revendeur a été suspendu. Contactez OZË Paris pour plus d\'informations.'
+              : pendingReason === 'deleted'
+              ? 'Ce compte revendeur a été supprimé. Contactez OZË Paris si vous pensez qu\'il s\'agit d\'une erreur.'
               : pendingReason === 'pending'
               ? 'Votre compte revendeur n\'a pas encore été activé par notre équipe.'
               : 'Ce compte n\'a pas accès au portail revendeur.'}
