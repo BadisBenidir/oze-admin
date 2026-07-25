@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useWallet, WalletTransaction } from '../../../hooks/useWallet';
-import { Wallet, PlusCircle, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, AlertCircle, Loader2 } from 'lucide-react';
+import { Wallet, PlusCircle, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, AlertCircle, Loader2, Gift } from 'lucide-react';
 
 const PRESET_AMOUNTS = [100, 500];
+
+// +10€ offerts par tranche COMPLÈTE de 100€ rechargés — aperçu client
+// uniquement (le montant réellement crédité est recalculé côté serveur dans
+// credit_wallet_topup, jamais accepté tel quel d'ici).
+const computeBonus = (amount: number): number => Math.floor(amount / 100) * 10;
 
 const TYPE_LABEL: Record<string, string> = {
   rechargement: 'Recharge',
@@ -36,12 +41,21 @@ export const WalletPage: React.FC = () => {
 
   const customValue = Number(customAmount);
   const customValid = customAmount.trim() !== '' && Number.isFinite(customValue) && customValue >= 1 && customValue <= 5000;
+  const previewBonus = customValid ? computeBonus(customValue) : 0;
+  const previewTotal = customValid ? customValue + previewBonus : 0;
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-gray-900">Mon Portefeuille</h3>
         <p className="text-sm text-gray-500">Rechargez votre solde pour payer vos commandes instantanément, sans Stripe.</p>
+      </div>
+
+      <div className="rounded-xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 px-4 py-3 flex items-center gap-3">
+        <span className="text-2xl flex-shrink-0">🎁</span>
+        <p className="text-sm text-amber-900 font-medium">
+          Offre Bonus B2B : recevez <span className="font-semibold">10 € offerts</span> pour chaque tranche de 100 € rechargés !
+        </p>
       </div>
 
       <div className="bg-gradient-to-br from-gray-900 to-gray-700 rounded-xl p-6 text-white shadow-sm">
@@ -67,9 +81,11 @@ export const WalletPage: React.FC = () => {
           {PRESET_AMOUNTS.map((amount) => (
             <button
               key={amount}
-              onClick={() => handleTopUp(amount)}
+              onClick={() => setCustomAmount(String(amount))}
               disabled={submitting}
-              className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:border-gray-900 hover:text-gray-900 transition-colors disabled:opacity-50"
+              className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 ${
+                customValue === amount ? 'border-gray-900 text-gray-900 bg-gray-50' : 'border-gray-200 text-gray-700 hover:border-gray-900 hover:text-gray-900'
+              }`}
             >
               {amount} €
             </button>
@@ -95,6 +111,29 @@ export const WalletPage: React.FC = () => {
             <span>Recharger</span>
           </button>
         </div>
+
+        {customValid && (
+          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">Montant payé</span>
+              <span className="font-medium text-gray-900">{customValue.toFixed(2)} €</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600 flex items-center gap-1">
+                <Gift className="h-3.5 w-3.5 text-amber-600" />
+                Bonus offert
+              </span>
+              <span className={`font-medium ${previewBonus > 0 ? 'text-amber-700' : 'text-gray-400'}`}>
+                +{previewBonus.toFixed(2)} €
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm font-semibold border-t border-amber-200 pt-1.5">
+              <span className="text-gray-900">Total crédité sur votre solde</span>
+              <span className="text-gray-900">{previewTotal.toFixed(2)} €</span>
+            </div>
+          </div>
+        )}
+
         <p className="text-xs text-gray-400 mt-2">Paiement sécurisé par Stripe. Le solde est crédité dès confirmation du paiement.</p>
       </div>
 
