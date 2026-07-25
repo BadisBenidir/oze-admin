@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useOrders, useOrderStats } from '../../hooks/useOrders';
 import { OrderDetail } from './OrderDetail';
+import { B2BOrders } from './B2BOrders';
 import { OrderTrackingCell } from '../orders/OrderTrackingCell';
 import {
   ShipmentStatusFilter,
@@ -37,6 +38,13 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
     shipmentFilter === 'all'
       ? orders
       : orders.filter((order) => getShipmentStatus(order) === shipmentFilter);
+
+  // Commandes B2B : composant et hook (useB2BOrders) entièrement séparés des
+  // commandes B2C ci-dessous — simplement affiché sous cet onglet de
+  // "Commandes" plutôt que sous "Revendeurs" (voir navigation.ts).
+  if (activeSubTab === 'b2b-orders') {
+    return <B2BOrders />;
+  }
 
   // Si un ordre est sélectionné, afficher la page de détail
   if (selectedOrderId) {
