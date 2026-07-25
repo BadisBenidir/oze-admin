@@ -98,9 +98,17 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
       const from = (page - 1) * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
+      // b2b_catalog laisse volontairement passer les produits déjà commandés
+      // par CE revendeur quel que soit leur statut actuel (voir 0035 : ça sert
+      // à ce qu'un lien "voir le produit" depuis l'historique de commandes
+      // fonctionne encore après une vente) — sans ce filtre explicite, un
+      // article vendu/réservé/cadeau réapparaît donc dans le catalogue
+      // général dès que ce revendeur l'a déjà acheté une fois. Le catalogue
+      // parcouru ici ne doit montrer QUE les articles réellement en vente.
       let query = supabase
         .from('b2b_catalog')
-        .select('*, brand:brands(id, name), category:categories(id, name)', { count: 'exact' });
+        .select('*, brand:brands(id, name), category:categories(id, name)', { count: 'exact' })
+        .eq('status', 'for-sale-b2b');
 
       if (currentFilters.search) {
         query = query.or(`name.ilike.%${currentFilters.search}%,product_code.ilike.%${currentFilters.search}%`);
@@ -147,7 +155,8 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
       setFacetsLoading(true);
       const { data, error: fetchError } = await supabase
         .from('b2b_catalog')
-        .select('brand:brands(id, name), category:categories(id, name), condition');
+        .select('brand:brands(id, name), category:categories(id, name), condition')
+        .eq('status', 'for-sale-b2b');
 
       if (fetchError) throw new Error(fetchError.message);
 
