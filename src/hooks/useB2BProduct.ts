@@ -10,9 +10,14 @@ interface UseB2BProductResult {
 }
 
 /**
- * Charge un seul article du catalogue B2B par id — utilisé par la page
- * produit dédiée (accessible directement via son URL, donc sans dépendre de
- * la liste déjà chargée par useB2BCatalog).
+ * Charge un seul article par id — utilisé par la page produit dédiée
+ * (accessible directement via son URL, donc sans dépendre de la liste déjà
+ * chargée par useB2BCatalog). Interroge `b2b_reseller_product_detail`, PAS
+ * `b2b_catalog` : cette vue autorise aussi un produit déjà commandé par ce
+ * revendeur même si son statut a changé depuis (vendu, cadeau livré...),
+ * pour que les liens "voir le produit" depuis l'historique de commandes
+ * restent valides. `b2b_catalog`, lui, ne renvoie JAMAIS un produit qui
+ * n'est pas actuellement en vente — ne pas revenir dessus ici (voir 0042).
  */
 export const useB2BProduct = (productId: string | undefined, isAuthenticated: boolean = false): UseB2BProductResult => {
   const [product, setProduct] = useState<B2BCatalogItem | null>(null);
@@ -29,7 +34,7 @@ export const useB2BProduct = (productId: string | undefined, isAuthenticated: bo
       setError(null);
 
       const { data, error: fetchError } = await supabase
-        .from('b2b_catalog')
+        .from('b2b_reseller_product_detail')
         .select('*, brand:brands(id, name), category:categories(id, name)')
         .eq('id', productId)
         .maybeSingle();

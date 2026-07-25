@@ -98,13 +98,12 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
       const from = (page - 1) * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
-      // b2b_catalog laisse volontairement passer les produits déjà commandés
-      // par CE revendeur quel que soit leur statut actuel (voir 0035 : ça sert
-      // à ce qu'un lien "voir le produit" depuis l'historique de commandes
-      // fonctionne encore après une vente) — sans ce filtre explicite, un
-      // article vendu/réservé/cadeau réapparaît donc dans le catalogue
-      // général dès que ce revendeur l'a déjà acheté une fois. Le catalogue
-      // parcouru ici ne doit montrer QUE les articles réellement en vente.
+      // La vue b2b_catalog ne renvoie déjà que status = 'for-sale-b2b' (voir
+      // migration 0042 — un incident précédent venait d'un second bras de
+      // cette vue qui laissait passer les produits déjà commandés quel que
+      // soit leur statut, utilisé par erreur ici aussi). Ce filtre explicite
+      // est redondant avec la vue mais volontairement conservé : si la vue
+      // change un jour, cette requête reste sûre par elle-même.
       let query = supabase
         .from('b2b_catalog')
         .select('*, brand:brands(id, name), category:categories(id, name)', { count: 'exact' })
