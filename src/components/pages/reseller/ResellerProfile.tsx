@@ -84,12 +84,15 @@ export const ResellerProfile: React.FC = () => {
     setError(null);
     setSuccess(false);
 
+    // "Informations personnelles" (prénom/nom/téléphone) est verrouillé côté
+    // UI — seules les préférences de livraison sont modifiables par le
+    // revendeur, donc seules elles sont envoyées ici. Les inclure quand même
+    // (avec leur valeur inchangée) ne casserait rien, mais les omettre rend
+    // explicite que ce formulaire ne peut plus les toucher, même si un futur
+    // changement réactive un input par erreur.
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        phone: phone.trim() || null,
         address: address.trim() || null,
         city: city.trim() || null,
         postal_code: postalCode.trim() || null,
@@ -143,14 +146,22 @@ export const ResellerProfile: React.FC = () => {
             <CardContent className="p-5 space-y-4">
               <h4 className="text-sm font-semibold text-gray-900">Informations personnelles</h4>
 
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-start gap-2">
+                <p className="text-xs text-blue-800">
+                  💡 Pour modifier vos informations personnelles d'entreprise, veuillez contacter directement votre
+                  administrateur OZË Paris.
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
                   <input
                     type="text"
                     value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                    readOnly
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
                   />
                 </div>
                 <div>
@@ -158,8 +169,9 @@ export const ResellerProfile: React.FC = () => {
                   <input
                     type="text"
                     value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                    readOnly
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -168,8 +180,9 @@ export const ResellerProfile: React.FC = () => {
                 <input
                   type="email"
                   value={profile.email}
+                  readOnly
                   disabled
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
                 />
               </div>
               <div>
@@ -177,8 +190,9 @@ export const ResellerProfile: React.FC = () => {
                 <input
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  readOnly
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
                   placeholder="06 12 34 56 78"
                 />
               </div>
