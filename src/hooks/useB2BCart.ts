@@ -55,7 +55,9 @@ const toCartItem = (product: B2BCatalogItem): B2BCartItem => ({
   image: product.images?.[product.main_image_index] || product.images?.[0] || null,
   price: product.price,
   added_at: Date.now(),
-  insured: false,
+  // Activée par défaut à l'ajout au panier : le revendeur peut toujours la
+  // décocher manuellement avant de valider sa commande (voir toggleInsurance).
+  insured: true,
 });
 
 const isExpired = (item: B2BCartItem) => item.added_at + CART_ITEM_SESSION_MS <= Date.now();
