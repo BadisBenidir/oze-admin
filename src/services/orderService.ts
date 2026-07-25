@@ -327,6 +327,35 @@ class OrderService {
     });
   }
 
+  // Rechargements de portefeuille B2B (wallet_transactions.type =
+  // 'rechargement'), avec le nom du contact et/ou de l'entreprise revendeuse
+  // qui a rechargé. Deux FK distinctes de wallet_transactions vers profiles
+  // (profile_id ET created_by) obligent à lever l'ambiguïté avec le nom de
+  // la contrainte plutôt qu'un simple `profiles(...)`.
+  async getRecentWalletRecharges(limit = 5) {
+    const { data, error } = await supabase
+      .from('wallet_transactions')
+      .select('id, amount, created_at, profiles!wallet_transactions_profile_id_fkey(first_name, last_name), resellers(company_name)')
+      .eq('type', 'rechargement')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+
+    return data.map((r: any) => {
+      const contactName = r.profiles ? `${r.profiles.first_name || ''} ${r.profiles.last_name || ''}`.trim() : '';
+      const companyName = r.resellers?.company_name || '';
+      return {
+        id: r.id,
+        amount: Number(r.amount),
+        created_at: r.created_at,
+        contactName,
+        companyName,
+        displayName: contactName || companyName || 'Revendeur',
+      };
+    });
+  }
+
   async getRecentActivity() {
     // 1. Récupérer les 3 dernières commandes
     const { data: orders } = await supabase
@@ -341,6 +370,9 @@ class OrderService {
       .select('id, created_at, first_name')
       .order('created_at', { ascending: false })
       .limit(3);
+
+    // 3. Récupérer les 3 derniers rechargements de portefeuille B2B
+    const recharges = await this.getRecentWalletRecharges(3);
 
     const activities = [];
 
@@ -363,6 +395,14 @@ class OrderService {
         date: new Date(p.created_at)
       }));
     }
+
+    // Transformer les rechargements en format "Activité"
+    recharges.forEach(r => activities.push({
+      id: `wallet-${r.id}`,
+      type: 'wallet',
+      text: `💳 Recharge portefeuille de ${r.amount.toFixed(2)} € par ${r.displayName}`,
+      date: new Date(r.created_at)
+    }));
 
     // Trier le tout du plus récent au plus ancien
     return activities

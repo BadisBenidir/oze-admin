@@ -12,19 +12,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
 
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
 
   useEffect(() => {
     const loadAll = async () => {
       try {
-        const [statsData, ordersData, activityData] = await Promise.all([
+        const [statsData, ordersData, rechargesData, activityData] = await Promise.all([
           orderService.getOrderStats(),
           orderService.getRecentOrders(5),
+          orderService.getRecentWalletRecharges(5),
           orderService.getRecentActivity(),
         ]);
         setStats(statsData);
-        setRecentOrders(ordersData);
+        // Fusionne commandes et rechargements de portefeuille en un seul fil
+        // trié par date, chacun taggé `kind` pour un rendu distinct ci-dessous.
+        const merged = [
+          ...ordersData.map((o: any) => ({ kind: 'order', created_at: o.created_at, data: o })),
+          ...rechargesData.map((r: any) => ({ kind: 'recharge', created_at: r.created_at, data: r })),
+        ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        setRecentTransactions(merged.slice(0, 5));
         setActivities(activityData);
       } catch (error) {
         console.error("Erreur chargement dashboard:", error);
@@ -249,26 +256,50 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
           <Card>
             <CardContent>
               <div className="space-y-4">
-                {recentOrders.map((order) => (
-                  <div key={order.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">
-                        {order.profiles?.first_name?.charAt(0) || 'C'}
+                {recentTransactions.map((tx) => {
+                  if (tx.kind === 'recharge') {
+                    const r = tx.data;
+                    return (
+                      <div key={`recharge-${r.id}`} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                        <div className="flex items-center space-x-3">
+                          <div className="h-8 w-8 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-xs">
+                            💳
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{r.displayName}</p>
+                            <p className="text-xs text-gray-500">{new Date(r.created_at).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-gray-900">+{r.amount.toFixed(2)} €</p>
+                          <p className="text-[10px] uppercase font-semibold text-violet-600">Recharge</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name || ''}</p>
-                        <p className="text-xs text-gray-500">{new Date(order.created_at).toLocaleDateString()}</p>
+                    );
+                  }
+
+                  const order = tx.data;
+                  return (
+                    <div key={order.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                      <div className="flex items-center space-x-3">
+                        <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">
+                          {order.profiles?.first_name?.charAt(0) || 'C'}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name || ''}</p>
+                          <p className="text-xs text-gray-500">{new Date(order.created_at).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-900">{order.total_amount} €</p>
+                        <p className={`text-[10px] uppercase font-semibold ${['confirmed', 'shipped', 'delivered'].includes(order.status) ? 'text-green-600' : order.status === 'pending' ? 'text-orange-600' : 'text-red-600'}`}>
+                          {order.status === 'pending' ? 'En attente' : order.status === 'confirmed' ? 'Confirmée' : order.status === 'shipped' ? 'Expédiée' : order.status === 'delivered' ? 'Livrée' : order.status}
+                        </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-gray-900">{order.total_amount} €</p>
-                      <p className={`text-[10px] uppercase font-semibold ${['confirmed', 'shipped', 'delivered'].includes(order.status) ? 'text-green-600' : order.status === 'pending' ? 'text-orange-600' : 'text-red-600'}`}>
-                        {order.status === 'pending' ? 'En attente' : order.status === 'confirmed' ? 'Confirmée' : order.status === 'shipped' ? 'Expédiée' : order.status === 'delivered' ? 'Livrée' : order.status}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                {recentOrders.length === 0 && <p className="text-sm text-gray-500 text-center">Aucune vente récente</p>}
+                  );
+                })}
+                {recentTransactions.length === 0 && <p className="text-sm text-gray-500 text-center">Aucune vente récente</p>}
               </div>
             </CardContent>
           </Card>
@@ -283,7 +314,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
               <div className="space-y-4">
                 {activities.map((activity) => (
                   <div key={activity.id} className="flex items-start space-x-3">
-                    <div className={`mt-1 h-2 w-2 rounded-full ${activity.type === 'order' ? 'bg-green-500' : 'bg-blue-500'}`} />
+                    <div className={`mt-1 h-2 w-2 rounded-full ${activity.type === 'order' ? 'bg-green-500' : activity.type === 'wallet' ? 'bg-violet-500' : 'bg-blue-500'}`} />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{activity.text}</p>
                       <p className="text-xs text-gray-500">
