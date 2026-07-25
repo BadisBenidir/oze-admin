@@ -11,6 +11,9 @@ const statusOptions = [
   { value: 'for-sale-b2b', label: 'En vente (B2B)' },
   { value: 'reserved-b2b', label: 'Réservé' },
   { value: 'sold-b2b', label: 'Vendu' },
+  { value: 'cadeau', label: '🎁 Cadeau (en attente)' },
+  { value: 'cadeau-attribue', label: '🎁 Cadeau attribué' },
+  { value: 'cadeau-livre', label: '🎁 Cadeau livré' },
 ];
 
 const statusBadge = (status: string) => {
@@ -19,6 +22,14 @@ const statusBadge = (status: string) => {
       return <Badge variant="info">Réservé</Badge>;
     case 'sold-b2b':
       return <Badge variant="warning">Vendu</Badge>;
+    case 'cadeau':
+      return <Badge variant="warning">🎁 Cadeau (en attente)</Badge>;
+    case 'cadeau-attribue':
+      return <Badge variant="info">🎁 Cadeau attribué</Badge>;
+    case 'cadeau-livre':
+      return <Badge variant="success">🎁 Cadeau livré</Badge>;
+    case 'for-sale-b2b':
+      return <Badge variant="success">En vente</Badge>;
     default:
       return <Badge variant="success">En vente</Badge>;
   }
