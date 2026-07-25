@@ -3,7 +3,11 @@ import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useMyB2BOrders } from '../../../hooks/useMyB2BOrders';
 import { B2BOrdersList } from './B2BOrdersList';
 
-export const MyOrders: React.FC = () => {
+interface MyOrdersProps {
+  onOpenProduct: (productId: string) => void;
+}
+
+export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct }) => {
   const { isReseller, profile } = useResellerAuth();
   const { orders, loading, error } = useMyB2BOrders(isReseller, profile?.id);
 
@@ -19,6 +23,7 @@ export const MyOrders: React.FC = () => {
         loading={loading}
         error={error}
         emptyMessage="Vos commandes passées depuis le catalogue apparaîtront ici."
+        onOpenProduct={onOpenProduct}
       />
     </div>
   );

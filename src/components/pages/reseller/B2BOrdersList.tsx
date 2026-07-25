@@ -27,6 +27,8 @@ interface B2BOrdersListProps {
   error: string | null;
   emptyTitle?: string;
   emptyMessage?: string;
+  /** Ouvre la fiche complète de l'article (même si vendu/archivé depuis). */
+  onOpenProduct: (productId: string) => void;
 }
 
 export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
@@ -35,6 +37,7 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
   error,
   emptyTitle = 'Aucune commande',
   emptyMessage = 'Les commandes passées depuis le catalogue apparaîtront ici.',
+  onOpenProduct,
 }) => {
   const [viewingOrder, setViewingOrder] = useState<MyB2BOrder | null>(null);
 
@@ -199,7 +202,12 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                           const isCancelled = item.status === 'cancelled';
                           const image = item.product_snapshot?.images?.[item.product_snapshot?.main_image_index ?? 0] || item.product_snapshot?.images?.[0];
                           return (
-                            <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
+                            <tr
+                              key={item.id}
+                              onClick={() => onOpenProduct(item.product_id)}
+                              className="border-b border-gray-50 last:border-b-0 cursor-pointer hover:bg-gray-50 transition-colors"
+                              title="Voir la fiche produit"
+                            >
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-3">
                                   <div className={`h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 ${isCancelled ? 'opacity-40' : ''}`}>
@@ -210,7 +218,7 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                     )}
                                   </div>
                                   <div>
-                                    <span className={`text-sm font-medium ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                                    <span className={`text-sm font-medium underline decoration-dotted underline-offset-2 ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                                       {item.product_snapshot?.name || 'Produit'}
                                     </span>
                                     {isCancelled && (

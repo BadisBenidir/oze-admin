@@ -12,7 +12,11 @@ import { Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound
 
 const INVITE_COOLDOWN_SECONDS = 30;
 
-export const Team: React.FC = () => {
+interface TeamProps {
+  onOpenProduct: (productId: string) => void;
+}
+
+export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
   const { profile } = useResellerAuth();
   const { members, loading, error, inviteTeammate, removeTeammate, resetTeammatePassword } = useResellerTeam(profile?.reseller_id);
 
@@ -131,7 +135,7 @@ export const Team: React.FC = () => {
   };
 
   if (viewingMember) {
-    return <TeamMemberDetail member={viewingMember} onBack={() => setViewingMember(null)} />;
+    return <TeamMemberDetail member={viewingMember} onBack={() => setViewingMember(null)} onOpenProduct={onOpenProduct} />;
   }
 
   return (

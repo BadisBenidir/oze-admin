@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   ZoomIn,
   Clock,
+  Archive,
+  Download,
 } from 'lucide-react';
 
 interface ProductPageProps {
@@ -82,6 +84,12 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
   const defectImages = normalizeImageArray(product.defect_images);
   const defectLines = (product.defects || '').split('\n').map((l) => l.trim()).filter(Boolean);
   const hasDefects = defectLines.length > 0 || defectImages.length > 0;
+
+  // Article consulté depuis l'historique de commandes une fois vendu/retiré
+  // du catalogue : plus achetable, on n'affiche que la consultation (photos,
+  // grade, défauts, description, référence) — jamais le bouton d'achat ni le
+  // statut de réservation, qui n'ont plus de sens ici.
+  const isReadOnly = product.status !== 'for-sale-b2b';
 
   const inCart = cart.isInCart(product.id);
   const goPrev = () => setActiveIndex((i) => (i - 1 + images.length) % images.length);
@@ -197,6 +205,12 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
 
         {/* Colonne droite : informations & achat (sticky) */}
         <div className="lg:sticky lg:top-6 bg-white border border-gray-100 rounded-lg p-6">
+          {isReadOnly && (
+            <div className="mb-4 flex items-center gap-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+              <Archive className="h-4 w-4 flex-shrink-0" />
+              <span>Cet article n'est plus au catalogue (vendu ou archivé) — vous consultez sa fiche en lecture seule.</span>
+            </div>
+          )}
           {product.brand?.name && <p className="text-sm font-medium text-gray-500">{product.brand.name}</p>}
           <h1 className="text-2xl font-semibold text-gray-900 mt-0.5">{product.name}</h1>
 
@@ -230,40 +244,55 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
             </div>
           )}
 
-          {product.held_by_other && !inCart && (
+          {!isReadOnly && product.held_by_other && !inCart && (
             <div className="mt-4 flex items-center gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               <Clock className="h-4 w-4 flex-shrink-0" />
               <span>Cet article est actuellement dans le panier d'un autre revendeur.</span>
             </div>
           )}
 
-          {addError && (
+          {!isReadOnly && addError && (
             <div className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{addError}</div>
           )}
 
-          <button
-            onClick={handleAdd}
-            disabled={buttonDisabled}
-            className={`w-full mt-6 flex items-center justify-center space-x-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-              inCart
-                ? 'bg-green-50 text-green-700 cursor-default'
-                : buttonDisabled
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-900 text-white hover:bg-gray-800'
-            }`}
-          >
-            {inCart ? (
-              <>
-                <Check className="h-4 w-4" />
-                <span>{buttonLabel}</span>
-              </>
-            ) : (
-              <>
-                <ShoppingCart className="h-4 w-4" />
-                <span>{buttonLabel}</span>
-              </>
-            )}
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={handleAdd}
+              disabled={buttonDisabled}
+              className={`w-full mt-6 flex items-center justify-center space-x-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                inCart
+                  ? 'bg-green-50 text-green-700 cursor-default'
+                  : buttonDisabled
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-900 text-white hover:bg-gray-800'
+              }`}
+            >
+              {inCart ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  <span>{buttonLabel}</span>
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="h-4 w-4" />
+                  <span>{buttonLabel}</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {isReadOnly && images.length > 0 && (
+            <a
+              href={images[activeIndex]}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full mt-6 flex items-center justify-center space-x-2 px-4 py-3 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              <span>Télécharger cette photo</span>
+            </a>
+          )}
         </div>
       </div>
 

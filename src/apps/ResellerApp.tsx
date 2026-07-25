@@ -91,11 +91,11 @@ function ResellerApp() {
 
     switch (currentTab) {
       case 'my-orders':
-        return <MyOrders />;
+        return <MyOrders onOpenProduct={openProduct} />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':
-        return <Team />;
+        return <Team onOpenProduct={openProduct} />;
       case 'catalog':
       default:
         return <Catalog cart={cart} onOpenProduct={openProduct} />;

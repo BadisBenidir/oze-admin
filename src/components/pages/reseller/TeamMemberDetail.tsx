@@ -9,9 +9,10 @@ import { ArrowLeft, Mail, Phone, Calendar, Crown, User } from 'lucide-react';
 interface TeamMemberDetailProps {
   member: TeamMember;
   onBack: () => void;
+  onOpenProduct: (productId: string) => void;
 }
 
-export const TeamMemberDetail: React.FC<TeamMemberDetailProps> = ({ member, onBack }) => {
+export const TeamMemberDetail: React.FC<TeamMemberDetailProps> = ({ member, onBack, onOpenProduct }) => {
   const { orders, loading, error } = useMyB2BOrders(true, member.profile_id);
 
   return (
@@ -76,6 +77,7 @@ export const TeamMemberDetail: React.FC<TeamMemberDetailProps> = ({ member, onBa
         error={error}
         emptyTitle="Aucune commande"
         emptyMessage={`${member.first_name} n'a pas encore passé de commande.`}
+        onOpenProduct={onOpenProduct}
       />
     </div>
   );
