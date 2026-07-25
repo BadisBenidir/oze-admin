@@ -48,15 +48,6 @@ function AdminApp() {
         return <Accounting activeSubTab={activeSubTab} />;
       case 'b2b':
         return <B2B activeSubTab={activeSubTab} />;
-      case 'analytics':
-        return (
-          <div className="p-6">
-            <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-8 text-center">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Analytics</h3>
-              <p className="text-gray-500">Module en cours de développement</p>
-            </div>
-          </div>
-        );
       case 'settings':
         return <Settings activeSubTab={activeSubTab} />;
       default:

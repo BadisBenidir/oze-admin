@@ -113,17 +113,6 @@ export const navigationItems: MenuItem[] = [
     ]
   },
   {
-    id: 'analytics',
-    label: 'Analytics',
-    icon: BarChart3,
-    path: '/analytics',
-    subItems: [
-      { id: 'sales', label: 'Ventes', path: '/analytics/sales', icon: TrendingUp },
-      { id: 'traffic', label: 'Trafic', path: '/analytics/traffic', icon: Activity },
-      { id: 'conversion', label: 'Conversion', path: '/analytics/conversion', icon: PieChart },
-    ]
-  },
-  {
     id: 'settings',
     label: 'Paramètres',
     icon: Settings,
