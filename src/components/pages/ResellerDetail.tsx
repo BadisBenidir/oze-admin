@@ -68,10 +68,19 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   const [showAdjustModal, setShowAdjustModal] = useState(false);
 
   // Le solde est porté par PROFIL (voir 0029_b2b_wallet.sql), pas par
-  // l'entreprise : on affiche/ajuste celui du contact principal, qui gère
-  // déjà seul l'équipe et la facturation de la société.
+  // l'entreprise : CHAQUE sous-compte a le sien, jamais partagé. L'admin
+  // choisit ici quel membre de l'équipe consulter/ajuster (par défaut le
+  // contact principal), au lieu d'être limité à ce dernier.
   const primaryContact = contacts.find((c) => c.is_primary);
-  const wallet = useAdminWallet(primaryContact?.profile_id);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selectedContactId && primaryContact) {
+      setSelectedContactId(primaryContact.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryContact]);
+  const selectedContact = contacts.find((c) => c.id === selectedContactId) || primaryContact;
+  const wallet = useAdminWallet(selectedContact?.profile_id);
 
   const [resettingContact, setResettingContact] = useState<ResellerContact | null>(null);
   const [newPassword, setNewPassword] = useState<string | null>(null);
@@ -269,6 +278,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Email</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Rôle</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Statut</th>
+                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Solde B2B</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Actions</th>
                   </tr>
                 </thead>
@@ -276,14 +286,14 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                   {contactsLoading ? (
                     [...Array(2)].map((_, i) => (
                       <tr key={`skeleton-${i}`} className="border-b border-gray-50">
-                        <td className="py-4 px-4 md:px-6" colSpan={5}>
+                        <td className="py-4 px-4 md:px-6" colSpan={6}>
                           <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
                         </td>
                       </tr>
                     ))
                   ) : contacts.length === 0 ? (
                     <tr>
-                      <td className="py-8 px-4 md:px-6 text-center text-sm text-gray-500" colSpan={5}>
+                      <td className="py-8 px-4 md:px-6 text-center text-sm text-gray-500" colSpan={6}>
                         Aucun sous-compte pour ce revendeur.
                       </td>
                     </tr>
@@ -303,14 +313,26 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                         <td className="py-3 px-4 md:px-6">
                           <Badge variant="success">Actif</Badge>
                         </td>
+                        <td className="py-3 px-4 md:px-6 text-right text-sm font-semibold text-gray-900 tabular-nums">
+                          {c.wallet_balance.toFixed(2)} €
+                        </td>
                         <td className="py-3 px-4 md:px-6">
-                          <button
-                            onClick={() => openResetModal(c)}
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Régénérer le mot de passe"
-                          >
-                            <Key className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => { setSelectedContactId(c.id); setActiveTab('wallet'); }}
+                              className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Voir le portefeuille de ce membre"
+                            >
+                              <Wallet className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => openResetModal(c)}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Régénérer le mot de passe"
+                            >
+                              <Key className="h-4 w-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -401,6 +423,23 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
             </Card>
           ) : (
             <>
+              {contacts.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600 flex-shrink-0">Sous-compte :</label>
+                  <select
+                    value={selectedContact?.id || ''}
+                    onChange={(e) => setSelectedContactId(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400 bg-white"
+                  >
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.first_name} {c.last_name}{c.is_primary ? ' (Principal)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <Card>
                 <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
                   <div className="flex items-center gap-3">
@@ -408,7 +447,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                       <Wallet className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Solde B2B ({primaryContact.first_name} {primaryContact.last_name})</p>
+                      <p className="text-xs text-gray-500">Solde B2B ({selectedContact?.first_name} {selectedContact?.last_name})</p>
                       <p className="text-xl font-semibold text-gray-900">
                         {wallet.loading ? '—' : wallet.balance.toFixed(2)} €
                       </p>

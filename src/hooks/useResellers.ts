@@ -53,6 +53,8 @@ export interface ResellerContact {
   first_name: string;
   last_name: string;
   email: string;
+  /** Solde individuel de CE sous-compte (profiles.wallet_balance) — jamais partagé entre contacts d'une même société. */
+  wallet_balance: number;
 }
 
 interface UseResellersResult {
@@ -211,7 +213,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
   const fetchContacts = async (resellerId: string): Promise<ResellerContact[]> => {
     const { data, error: fetchError } = await supabase
       .from('reseller_contacts')
-      .select('id, reseller_id, profile_id, is_primary, created_at, profiles!inner(first_name, last_name, email)')
+      .select('id, reseller_id, profile_id, is_primary, created_at, profiles!inner(first_name, last_name, email, wallet_balance)')
       .eq('reseller_id', resellerId)
       .order('created_at', { ascending: true });
 
@@ -225,7 +227,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       profile_id: string;
       is_primary: boolean;
       created_at: string;
-      profiles: { first_name: string; last_name: string; email: string };
+      profiles: { first_name: string; last_name: string; email: string; wallet_balance: number };
     };
 
     return ((data || []) as unknown as ContactRow[]).map((c) => ({
@@ -237,6 +239,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       first_name: c.profiles.first_name,
       last_name: c.profiles.last_name,
       email: c.profiles.email,
+      wallet_balance: Number(c.profiles.wallet_balance ?? 0),
     }));
   };
 
