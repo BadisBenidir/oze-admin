@@ -1204,6 +1204,9 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
               <optgroup label="🔨 Live enchères">
                 <option value="for-auction-live">À vendre en live enchères</option>
               </optgroup>
+              <optgroup label="🎁 Programme fidélité B2B">
+                <option value="cadeau">Cadeau fidélité (en attente d'attribution)</option>
+              </optgroup>
               <optgroup label="✅ Vendu">
                 <option value="sold-online">Vendu en ligne</option>
                 <option value="sold-other-platform">Vendu sur une autre plateforme</option>

@@ -184,6 +184,9 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
       case 'sold-online': return 'Vendu en ligne';
       case 'sold-other-platform': return 'Vendu sur autre plateforme';
       case 'sold-display': return 'Vendu - Affiché';
+      case 'cadeau': return '🎁 Cadeau fidélité (en attente)';
+      case 'cadeau-attribue': return '🎁 Cadeau attribué';
+      case 'cadeau-livre': return '🎁 Cadeau livré';
       default: return status;
     }
   };
@@ -252,10 +255,10 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
             <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 mb-2">
               <h1 className="text-xl md:text-2xl font-bold text-gray-900">{product.name}</h1>
               <Badge variant={
-                product.status === 'for-sale-online' || product.status === 'for-sale-b2b' ? 'success' :
+                product.status === 'for-sale-online' || product.status === 'for-sale-b2b' || product.status === 'cadeau-livre' ? 'success' :
                 product.status === 'sold-online' || product.status === 'sold-other-platform' || product.status === 'sold-b2b' ? 'warning' :
-                product.status === 'sold-display' || product.status === 'reserved-b2b' ? 'info' :
-                product.status === 'draft' ? 'default' : 'info'
+                product.status === 'sold-display' || product.status === 'reserved-b2b' || product.status === 'cadeau-attribue' ? 'info' :
+                product.status === 'draft' || product.status === 'cadeau' ? 'default' : 'info'
               }>
                 {formatStatus(product.status)}
               </Badge>

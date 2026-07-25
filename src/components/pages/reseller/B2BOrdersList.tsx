@@ -109,6 +109,7 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                           <span className={`text-xs max-w-[120px] truncate ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
                             {item.product_snapshot?.name}
                           </span>
+                          {item.is_loyalty_gift && <Badge variant="warning">🎁 Cadeau</Badge>}
                           {isCancelled && <Badge variant="danger">Annulé</Badge>}
                         </div>
                       );
@@ -221,6 +222,11 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                     <span className={`text-sm font-medium underline decoration-dotted underline-offset-2 ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                                       {item.product_snapshot?.name || 'Produit'}
                                     </span>
+                                    {item.is_loyalty_gift && (
+                                      <div className="mt-1">
+                                        <Badge variant="warning">🎁 Cadeau Fidélité offert</Badge>
+                                      </div>
+                                    )}
                                     {isCancelled && (
                                       <div className="mt-1">
                                         <Badge variant="danger">Article annulé</Badge>
@@ -234,9 +240,9 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                   {item.product_snapshot?.reference || item.product_snapshot?.product_code || '—'}
                                 </span>
                               </td>
-                              <td className={`py-3 px-4 text-right text-sm ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-600'}`}>{item.unit_price.toFixed(0)} €</td>
+                              <td className={`py-3 px-4 text-right text-sm ${isCancelled ? 'text-gray-400 line-through' : item.is_loyalty_gift ? 'text-amber-600 font-medium' : 'text-gray-600'}`}>{item.is_loyalty_gift ? 'Offert' : `${item.unit_price.toFixed(0)} €`}</td>
                               <td className={`py-3 px-4 text-right text-sm ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-600'}`}>{item.quantity}</td>
-                              <td className={`py-3 px-4 text-right text-sm font-semibold ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.line_total.toFixed(0)} €</td>
+                              <td className={`py-3 px-4 text-right text-sm font-semibold ${isCancelled ? 'text-gray-400 line-through' : item.is_loyalty_gift ? 'text-amber-600' : 'text-gray-900'}`}>{item.is_loyalty_gift ? 'Offert' : `${item.line_total.toFixed(0)} €`}</td>
                             </tr>
                           );
                         })}

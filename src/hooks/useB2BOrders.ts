@@ -13,6 +13,7 @@ export interface B2BOrderItem {
   cancelled_at: string | null;
   restock_action: 'draft' | 'for-sale-b2b' | 'archived' | null;
   refund_status: 'not_applicable' | 'succeeded' | 'failed' | null;
+  is_loyalty_gift: boolean;
 }
 
 export interface B2BOrder {

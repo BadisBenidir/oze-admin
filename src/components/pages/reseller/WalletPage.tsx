@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
-import { useWallet, WalletTransaction } from '../../../hooks/useWallet';
-import { Wallet, PlusCircle, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, AlertCircle, Loader2, Gift } from 'lucide-react';
+import { useWallet, WalletTransaction, LoyaltyGift } from '../../../hooks/useWallet';
+import { Wallet, PlusCircle, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, AlertCircle, Loader2, Gift, X, Package, Sparkles } from 'lucide-react';
 
 const PRESET_AMOUNTS = [100, 500];
 
@@ -21,12 +21,71 @@ const TYPE_LABEL: Record<string, string> = {
 // types sont toujours stockés positifs, le sens vient de `type` lui-même.
 const isDebit = (tx: WalletTransaction) => tx.type === 'achat' || (tx.type === 'ajustement_admin' && tx.amount < 0);
 
+const GiftDiscoveryModal: React.FC<{ gift: LoyaltyGift; onClose: () => void }> = ({ gift, onClose }) => {
+  const image = gift.product_images?.[gift.product_main_image_index] || gift.product_images?.[0];
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-40" onClick={onClose}></div>
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 z-10 p-2 bg-white/90 text-gray-500 hover:text-gray-700 rounded-full transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <div className="h-64 bg-gray-100 flex items-center justify-center overflow-hidden">
+            {image ? (
+              <img src={image} alt={gift.product_name} className="h-full w-full object-cover" />
+            ) : (
+              <Package className="h-12 w-12 text-gray-300" />
+            )}
+          </div>
+          <div className="p-6 space-y-3">
+            <div className="flex items-center gap-2 text-amber-600">
+              <Sparkles className="h-5 w-5" />
+              <span className="text-xs font-semibold uppercase tracking-wide">Cadeau fidélité débloqué</span>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">{gift.product_name}</h3>
+            <p className="text-sm text-gray-500">Grade {gift.product_condition}</p>
+            {gift.product_description && (
+              <p className="text-sm text-gray-600">{gift.product_description}</p>
+            )}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-2">
+              <p className="text-sm text-amber-900">
+                Félicitations ! Ce cadeau sera automatiquement ajouté dans le colis de votre prochaine commande B2B.
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-full mt-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const WalletPage: React.FC = () => {
   const { profile } = useResellerAuth();
-  const { balance, transactions, loading, topUp } = useWallet(profile?.id);
+  const { balance, transactions, loading, topUp, pendingGifts, markGiftDiscovered, loyaltyProgress } = useWallet(profile?.id);
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewingGift, setViewingGift] = useState<LoyaltyGift | null>(null);
+
+  const undiscoveredGift = pendingGifts.find((g) => g.status === 'pending_discovery');
+  const awaitingShipmentGifts = pendingGifts.filter((g) => g.status === 'discovered');
+
+  const handleOpenGift = (gift: LoyaltyGift) => {
+    setViewingGift(gift);
+    if (gift.status === 'pending_discovery') {
+      markGiftDiscovered(gift.id);
+    }
+  };
 
   const handleTopUp = async (amount: number) => {
     setError(null);
@@ -67,6 +126,60 @@ export const WalletPage: React.FC = () => {
           {loading ? '—' : balance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
         </p>
       </div>
+
+      {undiscoveredGift && (
+        <button
+          onClick={() => handleOpenGift(undiscoveredGift)}
+          className="w-full rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-yellow-50 px-4 py-4 flex items-center gap-3 hover:from-amber-100 hover:to-yellow-100 transition-colors text-left"
+        >
+          <span className="text-3xl flex-shrink-0">🎉</span>
+          <div>
+            <p className="text-sm font-semibold text-amber-900">Découvrir mon cadeau !</p>
+            <p className="text-xs text-amber-700">Vous avez débloqué un portefeuille de luxe offert.</p>
+          </div>
+        </button>
+      )}
+
+      {!loading && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="h-4 w-4 text-amber-600" />
+            <h4 className="text-sm font-medium text-gray-900">Programme fidélité</h4>
+          </div>
+          <p className="text-xs text-gray-500 mb-2">
+            Débloquez 1 portefeuille de luxe offert (Louis Vuitton, Gucci, Céline...) tous les 500 € rechargés.
+          </p>
+          <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-amber-400 to-yellow-500 rounded-full transition-all"
+              style={{ width: `${(loyaltyProgress.progressInTier / loyaltyProgress.tierAmount) * 100}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-600 mt-2">
+            {loyaltyProgress.progressInTier.toFixed(0)} € / {loyaltyProgress.tierAmount} € rechargés
+            {loyaltyProgress.remainingToNextTier > 0
+              ? ` — plus que ${loyaltyProgress.remainingToNextTier.toFixed(0)} € pour débloquer votre prochain cadeau !`
+              : ' — cadeau en cours d\'attribution !'}
+          </p>
+          {awaitingShipmentGifts.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+              <p className="text-xs text-gray-500">Cadeaux en attente d'envoi (inclus dans votre prochaine commande) :</p>
+              {awaitingShipmentGifts.map((gift) => (
+                <button
+                  key={gift.id}
+                  onClick={() => handleOpenGift(gift)}
+                  className="w-full flex items-center gap-2 px-3 py-2 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors text-left"
+                >
+                  <Gift className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+                  <span className="text-xs text-amber-900 truncate">{gift.product_name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {viewingGift && <GiftDiscoveryModal gift={viewingGift} onClose={() => setViewingGift(null)} />}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start space-x-2">

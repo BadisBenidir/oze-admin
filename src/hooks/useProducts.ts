@@ -25,7 +25,7 @@ export interface Product {
   defect_images: string[] | null
   colors: string[]
   material: string | null
-  status: 'draft' | 'for-sale-online' | 'for-sale-other-platform' | 'sold-online' | 'sold-other-platform' | 'sold-display' | 'for-auction-live' | 'sold-auction' | 'for-sale-b2b' | 'reserved-b2b' | 'sold-b2b'
+  status: 'draft' | 'for-sale-online' | 'for-sale-other-platform' | 'sold-online' | 'sold-other-platform' | 'sold-display' | 'for-auction-live' | 'sold-auction' | 'for-sale-b2b' | 'reserved-b2b' | 'sold-b2b' | 'cadeau' | 'cadeau-attribue' | 'cadeau-livre'
   serial_number: string | null
   internal_comments: string | null
   created_at: string

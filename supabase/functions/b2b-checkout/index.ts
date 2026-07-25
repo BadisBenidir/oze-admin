@@ -325,6 +325,14 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // Programme fidélité : pas de webhook sur ce chemin non plus, donc
+      // l'inclusion automatique du cadeau en attente (s'il y en a un) se
+      // fait ici — même RPC que le webhook Stripe.
+      await adminClient.rpc('attach_pending_loyalty_gift', {
+        p_order_id: walletResult.order_id,
+        p_reseller_id: resellerId,
+      });
+
       return new Response(JSON.stringify({ order_id: walletResult.order_id, unavailable_ids: unavailableIds }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

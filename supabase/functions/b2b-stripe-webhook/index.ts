@@ -236,6 +236,21 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Programme fidélité : inclut automatiquement le cadeau en attente (s'il
+    // y en a un) dans le récapitulatif de cette commande — sans effet si le
+    // revendeur n'a aucun cadeau non encore livré.
+    if (!data?.already_processed && data?.order_id) {
+      const { data: giftResult, error: giftError } = await adminClient.rpc('attach_pending_loyalty_gift', {
+        p_order_id: data.order_id,
+        p_reseller_id: metadata.reseller_id,
+      });
+      if (giftError) {
+        console.error(`${LOG_PREFIX} attach_pending_loyalty_gift a échoué pour la commande ${data.order_id}:`, giftError.message);
+      } else if (giftResult?.attached) {
+        console.log(`${LOG_PREFIX} Cadeau fidélité "${giftResult.product_name}" inclus dans la commande ${data.order_id}`);
+      }
+    }
+
     const unavailableIds: string[] = data?.unavailable_ids || [];
 
     // Si certains articles facturés n'ont finalement pas pu être honorés
