@@ -7,7 +7,6 @@ import { Products } from '../components/pages/Products';
 import { Orders } from '../components/pages/Orders';
 import { Customers } from '../components/pages/Customers';
 import { Accounting } from '../components/pages/Accounting';
-import { Settings } from '../components/pages/Settings';
 import { B2B } from '../components/pages/B2B';
 import { navigationItems } from '../config/navigation';
 
@@ -48,8 +47,6 @@ function AdminApp() {
         return <Accounting activeSubTab={activeSubTab} />;
       case 'b2b':
         return <B2B activeSubTab={activeSubTab} />;
-      case 'settings':
-        return <Settings activeSubTab={activeSubTab} />;
       default:
         return <Dashboard activeSubTab={activeSubTab} />;
     }

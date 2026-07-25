@@ -4,7 +4,6 @@ import {
   ShoppingCart,
   Users,
   BarChart3,
-  Settings,
   Plus,
   List,
   Archive,
@@ -14,9 +13,6 @@ import {
   Activity,
   TrendingUp,
   PieChart,
-  User,
-  Bell,
-  Shield,
   Calculator,
   CreditCard,
   Receipt,
@@ -110,18 +106,6 @@ export const navigationItems: MenuItem[] = [
       { id: 'b2b-orders', label: 'Commandes B2B', path: '/b2b/orders', icon: ShoppingCart },
       { id: 'commissions', label: 'Chiffre d\'affaires B2B', path: '/b2b/commissions', icon: Banknote },
       { id: 'portal', label: 'Portail B2B', path: '/b2b/portal', icon: LayoutGrid },
-    ]
-  },
-  {
-    id: 'settings',
-    label: 'Paramètres',
-    icon: Settings,
-    path: '/settings',
-    subItems: [
-      { id: 'profile', label: 'Profil', path: '/settings/profile', icon: User },
-      { id: 'users', label: 'Utilisateurs', path: '/settings/users', icon: Users },
-      { id: 'notifications', label: 'Notifications', path: '/settings/notifications', icon: Bell },
-      { id: 'security', label: 'Sécurité', path: '/settings/security', icon: Shield },
     ]
   },
 ];
