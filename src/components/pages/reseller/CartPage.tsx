@@ -1,16 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useB2BCart, CART_ITEM_SESSION_MS, INSURANCE_RATE } from '../../../hooks/useB2BCart';
+import { useWallet } from '../../../hooks/useWallet';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useGroupableOrder } from '../../../hooks/useGroupableOrder';
 import ShippingForm, { ShippingSelection, SHIPPING_RATES } from './ShippingForm';
 import CheckoutSummary from './CheckoutSummary';
 import { VolumeDiscountBanner } from './VolumeDiscountBanner';
 import { PromoCodeField, AppliedPromo } from './PromoCodeField';
-import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Package, CheckCircle } from 'lucide-react';
+import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Package, CheckCircle, Wallet } from 'lucide-react';
 
 interface CartPageProps {
   cart: ReturnType<typeof useB2BCart>;
+  wallet: ReturnType<typeof useWallet>;
   onBack: () => void;
+  /** Paiement 100% solde : pas de redirection Stripe, la commande existe déjà. */
+  onWalletPaymentSuccess: (orderId: string) => void;
 }
 
 const formatCountdown = (ms: number): string => {
@@ -20,7 +24,7 @@ const formatCountdown = (ms: number): string => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
+export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWalletPaymentSuccess }) => {
   const { profile } = useResellerAuth();
   const hasAddress = Boolean(profile?.address && profile?.city && profile?.postal_code);
   const { groupableOrder } = useGroupableOrder(profile?.id);
@@ -33,6 +37,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+  const [useWalletPayment, setUseWalletPayment] = useState(false);
   // Force le recalcul du chrono de chaque article à l'affichage (added_at
   // ne change pas, seul "maintenant" avance) — le retrait effectif d'un
   // article expiré est lui géré par useB2BCart, pas ici.
@@ -61,6 +66,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
     }
     setError(null);
     setSubmitting(true);
+    const paymentMethod = useWalletPayment ? (wallet.balance >= total ? 'wallet' : 'mixed') : 'card';
     const result = await cart.startCheckout(
       {
         line1: profile.address || '',
@@ -73,11 +79,16 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
       shipping.parcelPoint,
       undefined,
       groupWithOrder && groupableOrder ? groupableOrder.id : null,
-      appliedPromo?.code || null
+      appliedPromo?.code || null,
+      paymentMethod
     );
-    // En cas de succès, startCheckout redirige immédiatement vers Stripe —
-    // on ne repasse jamais ici. setSubmitting(false) ne sert donc que le cas
-    // d'erreur (ex : article devenu indisponible).
+    // En cas de succès par carte/mixte, startCheckout redirige immédiatement
+    // vers Stripe — on ne repasse jamais ici. Un paiement 100% solde renvoie
+    // directement l'orderId (pas de Stripe du tout, voir onWalletPaymentSuccess).
+    if (result.success && result.orderId) {
+      onWalletPaymentSuccess(result.orderId);
+      return;
+    }
     if (!result.success) {
       setSubmitting(false);
       setError(result.error || 'Une erreur est survenue');
@@ -269,6 +280,47 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
             promoDiscountAmount={promoDiscountAmount}
           />
 
+          {wallet.balance > 0 && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useWalletPayment}
+                  onChange={(e) => setUseWalletPayment(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0"
+                />
+                <span className="flex-1">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                    <Wallet className="h-4 w-4 text-gray-500" />
+                    Payer avec mon solde B2B
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    Solde disponible : {wallet.balance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                  </span>
+                </span>
+              </label>
+
+              {useWalletPayment && (
+                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-600 space-y-1">
+                  {wallet.balance >= total ? (
+                    <p>Le solde couvre l'intégralité de la commande — aucun paiement par carte requis.</p>
+                  ) : (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Déduit du solde</span>
+                        <span className="font-medium text-gray-900">-{wallet.balance.toFixed(2)} €</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Reste à payer par carte</span>
+                        <span className="font-medium text-gray-900">{(total - wallet.balance).toFixed(2)} €</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={handlePay}
             disabled={submitting}
@@ -276,6 +328,16 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, onBack }) => {
           >
             {submitting ? (
               <span>Traitement du paiement...</span>
+            ) : useWalletPayment && wallet.balance >= total ? (
+              <>
+                <Wallet className="h-4 w-4" />
+                <span>Payer avec mon solde ({total.toFixed(2)} €)</span>
+              </>
+            ) : useWalletPayment ? (
+              <>
+                <CreditCard className="h-4 w-4" />
+                <span>Payer {(total - wallet.balance).toFixed(2)} € par carte (+ solde)</span>
+              </>
             ) : (
               <>
                 <CreditCard className="h-4 w-4" />

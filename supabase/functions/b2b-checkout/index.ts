@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { product_ids, shipping_address, billing_address, delivery_type, parcel_point, insured_product_ids, grouped_with_order_id, promo_code } = await req.json();
+    const { product_ids, shipping_address, billing_address, delivery_type, parcel_point, insured_product_ids, grouped_with_order_id, promo_code, payment_method } = await req.json();
     if (!Array.isArray(product_ids) || product_ids.length === 0) {
       return new Response(JSON.stringify({ error: 'Le panier est vide' }), {
         status: 400,
@@ -260,6 +260,104 @@ Deno.serve(async (req: Request) => {
           phone,
         };
 
+    // Paiement par solde portefeuille : pas de session Stripe du tout, la
+    // commande est créée et débitée atomiquement en base via
+    // pay_b2b_order_with_wallet (verrouillage de ligne + vérification de
+    // solde côté serveur, jamais de confiance sur un solde affiché client).
+    if (payment_method === 'wallet') {
+      const { data: walletResult, error: walletError } = await adminClient.rpc('pay_b2b_order_with_wallet', {
+        p_reseller_id: resellerId,
+        p_product_ids: products.map((p) => p.id),
+        p_shipping_address: { ...deliveryAddress, delivery_type },
+        p_billing_address: billing_address || shipping_address,
+        p_email: email,
+        p_placed_by_profile_id: user.id,
+        p_shipping_cost: finalShippingCost,
+        p_insured_product_ids: insuredProducts.map((p) => p.id),
+        p_insurance_cost: insuranceCost,
+        p_grouped_with_order_id: validGroupedOrderId,
+        p_insured_value: insuredValue,
+        p_discount_rate: discountRate,
+        p_discount_amount: discountAmount,
+        p_promo_discount_amount: promoDiscountAmount,
+      });
+
+      if (walletError) {
+        const insufficient = walletError.message?.includes('Solde insuffisant');
+        return new Response(JSON.stringify({ error: insufficient ? 'Solde insuffisant' : walletError.message }), {
+          status: insufficient ? 402 : 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!walletResult?.order_id) {
+        return new Response(JSON.stringify({ error: 'Ces articles ne sont plus disponibles' }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Code promo : pas de webhook sur ce chemin (paiement synchrone), donc
+      // l'application définitive se fait ici, juste après la création de la
+      // commande — même RPC que le webhook Stripe. Si le code s'avère
+      // finalement invalide (épuisé entre-temps par une commande
+      // concurrente), on recrédite le solde plutôt que de garder le rabais
+      // non honoré : même logique que le remboursement Stripe côté webhook,
+      // adaptée au solde puisqu'aucune carte n'a été débitée ici.
+      if (promoCodeId) {
+        const { data: promoApplyResult } = await adminClient.rpc('record_promo_code_use', {
+          p_promo_code_id: promoCodeId,
+          p_order_id: walletResult.order_id,
+          p_reseller_id: resellerId,
+          p_profile_id: user.id,
+          p_discount_amount: promoDiscountAmount,
+        });
+        if (!promoApplyResult?.applied && promoDiscountAmount > 0) {
+          await adminClient.rpc('admin_adjust_wallet_balance', {
+            p_profile_id: user.id,
+            p_amount: promoDiscountAmount,
+            p_note: `Recrédit automatique : code promo devenu invalide après paiement par solde (commande ${walletResult.order_id})`,
+          });
+          await adminClient
+            .from('orders')
+            .update({ total_amount: Number(walletResult.total) + promoDiscountAmount })
+            .eq('id', walletResult.order_id);
+        }
+      }
+
+      return new Response(JSON.stringify({ order_id: walletResult.order_id, unavailable_ids: unavailableIds }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Paiement mixte : le solde ne couvre qu'une partie du total. On débite
+    // immédiatement TOUT le solde disponible (pas un montant choisi par le
+    // client — jamais de confiance sur un montant de solde envoyé du front),
+    // Stripe ne facture que le reste. Voir 0036_..._mixed_payment.sql pour la
+    // finalisation (webhook) ou le remboursement (session expirée sans
+    // paiement) de cette part.
+    let mixedWalletAmount = 0;
+    let chargeRatio = 1;
+    const grandTotalBeforeWallet = subtotalAfterDiscounts + finalShippingCost + insuranceCost;
+    if (payment_method === 'mixed') {
+      const { data: profileRow } = await adminClient
+        .from('profiles')
+        .select('wallet_balance')
+        .eq('id', user.id)
+        .single();
+      const balance = Number(profileRow?.wallet_balance || 0);
+      if (balance <= 0 || balance >= grandTotalBeforeWallet) {
+        return new Response(JSON.stringify({ error: "Paiement mixte non applicable : utilisez 'wallet' (solde suffisant) ou 'card' (aucun solde à utiliser)" }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      mixedWalletAmount = balance;
+      const remainder = grandTotalBeforeWallet - mixedWalletAmount;
+      chargeRatio = grandTotalBeforeWallet > 0 ? remainder / grandTotalBeforeWallet : 0;
+    }
+
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
     const origin = req.headers.get('origin') || 'https://admin.ozeparis.com';
 
@@ -273,7 +371,7 @@ Deno.serve(async (req: Request) => {
               name: discountRate > 0 ? `${p.name} (remise volume -${discountRate * 100}%)` : p.name,
               images: p.images?.[p.main_image_index ?? 0] ? [p.images[p.main_image_index ?? 0]] : undefined,
             },
-            unit_amount: Math.round(Number(p.sale_price) * lineItemRatio * 100),
+            unit_amount: Math.round(Number(p.sale_price) * lineItemRatio * chargeRatio * 100),
           },
           quantity: 1,
         })),
@@ -285,7 +383,7 @@ Deno.serve(async (req: Request) => {
                 ? 'Livraison — Groupée (gratuite)'
                 : delivery_type === 'point_relais' ? 'Livraison — Point Relais' : 'Livraison — À l\'entreprise',
             },
-            unit_amount: Math.round(finalShippingCost * 100),
+            unit_amount: Math.round(finalShippingCost * chargeRatio * 100),
           },
           quantity: 1,
         },
@@ -294,7 +392,7 @@ Deno.serve(async (req: Request) => {
               price_data: {
                 currency: 'eur',
                 product_data: { name: 'Assurance colis (Sendcloud)' },
-                unit_amount: Math.round(insuranceCost * 100),
+                unit_amount: Math.round(insuranceCost * chargeRatio * 100),
               },
               quantity: 1,
             }]
@@ -324,11 +422,33 @@ Deno.serve(async (req: Request) => {
         promo_code: promoCodeLabel || '',
         promo_discount_amount: String(promoDiscountAmount),
         grouped_with_order_id: validGroupedOrderId || '',
+        wallet_amount_used: String(mixedWalletAmount),
         email,
       },
       success_url: `${origin}/?b2b_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?b2b_checkout=cancel`,
     });
+
+    // Paiement mixte : débite le solde MAINTENANT que la session existe (le
+    // débit est lié à session.id pour être finalisé ou remboursé selon
+    // l'issue du paiement — voir b2b-stripe-webhook). En cas d'échec (très
+    // rare course concurrente), on n'envoie surtout pas au client une session
+    // Stripe dont le montant suppose à tort que le solde la complète : elle
+    // reste orpheline et expire d'elle-même sans qu'aucune charge n'ait lieu.
+    if (payment_method === 'mixed' && mixedWalletAmount > 0) {
+      const { error: debitError } = await adminClient.rpc('debit_wallet_amount', {
+        p_profile_id: user.id,
+        p_reseller_id: resellerId,
+        p_amount: mixedWalletAmount,
+        p_stripe_session_id: session.id,
+      });
+      if (debitError) {
+        return new Response(JSON.stringify({ error: "Le solde a changé entre-temps, réessayez le paiement." }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
 
     return new Response(JSON.stringify({ url: session.url, unavailable_ids: unavailableIds }), {
       status: 200,

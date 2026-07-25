@@ -5,12 +5,14 @@ import { Modal } from '../ui/Modal';
 import { useResellers, Reseller, ResellerContact, ResellerFormData } from '../../hooks/useResellers';
 import { useB2BOrders } from '../../hooks/useB2BOrders';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
+import { useAdminWallet } from '../../hooks/useAdminWallet';
 import { ResellerFormModal } from './ResellerFormModal';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
+import { WalletAdjustModal } from './b2b/WalletAdjustModal';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
-  Eye, Edit,
+  Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2,
 } from 'lucide-react';
 import type { B2BOrder } from '../../hooks/useB2BOrders';
 
@@ -61,8 +63,15 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [contactsError, setContactsError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'team' | 'orders'>('team');
+  const [activeTab, setActiveTab] = useState<'team' | 'orders' | 'wallet'>('team');
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+
+  // Le solde est porté par PROFIL (voir 0029_b2b_wallet.sql), pas par
+  // l'entreprise : on affiche/ajuste celui du contact principal, qui gère
+  // déjà seul l'équipe et la facturation de la société.
+  const primaryContact = contacts.find((c) => c.is_primary);
+  const wallet = useAdminWallet(primaryContact?.profile_id);
 
   const [resettingContact, setResettingContact] = useState<ResellerContact | null>(null);
   const [newPassword, setNewPassword] = useState<string | null>(null);
@@ -233,6 +242,14 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
         >
           Historique des commandes
         </button>
+        <button
+          onClick={() => setActiveTab('wallet')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'wallet' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Portefeuille B2B
+        </button>
       </div>
 
       {activeTab === 'team' && (
@@ -374,6 +391,119 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
         </Card>
       )}
 
+      {activeTab === 'wallet' && (
+        <div className="space-y-4">
+          {!primaryContact ? (
+            <Card>
+              <CardContent className="p-6 text-center text-sm text-gray-500">
+                Aucun contact principal pour cette société — le portefeuille B2B lui sera rattaché dès qu'un contact principal existera.
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
+                      <Wallet className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Solde B2B ({primaryContact.first_name} {primaryContact.last_name})</p>
+                      <p className="text-xl font-semibold text-gray-900">
+                        {wallet.loading ? '—' : wallet.balance.toFixed(2)} €
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowAdjustModal(true)}
+                    className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+                  >
+                    <Settings2 className="h-4 w-4" />
+                    <span>Ajuster le solde</span>
+                  </button>
+                </CardContent>
+              </Card>
+
+              {wallet.error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-700">Erreur : {wallet.error}</p>
+                </div>
+              )}
+
+              <Card>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Date</th>
+                          <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Type</th>
+                          <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden md:table-cell">Note</th>
+                          <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Montant</th>
+                          <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Statut</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {wallet.loading ? (
+                          [...Array(2)].map((_, i) => (
+                            <tr key={`skeleton-${i}`} className="border-b border-gray-50">
+                              <td className="py-4 px-4 md:px-6" colSpan={5}>
+                                <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
+                              </td>
+                            </tr>
+                          ))
+                        ) : wallet.transactions.length === 0 ? (
+                          <tr>
+                            <td className="py-8 px-4 md:px-6 text-center text-sm text-gray-500" colSpan={5}>
+                              Aucune transaction pour l'instant.
+                            </td>
+                          </tr>
+                        ) : (
+                          wallet.transactions.map((tx) => {
+                            const isNegative = tx.type === 'achat' || (tx.type === 'ajustement_admin' && tx.amount < 0);
+                            const icon = tx.type === 'rechargement' ? (
+                              <ArrowUpCircle className="h-4 w-4 text-green-600" />
+                            ) : tx.type === 'remboursement' ? (
+                              <RotateCcw className="h-4 w-4 text-blue-600" />
+                            ) : tx.type === 'ajustement_admin' ? (
+                              <Settings2 className="h-4 w-4 text-purple-600" />
+                            ) : (
+                              <ArrowDownCircle className="h-4 w-4 text-gray-500" />
+                            );
+                            const typeLabel = tx.type === 'rechargement' ? 'Recharge' : tx.type === 'achat' ? `Achat${tx.order_id ? ' commande' : ''}` : tx.type === 'remboursement' ? 'Remboursement' : 'Ajustement admin';
+                            return (
+                              <tr key={tx.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                                <td className="py-3 px-4 md:px-6 text-sm text-gray-600">{new Date(tx.created_at).toLocaleString('fr-FR')}</td>
+                                <td className="py-3 px-4 md:px-6">
+                                  <div className="flex items-center gap-2 text-sm text-gray-900">
+                                    {icon}
+                                    {typeLabel}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 md:px-6 hidden md:table-cell text-sm text-gray-500">{tx.note || '—'}</td>
+                                <td className={`py-3 px-4 md:px-6 text-right text-sm font-semibold ${isNegative ? 'text-red-600' : 'text-green-600'}`}>
+                                  {isNegative ? '-' : '+'}{Math.abs(tx.amount).toFixed(2)} €
+                                </td>
+                                <td className="py-3 px-4 md:px-6">
+                                  {tx.status === 'pending' && <Badge variant="warning">En attente</Badge>}
+                                  {tx.status === 'failed' && <Badge variant="danger">Échec</Badge>}
+                                  {tx.status === 'success' && <Badge variant="success">Réussi</Badge>}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Modal réinitialisation mot de passe */}
       <Modal
         isOpen={!!resettingContact}
@@ -462,6 +592,13 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
         reseller={currentReseller}
         onClose={() => setShowEditModal(false)}
         onSaved={handleResellerSaved}
+      />
+
+      <WalletAdjustModal
+        isOpen={showAdjustModal}
+        currentBalance={wallet.balance}
+        onClose={() => setShowAdjustModal(false)}
+        onSubmit={wallet.adjustBalance}
       />
     </div>
   );

@@ -55,12 +55,67 @@ Deno.serve(async (req: Request) => {
 
   console.log(`${LOG_PREFIX} Événement reçu: ${event.type} (${event.id})`);
 
+  // Session jamais payée (fermée par le client, ou expirée après 24h) : si
+  // un paiement mixte avait débité une part du solde par avance pour cette
+  // session, on la recrédite — sinon l'argent resterait perdu pour rien.
+  // À activer manuellement dans le dashboard Stripe (Webhooks → cet endpoint
+  // → + Select events → checkout.session.expired), comme pour
+  // checkout.session.completed.
+  if (event.type === 'checkout.session.expired') {
+    const expiredSession = event.data.object as Stripe.Checkout.Session;
+    try {
+      const adminClient = createClient(supabaseUrl, serviceRoleKey);
+      const { data: refundResult, error: refundError } = await adminClient.rpc('refund_pending_wallet_debit', {
+        p_stripe_session_id: expiredSession.id,
+      });
+      if (refundError) {
+        console.error(`${LOG_PREFIX} ÉCHEC refund_pending_wallet_debit pour la session expirée ${expiredSession.id}: ${refundError.message}`);
+        return new Response(JSON.stringify({ error: refundError.message }), { status: 500 });
+      }
+      if (refundResult?.found) {
+        console.log(`${LOG_PREFIX} Session expirée ${expiredSession.id} — solde recrédité (${refundResult.amount}€)`);
+      }
+      return new Response(JSON.stringify({ received: true }), { status: 200 });
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Erreur non gérée session expirée (${expiredSession.id}):`, err instanceof Error ? err.stack || err.message : err);
+      return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Erreur inconnue' }), { status: 500 });
+    }
+  }
+
   if (event.type !== 'checkout.session.completed') {
     return new Response(JSON.stringify({ received: true }), { status: 200 });
   }
 
   const session = event.data.object as Stripe.Checkout.Session;
   const metadata = session.metadata || {};
+
+  // Recharge de portefeuille : chemin totalement distinct de la confirmation
+  // de commande ci-dessous — pas de produits, pas de commande, juste un
+  // crédit de solde. Identifié par metadata.type posé par wallet-topup.
+  if (metadata.type === 'wallet_topup') {
+    console.log(`${LOG_PREFIX} Session ${session.id} — recharge portefeuille, profile_id: ${metadata.profile_id}, montant: ${metadata.amount}`);
+    try {
+      const adminClient = createClient(supabaseUrl, serviceRoleKey);
+      const { data, error } = await adminClient.rpc('credit_wallet_topup', {
+        p_profile_id: metadata.profile_id,
+        p_reseller_id: metadata.reseller_id,
+        p_amount: Number(metadata.amount || 0),
+        p_stripe_session_id: session.id,
+      });
+
+      if (error) {
+        console.error(`${LOG_PREFIX} ÉCHEC credit_wallet_topup pour la session ${session.id}: ${error.message} (code ${error.code ?? 'n/a'})`);
+        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+      }
+
+      console.log(`${LOG_PREFIX} Recharge créditée pour la session ${session.id} (already_processed: ${!!data?.already_processed})`);
+      return new Response(JSON.stringify({ received: true }), { status: 200 });
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Erreur non gérée recharge portefeuille (session ${session.id}):`, err instanceof Error ? err.stack || err.message : err);
+      return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Erreur inconnue' }), { status: 500 });
+    }
+  }
+
   console.log(`${LOG_PREFIX} Session ${session.id} — reseller_id: ${metadata.reseller_id}, product_ids bruts: ${metadata.product_ids}`);
 
   try {
@@ -161,6 +216,23 @@ Deno.serve(async (req: Request) => {
             console.error(`${LOG_PREFIX} Échec du remboursement du code promo:`, (refundErr as Error).message);
           }
         }
+      }
+    }
+
+    // Paiement mixte (solde + carte) : le solde a déjà été débité de façon
+    // eager côté b2b-checkout, lié à ce session.id — on rattache maintenant
+    // cette transaction 'pending' à la commande fraîchement créée et on
+    // corrige total_amount (confirm_b2b_payment ne connaissait que la part
+    // carte). Rien à faire si ce n'était pas un paiement mixte.
+    if (!data?.already_processed && data?.order_id && Number(metadata.wallet_amount_used || 0) > 0) {
+      const { data: walletFinalize, error: walletFinalizeError } = await adminClient.rpc('finalize_wallet_order_debit', {
+        p_stripe_session_id: session.id,
+        p_order_id: data.order_id,
+      });
+      if (walletFinalizeError || !walletFinalize?.found) {
+        console.error(`${LOG_PREFIX} finalize_wallet_order_debit n'a rien trouvé/échoué pour la session ${session.id}:`, walletFinalizeError?.message);
+      } else {
+        console.log(`${LOG_PREFIX} Part solde (${walletFinalize.amount}€) rattachée à la commande ${data.order_id}`);
       }
     }
 

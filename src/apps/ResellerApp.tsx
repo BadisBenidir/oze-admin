@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigation } from '../hooks/useNavigation';
 import { useResellerAuth } from '../hooks/useResellerAuth';
 import { useB2BCart } from '../hooks/useB2BCart';
+import { useWallet } from '../hooks/useWallet';
 import { ResellerProtectedRoute } from '../components/auth/ResellerProtectedRoute';
 import { MainLayout } from '../components/layout/layMainLayout';
 import { ResellerHeader } from '../components/layout/resHeader';
@@ -12,8 +13,9 @@ import { CartPage } from '../components/pages/reseller/CartPage';
 import { MyOrders } from '../components/pages/reseller/MyOrders';
 import { ResellerProfile } from '../components/pages/reseller/ResellerProfile';
 import { Team } from '../components/pages/reseller/Team';
+import { WalletPage } from '../components/pages/reseller/WalletPage';
 import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
-import { ShoppingCart, X } from 'lucide-react';
+import { ShoppingCart, Wallet, X } from 'lucide-react';
 
 // Deux routes "réelles" (URL adressables) de l'app revendeur : la fiche
 // produit du catalogue B2B et le panier. Tout le reste continue de
@@ -28,10 +30,13 @@ function ResellerApp() {
   const { activeTab, activeSubTab, navigateTo } = useNavigation();
   const { profile } = useResellerAuth();
   const cart = useB2BCart(profile?.id);
+  const wallet = useWallet(profile?.id);
   const currentTab = activeTab || 'catalog';
 
   const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'cancel' | null>(null);
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
+  const [checkoutOrderId, setCheckoutOrderId] = useState<string | null>(null);
+  const [topUpStatus, setTopUpStatus] = useState<'success' | 'cancel' | null>(null);
   const [pathname, setPathname] = useState(window.location.pathname);
 
   useEffect(() => {
@@ -66,8 +71,29 @@ function ResellerApp() {
         cart.clear();
       }
     }
+
+    const topUp = params.get('wallet_topup');
+    if (topUp === 'success' || topUp === 'cancel') {
+      setTopUpStatus(topUp);
+      window.history.replaceState({}, '', window.location.pathname);
+      if (topUp === 'success') {
+        wallet.refresh();
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Paiement par solde : pas de redirection Stripe, la commande est créée
+  // et confirmée immédiatement côté serveur — on affiche donc le même écran
+  // de succès que pour Stripe, mais via un orderId direct plutôt qu'un
+  // stripe_session_id (aucun webhook à attendre).
+  const handleWalletCheckoutSuccess = (orderId: string) => {
+    cart.clear();
+    wallet.refresh();
+    setCheckoutSessionId(null);
+    setCheckoutOrderId(orderId);
+    setCheckoutStatus('success');
+  };
 
   const navItems = profile?.is_primary ? [...resellerNavigationItems, resellerTeamNavItem] : resellerNavigationItems;
 
@@ -78,7 +104,7 @@ function ResellerApp() {
 
   const renderContent = () => {
     if (checkoutStatus === 'success') {
-      return <CheckoutSuccess sessionId={checkoutSessionId} onGoToOrders={handleGoToOrders} />;
+      return <CheckoutSuccess sessionId={checkoutSessionId} orderId={checkoutOrderId} onGoToOrders={handleGoToOrders} />;
     }
 
     if (productId) {
@@ -86,7 +112,7 @@ function ResellerApp() {
     }
 
     if (isCartRoute) {
-      return <CartPage cart={cart} onBack={closeToRoot} />;
+      return <CartPage cart={cart} onBack={closeToRoot} wallet={wallet} onWalletPaymentSuccess={handleWalletCheckoutSuccess} />;
     }
 
     switch (currentTab) {
@@ -96,6 +122,8 @@ function ResellerApp() {
         return <ResellerProfile />;
       case 'team':
         return <Team onOpenProduct={openProduct} />;
+      case 'wallet':
+        return <WalletPage />;
       case 'catalog':
       default:
         return <Catalog cart={cart} onOpenProduct={openProduct} />;
@@ -104,36 +132,66 @@ function ResellerApp() {
 
   const cartBadgeCount = cart.items.length;
 
-  const desktopCartButton = (
+  const walletBadge = (
     <button
-      onClick={openCart}
-      className="relative flex items-center space-x-2 px-3 md:px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+      onClick={() => { setCheckoutStatus(null); navigateTo('wallet', ''); }}
+      className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-white/10 text-gray-200 hover:bg-white/20 hover:text-white transition-colors text-xs font-medium"
+      title="Mon Portefeuille"
     >
-      <ShoppingCart className="h-4 w-4" />
-      <span className="hidden sm:inline">Panier</span>
-      {cartBadgeCount > 0 && (
-        <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
-          {cartBadgeCount}
-        </span>
-      )}
+      <Wallet className="h-3.5 w-3.5" />
+      <span className="tabular-nums">
+        Solde : {wallet.balance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+      </span>
     </button>
   );
 
+  const desktopCartButton = (
+    <div className="flex items-center space-x-2 md:space-x-3">
+      {walletBadge}
+      <button
+        onClick={openCart}
+        className="relative flex items-center space-x-2 px-3 md:px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+      >
+        <ShoppingCart className="h-4 w-4" />
+        <span className="hidden sm:inline">Panier</span>
+        {cartBadgeCount > 0 && (
+          <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
+            {cartBadgeCount}
+          </span>
+        )}
+      </button>
+    </div>
+  );
+
   const mobileCartButton = (
-    <button
-      onClick={openCart}
-      className="w-full flex items-center justify-between px-3 py-3 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
-    >
-      <span className="flex items-center space-x-3">
-        <ShoppingCart className="h-5 w-5" />
-        <span>Panier</span>
-      </span>
-      {cartBadgeCount > 0 && (
-        <span className="h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
-          {cartBadgeCount}
+    <div className="space-y-1">
+      <button
+        onClick={() => { setCheckoutStatus(null); navigateTo('wallet', ''); }}
+        className="w-full flex items-center justify-between px-3 py-3 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+      >
+        <span className="flex items-center space-x-3">
+          <Wallet className="h-5 w-5" />
+          <span>Mon Portefeuille</span>
         </span>
-      )}
-    </button>
+        <span className="tabular-nums text-gray-500">
+          {wallet.balance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+        </span>
+      </button>
+      <button
+        onClick={openCart}
+        className="w-full flex items-center justify-between px-3 py-3 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+      >
+        <span className="flex items-center space-x-3">
+          <ShoppingCart className="h-5 w-5" />
+          <span>Panier</span>
+        </span>
+        {cartBadgeCount > 0 && (
+          <span className="h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
+            {cartBadgeCount}
+          </span>
+        )}
+      </button>
+    </div>
   );
 
   return (
@@ -156,6 +214,22 @@ function ResellerApp() {
           <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
             <p className="text-sm text-amber-800">Paiement annulé — votre panier a été conservé.</p>
             <button onClick={() => setCheckoutStatus(null)} className="p-1 text-amber-600 hover:text-amber-800">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        {topUpStatus === 'success' && (
+          <div className="m-4 md:m-6 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+            <p className="text-sm text-green-800">Recharge effectuée avec succès — votre solde a été mis à jour.</p>
+            <button onClick={() => setTopUpStatus(null)} className="p-1 text-green-600 hover:text-green-800">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        {topUpStatus === 'cancel' && (
+          <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+            <p className="text-sm text-amber-800">Recharge annulée.</p>
+            <button onClick={() => setTopUpStatus(null)} className="p-1 text-amber-600 hover:text-amber-800">
               <X className="h-4 w-4" />
             </button>
           </div>

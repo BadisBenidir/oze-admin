@@ -26,6 +26,9 @@ interface CheckoutResult {
   success: boolean;
   error?: string;
   unavailableIds?: string[];
+  /** Renseigné uniquement pour un paiement 100% solde : pas de redirection
+   * Stripe, la commande existe déjà — voir onWalletPaymentSuccess côté CartPage. */
+  orderId?: string;
 }
 
 interface AddItemResult {
@@ -204,13 +207,14 @@ export const useB2BCart = (profileId: string | undefined) => {
     parcelPoint: ChronopostPickupPoint | null,
     billingAddress?: Record<string, unknown>,
     groupedWithOrderId?: string | null,
-    promoCode?: string | null
+    promoCode?: string | null,
+    paymentMethod: 'card' | 'wallet' | 'mixed' = 'card'
   ): Promise<CheckoutResult> => {
     if (items.length === 0) {
       return { success: false, error: 'Le panier est vide' };
     }
 
-    const { data, error } = await invokeEdgeFunction<{ url: string; unavailable_ids?: string[] }>('b2b-checkout', {
+    const { data, error } = await invokeEdgeFunction<{ url?: string; order_id?: string; unavailable_ids?: string[] }>('b2b-checkout', {
       product_ids: items.map((i) => i.id),
       shipping_address: shippingAddress,
       billing_address: billingAddress,
@@ -219,6 +223,7 @@ export const useB2BCart = (profileId: string | undefined) => {
       insured_product_ids: items.filter((i) => i.insured).map((i) => i.id),
       grouped_with_order_id: groupedWithOrderId || null,
       promo_code: promoCode || null,
+      payment_method: paymentMethod,
     });
 
     if (error) {
@@ -228,6 +233,11 @@ export const useB2BCart = (profileId: string | undefined) => {
     if (data?.unavailable_ids?.length) {
       const unavailableIds = data.unavailable_ids;
       write(items.filter((i) => !unavailableIds.includes(i.id)));
+    }
+
+    // Paiement 100% solde : pas de redirection, la commande est déjà créée.
+    if (data?.order_id) {
+      return { success: true, orderId: data.order_id };
     }
 
     if (!data?.url) {

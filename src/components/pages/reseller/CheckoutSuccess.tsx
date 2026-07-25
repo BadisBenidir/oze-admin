@@ -4,6 +4,8 @@ import { CheckCircle2, ShoppingBag } from 'lucide-react';
 
 interface CheckoutSuccessProps {
   sessionId: string | null;
+  /** Paiement 100% solde : commande déjà connue immédiatement, pas de session Stripe ni de webhook à attendre. */
+  orderId?: string | null;
   onGoToOrders: () => void;
 }
 
@@ -13,12 +15,12 @@ interface OrderRecap {
   order_items: { id: string }[];
 }
 
-export const CheckoutSuccess: React.FC<CheckoutSuccessProps> = ({ sessionId, onGoToOrders }) => {
+export const CheckoutSuccess: React.FC<CheckoutSuccessProps> = ({ sessionId, orderId, onGoToOrders }) => {
   const [order, setOrder] = useState<OrderRecap | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId && !orderId) {
       setLoading(false);
       return;
     }
@@ -26,11 +28,10 @@ export const CheckoutSuccess: React.FC<CheckoutSuccessProps> = ({ sessionId, onG
     let mounted = true;
 
     const fetchOrder = async () => {
-      const { data } = await supabase
-        .from('orders')
-        .select('order_number, total_amount, order_items(id)')
-        .eq('stripe_session_id', sessionId)
-        .maybeSingle();
+      const query = supabase.from('orders').select('order_number, total_amount, order_items(id)');
+      const { data } = orderId
+        ? await query.eq('id', orderId).maybeSingle()
+        : await query.eq('stripe_session_id', sessionId).maybeSingle();
       return data as OrderRecap | null;
     };
 
@@ -38,8 +39,10 @@ export const CheckoutSuccess: React.FC<CheckoutSuccessProps> = ({ sessionId, onG
       let data = await fetchOrder();
       // Le webhook Stripe peut mettre quelques secondes à traiter le paiement
       // après la redirection : un seul nouvel essai suffit dans la grande
-      // majorité des cas, sans mettre en place un vrai polling.
-      if (!data && mounted) {
+      // majorité des cas, sans mettre en place un vrai polling. Non
+      // applicable au paiement par solde (orderId déjà connu, créé
+      // synchroniquement, pas de webhook à attendre).
+      if (!data && mounted && !orderId) {
         await new Promise((resolve) => setTimeout(resolve, 2500));
         data = await fetchOrder();
       }
@@ -52,7 +55,7 @@ export const CheckoutSuccess: React.FC<CheckoutSuccessProps> = ({ sessionId, onG
     return () => {
       mounted = false;
     };
-  }, [sessionId]);
+  }, [sessionId, orderId]);
 
   return (
     <div className="p-4 md:p-6 max-w-lg mx-auto">
