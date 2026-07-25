@@ -16,7 +16,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const MIN_AMOUNT = 10;
+const MIN_AMOUNT = 1;
 const MAX_AMOUNT = 5000;
 
 Deno.serve(async (req: Request) => {
