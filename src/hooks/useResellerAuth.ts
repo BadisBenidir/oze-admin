@@ -25,6 +25,12 @@ export interface ResellerProfile {
   postal_code: string | null
   city: string | null
   country: string | null
+  /** Instructions de livraison à domicile (étage, digicode...), voir "Mon profil". */
+  delivery_instructions: string | null
+  /** Point relais favori enregistré (même forme que ChronopostPickupPoint), ou null si aucun. */
+  default_relay_point: Record<string, unknown> | null
+  /** Mode de livraison présélectionné au checkout si renseigné. */
+  default_delivery_type: 'domicile' | 'point_relais' | null
 }
 
 interface ResellerAuthState {
@@ -57,6 +63,7 @@ export const useResellerAuth = () => {
         .from('profiles')
         .select(`
           id, email, first_name, last_name, role, phone, address, postal_code, city, country,
+          delivery_instructions, default_relay_point, default_delivery_type,
           reseller_contacts!inner(
             reseller_id, is_primary,
             resellers!inner(company_name, status)
@@ -100,6 +107,9 @@ export const useResellerAuth = () => {
           postal_code: data.postal_code || null,
           city: data.city || null,
           country: data.country || null,
+          delivery_instructions: data.delivery_instructions || null,
+          default_relay_point: data.default_relay_point || null,
+          default_delivery_type: data.default_delivery_type || null,
         },
         pendingReason: null,
       }

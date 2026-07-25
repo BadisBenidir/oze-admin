@@ -1,8 +1,29 @@
 import React, { useState } from 'react';
-import { X, Package, Trash2, AlertCircle, AlertTriangle } from 'lucide-react';
+import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { B2BOrder, B2BOrderItem } from '../../../hooks/useB2BOrders';
 import { cancelOrderItem } from '../../../hooks/useCancelOrderItem';
+
+// `orders.shipping_address` est stocké dans la forme assemblée par
+// b2b-checkout (address/postcode/city/country/pickup_point_*/delivery_type/
+// instructions — voir deliveryAddress dans l'edge function), pas dans la
+// forme brute envoyée par le client (line1/postal_code, qui finit elle dans
+// `billing_address`).
+const formatShippingAddress = (address: Record<string, unknown> | null | undefined) => {
+  const isPointRelais = address?.delivery_type === 'point_relais';
+  return {
+    isPointRelais,
+    street: (address?.address as string) || '',
+    city: (address?.city as string) || '',
+    postalCode: (address?.postcode as string) || '',
+    country: (address?.country as string) || '',
+    phone: (address?.phone as string) || '',
+    instructions: (address?.instructions as string) || '',
+    pickupPointName: (address?.pickup_point_name as string) || '',
+    pickupPointNetwork: (address?.pickup_point_network as string) || '',
+    pickupPointAddress: (address?.pickup_point_address as string) || '',
+  };
+};
 
 const CANCEL_REASONS = [
   'Rupture de stock / Article introuvable',
@@ -201,6 +222,35 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                   <p className="text-sm text-blue-800">{refundNotice}</p>
                 </div>
               )}
+
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Livraison</p>
+                <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-2">
+                  <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-gray-900">
+                    {(() => {
+                      const a = formatShippingAddress(order.shipping_address);
+                      return a.isPointRelais ? (
+                        <>
+                          <p className="font-medium">{a.pickupPointName || 'Point Relais'}</p>
+                          {a.pickupPointAddress && <p>{a.pickupPointAddress}</p>}
+                          <p>{a.postalCode} {a.city}</p>
+                          {a.pickupPointNetwork && <p className="text-xs text-gray-500 mt-1">{a.pickupPointNetwork}</p>}
+                        </>
+                      ) : (
+                        <>
+                          <p>{a.street}</p>
+                          <p>{a.postalCode} {a.city}</p>
+                          <p>{a.country}</p>
+                          {a.instructions && (
+                            <p className="text-xs text-amber-700 mt-1 italic">Consignes : {a.instructions}</p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
 
               <div>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Articles</p>

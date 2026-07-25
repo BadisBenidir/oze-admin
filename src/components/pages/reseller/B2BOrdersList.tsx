@@ -12,13 +12,25 @@ const statusBadge = (order: MyB2BOrder) => {
   return <Badge variant="info">En préparation</Badge>;
 };
 
+// `orders.shipping_address` est stocké dans la forme assemblée par
+// b2b-checkout (address/postcode/city/country/pickup_point_*/delivery_type,
+// voir deliveryAddress dans l'edge function) — PAS dans la forme brute
+// {line1, postal_code} envoyée par CartPage, qui elle finit dans
+// `billing_address`. Utiliser les mauvaises clés ici affichait une adresse
+// de rue/CP vides sur toutes les commandes.
 const formatAddress = (address: Record<string, unknown>) => {
-  const line1 = (address?.line1 as string) || '';
-  const line2 = (address?.line2 as string) || '';
-  const city = (address?.city as string) || '';
-  const postalCode = (address?.postal_code as string) || '';
-  const country = (address?.country as string) || '';
-  return { line1, line2, city, postalCode, country };
+  const isPointRelais = address?.delivery_type === 'point_relais';
+  return {
+    isPointRelais,
+    street: (address?.address as string) || '',
+    city: (address?.city as string) || '',
+    postalCode: (address?.postcode as string) || '',
+    country: (address?.country as string) || '',
+    instructions: (address?.instructions as string) || '',
+    pickupPointName: (address?.pickup_point_name as string) || '',
+    pickupPointNetwork: (address?.pickup_point_network as string) || '',
+    pickupPointAddress: (address?.pickup_point_address as string) || '',
+  };
 };
 
 interface B2BOrdersListProps {
@@ -172,12 +184,19 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                     <div className="text-sm text-gray-900">
                       {(() => {
                         const a = formatAddress(viewingOrder.shipping_address);
-                        return (
+                        return a.isPointRelais ? (
                           <>
-                            <p>{a.line1}</p>
-                            {a.line2 && <p>{a.line2}</p>}
+                            <p className="font-medium">{a.pickupPointName || 'Point Relais'}</p>
+                            {a.pickupPointAddress && <p>{a.pickupPointAddress}</p>}
+                            <p>{a.postalCode} {a.city}</p>
+                            {a.pickupPointNetwork && <p className="text-xs text-gray-500 mt-1">{a.pickupPointNetwork}</p>}
+                          </>
+                        ) : (
+                          <>
+                            <p>{a.street}</p>
                             <p>{a.postalCode} {a.city}</p>
                             <p>{a.country}</p>
+                            {a.instructions && <p className="text-xs text-gray-500 mt-1 italic">{a.instructions}</p>}
                           </>
                         );
                       })()}

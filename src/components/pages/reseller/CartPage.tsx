@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useB2BCart, CART_ITEM_SESSION_MS, INSURANCE_RATE } from '../../../hooks/useB2BCart';
 import { useWallet } from '../../../hooks/useWallet';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
@@ -33,6 +33,21 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
     deliveryType: hasAddress ? 'domicile' : 'point_relais',
     parcelPoint: null,
   });
+  // Ne présélectionne les préférences enregistrées sur le profil qu'une
+  // seule fois (profile arrive de façon asynchrone après le premier rendu) —
+  // sans ce verrou, tout changement ultérieur du profil (autre onglet,
+  // reconnexion...) écraserait un choix déjà fait par le revendeur sur CETTE
+  // commande.
+  const shippingDefaultsApplied = useRef(false);
+  useEffect(() => {
+    if (shippingDefaultsApplied.current || !profile) return;
+    shippingDefaultsApplied.current = true;
+    if (profile.default_delivery_type === 'point_relais' && profile.default_relay_point) {
+      setShipping({ deliveryType: 'point_relais', parcelPoint: profile.default_relay_point as any });
+    } else if (profile.default_delivery_type === 'domicile' && hasAddress) {
+      setShipping({ deliveryType: 'domicile', parcelPoint: null });
+    }
+  }, [profile, hasAddress]);
   const [groupWithOrder, setGroupWithOrder] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +89,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
         city: profile.city || '',
         postal_code: profile.postal_code || '',
         country: profile.country || 'France',
+        instructions: profile.delivery_instructions || undefined,
       },
       shipping.deliveryType,
       shipping.parcelPoint,

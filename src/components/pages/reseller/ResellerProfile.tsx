@@ -3,7 +3,9 @@ import { Card, CardContent } from '../../ui/Card';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useGooglePlacesAutocomplete } from '../../../hooks/useGooglePlacesAutocomplete';
 import { supabase } from '../../../lib/supabase';
-import { Building2, CheckCircle2, AlertCircle, Lock, Eye, EyeOff, Check, Circle } from 'lucide-react';
+import { openServicePointPicker } from '../../../services/sendcloudService';
+import { ChronopostPickupPoint } from '../../../services/chronopostService';
+import { Building2, CheckCircle2, AlertCircle, Lock, Eye, EyeOff, Check, Circle, Truck, Package, MapPin } from 'lucide-react';
 
 export const ResellerProfile: React.FC = () => {
   const { profile } = useResellerAuth();
@@ -14,6 +16,11 @@ export const ResellerProfile: React.FC = () => {
   const [city, setCity] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [country, setCountry] = useState('France');
+  const [deliveryInstructions, setDeliveryInstructions] = useState('');
+  const [defaultRelayPoint, setDefaultRelayPoint] = useState<ChronopostPickupPoint | null>(null);
+  const [defaultDeliveryType, setDefaultDeliveryType] = useState<'domicile' | 'point_relais' | null>(null);
+  const [relayPickerLoading, setRelayPickerLoading] = useState(false);
+  const [relayPickerError, setRelayPickerError] = useState('');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +42,39 @@ export const ResellerProfile: React.FC = () => {
       setCity(profile.city || '');
       setPostalCode(profile.postal_code || '');
       setCountry(profile.country || 'France');
+      setDeliveryInstructions(profile.delivery_instructions || '');
+      setDefaultRelayPoint((profile.default_relay_point as unknown as ChronopostPickupPoint) || null);
+      setDefaultDeliveryType(profile.default_delivery_type);
     }
   }, [profile]);
+
+  const hasAddressForm = Boolean(address.trim() && city.trim() && postalCode.trim());
+
+  const openRelayPicker = async () => {
+    setRelayPickerError('');
+    setRelayPickerLoading(true);
+    try {
+      const point = await openServicePointPicker({
+        postalCode: postalCode || '75001',
+        city: city || 'Paris',
+        country,
+      });
+      if (point) {
+        setDefaultRelayPoint(point);
+      }
+    } catch (err) {
+      setRelayPickerError(err instanceof Error ? err.message : "Impossible d'ouvrir la carte des points relais");
+    } finally {
+      setRelayPickerLoading(false);
+    }
+  };
+
+  const removeRelayPoint = () => {
+    setDefaultRelayPoint(null);
+    if (defaultDeliveryType === 'point_relais') {
+      setDefaultDeliveryType(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +94,9 @@ export const ResellerProfile: React.FC = () => {
         city: city.trim() || null,
         postal_code: postalCode.trim() || null,
         country: country.trim() || null,
+        delivery_instructions: deliveryInstructions.trim() || null,
+        default_relay_point: defaultRelayPoint,
+        default_delivery_type: defaultDeliveryType,
       })
       .eq('id', profile.id);
 
@@ -177,7 +218,108 @@ export const ResellerProfile: React.FC = () => {
             </select>
           </div>
           <p className="text-xs text-gray-500 mt-1">Utilisée pour préremplir "Livrer à mon entreprise" au moment de la commande.</p>
+
+          <label className="mt-2 flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={defaultDeliveryType === 'domicile'}
+              disabled={!hasAddressForm}
+              onChange={(e) => setDefaultDeliveryType(e.target.checked ? 'domicile' : null)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0 disabled:opacity-40"
+            />
+            <span className="text-sm text-gray-600">
+              Définir comme mode de livraison par défaut pour mes commandes rapides
+            </span>
+          </label>
         </div>
+
+        <div className="pt-4 mt-2 border-t border-gray-100">
+          <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 mb-1">
+            <Truck className="h-4 w-4 text-gray-400" />
+            Préférences de livraison
+          </h4>
+          <p className="text-xs text-gray-500 mb-3">
+            Enregistrées ici, elles sont présélectionnées automatiquement au moment de payer — vous pouvez toujours en
+            changer pour une commande précise.
+          </p>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Instructions de livraison</label>
+            <textarea
+              value={deliveryInstructions}
+              onChange={(e) => setDeliveryInstructions(e.target.value)}
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+              placeholder="Étage, digicode, consignes pour le livreur..."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Point Relais favori</label>
+            {defaultRelayPoint ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2 min-w-0">
+                  <Package className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-green-800 truncate">{defaultRelayPoint.name}</p>
+                    <p className="text-xs text-green-700">
+                      {defaultRelayPoint.address && `${defaultRelayPoint.address}, `}
+                      {defaultRelayPoint.zipCode} {defaultRelayPoint.city}
+                    </p>
+                    <p className="text-xs text-green-600 mt-0.5">{defaultRelayPoint.network}</p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={openRelayPicker}
+                    disabled={relayPickerLoading}
+                    className="text-xs text-gray-900 underline hover:text-gray-600 disabled:opacity-50"
+                  >
+                    Changer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={removeRelayPoint}
+                    className="text-xs text-red-600 underline hover:text-red-800"
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={openRelayPicker}
+                disabled={relayPickerLoading}
+                className="w-full py-2 px-4 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-900 hover:text-gray-900 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <MapPin className="h-4 w-4" />
+                {relayPickerLoading ? 'Ouverture de la carte…' : 'Choisir un point relais'}
+              </button>
+            )}
+            {relayPickerError && (
+              <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                {relayPickerError}
+              </p>
+            )}
+
+            <label className="mt-2 flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={defaultDeliveryType === 'point_relais'}
+                disabled={!defaultRelayPoint}
+                onChange={(e) => setDefaultDeliveryType(e.target.checked ? 'point_relais' : null)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0 disabled:opacity-40"
+              />
+              <span className="text-sm text-gray-600">
+                Définir comme mode de livraison par défaut pour mes commandes rapides
+              </span>
+            </label>
+          </div>
+        </div>
+
         <button
           type="submit"
           disabled={saving}

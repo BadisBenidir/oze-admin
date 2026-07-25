@@ -258,6 +258,10 @@ Deno.serve(async (req: Request) => {
           country: shipping_address.country,
           name: contactName,
           phone,
+          // Consignes du revendeur (étage, digicode...) — remontées telles
+          // quelles pour l'équipe logistique, sans effet sur la création du
+          // colis Sendcloud (champ non lu par cette intégration).
+          instructions: shipping_address.instructions || undefined,
         };
 
     // Paiement par solde portefeuille : pas de session Stripe du tout, la
