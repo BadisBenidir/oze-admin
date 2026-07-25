@@ -111,7 +111,7 @@ export const ResellerProfile: React.FC = () => {
   if (!profile) return null;
 
   return (
-    <div className="p-4 md:p-6 max-w-lg">
+    <div className="max-w-6xl mx-auto w-full px-4 py-8">
       <h3 className="text-lg font-semibold text-gray-900 mb-6">Mon profil</h3>
 
       <Card className="mb-6">
@@ -137,193 +137,206 @@ export const ResellerProfile: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
-            <input
-              type="text"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
-            <input
-              type="text"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input
-            type="email"
-            value={profile.email}
-            disabled
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
-          <input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-            placeholder="06 12 34 56 78"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
-          <div className="space-y-2">
-            <input
-              ref={addressInputRef}
-              type="text"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              autoComplete="off"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-              placeholder="Commencez à taper votre adresse..."
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={postalCode}
-                onChange={(e) => setPostalCode(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                placeholder="Code postal"
-              />
-              <input
-                type="text"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                placeholder="Ville"
-              />
-            </div>
-            <select
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
-            >
-              <option value="France">France</option>
-              <option value="Belgique">Belgique</option>
-              <option value="Suisse">Suisse</option>
-              <option value="Luxembourg">Luxembourg</option>
-              <option value="Monaco">Monaco</option>
-            </select>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">Utilisée pour préremplir "Livrer à mon entreprise" au moment de la commande.</p>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <Card>
+            <CardContent className="p-5 space-y-4">
+              <h4 className="text-sm font-semibold text-gray-900">Informations personnelles</h4>
 
-          <label className="mt-2 flex items-start gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={defaultDeliveryType === 'domicile'}
-              disabled={!hasAddressForm}
-              onChange={(e) => setDefaultDeliveryType(e.target.checked ? 'domicile' : null)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0 disabled:opacity-40"
-            />
-            <span className="text-sm text-gray-600">
-              Définir comme mode de livraison par défaut pour mes commandes rapides
-            </span>
-          </label>
-        </div>
-
-        <div className="pt-4 mt-2 border-t border-gray-100">
-          <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 mb-1">
-            <Truck className="h-4 w-4 text-gray-400" />
-            Préférences de livraison
-          </h4>
-          <p className="text-xs text-gray-500 mb-3">
-            Enregistrées ici, elles sont présélectionnées automatiquement au moment de payer — vous pouvez toujours en
-            changer pour une commande précise.
-          </p>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Instructions de livraison</label>
-            <textarea
-              value={deliveryInstructions}
-              onChange={(e) => setDeliveryInstructions(e.target.value)}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-              placeholder="Étage, digicode, consignes pour le livreur..."
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Point Relais favori</label>
-            {defaultRelayPoint ? (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2 min-w-0">
-                  <Package className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-green-800 truncate">{defaultRelayPoint.name}</p>
-                    <p className="text-xs text-green-700">
-                      {defaultRelayPoint.address && `${defaultRelayPoint.address}, `}
-                      {defaultRelayPoint.zipCode} {defaultRelayPoint.city}
-                    </p>
-                    <p className="text-xs text-green-600 mt-0.5">{defaultRelayPoint.network}</p>
-                  </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  />
                 </div>
-                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={profile.email}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  placeholder="06 12 34 56 78"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-5 space-y-4">
+              <div>
+                <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                  <Truck className="h-4 w-4 text-gray-400" />
+                  Préférences de livraison
+                </h4>
+                <p className="text-xs text-gray-500 mt-1">
+                  Enregistrées ici, elles sont présélectionnées automatiquement au moment de payer — vous pouvez
+                  toujours en changer pour une commande précise.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
+                <div className="space-y-2">
+                  <input
+                    ref={addressInputRef}
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    autoComplete="off"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                    placeholder="Commencez à taper votre adresse..."
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={postalCode}
+                      onChange={(e) => setPostalCode(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      placeholder="Code postal"
+                    />
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      placeholder="Ville"
+                    />
+                  </div>
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
+                  >
+                    <option value="France">France</option>
+                    <option value="Belgique">Belgique</option>
+                    <option value="Suisse">Suisse</option>
+                    <option value="Luxembourg">Luxembourg</option>
+                    <option value="Monaco">Monaco</option>
+                  </select>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Utilisée pour préremplir "Livrer à mon entreprise" au moment de la commande.</p>
+
+                <label className="mt-2 flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={defaultDeliveryType === 'domicile'}
+                    disabled={!hasAddressForm}
+                    onChange={(e) => setDefaultDeliveryType(e.target.checked ? 'domicile' : null)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0 disabled:opacity-40"
+                  />
+                  <span className="text-sm text-gray-600">
+                    Définir comme mode de livraison par défaut pour mes commandes rapides
+                  </span>
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Instructions de livraison</label>
+                <textarea
+                  value={deliveryInstructions}
+                  onChange={(e) => setDeliveryInstructions(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                  placeholder="Étage, digicode, consignes pour le livreur..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Point Relais favori</label>
+                {defaultRelayPoint ? (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <Package className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-green-800 truncate">{defaultRelayPoint.name}</p>
+                        <p className="text-xs text-green-700">
+                          {defaultRelayPoint.address && `${defaultRelayPoint.address}, `}
+                          {defaultRelayPoint.zipCode} {defaultRelayPoint.city}
+                        </p>
+                        <p className="text-xs text-green-600 mt-0.5">{defaultRelayPoint.network}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={openRelayPicker}
+                        disabled={relayPickerLoading}
+                        className="text-xs text-gray-900 underline hover:text-gray-600 disabled:opacity-50"
+                      >
+                        Changer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={removeRelayPoint}
+                        className="text-xs text-red-600 underline hover:text-red-800"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
+                ) : (
                   <button
                     type="button"
                     onClick={openRelayPicker}
                     disabled={relayPickerLoading}
-                    className="text-xs text-gray-900 underline hover:text-gray-600 disabled:opacity-50"
+                    className="w-full py-2 px-4 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-900 hover:text-gray-900 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
-                    Changer
+                    <MapPin className="h-4 w-4" />
+                    {relayPickerLoading ? 'Ouverture de la carte…' : 'Choisir un point relais'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={removeRelayPoint}
-                    className="text-xs text-red-600 underline hover:text-red-800"
-                  >
-                    Supprimer
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={openRelayPicker}
-                disabled={relayPickerLoading}
-                className="w-full py-2 px-4 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-900 hover:text-gray-900 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-              >
-                <MapPin className="h-4 w-4" />
-                {relayPickerLoading ? 'Ouverture de la carte…' : 'Choisir un point relais'}
-              </button>
-            )}
-            {relayPickerError && (
-              <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
-                {relayPickerError}
-              </p>
-            )}
+                )}
+                {relayPickerError && (
+                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                    {relayPickerError}
+                  </p>
+                )}
 
-            <label className="mt-2 flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={defaultDeliveryType === 'point_relais'}
-                disabled={!defaultRelayPoint}
-                onChange={(e) => setDefaultDeliveryType(e.target.checked ? 'point_relais' : null)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0 disabled:opacity-40"
-              />
-              <span className="text-sm text-gray-600">
-                Définir comme mode de livraison par défaut pour mes commandes rapides
-              </span>
-            </label>
-          </div>
+                <label className="mt-2 flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={defaultDeliveryType === 'point_relais'}
+                    disabled={!defaultRelayPoint}
+                    onChange={(e) => setDefaultDeliveryType(e.target.checked ? 'point_relais' : null)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0 disabled:opacity-40"
+                  />
+                  <span className="text-sm text-gray-600">
+                    Définir comme mode de livraison par défaut pour mes commandes rapides
+                  </span>
+                </label>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <button
           type="submit"
           disabled={saving}
-          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
+          className="mt-6 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
         >
           {saving ? 'Enregistrement...' : 'Enregistrer'}
         </button>
