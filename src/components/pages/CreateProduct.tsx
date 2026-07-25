@@ -1183,7 +1183,18 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Statut *
           </label>
-          {isB2B ? (
+          {isB2B && productData.status === 'for-sale-b2b' ? (
+            // 'for-sale-b2b' reste modifiable : c'est depuis là qu'on bascule
+            // un article vers la file d'attente du programme fidélité.
+            <select
+              value={productData.status}
+              onChange={(e) => updateProductData({ status: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="for-sale-b2b">Revendeurs B2B uniquement</option>
+              <option value="cadeau">🎁 Cadeau fidélité (en attente d'attribution)</option>
+            </select>
+          ) : isB2B ? (
             <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 flex items-center">
               <Badge variant="info">{B2B_STATUS_LABELS[productData.status] || productData.status}</Badge>
             </div>
