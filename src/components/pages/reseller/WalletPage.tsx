@@ -99,7 +99,7 @@ export const WalletPage: React.FC = () => {
   };
 
   const customValue = Number(customAmount);
-  const customValid = customAmount.trim() !== '' && Number.isFinite(customValue) && customValue >= 1 && customValue <= 5000;
+  const customValid = customAmount.trim() !== '' && Number.isFinite(customValue) && customValue >= 10 && customValue <= 5000;
   const previewBonus = customValid ? computeBonus(customValue) : 0;
   const previewTotal = customValid ? customValue + previewBonus : 0;
 
@@ -207,12 +207,12 @@ export const WalletPage: React.FC = () => {
         <div className="flex items-center gap-2">
           <input
             type="number"
-            min={1}
+            min={10}
             max={5000}
             step={1}
             value={customAmount}
             onChange={(e) => setCustomAmount(e.target.value)}
-            placeholder="Montant personnalisé (1 - 5000 €)"
+            placeholder="Montant personnalisé (10 - 5000 €)"
             className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
           />
           <button
