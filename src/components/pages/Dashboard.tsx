@@ -8,39 +8,92 @@ interface DashboardProps {
   activeSubTab: string;
 }
 
+// Garantit "DD/MM/YYYY à HH:mm" quel que soit le fuseau/la langue du
+// navigateur (toLocaleDateString() sans locale explicite peut varier).
+const formatDateTime = (date: Date): string =>
+  `${date.toLocaleDateString('fr-FR')} à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+
+const INITIAL_LIST_SIZE = 5;
+const LOAD_MORE_STEP = 10;
+
 export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
 
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
+  const [transactionsLimit, setTransactionsLimit] = useState(INITIAL_LIST_SIZE);
+  const [activitiesLimit, setActivitiesLimit] = useState(INITIAL_LIST_SIZE);
+  const [loadingMoreTransactions, setLoadingMoreTransactions] = useState(false);
+  const [loadingMoreActivities, setLoadingMoreActivities] = useState(false);
+  const [transactionsExhausted, setTransactionsExhausted] = useState(false);
+  const [activitiesExhausted, setActivitiesExhausted] = useState(false);
 
   useEffect(() => {
-    const loadAll = async () => {
+    orderService.getOrderStats().then(setStats).catch((error) => console.error("Erreur chargement stats:", error));
+  }, []);
+
+  // Commandes + rechargements de portefeuille, fusionnés et triés par date.
+  // "Voir plus" augmente transactionsLimit de 10 (voir handleLoadMoreTransactions),
+  // ce qui redéclenche cet effet et élargit le vivier des deux sources avant
+  // de retrier/retronquer.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
       try {
-        const [statsData, ordersData, rechargesData, activityData] = await Promise.all([
-          orderService.getOrderStats(),
-          orderService.getRecentOrders(5),
-          orderService.getRecentWalletRecharges(5),
-          orderService.getRecentActivity(),
+        const [ordersData, rechargesData] = await Promise.all([
+          orderService.getRecentOrders(transactionsLimit),
+          orderService.getRecentWalletRecharges(transactionsLimit),
         ]);
-        setStats(statsData);
-        // Fusionne commandes et rechargements de portefeuille en un seul fil
-        // trié par date, chacun taggé `kind` pour un rendu distinct ci-dessous.
+        if (cancelled) return;
         const merged = [
           ...ordersData.map((o: any) => ({ kind: 'order', created_at: o.created_at, data: o })),
           ...rechargesData.map((r: any) => ({ kind: 'recharge', created_at: r.created_at, data: r })),
         ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        setRecentTransactions(merged.slice(0, 5));
-        setActivities(activityData);
+        setRecentTransactions(merged.slice(0, transactionsLimit));
+        // Si les deux sources renvoient moins que demandé, il n'y a plus rien à charger.
+        setTransactionsExhausted(ordersData.length < transactionsLimit && rechargesData.length < transactionsLimit);
       } catch (error) {
-        console.error("Erreur chargement dashboard:", error);
+        console.error("Erreur chargement transactions:", error);
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setLoadingMoreTransactions(false);
+        }
       }
     };
-    loadAll();
-  }, []);
+    load();
+    return () => { cancelled = true; };
+  }, [transactionsLimit]);
+
+  // Fil d'activité (commandes/clients/recharges) — même logique de pagination.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const activityData = await orderService.getRecentActivity(activitiesLimit);
+        if (cancelled) return;
+        setActivities(activityData);
+        setActivitiesExhausted(activityData.length < activitiesLimit);
+      } catch (error) {
+        console.error("Erreur chargement activité:", error);
+      } finally {
+        if (!cancelled) setLoadingMoreActivities(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [activitiesLimit]);
+
+  const handleLoadMoreTransactions = () => {
+    setLoadingMoreTransactions(true);
+    setTransactionsLimit((n) => n + LOAD_MORE_STEP);
+  };
+
+  const handleLoadMoreActivities = () => {
+    setLoadingMoreActivities(true);
+    setActivitiesLimit((n) => n + LOAD_MORE_STEP);
+  };
 
   if (loading) return <div className="p-6">Chargement des données réelles...</div>;
 
@@ -267,7 +320,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                           </div>
                           <div>
                             <p className="text-sm font-medium text-gray-900">{r.displayName}</p>
-                            <p className="text-xs text-gray-500">{new Date(r.created_at).toLocaleDateString()}</p>
+                            <p className="text-xs text-gray-500">{formatDateTime(new Date(r.created_at))}</p>
                           </div>
                         </div>
                         <div className="text-right">
@@ -287,7 +340,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name || ''}</p>
-                          <p className="text-xs text-gray-500">{new Date(order.created_at).toLocaleDateString()}</p>
+                          <p className="text-xs text-gray-500">{formatDateTime(new Date(order.created_at))}</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -301,6 +354,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                 })}
                 {recentTransactions.length === 0 && <p className="text-sm text-gray-500 text-center">Aucune vente récente</p>}
               </div>
+              {!transactionsExhausted && recentTransactions.length > 0 && (
+                <button
+                  onClick={handleLoadMoreTransactions}
+                  disabled={loadingMoreTransactions}
+                  className="w-full mt-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loadingMoreTransactions ? 'Chargement...' : 'Voir plus'}
+                </button>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -317,9 +379,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                     <div className={`mt-1 h-2 w-2 rounded-full ${activity.type === 'order' ? 'bg-green-500' : activity.type === 'wallet' ? 'bg-violet-500' : 'bg-blue-500'}`} />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{activity.text}</p>
-                      <p className="text-xs text-gray-500">
-                        {activity.date.toLocaleDateString()} à {activity.date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </p>
+                      <p className="text-xs text-gray-500">{formatDateTime(activity.date)}</p>
                     </div>
                   </div>
                 ))}
@@ -327,6 +387,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                   <p className="text-sm text-gray-500 text-center">Aucune activité récente</p>
                 )}
               </div>
+              {!activitiesExhausted && activities.length > 0 && (
+                <button
+                  onClick={handleLoadMoreActivities}
+                  disabled={loadingMoreActivities}
+                  className="w-full mt-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loadingMoreActivities ? 'Chargement...' : 'Voir plus'}
+                </button>
+              )}
             </CardContent>
           </Card>
         </div>

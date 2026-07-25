@@ -356,23 +356,26 @@ class OrderService {
     });
   }
 
-  async getRecentActivity() {
-    // 1. Récupérer les 3 dernières commandes
+  // `limit` porte sur CHAQUE source (commandes/clients/recharges), pas sur le
+  // total renvoyé : "Voir plus" l'augmente de 10 à chaque clic pour élargir
+  // le vivier avant de retrier et de retronquer au même nombre.
+  async getRecentActivity(limit = 3) {
+    // 1. Récupérer les dernières commandes
     const { data: orders } = await supabase
       .from('orders')
       .select('id, created_at, total_amount')
       .order('created_at', { ascending: false })
-      .limit(3);
+      .limit(limit);
 
-    // 2. Récupérer les 3 derniers profils inscrits
+    // 2. Récupérer les derniers profils inscrits
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, created_at, first_name')
       .order('created_at', { ascending: false })
-      .limit(3);
+      .limit(limit);
 
-    // 3. Récupérer les 3 derniers rechargements de portefeuille B2B
-    const recharges = await this.getRecentWalletRecharges(3);
+    // 3. Récupérer les derniers rechargements de portefeuille B2B
+    const recharges = await this.getRecentWalletRecharges(limit);
 
     const activities = [];
 
@@ -407,7 +410,7 @@ class OrderService {
     // Trier le tout du plus récent au plus ancien
     return activities
       .sort((a, b) => b.date.getTime() - a.date.getTime())
-      .slice(0, 5); // On garde les 5 derniers événements
+      .slice(0, limit);
   }
 }
 
