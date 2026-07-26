@@ -1,14 +1,12 @@
-// Edge Function : cancel-b2b-order-item
+// Edge Function : cancel-b2b-order
 //
-// Annule UN article d'une commande B2B (pas la commande entière) : appelle
-// cancel_b2b_order_item (recalcul atomique de subtotal/total_amount, bascule
-// la commande en 'cancelled' si plus aucun article actif, remet le produit
-// en vente/brouillon/archivé), puis rembourse — au choix de l'admin — en
-// crédit portefeuille (n'importe quelle commande, y compris payée 100% par
-// solde) ou via Stripe (uniquement si la commande a réellement été payée par
-// carte). Réservé aux admins OZË (profiles.role='admin').
+// Annule TOUS les articles actifs d'une commande B2B en une fois (contraste
+// avec cancel-b2b-order-item, qui n'en annule qu'un). Appelle cancel_b2b_order
+// (recalcul en une transaction), puis effectue UN SEUL remboursement pour le
+// total — portefeuille ou Stripe, au choix de l'admin — plutôt qu'un par
+// article. Réservé aux admins OZË (profiles.role='admin').
 //
-// Déploiement : `supabase functions deploy cancel-b2b-order-item`
+// Déploiement : `supabase functions deploy cancel-b2b-order`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
@@ -47,9 +45,9 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Action réservée aux administrateurs' }, 403);
     }
 
-    const { order_item_id, reason, restock_action, refund_method } = await req.json();
-    if (!order_item_id || !reason || !restock_action) {
-      return json({ error: 'order_item_id, reason et restock_action sont requis' }, 400);
+    const { order_id, reason, restock_action, refund_method } = await req.json();
+    if (!order_id || !reason || !restock_action) {
+      return json({ error: 'order_id, reason et restock_action sont requis' }, 400);
     }
     if (!['draft', 'for-sale-b2b', 'archived'].includes(restock_action)) {
       return json({ error: 'restock_action invalide' }, 400);
@@ -60,8 +58,8 @@ Deno.serve(async (req: Request) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const { data: result, error: rpcError } = await adminClient.rpc('cancel_b2b_order_item', {
-      p_order_item_id: order_item_id,
+    const { data: result, error: rpcError } = await adminClient.rpc('cancel_b2b_order', {
+      p_order_id: order_id,
       p_reason: reason,
       p_restock_action: restock_action,
     });
@@ -70,15 +68,15 @@ Deno.serve(async (req: Request) => {
       return json({ error: rpcError.message }, 400);
     }
 
-    // Un échec du remboursement n'annule pas l'annulation déjà actée en base
-    // (l'article reste annulé) — il est simplement signalé, à traiter
-    // manuellement (dashboard Stripe, ou nouvel essai en portefeuille) si besoin.
+    const itemIds: string[] = result?.order_item_ids || [];
+    const totalRefund = Number(result?.total_refund || 0);
+
     let refundStatus: 'not_applicable' | 'succeeded' | 'failed' = 'not_applicable';
     let refundError: string | undefined;
     let refundId: string | undefined;
     let appliedMethod: string | null = null;
 
-    if (result?.payment_status === 'paid') {
+    if (result?.payment_status === 'paid' && totalRefund > 0) {
       if (!refund_method) {
         return json({ error: 'refund_method (wallet ou stripe) est requis pour cette commande payée' }, 400);
       }
@@ -97,7 +95,7 @@ Deno.serve(async (req: Request) => {
             const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
             const refund = await stripe.refunds.create({
               payment_intent: result.stripe_payment_intent_id,
-              amount: Math.round(Number(result.line_total) * 100),
+              amount: Math.round(totalRefund * 100),
             });
             refundStatus = 'succeeded';
             refundId = refund.id;
@@ -107,13 +105,12 @@ Deno.serve(async (req: Request) => {
           }
         }
       } else {
-        // wallet
         const { error: walletError } = await adminClient.rpc('credit_order_item_refund_to_wallet', {
           p_profile_id: result.placed_by_profile_id,
           p_reseller_id: result.reseller_id,
-          p_amount: Number(result.line_total),
-          p_order_id: result.order_id,
-          p_note: `Remboursement (article annulé) — commande ${result.order_id}`,
+          p_amount: totalRefund,
+          p_order_id: order_id,
+          p_note: `Remboursement (commande annulée) — commande ${order_id}`,
         });
         if (walletError) {
           refundStatus = 'failed';
@@ -122,23 +119,24 @@ Deno.serve(async (req: Request) => {
           refundStatus = 'succeeded';
         }
       }
+    }
 
+    if (itemIds.length > 0) {
       await adminClient
         .from('order_items')
-        .update({ refund_status: refundStatus, refund_method: appliedMethod, stripe_refund_id: refundId ?? null, refund_error: refundError ?? null })
-        .eq('id', order_item_id);
-    } else {
-      await adminClient
-        .from('order_items')
-        .update({ refund_status: 'not_applicable' })
-        .eq('id', order_item_id);
+        .update({
+          refund_status: refundStatus,
+          refund_method: appliedMethod,
+          stripe_refund_id: refundId ?? null,
+          refund_error: refundError ?? null,
+        })
+        .in('id', itemIds);
     }
 
     return json({
       success: true,
-      order_id: result?.order_id,
-      new_total_amount: result?.new_total_amount,
-      order_status: result?.order_status,
+      order_id,
+      total_refund: totalRefund,
       refund_status: refundStatus,
       refund_method: appliedMethod,
       refund_error: refundError,

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin } from 'lucide-react';
+import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { B2BOrder, B2BOrderItem } from '../../../hooks/useB2BOrders';
-import { cancelOrderItem } from '../../../hooks/useCancelOrderItem';
+import { cancelOrderItem, cancelOrder } from '../../../hooks/useCancelOrderItem';
 
 // `orders.shipping_address` est stocké dans la forme assemblée par
 // b2b-checkout (address/postcode/city/country/pickup_point_*/delivery_type/
@@ -50,22 +50,67 @@ const orderStatusBadge = (status: string) => {
   }
 };
 
+const refundMethodLabel = (method?: string | null) =>
+  method === 'wallet' ? 'crédit portefeuille' : method === 'stripe' ? 'Stripe' : '';
+
+// Choix du mode de remboursement, partagé entre l'annulation d'un article et
+// celle de la commande entière — l'option Stripe n'est proposée que si la
+// commande a réellement été payée (au moins en partie) par carte.
+const RefundMethodChoice: React.FC<{
+  value: 'wallet' | 'stripe';
+  onChange: (v: 'wallet' | 'stripe') => void;
+  hasStripePayment: boolean;
+}> = ({ value, onChange, hasStripePayment }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-2">Mode de remboursement</label>
+    <div className="space-y-2">
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="radio"
+          name="refund-method"
+          checked={value === 'wallet'}
+          onChange={() => onChange('wallet')}
+          className="h-4 w-4 text-gray-900 focus:ring-gray-900"
+        />
+        💳 Rembourser en crédit portefeuille (Solde B2B)
+      </label>
+      <label className={`flex items-center gap-2 text-sm ${hasStripePayment ? 'text-gray-700' : 'text-gray-400'}`}>
+        <input
+          type="radio"
+          name="refund-method"
+          checked={value === 'stripe'}
+          disabled={!hasStripePayment}
+          onChange={() => onChange('stripe')}
+          className="h-4 w-4 text-gray-900 focus:ring-gray-900 disabled:opacity-50"
+        />
+        🏦 Rembourser via Stripe (paiement d'origine)
+      </label>
+      {!hasStripePayment && (
+        <p className="text-xs text-gray-400 pl-6">Aucun paiement Stripe sur cette commande — seul le portefeuille est disponible.</p>
+      )}
+    </div>
+  </div>
+);
+
 interface CancelItemPanelProps {
   item: B2BOrderItem;
+  isPaid: boolean;
+  hasStripePayment: boolean;
   onCancel: () => void;
-  onConfirmed: (result: { new_total_amount?: number; order_status?: string; refund_status?: string; refund_error?: string }) => void;
+  onConfirmed: (result: { new_total_amount?: number; order_status?: string; refund_status?: string; refund_method?: string | null; refund_error?: string }) => void;
 }
 
-const CancelItemPanel: React.FC<CancelItemPanelProps> = ({ item, onCancel, onConfirmed }) => {
+const CancelItemPanel: React.FC<CancelItemPanelProps> = ({ item, isPaid, hasStripePayment, onCancel, onConfirmed }) => {
   const [reason, setReason] = useState<string>(CANCEL_REASONS[0]);
   const [restockAction, setRestockAction] = useState<'draft' | 'for-sale-b2b' | 'archived'>('draft');
+  const [refundMethod, setRefundMethod] = useState<'wallet' | 'stripe'>('wallet');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const handleConfirm = async () => {
     setSubmitting(true);
     setError('');
-    const result = await cancelOrderItem(item.id, reason, restockAction);
+    const result = await cancelOrderItem(item.id, reason, restockAction, isPaid ? refundMethod : undefined);
     setSubmitting(false);
 
     if (!result.success) {
@@ -137,6 +182,10 @@ const CancelItemPanel: React.FC<CancelItemPanelProps> = ({ item, onCancel, onCon
               </div>
             </div>
 
+            {isPaid && (
+              <RefundMethodChoice value={refundMethod} onChange={setRefundMethod} hasStripePayment={hasStripePayment} />
+            )}
+
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
                 <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
@@ -167,6 +216,126 @@ const CancelItemPanel: React.FC<CancelItemPanelProps> = ({ item, onCancel, onCon
   );
 };
 
+interface CancelOrderPanelProps {
+  order: B2BOrder;
+  isPaid: boolean;
+  hasStripePayment: boolean;
+  onCancel: () => void;
+  onConfirmed: (result: { total_refund?: number; refund_status?: string; refund_method?: string | null; refund_error?: string }) => void;
+}
+
+const CancelOrderPanel: React.FC<CancelOrderPanelProps> = ({ order, isPaid, hasStripePayment, onCancel, onConfirmed }) => {
+  const activeItems = order.order_items.filter((i) => i.status === 'active');
+  const totalToRefund = activeItems.reduce((sum, i) => sum + i.line_total, 0);
+
+  const [reason, setReason] = useState<string>(CANCEL_REASONS[0]);
+  const [restockAction, setRestockAction] = useState<'draft' | 'for-sale-b2b' | 'archived'>('draft');
+  const [refundMethod, setRefundMethod] = useState<'wallet' | 'stripe'>('wallet');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleConfirm = async () => {
+    setSubmitting(true);
+    setError('');
+    const result = await cancelOrder(order.id, reason, restockAction, isPaid ? refundMethod : undefined);
+    setSubmitting(false);
+
+    if (!result.success) {
+      setError(result.error || "Impossible d'annuler cette commande");
+      return;
+    }
+    onConfirmed(result);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] overflow-y-auto">
+      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onCancel} />
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-5 border-b border-gray-100">
+            <h3 className="text-base font-semibold text-gray-900">Annuler toute la commande</h3>
+            <button onClick={onCancel} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="p-5 space-y-4">
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-sm text-gray-700">
+                {activeItems.length} article{activeItems.length > 1 ? 's' : ''} de la commande #{order.order_number}
+              </p>
+              <p className="text-sm font-semibold text-gray-900 mt-1">Total à rembourser : {totalToRefund.toFixed(0)} €</p>
+            </div>
+
+            <div>
+              <label htmlFor="cancel-order-reason" className="block text-sm font-medium text-gray-700 mb-2">
+                Raison de l'annulation
+              </label>
+              <select
+                id="cancel-order-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm bg-white"
+              >
+                {CANCEL_REASONS.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Que faire des articles ?</label>
+              <div className="space-y-2">
+                {RESTOCK_OPTIONS.map((opt) => (
+                  <label key={opt.value} className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="radio"
+                      name="restock-action-order"
+                      value={opt.value}
+                      checked={restockAction === opt.value}
+                      onChange={() => setRestockAction(opt.value)}
+                      className="h-4 w-4 text-gray-900 focus:ring-gray-900"
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {isPaid && (
+              <RefundMethodChoice value={refundMethod} onChange={setRefundMethod} hasStripePayment={hasStripePayment} />
+            )}
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 p-5 pt-0">
+            <button
+              onClick={onCancel}
+              disabled={submitting}
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-sm disabled:opacity-50"
+            >
+              Retour
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={submitting}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              {submitting ? 'Annulation...' : 'Confirmer l\'annulation de la commande'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface B2BOrderDetailModalProps {
   order: B2BOrder | null;
   onClose: () => void;
@@ -176,18 +345,35 @@ interface B2BOrderDetailModalProps {
 
 export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order, onClose, onOrderUpdated }) => {
   const [cancellingItem, setCancellingItem] = useState<B2BOrderItem | null>(null);
+  const [cancellingOrder, setCancellingOrder] = useState(false);
   const [refundNotice, setRefundNotice] = useState<string | null>(null);
 
   if (!order) return null;
 
-  const handleConfirmed = (result: { refund_status?: string; refund_error?: string }) => {
+  const isPaid = order.payment_status === 'paid';
+  const hasStripePayment = Boolean(order.stripe_payment_intent_id);
+  const hasActiveItems = order.order_items.some((i) => i.status === 'active');
+
+  const handleItemConfirmed = (result: { refund_status?: string; refund_method?: string | null; refund_error?: string }) => {
     setCancellingItem(null);
     if (result.refund_status === 'succeeded') {
-      setRefundNotice('Article annulé et remboursement Stripe effectué avec succès.');
+      setRefundNotice(`Article annulé et remboursement effectué avec succès (${refundMethodLabel(result.refund_method)}).`);
     } else if (result.refund_status === 'failed') {
-      setRefundNotice(`Article annulé, mais le remboursement Stripe a échoué (${result.refund_error || 'erreur inconnue'}) — à traiter manuellement depuis le dashboard Stripe.`);
+      setRefundNotice(`Article annulé, mais le remboursement a échoué (${result.refund_error || 'erreur inconnue'}) — à traiter manuellement.`);
     } else {
       setRefundNotice(null);
+    }
+    onOrderUpdated();
+  };
+
+  const handleOrderConfirmed = (result: { total_refund?: number; refund_status?: string; refund_method?: string | null; refund_error?: string }) => {
+    setCancellingOrder(false);
+    if (result.refund_status === 'succeeded') {
+      setRefundNotice(`Commande annulée et ${(result.total_refund || 0).toFixed(0)} € remboursés avec succès (${refundMethodLabel(result.refund_method)}).`);
+    } else if (result.refund_status === 'failed') {
+      setRefundNotice(`Commande annulée, mais le remboursement a échoué (${result.refund_error || 'erreur inconnue'}) — à traiter manuellement.`);
+    } else {
+      setRefundNotice('Commande annulée.');
     }
     onOrderUpdated();
   };
@@ -253,7 +439,18 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
               </div>
 
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Articles</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Articles</p>
+                  {hasActiveItems && !['shipped', 'delivered', 'cancelled'].includes(order.status) && (
+                    <button
+                      onClick={() => setCancellingOrder(true)}
+                      className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-800 transition-colors"
+                    >
+                      <Ban className="h-3.5 w-3.5" />
+                      Annuler toute la commande
+                    </button>
+                  )}
+                </div>
                 <div className="border border-gray-100 rounded-lg overflow-hidden">
                   <table className="w-full">
                     <thead>
@@ -292,6 +489,12 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                       <Badge variant="danger">Article annulé</Badge>
                                       {item.cancellation_reason && (
                                         <span className="text-xs text-gray-400">{item.cancellation_reason}</span>
+                                      )}
+                                      {item.refund_status === 'succeeded' && (
+                                        <span className="text-xs text-green-600">Remboursé ({refundMethodLabel(item.refund_method)})</span>
+                                      )}
+                                      {item.refund_status === 'failed' && (
+                                        <span className="text-xs text-red-600">Échec du remboursement</span>
                                       )}
                                     </div>
                                   )}
@@ -344,8 +547,20 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
       {cancellingItem && (
         <CancelItemPanel
           item={cancellingItem}
+          isPaid={isPaid}
+          hasStripePayment={hasStripePayment}
           onCancel={() => setCancellingItem(null)}
-          onConfirmed={handleConfirmed}
+          onConfirmed={handleItemConfirmed}
+        />
+      )}
+
+      {cancellingOrder && (
+        <CancelOrderPanel
+          order={order}
+          isPaid={isPaid}
+          hasStripePayment={hasStripePayment}
+          onCancel={() => setCancellingOrder(false)}
+          onConfirmed={handleOrderConfirmed}
         />
       )}
     </>

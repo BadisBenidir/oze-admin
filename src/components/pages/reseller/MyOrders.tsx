@@ -9,7 +9,7 @@ interface MyOrdersProps {
 
 export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct }) => {
   const { isReseller, profile } = useResellerAuth();
-  const { orders, loading, error } = useMyB2BOrders(isReseller, profile?.id);
+  const { orders, loading, error, refresh } = useMyB2BOrders(isReseller, profile?.id);
 
   return (
     <div className="p-4 md:p-6">
@@ -24,6 +24,8 @@ export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct }) => {
         error={error}
         emptyMessage="Vos commandes passées depuis le catalogue apparaîtront ici."
         onOpenProduct={onOpenProduct}
+        canCancel
+        onOrderCancelled={refresh}
       />
     </div>
   );

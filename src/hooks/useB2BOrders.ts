@@ -13,6 +13,8 @@ export interface B2BOrderItem {
   cancelled_at: string | null;
   restock_action: 'draft' | 'for-sale-b2b' | 'archived' | null;
   refund_status: 'not_applicable' | 'succeeded' | 'failed' | null;
+  refund_method: 'wallet' | 'stripe' | null;
+  refund_error: string | null;
   is_loyalty_gift: boolean;
 }
 
@@ -21,6 +23,9 @@ export interface B2BOrder {
   order_number: string;
   status: string;
   email: string;
+  payment_status: string;
+  stripe_payment_intent_id: string | null;
+  placed_by_profile_id: string | null;
   subtotal: number;
   shipping_cost: number;
   total_amount: number;
@@ -44,7 +49,7 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
       let query = supabase
         .from('orders')
         .select(
-          'id, order_number, status, email, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), order_items(*)'
+          'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), order_items(*)'
         )
         .eq('order_channel', 'b2b');
 

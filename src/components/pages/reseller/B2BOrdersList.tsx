@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { MyB2BOrder } from '../../../hooks/useMyB2BOrders';
-import { ShoppingBag, ImageOff, AlertCircle, Eye, X, Package, MapPin, Truck, FileDown } from 'lucide-react';
+import { ShoppingBag, ImageOff, AlertCircle, Eye, X, Package, MapPin, Truck, FileDown, Ban } from 'lucide-react';
+import { CancelMyOrderModal } from './CancelMyOrderModal';
 
 const statusBadge = (order: MyB2BOrder) => {
   if (order.status === 'cancelled') return <Badge variant="danger">Annulée</Badge>;
@@ -41,6 +42,15 @@ interface B2BOrdersListProps {
   emptyMessage?: string;
   /** Ouvre la fiche complète de l'article (même si vendu/archivé depuis). */
   onOpenProduct: (productId: string) => void;
+  /**
+   * N'active le bouton "Annuler" que pour SES PROPRES commandes (MyOrders.tsx) —
+   * pas quand le contact principal consulte celles d'un coéquipier
+   * (TeamMemberDetail.tsx), où le serveur refuserait de toute façon
+   * (cancel-my-b2b-order-item vérifie placed_by_profile_id === auth.uid()).
+   */
+  canCancel?: boolean;
+  /** Rafraîchit la liste du parent après une annulation réussie. */
+  onOrderCancelled?: () => void;
 }
 
 export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
@@ -50,8 +60,11 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
   emptyTitle = 'Aucune commande',
   emptyMessage = 'Les commandes passées depuis le catalogue apparaîtront ici.',
   onOpenProduct,
+  canCancel = false,
+  onOrderCancelled,
 }) => {
   const [viewingOrder, setViewingOrder] = useState<MyB2BOrder | null>(null);
+  const [cancellingOrder, setCancellingOrder] = useState<MyB2BOrder | null>(null);
 
   const handleDownloadInvoice = () => {
     alert("La facture PDF n'est pas encore disponible au téléchargement. Contacte OZË Paris si tu en as besoin dès maintenant.");
@@ -271,13 +284,24 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                  <button
-                    onClick={handleDownloadInvoice}
-                    className="flex items-center justify-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
-                  >
-                    <FileDown className="h-4 w-4" />
-                    <span>Télécharger la facture</span>
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleDownloadInvoice}
+                      className="flex items-center justify-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                    >
+                      <FileDown className="h-4 w-4" />
+                      <span>Télécharger la facture</span>
+                    </button>
+                    {canCancel && !['shipped', 'delivered', 'cancelled'].includes(viewingOrder.status) && viewingOrder.order_items.some((i) => i.status === 'active') && (
+                      <button
+                        onClick={() => setCancellingOrder(viewingOrder)}
+                        className="flex items-center justify-center space-x-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm"
+                      >
+                        <Ban className="h-4 w-4" />
+                        <span>Annuler la commande</span>
+                      </button>
+                    )}
+                  </div>
                   <div className="w-full sm:w-56 space-y-1.5">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Sous-total</span>
@@ -297,6 +321,17 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {cancellingOrder && (
+        <CancelMyOrderModal
+          order={cancellingOrder}
+          onClose={() => setCancellingOrder(null)}
+          onCancelled={() => {
+            setViewingOrder(null);
+            onOrderCancelled?.();
+          }}
+        />
       )}
     </>
   );
