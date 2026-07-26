@@ -120,7 +120,7 @@ Deno.serve(async (req: Request) => {
           p_restock_action: RESTOCK_ACTION,
         });
         if (rpcError) return json({ error: rpcError.message }, 400);
-        totalRefund += Number(result?.line_total || 0);
+        totalRefund += Number(result?.refund_amount || 0);
         cancelledOrderStatus = result?.order_status;
       }
     }

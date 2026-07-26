@@ -97,7 +97,7 @@ Deno.serve(async (req: Request) => {
             const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
             const refund = await stripe.refunds.create({
               payment_intent: result.stripe_payment_intent_id,
-              amount: Math.round(Number(result.line_total) * 100),
+              amount: Math.round(Number(result.refund_amount) * 100),
             });
             refundStatus = 'succeeded';
             refundId = refund.id;
@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
         const { error: walletError } = await adminClient.rpc('credit_order_item_refund_to_wallet', {
           p_profile_id: result.placed_by_profile_id,
           p_reseller_id: result.reseller_id,
-          p_amount: Number(result.line_total),
+          p_amount: Number(result.refund_amount),
           p_order_id: result.order_id,
           p_note: `Remboursement (article annulé) — commande ${result.order_id}`,
         });

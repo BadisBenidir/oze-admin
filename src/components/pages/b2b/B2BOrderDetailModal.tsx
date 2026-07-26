@@ -101,6 +101,7 @@ interface CancelItemPanelProps {
 }
 
 const CancelItemPanel: React.FC<CancelItemPanelProps> = ({ item, isPaid, hasStripePayment, onCancel, onConfirmed }) => {
+  const refundAmount = item.line_total + (item.insured ? item.insurance_cost : 0);
   const [reason, setReason] = useState<string>(CANCEL_REASONS[0]);
   const [restockAction, setRestockAction] = useState<'draft' | 'for-sale-b2b' | 'archived'>('draft');
   const [refundMethod, setRefundMethod] = useState<'wallet' | 'stripe'>('wallet');
@@ -143,7 +144,12 @@ const CancelItemPanel: React.FC<CancelItemPanelProps> = ({ item, isPaid, hasStri
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-900">{item.product_snapshot?.name || 'Produit'}</p>
-                <p className="text-xs text-gray-500">{item.line_total.toFixed(0)} €</p>
+                <p className="text-xs text-gray-500">
+                  {item.line_total.toFixed(0)} €{item.insured ? ` + ${item.insurance_cost.toFixed(2)} € d'assurance` : ''}
+                </p>
+                {isPaid && (
+                  <p className="text-xs font-medium text-gray-700 mt-0.5">À rembourser : {refundAmount.toFixed(2)} €</p>
+                )}
               </div>
             </div>
 
@@ -226,7 +232,7 @@ interface CancelOrderPanelProps {
 
 const CancelOrderPanel: React.FC<CancelOrderPanelProps> = ({ order, isPaid, hasStripePayment, onCancel, onConfirmed }) => {
   const activeItems = order.order_items.filter((i) => i.status === 'active');
-  const totalToRefund = activeItems.reduce((sum, i) => sum + i.line_total, 0);
+  const totalToRefund = activeItems.reduce((sum, i) => sum + i.line_total + (i.insured ? i.insurance_cost : 0), 0);
 
   const [reason, setReason] = useState<string>(CANCEL_REASONS[0]);
   const [restockAction, setRestockAction] = useState<'draft' | 'for-sale-b2b' | 'archived'>('draft');

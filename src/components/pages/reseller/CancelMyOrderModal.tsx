@@ -32,7 +32,7 @@ export const CancelMyOrderModal: React.FC<CancelMyOrderModalProps> = ({ order, o
   };
 
   const targetItems = mode === 'all' ? activeItems : activeItems.filter((i) => selectedIds.has(i.id));
-  const totalRefund = targetItems.reduce((sum, i) => sum + i.line_total, 0);
+  const totalRefund = targetItems.reduce((sum, i) => sum + i.line_total + (i.insured ? i.insurance_cost : 0), 0);
 
   const handleConfirm = async () => {
     if (targetItems.length === 0) {
@@ -135,7 +135,9 @@ export const CancelMyOrderModal: React.FC<CancelMyOrderModalProps> = ({ order, o
                       )}
                     </div>
                     <span className="text-sm text-gray-700 flex-1 truncate">{item.product_snapshot?.name}</span>
-                    <span className="text-sm font-medium text-gray-900">{item.line_total.toFixed(0)} €</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {(item.line_total + (item.insured ? item.insurance_cost : 0)).toFixed(2)} €
+                    </span>
                   </label>
                 );
               })}
