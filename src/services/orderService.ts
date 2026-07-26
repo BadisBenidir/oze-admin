@@ -280,10 +280,14 @@ class OrderService {
   }
 
   async getRecentOrders(limit = 5) {
-    // 1. Récupérer les commandes
+    // 1. Récupérer les commandes — order_items minimal pour calculer le
+    // montant réellement remboursé d'une commande annulée (order.total_amount
+    // est recalculé par cancel_b2b_order_item/cancel_b2b_order sur les
+    // articles restants ACTIFS, donc retombe à ~0 après annulation complète
+    // — il ne reflète jamais ce qui a été rendu au client).
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
-      .select('*')
+      .select('*, order_items(line_total, insured, insurance_cost, status, refund_method)')
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -356,6 +360,62 @@ class OrderService {
     });
   }
 
+  // Annulations B2B (order_items.status = 'cancelled') — regroupées par
+  // (order_id, cancelled_at EXACT) : cancel_b2b_order (annulation de toute
+  // la commande) cancelle tous ses articles dans UNE seule transaction, donc
+  // ils partagent le même now() Postgres (constant par transaction) — alors
+  // que cancel_b2b_order_item et la boucle d'annulation partielle du
+  // revendeur (item par item, un appel RPC distinct par article) produisent
+  // chacun un cancelled_at différent. Un groupe de plus d'un article = une
+  // vraie annulation de commande entière ; un groupe d'un seul = un article
+  // annulé individuellement (même si c'était le dernier de la commande).
+  async getRecentCancellations(limit = 3) {
+    const { data, error } = await supabase
+      .from('order_items')
+      .select(
+        'id, order_id, line_total, insured, insurance_cost, cancelled_at, refund_method, product_snapshot, orders!inner(order_number, reseller:resellers(company_name), placed_by:profiles!orders_placed_by_profile_id_fkey(first_name, last_name))'
+      )
+      .eq('status', 'cancelled')
+      .not('cancelled_at', 'is', null)
+      .order('cancelled_at', { ascending: false })
+      .limit(limit * 3);
+
+    if (error || !data) return [];
+
+    const groups = new Map<string, any[]>();
+    for (const row of data as any[]) {
+      const key = `${row.order_id}_${row.cancelled_at}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(row);
+    }
+
+    const events = [...groups.values()].map((items) => {
+      const first = items[0];
+      const order = Array.isArray(first.orders) ? first.orders[0] : first.orders;
+      const reseller = Array.isArray(order?.reseller) ? order.reseller[0] : order?.reseller;
+      const placedBy = Array.isArray(order?.placed_by) ? order.placed_by[0] : order?.placed_by;
+      const contactName = placedBy ? `${placedBy.first_name || ''} ${placedBy.last_name || ''}`.trim() : '';
+      const who = contactName || reseller?.company_name || 'Revendeur';
+      const amount = items.reduce(
+        (sum: number, i: any) => sum + Number(i.line_total) + (i.insured ? Number(i.insurance_cost) : 0),
+        0
+      );
+
+      return {
+        id: `cancel-${first.order_id}-${first.cancelled_at}`,
+        isWholeOrder: items.length > 1,
+        productName: first.product_snapshot?.name || 'Produit',
+        amount,
+        who,
+        created_at: first.cancelled_at as string,
+      };
+    });
+
+    return events
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, limit);
+  }
+
   // `limit` porte sur CHAQUE source (commandes/clients/recharges), pas sur le
   // total renvoyé : "Voir plus" l'augmente de 10 à chaque clic pour élargir
   // le vivier avant de retrier et de retronquer au même nombre.
@@ -376,6 +436,9 @@ class OrderService {
 
     // 3. Récupérer les derniers rechargements de portefeuille B2B
     const recharges = await this.getRecentWalletRecharges(limit);
+
+    // 4. Récupérer les dernières annulations (commande entière ou article)
+    const cancellations = await this.getRecentCancellations(limit);
 
     const activities = [];
 
@@ -405,6 +468,16 @@ class OrderService {
       type: 'wallet',
       text: `💳 Recharge portefeuille de ${r.amount.toFixed(2)} € par ${r.displayName}`,
       date: new Date(r.created_at)
+    }));
+
+    // Transformer les annulations en format "Activité"
+    cancellations.forEach(c => activities.push({
+      id: c.id,
+      type: 'cancellation',
+      text: c.isWholeOrder
+        ? `🔴 Commande de ${c.amount.toFixed(2)} € annulée par ${c.who}`
+        : `🔴 Article ${c.productName} (${c.amount.toFixed(2)} €) annulé par ${c.who}`,
+      date: new Date(c.created_at)
     }));
 
     // Trier le tout du plus récent au plus ancien

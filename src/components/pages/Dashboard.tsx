@@ -332,6 +332,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                   }
 
                   const order = tx.data;
+                  const isCancelled = order.status === 'cancelled';
+                  // order.total_amount est recalculé sur les articles ACTIFS restants
+                  // (voir cancel_b2b_order_item/cancel_b2b_order) — retombe à ~0 après
+                  // une annulation complète, donc ne reflète jamais ce qui a été rendu.
+                  const cancelledItems = isCancelled ? (order.order_items || []).filter((i: any) => i.status === 'cancelled') : [];
+                  const refundedAmount = cancelledItems.reduce(
+                    (sum: number, i: any) => sum + Number(i.line_total) + (i.insured ? Number(i.insurance_cost) : 0),
+                    0
+                  );
+                  const refundMethod = cancelledItems.find((i: any) => i.refund_method)?.refund_method;
+                  const refundMethodLabel = refundMethod === 'wallet' ? 'Solde B2B' : refundMethod === 'stripe' ? 'Stripe' : null;
+
                   return (
                     <div key={order.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
                       <div className="flex items-center space-x-3">
@@ -344,10 +356,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-bold text-gray-900">{order.total_amount} €</p>
-                        <p className={`text-[10px] uppercase font-semibold ${['confirmed', 'shipped', 'delivered'].includes(order.status) ? 'text-green-600' : order.status === 'pending' ? 'text-orange-600' : 'text-red-600'}`}>
-                          {order.status === 'pending' ? 'En attente' : order.status === 'confirmed' ? 'Confirmée' : order.status === 'shipped' ? 'Expédiée' : order.status === 'delivered' ? 'Livrée' : order.status}
+                        <p className={`text-sm font-bold ${isCancelled ? 'text-red-600' : 'text-gray-900'}`}>
+                          {isCancelled ? `-${refundedAmount.toFixed(2)} €` : `${order.total_amount} €`}
                         </p>
+                        <p className={`text-[10px] uppercase font-semibold ${isCancelled ? 'text-red-600' : ['confirmed', 'shipped', 'delivered'].includes(order.status) ? 'text-green-600' : order.status === 'pending' ? 'text-orange-600' : 'text-red-600'}`}>
+                          {isCancelled ? 'Annulée' : order.status === 'pending' ? 'En attente' : order.status === 'confirmed' ? 'Confirmée' : order.status === 'shipped' ? 'Expédiée' : order.status === 'delivered' ? 'Livrée' : order.status}
+                        </p>
+                        {isCancelled && refundMethodLabel && (
+                          <p className="text-[10px] text-gray-400 mt-0.5">Remboursé en {refundMethodLabel}</p>
+                        )}
                       </div>
                     </div>
                   );
@@ -376,7 +393,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
               <div className="space-y-4">
                 {activities.map((activity) => (
                   <div key={activity.id} className="flex items-start space-x-3">
-                    <div className={`mt-1 h-2 w-2 rounded-full ${activity.type === 'order' ? 'bg-green-500' : activity.type === 'wallet' ? 'bg-violet-500' : 'bg-blue-500'}`} />
+                    <div className={`mt-1 h-2 w-2 rounded-full ${activity.type === 'order' ? 'bg-green-500' : activity.type === 'wallet' ? 'bg-violet-500' : activity.type === 'cancellation' ? 'bg-red-500' : 'bg-blue-500'}`} />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{activity.text}</p>
                       <p className="text-xs text-gray-500">{formatDateTime(activity.date)}</p>
