@@ -403,6 +403,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
 
   const held = product.held_by_other && !inCart;
   const disabled = adding || inCart || held;
+  const hasDiscount = Boolean(product.original_price && product.original_price > product.price);
+  const discountPercent = hasDiscount ? Math.round((1 - product.price / product.original_price!) * 100) : 0;
 
   const handleAdd = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -418,6 +420,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
   return (
     <Card hover className="overflow-hidden flex flex-col cursor-pointer" onClick={onView}>
       <div className="relative h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
+        {hasDiscount && (
+          <span className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-red-600 text-white text-xs font-semibold rounded">
+            -{discountPercent}%
+          </span>
+        )}
         {image ? (
           <img
             src={image}
@@ -441,7 +448,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
         {product.brand?.name && <p className="text-xs text-gray-500 mb-2">{product.brand.name}</p>}
         <div className="mt-auto space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-base font-semibold text-gray-900">{product.price.toFixed(0)} €</span>
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-base font-semibold text-gray-900">{product.price.toFixed(0)} €</span>
+              {hasDiscount && (
+                <span className="text-xs text-gray-400 line-through">{product.original_price!.toFixed(0)} €</span>
+              )}
+            </span>
             {isGrade(product.condition) && (
               <Badge variant={GRADE_VARIANTS[product.condition]}>Grade {product.condition}</Badge>
             )}

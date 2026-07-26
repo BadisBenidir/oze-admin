@@ -22,6 +22,7 @@ export interface B2BCatalogItem {
   status: string;
   created_at: string;
   price: number;
+  original_price: number | null;
   held_by_other: boolean;
   brand?: { id: string; name: string };
   category?: { id: string; name: string };

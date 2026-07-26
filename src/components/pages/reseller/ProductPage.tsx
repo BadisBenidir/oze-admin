@@ -83,6 +83,8 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
   const defectImages = normalizeImageArray(product.defect_images);
   const defectLines = (product.defects || '').split('\n').map((l) => l.trim()).filter(Boolean);
   const hasDefects = defectLines.length > 0 || defectImages.length > 0;
+  const hasDiscount = Boolean(product.original_price && product.original_price > product.price);
+  const discountPercent = hasDiscount ? Math.round((1 - product.price / product.original_price!) * 100) : 0;
 
   // Article consulté depuis l'historique de commandes une fois vendu/retiré
   // du catalogue : plus achetable, on n'affiche que la consultation (photos,
@@ -221,7 +223,15 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
             </span>
           </div>
 
-          <p className="text-3xl font-semibold text-gray-900 mt-4">{product.price.toFixed(0)} €</p>
+          <div className="flex items-center gap-3 mt-4">
+            <p className="text-3xl font-semibold text-gray-900">{product.price.toFixed(0)} €</p>
+            {hasDiscount && (
+              <>
+                <p className="text-lg text-gray-400 line-through">{product.original_price!.toFixed(0)} €</p>
+                <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-semibold rounded">-{discountPercent}%</span>
+              </>
+            )}
+          </div>
 
           {(product.material || (product.colors && product.colors.length > 0)) && (
             <div className="flex flex-wrap gap-2 mt-3 text-xs text-gray-500">
