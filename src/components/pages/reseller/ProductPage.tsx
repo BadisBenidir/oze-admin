@@ -13,7 +13,6 @@ import {
   Check,
   X,
   Tag,
-  ShieldCheck,
   AlertTriangle,
   ZoomIn,
   Clock,
@@ -162,10 +161,11 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
             )}
           </div>
 
-          {/* Section Imperfections */}
-          <div className="mt-6 bg-white border border-gray-100 rounded-lg p-4">
-            <p className="text-sm font-semibold text-gray-900 mb-3">Photos et détails des défauts</p>
-            {hasDefects ? (
+          {/* Section Imperfections — absente du DOM s'il n'y a rien à montrer, */}
+          {/* plutôt que d'afficher une boîte "Aucun défaut" par défaut. */}
+          {hasDefects && (
+            <div className="mt-6 bg-white border border-gray-100 rounded-lg p-4">
+              <p className="text-sm font-semibold text-gray-900 mb-3">Photos et détails des défauts</p>
               <div className="space-y-4">
                 {defectLines.length > 0 && (
                   <ul className="space-y-1.5">
@@ -194,13 +194,8 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
-                <ShieldCheck className="h-4 w-4 flex-shrink-0" />
-                <span>Aucun défaut notable sur cette pièce.</span>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Colonne droite : informations & achat (sticky) */}
