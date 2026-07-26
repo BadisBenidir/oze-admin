@@ -146,7 +146,7 @@ function ResellerApp() {
 
     switch (currentTab) {
       case 'my-orders':
-        return <MyOrders onOpenProduct={openProduct} />;
+        return <MyOrders onOpenProduct={openProduct} onWalletChanged={wallet.refresh} />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':

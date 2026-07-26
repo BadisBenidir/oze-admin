@@ -5,11 +5,18 @@ import { B2BOrdersList } from './B2BOrdersList';
 
 interface MyOrdersProps {
   onOpenProduct: (productId: string) => void;
+  /** Rafraîchit le solde affiché dans l'en-tête après un remboursement (annulation). */
+  onWalletChanged?: () => void;
 }
 
-export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct }) => {
+export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct, onWalletChanged }) => {
   const { isReseller, profile } = useResellerAuth();
   const { orders, loading, error, refresh } = useMyB2BOrders(isReseller, profile?.id);
+
+  const handleOrderCancelled = () => {
+    refresh();
+    onWalletChanged?.();
+  };
 
   return (
     <div className="p-4 md:p-6">
@@ -25,7 +32,7 @@ export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct }) => {
         emptyMessage="Vos commandes passées depuis le catalogue apparaîtront ici."
         onOpenProduct={onOpenProduct}
         canCancel
-        onOrderCancelled={refresh}
+        onOrderCancelled={handleOrderCancelled}
       />
     </div>
   );
