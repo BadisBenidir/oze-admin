@@ -4,7 +4,8 @@ import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useDrops, Drop } from '../../hooks/useDrops';
 import { CreateDropModal } from './b2b/CreateDropModal';
-import { Rocket, Plus, AlertCircle, Package, Pencil, Ban } from 'lucide-react';
+import { DropDetailModal } from './b2b/DropDetailModal';
+import { Rocket, Plus, AlertCircle, Package, Pencil, Ban, Eye } from 'lucide-react';
 
 const statusBadge = (status: Drop['status']) => {
   switch (status) {
@@ -27,6 +28,7 @@ export const B2BDrops: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingDrop, setEditingDrop] = useState<Drop | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [viewingDrop, setViewingDrop] = useState<Drop | null>(null);
 
   const handleCreate = () => {
     setEditingDrop(null);
@@ -107,6 +109,13 @@ export const B2BDrops: React.FC = () => {
                     <div className="flex items-center gap-2">
                       {statusBadge(drop.status)}
                       <button
+                        onClick={() => setViewingDrop(drop)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Voir le détail"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
                         onClick={() => handleEdit(drop)}
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Modifier"
@@ -143,6 +152,7 @@ export const B2BDrops: React.FC = () => {
                       <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Date prévue</th>
                       <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden sm:table-cell">Articles</th>
                       <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Statut</th>
+                      <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -157,6 +167,15 @@ export const B2BDrops: React.FC = () => {
                           </div>
                         </td>
                         <td className="py-3 px-4 md:px-6">{statusBadge(drop.status)}</td>
+                        <td className="py-3 px-4 md:px-6 text-right">
+                          <button
+                            onClick={() => setViewingDrop(drop)}
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Voir le détail"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -173,6 +192,8 @@ export const B2BDrops: React.FC = () => {
         onSubmit={editingDrop ? (input) => updateDrop(editingDrop.id, input) : createDrop}
         editingDrop={editingDrop}
       />
+
+      <DropDetailModal drop={viewingDrop} onClose={() => setViewingDrop(null)} />
     </div>
   );
 };
