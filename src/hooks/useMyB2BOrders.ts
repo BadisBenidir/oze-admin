@@ -29,6 +29,7 @@ export interface MyB2BOrder {
   tracking_number: string | null;
   tracking_url: string | null;
   created_at: string;
+  batch_id: string | null;
   order_items: MyB2BOrderItem[];
 }
 
@@ -56,7 +57,7 @@ export const useMyB2BOrders = (isAuthenticated: boolean = false, profileId: stri
       const { data, error: fetchError } = await supabase
         .from('orders')
         .select(
-          'id, order_number, status, payment_status, subtotal, shipping_cost, total_amount, shipping_address, tracking_number, tracking_url, created_at, order_items(*)'
+          'id, order_number, status, payment_status, subtotal, shipping_cost, total_amount, shipping_address, tracking_number, tracking_url, created_at, batch_id, order_items(*)'
         )
         .eq('order_channel', 'b2b')
         .eq('placed_by_profile_id', profileId)

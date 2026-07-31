@@ -1,13 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useB2BCart, CART_ITEM_SESSION_MS, INSURANCE_RATE } from '../../../hooks/useB2BCart';
 import { useWallet } from '../../../hooks/useWallet';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
-import { useGroupableOrder } from '../../../hooks/useGroupableOrder';
-import ShippingForm, { ShippingSelection, SHIPPING_RATES } from './ShippingForm';
 import CheckoutSummary from './CheckoutSummary';
 import { VolumeDiscountBanner } from './VolumeDiscountBanner';
 import { PromoCodeField, AppliedPromo } from './PromoCodeField';
-import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Package, CheckCircle, Wallet } from 'lucide-react';
+import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Wallet } from 'lucide-react';
 
 interface CartPageProps {
   cart: ReturnType<typeof useB2BCart>;
@@ -26,29 +24,7 @@ const formatCountdown = (ms: number): string => {
 
 export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWalletPaymentSuccess }) => {
   const { profile } = useResellerAuth();
-  const hasAddress = Boolean(profile?.address && profile?.city && profile?.postal_code);
-  const { groupableOrder } = useGroupableOrder(profile?.id);
 
-  const [shipping, setShipping] = useState<ShippingSelection>({
-    deliveryType: hasAddress ? 'domicile' : 'point_relais',
-    parcelPoint: null,
-  });
-  // Ne présélectionne les préférences enregistrées sur le profil qu'une
-  // seule fois (profile arrive de façon asynchrone après le premier rendu) —
-  // sans ce verrou, tout changement ultérieur du profil (autre onglet,
-  // reconnexion...) écraserait un choix déjà fait par le revendeur sur CETTE
-  // commande.
-  const shippingDefaultsApplied = useRef(false);
-  useEffect(() => {
-    if (shippingDefaultsApplied.current || !profile) return;
-    shippingDefaultsApplied.current = true;
-    if (profile.default_delivery_type === 'point_relais' && profile.default_relay_point) {
-      setShipping({ deliveryType: 'point_relais', parcelPoint: profile.default_relay_point as any });
-    } else if (profile.default_delivery_type === 'domicile' && hasAddress) {
-      setShipping({ deliveryType: 'domicile', parcelPoint: null });
-    }
-  }, [profile, hasAddress]);
-  const [groupWithOrder, setGroupWithOrder] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
@@ -74,30 +50,10 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
 
   const handlePay = async () => {
     if (!profile) return;
-    if (shipping.deliveryType === 'domicile' && !hasAddress) return;
-    if (shipping.deliveryType === 'point_relais' && !shipping.parcelPoint) {
-      setError('Veuillez sélectionner un point relais avant de payer.');
-      return;
-    }
     setError(null);
     setSubmitting(true);
     const paymentMethod = useWalletPayment ? (wallet.balance >= total ? 'wallet' : 'mixed') : 'card';
-    const result = await cart.startCheckout(
-      {
-        line1: profile.address || '',
-        line2: '',
-        city: profile.city || '',
-        postal_code: profile.postal_code || '',
-        country: profile.country || 'France',
-        instructions: profile.delivery_instructions || undefined,
-      },
-      shipping.deliveryType,
-      shipping.parcelPoint,
-      undefined,
-      groupWithOrder && groupableOrder ? groupableOrder.id : null,
-      appliedPromo?.code || null,
-      paymentMethod
-    );
+    const result = await cart.startCheckout(appliedPromo?.code || null, paymentMethod);
     // En cas de succès par carte/mixte, startCheckout redirige immédiatement
     // vers Stripe — on ne repasse jamais ici. Un paiement 100% solde renvoie
     // directement l'orderId (pas de Stripe du tout, voir onWalletPaymentSuccess).
@@ -133,9 +89,8 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
     );
   }
 
-  const shippingCost = groupWithOrder ? 0 : SHIPPING_RATES[shipping.deliveryType];
   const promoDiscountAmount = appliedPromo?.discountAmount || 0;
-  const total = cart.subtotal - cart.discountAmount - promoDiscountAmount + shippingCost + cart.insuranceTotal;
+  const total = cart.subtotal - cart.discountAmount - promoDiscountAmount + cart.insuranceTotal;
 
   return (
     <div className="p-4 md:p-6">
@@ -172,51 +127,6 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <div className="lg:col-span-2 space-y-4">
-          {groupableOrder && (
-            <div
-              onClick={() => setGroupWithOrder((v) => !v)}
-              role="checkbox"
-              aria-checked={groupWithOrder}
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setGroupWithOrder((v) => !v); } }}
-              className={`rounded-lg border-2 p-4 flex items-start gap-3 cursor-pointer transition-colors ${
-                groupWithOrder ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={groupWithOrder}
-                onChange={() => setGroupWithOrder((v) => !v)}
-                onClick={(e) => e.stopPropagation()}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0"
-              />
-              <Package className="h-4 w-4 text-gray-500 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900">Grouper avec ma commande en cours</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  N° {groupableOrder.order_number} — du {new Date(groupableOrder.created_at).toLocaleDateString('fr-FR')}
-                </p>
-              </div>
-              {groupWithOrder && (
-                <span className="flex items-center gap-1 text-sm font-semibold text-green-600 flex-shrink-0">
-                  <CheckCircle className="h-4 w-4" />
-                  Livraison offerte
-                </span>
-              )}
-            </div>
-          )}
-
-          <ShippingForm
-            companyAddress={{
-              address: profile?.address || '',
-              city: profile?.city || '',
-              postalCode: profile?.postal_code || '',
-              country: profile?.country || 'France',
-            }}
-            value={shipping}
-            onChange={setShipping}
-          />
-
           <VolumeDiscountBanner itemCount={cart.items.length} />
 
           <ul className="space-y-2">
@@ -285,11 +195,8 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
 
           <CheckoutSummary
             subtotal={cart.subtotal}
-            shipping={shippingCost}
             insurance={cart.insuranceTotal}
             total={total}
-            deliveryType={shipping.deliveryType}
-            grouped={groupWithOrder}
             discountRate={cart.discountRate}
             discountAmount={cart.discountAmount}
             promoCode={appliedPromo?.code}

@@ -35,6 +35,7 @@ export interface B2BOrder {
   created_at: string;
   reseller_id: string;
   reseller: { company_name: string } | null;
+  batch_id: string | null;
   order_items: B2BOrderItem[];
 }
 
@@ -51,7 +52,7 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
       let query = supabase
         .from('orders')
         .select(
-          'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), order_items(*)'
+          'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), batch_id, order_items(*)'
         )
         .eq('order_channel', 'b2b');
 

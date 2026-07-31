@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { B2BCatalogItem } from './useB2BCatalog';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
-import { DeliveryType } from '../components/pages/reseller/ShippingForm';
-import { ChronopostPickupPoint } from '../services/chronopostService';
 import { getVolumeDiscountRate } from '../utils/volumeDiscount';
 
 export interface B2BCartItem {
@@ -202,11 +200,6 @@ export const useB2BCart = (profileId: string | undefined) => {
    * donc volontairement PAS vidé ici, seulement au retour en cas de succès.
    */
   const startCheckout = async (
-    shippingAddress: Record<string, unknown>,
-    deliveryType: DeliveryType,
-    parcelPoint: ChronopostPickupPoint | null,
-    billingAddress?: Record<string, unknown>,
-    groupedWithOrderId?: string | null,
     promoCode?: string | null,
     paymentMethod: 'card' | 'wallet' | 'mixed' = 'card'
   ): Promise<CheckoutResult> => {
@@ -216,12 +209,7 @@ export const useB2BCart = (profileId: string | undefined) => {
 
     const { data, error } = await invokeEdgeFunction<{ url?: string; order_id?: string; unavailable_ids?: string[] }>('b2b-checkout', {
       product_ids: items.map((i) => i.id),
-      shipping_address: shippingAddress,
-      billing_address: billingAddress,
-      delivery_type: deliveryType,
-      parcel_point: parcelPoint,
       insured_product_ids: items.filter((i) => i.insured).map((i) => i.id),
-      grouped_with_order_id: groupedWithOrderId || null,
       promo_code: promoCode || null,
       payment_method: paymentMethod,
     });

@@ -63,38 +63,19 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { product_ids, shipping_address, billing_address, delivery_type, parcel_point, insured_product_ids, grouped_with_order_id, promo_code, payment_method } = await req.json();
+    const { product_ids, insured_product_ids, promo_code, payment_method } = await req.json();
     if (!Array.isArray(product_ids) || product_ids.length === 0) {
       return new Response(JSON.stringify({ error: 'Le panier est vide' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    if (!shipping_address?.line1 || !shipping_address?.city || !shipping_address?.postal_code) {
-      return new Response(JSON.stringify({ error: 'Adresse de livraison incomplète' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
 
-    // Tarif recalculé ici, jamais accepté depuis le client — même logique de
-    // confiance que les prix produits ci-dessous. Doit rester aligné avec
-    // SHIPPING_RATES dans ShippingForm.tsx (front, affichage uniquement).
-    // ⚠️ TEMPORAIRE : point_relais à 0€ pour un test en cours — remettre à 4.9.
-    const SHIPPING_RATES: Record<string, number> = { point_relais: 0, domicile: 14.9 };
-    if (delivery_type !== 'point_relais' && delivery_type !== 'domicile') {
-      return new Response(JSON.stringify({ error: 'Mode de livraison invalide' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    if (delivery_type === 'point_relais' && (!parcel_point?.name || !parcel_point?.zipCode || !parcel_point?.city)) {
-      return new Response(JSON.stringify({ error: 'Point relais incomplet' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    const shippingCost = SHIPPING_RATES[delivery_type];
+    // Le mode/l'adresse de livraison ne sont plus choisis au checkout : ils le
+    // seront au moment de la demande de livraison du lot (voir
+    // request_batch_delivery, 0054_delivery_batches.sql). Aucune commande
+    // n'est donc facturée de frais de port à ce stade.
+    const shippingCost = 0;
 
     // Client service-role : products est en RLS deny-all pour le rôle
     // revendeur (l'accès catalogue passe par la vue b2b_catalog), donc on lit
@@ -185,84 +166,27 @@ Deno.serve(async (req: Request) => {
     const subtotalAfterDiscounts = Math.max(0, rawSubtotal - discountAmount - promoDiscountAmount);
     const lineItemRatio = rawSubtotal > 0 ? subtotalAfterDiscounts / rawSubtotal : 1;
 
-    // Commande groupée : livraison gratuite si le client rattache cette
-    // commande à une commande précédente déjà payée et pas encore expédiée.
-    // Revalidé entièrement ici — jamais de confiance sur un "c'est gratuit"
-    // envoyé par le client, même logique que les prix produits/livraison.
-    let finalShippingCost = shippingCost;
-    let validGroupedOrderId: string | null = null;
-    if (grouped_with_order_id) {
-      const { data: groupOrder } = await adminClient
-        .from('orders')
-        .select('id, placed_by_profile_id, payment_status, status, created_at')
-        .eq('id', grouped_with_order_id)
-        .maybeSingle();
-
-      const cutoff = Date.now() - 21 * 24 * 60 * 60 * 1000;
-      const isEligible =
-        groupOrder &&
-        groupOrder.placed_by_profile_id === user.id &&
-        groupOrder.payment_status === 'paid' &&
-        !['shipped', 'delivered', 'cancelled'].includes(groupOrder.status) &&
-        new Date(groupOrder.created_at).getTime() >= cutoff;
-
-      if (isEligible) {
-        finalShippingCost = 0;
-        validGroupedOrderId = groupOrder.id;
-      }
-    }
-
     const { data: profile } = await adminClient
       .from('profiles')
-      .select('email, first_name, last_name, phone')
+      .select('email, first_name, last_name, phone, address, city, postal_code, country')
       .eq('id', user.id)
       .single();
     const email = profile?.email || user.email || '';
     const contactName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Revendeur';
     const phone = profile?.phone || '';
 
-    // Destination réelle de l'expédition, dans le format attendu par
-    // l'intégration Sendcloud partagée (voir oze-storefront/supabase/functions/
-    // sendcloud-label et _shared/finalizeOrder.ts : sa.address, sa.postcode,
-    // sa.pickup_point_code/network, sa.name, sa.phone — mêmes noms de champs
-    // que côté B2C, pour réutiliser la même fonction de création de colis
-    // sans dupliquer l'intégration). L'adresse entreprise reste toujours
-    // l'adresse de facturation.
-    const deliveryAddress = delivery_type === 'point_relais'
-      ? {
-          // sendcloud-label lit sa.address pour to_address.address_line_1 —
-          // un champ obligatoire côté Sendcloud même pour un envoi en point
-          // relais (il identifie l'adresse du colis, to_service_point ne
-          // fait que le router physiquement vers le relais). pickup_point_*
-          // reste dupliqué pour l'affichage/l'email, mais SEUL `address`
-          // (et non pickup_point_address) est réellement lu pour l'API —
-          // l'oublier laissait ce champ vide et faisait échouer la création
-          // du colis ("This field cannot be blank", source address_1).
-          address: parcel_point.address || parcel_point.name,
-          pickup_point_code: parcel_point.code,
-          pickup_point_network: parcel_point.network,
-          pickup_point_name: parcel_point.name,
-          pickup_point_address: parcel_point.address,
-          pickup_point_zip: parcel_point.zipCode,
-          pickup_point_city: parcel_point.city,
-          city: parcel_point.city,
-          postcode: parcel_point.zipCode,
-          country: parcel_point.country || 'FR',
-          name: contactName,
-          phone,
-        }
-      : {
-          address: shipping_address.line1,
-          city: shipping_address.city,
-          postcode: shipping_address.postal_code,
-          country: shipping_address.country,
-          name: contactName,
-          phone,
-          // Consignes du revendeur (étage, digicode...) — remontées telles
-          // quelles pour l'équipe logistique, sans effet sur la création du
-          // colis Sendcloud (champ non lu par cette intégration).
-          instructions: shipping_address.instructions || undefined,
-        };
+    // L'adresse de livraison n'est plus connue à ce stade (voir plus haut) —
+    // seule l'adresse de l'entreprise (facturation) est conservée sur la
+    // commande, à titre d'information ; elle ne sert plus à générer un colis
+    // Sendcloud ici (ça n'arrivera qu'à la demande de livraison du lot).
+    const billingAddress = {
+      address: profile?.address || '',
+      city: profile?.city || '',
+      postcode: profile?.postal_code || '',
+      country: profile?.country || 'France',
+      name: contactName,
+      phone,
+    };
 
     // Paiement par solde portefeuille : pas de session Stripe du tout, la
     // commande est créée et débitée atomiquement en base via
@@ -272,14 +196,14 @@ Deno.serve(async (req: Request) => {
       const { data: walletResult, error: walletError } = await adminClient.rpc('pay_b2b_order_with_wallet', {
         p_reseller_id: resellerId,
         p_product_ids: products.map((p) => p.id),
-        p_shipping_address: { ...deliveryAddress, delivery_type },
-        p_billing_address: billing_address || shipping_address,
+        p_shipping_address: null,
+        p_billing_address: billingAddress,
         p_email: email,
         p_placed_by_profile_id: user.id,
-        p_shipping_cost: finalShippingCost,
+        p_shipping_cost: shippingCost,
         p_insured_product_ids: insuredProducts.map((p) => p.id),
         p_insurance_cost: insuranceCost,
-        p_grouped_with_order_id: validGroupedOrderId,
+        p_grouped_with_order_id: null,
         p_insured_value: insuredValue,
         p_discount_rate: discountRate,
         p_discount_amount: discountAmount,
@@ -351,7 +275,7 @@ Deno.serve(async (req: Request) => {
     // paiement) de cette part.
     let mixedWalletAmount = 0;
     let chargeRatio = 1;
-    const grandTotalBeforeWallet = subtotalAfterDiscounts + finalShippingCost + insuranceCost;
+    const grandTotalBeforeWallet = subtotalAfterDiscounts + shippingCost + insuranceCost;
     if (payment_method === 'mixed') {
       const { data: profileRow } = await adminClient
         .from('profiles')
@@ -387,18 +311,6 @@ Deno.serve(async (req: Request) => {
           },
           quantity: 1,
         })),
-        {
-          price_data: {
-            currency: 'eur',
-            product_data: {
-              name: validGroupedOrderId
-                ? 'Livraison — Groupée (gratuite)'
-                : delivery_type === 'point_relais' ? 'Livraison — Point Relais' : 'Livraison — À l\'entreprise',
-            },
-            unit_amount: Math.round(finalShippingCost * chargeRatio * 100),
-          },
-          quantity: 1,
-        },
         ...(insuranceCost > 0
           ? [{
               price_data: {
@@ -415,16 +327,9 @@ Deno.serve(async (req: Request) => {
         reseller_id: resellerId,
         placed_by_profile_id: user.id,
         product_ids: JSON.stringify(products.map((p) => p.id)),
-        // deliveryAddress porte déjà tout ce dont Sendcloud/l'admin ont
-        // besoin (pickup_point_code/network/name/address/zip/city, ou
-        // address/city/postcode pour une livraison entreprise) : ne PAS
-        // aussi sérialiser l'objet parcel_point brut à côté (lat/lng/
-        // distance inutiles + adresse/nom dupliqués) — Stripe limite chaque
-        // valeur de metadata à 500 caractères, et l'objet complet dépassait
-        // largement cette limite pour un point relais.
-        shipping_address: JSON.stringify({ ...deliveryAddress, delivery_type }),
-        billing_address: JSON.stringify(billing_address || shipping_address),
-        shipping_cost: String(finalShippingCost),
+        // L'adresse de livraison n'est plus connue au checkout — seule
+        // l'adresse entreprise (facturation) est transmise ici.
+        billing_address: JSON.stringify(billingAddress),
         insured_product_ids: JSON.stringify(insuredProducts.map((p) => p.id)),
         insurance_cost: String(insuranceCost),
         insured_value: String(insuredValue),
@@ -433,7 +338,6 @@ Deno.serve(async (req: Request) => {
         promo_code_id: promoCodeId || '',
         promo_code: promoCodeLabel || '',
         promo_discount_amount: String(promoDiscountAmount),
-        grouped_with_order_id: validGroupedOrderId || '',
         wallet_amount_used: String(mixedWalletAmount),
         email,
       },

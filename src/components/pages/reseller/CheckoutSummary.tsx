@@ -1,13 +1,9 @@
 import React from 'react';
-import { DeliveryType } from './ShippingForm';
 
 interface CheckoutSummaryProps {
   subtotal: number;
-  shipping: number;
   insurance: number;
   total: number;
-  deliveryType: DeliveryType;
-  grouped?: boolean;
   discountRate?: number;
   discountAmount?: number;
   promoCode?: string | null;
@@ -17,14 +13,14 @@ interface CheckoutSummaryProps {
 // Adapté de oze-storefront/CheckoutSummary.tsx : la liste des articles vit
 // désormais directement dans CartPage (avec la case à cocher assurance par
 // article) pour ne pas la dupliquer — ce composant ne porte plus que le
-// détail chiffré (sous-total, remises, livraison, assurance, total).
+// détail chiffré (sous-total, remises, assurance, total). Le mode/l'adresse
+// de livraison n'étant plus choisis au checkout (voir CartPage), aucune
+// commande n'est facturée de frais de port ici — la livraison n'est donc
+// plus affichée qu'à titre indicatif, toujours gratuite.
 const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({
   subtotal,
-  shipping,
   insurance,
   total,
-  deliveryType,
-  grouped,
   discountRate = 0,
   discountAmount = 0,
   promoCode = null,
@@ -59,13 +55,9 @@ const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-500">
             Livraison
-            <span className="block text-xs text-gray-400">
-              {grouped ? 'Groupée avec une commande existante' : deliveryType === 'point_relais' ? 'Point Relais' : "Livraison à l'entreprise"}
-            </span>
+            <span className="block text-xs text-gray-400">À organiser après paiement</span>
           </span>
-          <span className={grouped ? 'text-green-600 font-medium' : 'text-gray-900'}>
-            {grouped ? 'Gratuite' : `${shipping.toFixed(2)} €`}
-          </span>
+          <span className="text-green-600 font-medium">Gratuite</span>
         </div>
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-500">Assurance colis</span>
