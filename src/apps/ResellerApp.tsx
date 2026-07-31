@@ -51,6 +51,14 @@ function ResellerApp() {
   const [checkoutOrderId, setCheckoutOrderId] = useState<string | null>(null);
   const [topUpStatus, setTopUpStatus] = useState<'success' | 'cancel' | null>(null);
   const [pathname, setPathname] = useState(window.location.pathname);
+  // Retour Stripe = rechargement COMPLET de la page : à ce tout premier
+  // montage, `profile` (donc `cart`'s cartKey, dérivé de profile.id) n'est
+  // pas encore chargé. Appeler cart.clear() tout de suite ne fait rien sur
+  // localStorage (cartKey encore null, voir useB2BCart.write) — le panier
+  // "fantôme" était ensuite rechargé depuis localStorage dès que profile
+  // arrivait. On mémorise donc juste l'intention, et on vide réellement le
+  // panier seulement une fois profile.id connu (voir l'effet plus bas).
+  const [pendingCartClear, setPendingCartClear] = useState(false);
 
   useEffect(() => {
     const onPopState = () => setPathname(window.location.pathname);
@@ -97,7 +105,7 @@ function ResellerApp() {
       window.history.replaceState({}, '', window.location.pathname);
 
       if (status === 'success') {
-        cart.clear();
+        setPendingCartClear(true);
       }
     }
 
@@ -111,6 +119,15 @@ function ResellerApp() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Vide réellement le panier une fois profile.id (donc le cartKey correct)
+  // disponible — voir le commentaire sur pendingCartClear plus haut.
+  useEffect(() => {
+    if (!pendingCartClear || !profile?.id) return;
+    cart.clear();
+    setPendingCartClear(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCartClear, profile?.id]);
 
   // Paiement par solde : pas de redirection Stripe, la commande est créée
   // et confirmée immédiatement côté serveur — on affiche donc le même écran
