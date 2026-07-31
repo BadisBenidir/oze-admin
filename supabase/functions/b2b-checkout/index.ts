@@ -188,6 +188,19 @@ Deno.serve(async (req: Request) => {
       phone,
     };
 
+    // orders.shipping_address est NOT NULL : on ne connaît plus l'adresse de
+    // livraison réelle au checkout (choisie plus tard, par lot, voir
+    // request_batch_delivery), mais on ne peut pas non plus laisser la
+    // colonne à null. On y met donc l'adresse entreprise connue à défaut
+    // (même valeur que billingAddress), avec une note explicite.
+    const shippingAddressPlaceholder = {
+      address: profile?.address || null,
+      city: profile?.city || null,
+      postcode: profile?.postal_code || null,
+      country: profile?.country || null,
+      note: 'À définir lors de la demande de livraison',
+    };
+
     // Paiement par solde portefeuille : pas de session Stripe du tout, la
     // commande est créée et débitée atomiquement en base via
     // pay_b2b_order_with_wallet (verrouillage de ligne + vérification de
@@ -196,7 +209,7 @@ Deno.serve(async (req: Request) => {
       const { data: walletResult, error: walletError } = await adminClient.rpc('pay_b2b_order_with_wallet', {
         p_reseller_id: resellerId,
         p_product_ids: products.map((p) => p.id),
-        p_shipping_address: null,
+        p_shipping_address: shippingAddressPlaceholder,
         p_billing_address: billingAddress,
         p_email: email,
         p_placed_by_profile_id: user.id,
@@ -328,7 +341,10 @@ Deno.serve(async (req: Request) => {
         placed_by_profile_id: user.id,
         product_ids: JSON.stringify(products.map((p) => p.id)),
         // L'adresse de livraison n'est plus connue au checkout — seule
-        // l'adresse entreprise (facturation) est transmise ici.
+        // l'adresse entreprise (facturation) est transmise ici, avec un
+        // placeholder pour shipping_address (colonne NOT NULL, voir
+        // shippingAddressPlaceholder plus haut).
+        shipping_address: JSON.stringify(shippingAddressPlaceholder),
         billing_address: JSON.stringify(billingAddress),
         insured_product_ids: JSON.stringify(insuredProducts.map((p) => p.id)),
         insurance_cost: String(insuranceCost),
