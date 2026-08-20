@@ -171,7 +171,7 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
               </div>
 
               <div className="p-6 space-y-6">
-                {viewingOrder.status === 'shipped' && viewingOrder.tracking_number && (
+                {!viewingOrder.order_items.some((i) => i.shipment_parcel?.tracking_number) && viewingOrder.status === 'shipped' && viewingOrder.tracking_number && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
                     <Truck className="h-5 w-5 text-blue-600 flex-shrink-0" />
                     <div>
@@ -257,6 +257,26 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                     {item.is_loyalty_gift && (
                                       <div className="mt-1">
                                         <Badge variant="warning">🎁 Cadeau Fidélité offert</Badge>
+                                      </div>
+                                    )}
+                                    {!isCancelled && item.fulfillment_status === 'shipped' && (
+                                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                        <Badge variant="success">Expédié</Badge>
+                                        {item.shipment_parcel?.tracking_number && (
+                                          <span className="text-xs text-gray-500" onClick={(e) => e.stopPropagation()}>
+                                            {item.shipment_parcel.tracking_number}
+                                            {item.shipment_parcel.tracking_url && (
+                                              <a
+                                                href={item.shipment_parcel.tracking_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="ml-1 text-blue-600 underline"
+                                              >
+                                                suivre
+                                              </a>
+                                            )}
+                                          </span>
+                                        )}
                                       </div>
                                     )}
                                     {isCancelled && (

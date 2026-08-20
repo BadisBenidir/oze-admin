@@ -4,6 +4,8 @@ import { Badge } from '../ui/Badge';
 import { useOrders, useOrderStats } from '../../hooks/useOrders';
 import { OrderDetail } from './OrderDetail';
 import { B2BOrders } from './B2BOrders';
+import { ReceptionView } from './b2b/ReceptionView';
+import { ShipmentRequestsView } from './b2b/ShipmentRequestsView';
 import { OrderTrackingCell } from '../orders/OrderTrackingCell';
 import {
   ShipmentStatusFilter,
@@ -44,6 +46,12 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
   // "Commandes" plutôt que sous "Revendeurs" (voir navigation.ts).
   if (activeSubTab === 'b2b-orders') {
     return <B2BOrders />;
+  }
+  if (activeSubTab === 'reception') {
+    return <ReceptionView />;
+  }
+  if (activeSubTab === 'shipment-requests') {
+    return <ShipmentRequestsView />;
   }
 
   // Si un ordre est sélectionné, afficher la page de détail

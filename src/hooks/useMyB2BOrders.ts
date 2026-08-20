@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
+export interface MyB2BShipmentParcel {
+  tracking_number: string | null;
+  tracking_url: string | null;
+  label_url: string | null;
+  sendcloud_parcel_id: string | null;
+  weight_kg: number | null;
+}
+
 export interface MyB2BOrderItem {
   id: string;
   product_id: string;
@@ -15,6 +23,10 @@ export interface MyB2BOrderItem {
   refund_status: 'not_applicable' | 'succeeded' | 'failed' | null;
   refund_method: 'wallet' | 'stripe' | null;
   is_loyalty_gift: boolean;
+  fulfillment_status: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'shipped';
+  shipment_id: string | null;
+  parcel_id: string | null;
+  shipment_parcel: MyB2BShipmentParcel | null;
 }
 
 export interface MyB2BOrder {
@@ -29,7 +41,6 @@ export interface MyB2BOrder {
   tracking_number: string | null;
   tracking_url: string | null;
   created_at: string;
-  batch_id: string | null;
   order_items: MyB2BOrderItem[];
 }
 
@@ -57,7 +68,7 @@ export const useMyB2BOrders = (isAuthenticated: boolean = false, profileId: stri
       const { data, error: fetchError } = await supabase
         .from('orders')
         .select(
-          'id, order_number, status, payment_status, subtotal, shipping_cost, total_amount, shipping_address, tracking_number, tracking_url, created_at, batch_id, order_items(*)'
+          'id, order_number, status, payment_status, subtotal, shipping_cost, total_amount, shipping_address, tracking_number, tracking_url, created_at, order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg))'
         )
         .eq('order_channel', 'b2b')
         .eq('placed_by_profile_id', profileId)

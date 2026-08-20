@@ -53,6 +53,21 @@ const orderStatusBadge = (status: string) => {
 const refundMethodLabel = (method?: string | null) =>
   method === 'wallet' ? 'crédit portefeuille' : method === 'stripe' ? 'Stripe' : '';
 
+const fulfillmentBadge = (status: B2BOrderItem['fulfillment_status']) => {
+  switch (status) {
+    case 'received':
+      return <Badge variant="warning">Reçu</Badge>;
+    case 'ready_to_ship':
+      return <Badge variant="info">Prêt à expédier</Badge>;
+    case 'delivery_requested':
+      return <Badge variant="info">Livraison demandée</Badge>;
+    case 'shipped':
+      return <Badge variant="success">Expédié</Badge>;
+    default:
+      return null;
+  }
+};
+
 // Choix du mode de remboursement, partagé entre l'annulation d'un article et
 // celle de la commande entière — l'option Stripe n'est proposée que si la
 // commande a réellement été payée (au moins en partie) par carte.
@@ -488,6 +503,26 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                   {item.is_loyalty_gift && (
                                     <div className="mt-1">
                                       <Badge variant="warning">🎁 Cadeau Fidélité — 0 €</Badge>
+                                    </div>
+                                  )}
+                                  {!isCancelled && fulfillmentBadge(item.fulfillment_status) && (
+                                    <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                      {fulfillmentBadge(item.fulfillment_status)}
+                                      {item.shipment_parcel?.tracking_number && (
+                                        <span className="text-xs text-gray-500">
+                                          Suivi : {item.shipment_parcel.tracking_number}
+                                          {item.shipment_parcel.tracking_url && (
+                                            <a
+                                              href={item.shipment_parcel.tracking_url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="ml-1 text-blue-600 underline"
+                                            >
+                                              suivre
+                                            </a>
+                                          )}
+                                        </span>
+                                      )}
                                     </div>
                                   )}
                                   {isCancelled && (

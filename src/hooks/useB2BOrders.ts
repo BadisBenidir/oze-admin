@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
+export interface B2BShipmentParcel {
+  tracking_number: string | null;
+  tracking_url: string | null;
+  label_url: string | null;
+  sendcloud_parcel_id: string | null;
+  weight_kg: number | null;
+}
+
 export interface B2BOrderItem {
   id: string;
   product_id: string;
@@ -18,6 +26,10 @@ export interface B2BOrderItem {
   refund_method: 'wallet' | 'stripe' | null;
   refund_error: string | null;
   is_loyalty_gift: boolean;
+  fulfillment_status: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'shipped';
+  shipment_id: string | null;
+  parcel_id: string | null;
+  shipment_parcel: B2BShipmentParcel | null;
 }
 
 export interface B2BOrder {
@@ -35,7 +47,6 @@ export interface B2BOrder {
   created_at: string;
   reseller_id: string;
   reseller: { company_name: string } | null;
-  batch_id: string | null;
   order_items: B2BOrderItem[];
 }
 
@@ -52,7 +63,7 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
       let query = supabase
         .from('orders')
         .select(
-          'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), batch_id, order_items(*)'
+          'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg))'
         )
         .eq('order_channel', 'b2b');
 

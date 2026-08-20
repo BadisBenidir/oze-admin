@@ -27,7 +27,8 @@ import {
   Gavel,
   Handshake,
   LayoutGrid,
-  Rocket
+  Rocket,
+  PackageCheck
 } from 'lucide-react';
 import { MenuItem } from '../types';
 
@@ -52,6 +53,8 @@ export const navigationItems: MenuItem[] = [
       { id: 'all-orders', label: 'Toutes les commandes', path: '/orders/all', icon: List },
       { id: 'web-orders', label: 'Commandes site web', path: '/orders/web', icon: Globe },
       { id: 'b2b-orders', label: 'Commandes B2B', path: '/orders/b2b', icon: Handshake },
+      { id: 'reception', label: 'Vue Réception', path: '/orders/reception', icon: PackageCheck },
+      { id: 'shipment-requests', label: 'Demandes de livraison', path: '/orders/shipment-requests', icon: Truck },
       { id: 'external-orders', label: 'Commandes externes', path: '/orders/external', icon: Archive },
     ]
   },

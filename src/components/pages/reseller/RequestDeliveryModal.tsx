@@ -2,22 +2,21 @@ import React, { useState } from 'react';
 import { X, Truck, AlertCircle } from 'lucide-react';
 import ShippingForm, { ShippingSelection } from './ShippingForm';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
-import { DeliveryBatch } from '../../../hooks/useDeliveryBatches';
 
 interface RequestDeliveryModalProps {
-  batch: DeliveryBatch;
-  orderCount: number;
+  itemCount: number;
   onClose: () => void;
   onSubmit: (deliveryType: ShippingSelection['deliveryType'], parcelPoint: ShippingSelection['parcelPoint'], instructions: string | null) => Promise<{ success: boolean; error?: string }>;
 }
 
 /**
  * Le mode/l'adresse de livraison ne sont plus choisis au checkout (voir
- * CartPage) : c'est ici, une seule fois par lot plutôt qu'une fois par
- * commande, que le revendeur les choisit — au moment où il demande
- * effectivement la livraison de tout ce qui n'a pas encore été expédié.
+ * CartPage) : c'est ici, une seule fois par demande de livraison plutôt
+ * qu'une fois par commande, que le revendeur les choisit — au moment où il
+ * demande effectivement la livraison des articles ready_to_ship qu'il a
+ * sélectionnés (voir reseller_request_item_delivery).
  */
-export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ batch, orderCount, onClose, onSubmit }) => {
+export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ itemCount, onClose, onSubmit }) => {
   const { profile } = useResellerAuth();
   const hasAddress = Boolean(profile?.address && profile?.city && profile?.postal_code);
 
@@ -56,7 +55,7 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ batc
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Demander la livraison</h3>
               <p className="text-sm text-gray-500 mt-1">
-                Lot du {new Date(batch.created_at).toLocaleDateString('fr-FR')} — {orderCount} commande{orderCount > 1 ? 's' : ''} en attente de livraison
+                {itemCount} article{itemCount > 1 ? 's' : ''} sélectionné{itemCount > 1 ? 's' : ''}
               </p>
             </div>
             <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
