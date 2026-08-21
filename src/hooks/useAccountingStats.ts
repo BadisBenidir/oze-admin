@@ -25,6 +25,8 @@ export interface AccountingStats {
   cogs: number
   grossMargin: number
   expensesTotal: number
+  /** Bonus monétaires offerts sur les recharges de portefeuille B2B (montant crédité au-delà du montant réellement payé), comptés comme une charge commerciale. */
+  bonusExpense: number
   netProfit: number
   ordersCount: number
   auctionCount: number
@@ -56,19 +58,22 @@ export const useAccountingStats = (isAuthenticated: boolean = false): UseAccount
       setLoading(true)
       setError(null)
 
-      const [ordersRes, productsRes, expensesRes] = await Promise.all([
+      const [ordersRes, productsRes, expensesRes, walletTopupsRes] = await Promise.all([
         supabase.from('orders').select('total_amount, status, payment_status, created_at'),
         supabase.from('products').select('sale_price, purchase_price, status, updated_at'),
         supabase.from('expenses').select('amount, spent_at'),
+        supabase.from('wallet_transactions').select('amount, paid_amount, created_at').eq('type', 'rechargement').eq('status', 'success'),
       ])
 
       if (ordersRes.error) throw new Error(ordersRes.error.message)
       if (productsRes.error) throw new Error(productsRes.error.message)
       if (expensesRes.error) throw new Error(expensesRes.error.message)
+      if (walletTopupsRes.error) throw new Error(walletTopupsRes.error.message)
 
       const orders = ordersRes.data || []
       const products = productsRes.data || []
       const expenses = expensesRes.data || []
+      const walletTopups = walletTopupsRes.data || []
 
       // Commandes valides (CA en ligne).
       const validOrders = orders.filter((o: any) => VALID_ORDER(o.status))
@@ -95,9 +100,17 @@ export const useAccountingStats = (isAuthenticated: boolean = false): UseAccount
 
       const expensesTotal = expenses.reduce((s: number, e: any) => s + Number(e.amount || 0), 0)
 
+      // Bonus de rechargement (10€ offerts par 100€ payés, voir credit_wallet_topup) :
+      // `amount` = total crédité au portefeuille, `paid_amount` = ce qui a réellement
+      // été payé sur Stripe — l'écart est le bonus, compté comme charge commerciale.
+      const bonusExpense = walletTopups.reduce(
+        (s: number, t: any) => s + Math.max(0, Number(t.amount || 0) - Number(t.paid_amount ?? t.amount ?? 0)),
+        0
+      )
+
       const ca = onlineRevenue + auctionRevenue
       const grossMargin = ca - cogs
-      const netProfit = grossMargin - expensesTotal
+      const netProfit = grossMargin - expensesTotal - bonusExpense
       const averageBasket = ordersCount > 0 ? onlineRevenue / ordersCount : 0
 
       // Série mensuelle : CA (commandes par created_at + ventes Live par updated_at) et dépenses (spent_at).
@@ -111,6 +124,7 @@ export const useAccountingStats = (isAuthenticated: boolean = false): UseAccount
       validOrders.forEach((o: any) => bump(ym(o.created_at), 'revenue', Number(o.total_amount || 0)))
       auctionSold.forEach((p: any) => bump(ym(p.updated_at), 'revenue', Number(p.sale_price || 0)))
       expenses.forEach((e: any) => bump(ym(e.spent_at), 'expenses', Number(e.amount || 0)))
+      walletTopups.forEach((t: any) => bump(ym(t.created_at), 'expenses', Math.max(0, Number(t.amount || 0) - Number(t.paid_amount ?? t.amount ?? 0))))
 
       const monthly: MonthlyRow[] = Array.from(monthlyMap.entries())
         .map(([key, v]) => ({ ym: key, revenue: v.revenue, expenses: v.expenses, result: v.revenue - v.expenses }))
@@ -123,6 +137,7 @@ export const useAccountingStats = (isAuthenticated: boolean = false): UseAccount
         cogs,
         grossMargin,
         expensesTotal,
+        bonusExpense,
         netProfit,
         ordersCount,
         auctionCount,

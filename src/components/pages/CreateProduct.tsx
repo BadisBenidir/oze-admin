@@ -6,19 +6,21 @@ import { ErrorModal } from '../ui/ErrorModal';
 import { useCategories } from '../../hooks/useCategories';
 import { useBrands, Brand } from '../../hooks/useBrands';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-import { 
-  ArrowLeft, 
-  ArrowRight, 
-  Check, 
-  Upload, 
-  Image as ImageIcon, 
+import { DirectB2BSaleModal } from '../products/DirectB2BSaleModal';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Upload,
+  Image as ImageIcon,
   Package,
   Info,
   Camera,
   Settings,
   Plus,
   Search,
-  X
+  X,
+  Handshake
 } from 'lucide-react';
 
 interface CreateProductProps {
@@ -131,6 +133,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
   const [uploadingImages, setUploadingImages] = useState(false);
   const [uploadingDefectImages, setUploadingDefectImages] = useState(false);
   const [loadingProduct, setLoadingProduct] = useState(isEditMode);
+  const [showDirectSaleModal, setShowDirectSaleModal] = useState(false);
   
   // États pour les modals
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -1195,8 +1198,18 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
               <option value="cadeau">🎁 Cadeau fidélité (en attente d'attribution)</option>
             </select>
           ) : isB2B ? (
-            <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 flex items-center">
+            <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 flex items-center justify-between">
               <Badge variant="info">{B2B_STATUS_LABELS[productData.status] || productData.status}</Badge>
+              {isEditMode && productId && productData.status === 'draft' && (
+                <button
+                  type="button"
+                  onClick={() => setShowDirectSaleModal(true)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-gray-900"
+                >
+                  <Handshake className="h-3.5 w-3.5" />
+                  Vendu B2B (vente directe)
+                </button>
+              )}
             </div>
           ) : (
             <select
@@ -1642,6 +1655,18 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
         title={modalData.title}
         message={modalData.message}
       />
+
+      {showDirectSaleModal && productId && (
+        <DirectB2BSaleModal
+          productId={productId}
+          defaultPrice={parseAmount(productData.salePrice)}
+          onClose={() => setShowDirectSaleModal(false)}
+          onSuccess={() => {
+            setShowDirectSaleModal(false);
+            updateProductData({ status: 'sold-b2b' });
+          }}
+        />
+      )}
     </div>
   );
 };

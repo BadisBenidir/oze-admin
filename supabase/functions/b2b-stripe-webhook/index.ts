@@ -116,6 +116,41 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Frais de livraison B2B (demande de livraison payante, voir
+  // b2b-request-delivery-checkout) : chemin distinct lui aussi — pas de
+  // produits/commande, juste la création du shipment + bascule des articles
+  // en delivery_requested, une fois le paiement carte confirmé.
+  if (metadata.type === 'b2b_delivery_request') {
+    console.log(`${LOG_PREFIX} Session ${session.id} — demande de livraison B2B, reseller_id: ${metadata.reseller_id}`);
+    try {
+      const adminClient = createClient(supabaseUrl, serviceRoleKey);
+      const itemIds = JSON.parse(metadata.item_ids || '[]');
+      const parcelPoint = metadata.parcel_point ? JSON.parse(metadata.parcel_point) : null;
+
+      const { data, error } = await adminClient.rpc('finalize_b2b_delivery_request', {
+        p_item_ids: itemIds,
+        p_reseller_id: metadata.reseller_id,
+        p_profile_id: metadata.placed_by_profile_id,
+        p_delivery_type: metadata.delivery_type,
+        p_parcel_point: parcelPoint,
+        p_instructions: metadata.instructions || null,
+        p_shipping_cost: Number(metadata.shipping_cost || 0),
+        p_stripe_session_id: session.id,
+      });
+
+      if (error) {
+        console.error(`${LOG_PREFIX} ÉCHEC finalize_b2b_delivery_request pour la session ${session.id}: ${error.message} (code ${error.code ?? 'n/a'})`);
+        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+      }
+
+      console.log(`${LOG_PREFIX} Shipment ${data?.shipment_id} finalisé pour la session ${session.id} (already_processed: ${!!data?.already_processed})`);
+      return new Response(JSON.stringify({ received: true }), { status: 200 });
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Erreur non gérée demande de livraison B2B (session ${session.id}):`, err instanceof Error ? err.stack || err.message : err);
+      return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Erreur inconnue' }), { status: 500 });
+    }
+  }
+
   console.log(`${LOG_PREFIX} Session ${session.id} — reseller_id: ${metadata.reseller_id}, product_ids bruts: ${metadata.product_ids}`);
 
   try {

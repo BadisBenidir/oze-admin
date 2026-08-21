@@ -26,6 +26,12 @@ interface UseDropsResult {
   createDrop: (input: DropInput) => Promise<{ success: boolean; error?: string }>;
   updateDrop: (id: string, input: DropInput) => Promise<{ success: boolean; error?: string }>;
   cancelDrop: (id: string) => Promise<{ success: boolean; error?: string }>;
+  /** Renomme un drop quel que soit son statut (contrairement à updateDrop, restreint à 'planifie'). */
+  renameDrop: (id: string, title: string) => Promise<{ success: boolean; error?: string }>;
+  /** Fusionne sourceId dans targetId (union des articles) et annule sourceId — fonctionne pour des drops de tout statut. */
+  mergeDrops: (sourceId: string, targetId: string) => Promise<{ success: boolean; error?: string }>;
+  /** Déplace un article d'un drop vers un autre — fonctionne pour des drops de tout statut. */
+  reassignDropProduct: (productId: string, fromDropId: string, toDropId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
@@ -94,6 +100,31 @@ export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
     return { success: true };
   };
 
+  const renameDrop = async (id: string, title: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: rpcError } = await supabase.rpc('admin_rename_drop', { p_drop_id: id, p_title: title });
+    if (rpcError) return { success: false, error: rpcError.message };
+    await fetchDrops();
+    return { success: true };
+  };
+
+  const mergeDrops = async (sourceId: string, targetId: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: rpcError } = await supabase.rpc('admin_merge_drops', { p_source_drop_id: sourceId, p_target_drop_id: targetId });
+    if (rpcError) return { success: false, error: rpcError.message };
+    await fetchDrops();
+    return { success: true };
+  };
+
+  const reassignDropProduct = async (productId: string, fromDropId: string, toDropId: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: rpcError } = await supabase.rpc('admin_reassign_drop_product', {
+      p_product_id: productId,
+      p_from_drop_id: fromDropId,
+      p_to_drop_id: toDropId,
+    });
+    if (rpcError) return { success: false, error: rpcError.message };
+    await fetchDrops();
+    return { success: true };
+  };
+
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
@@ -102,5 +133,5 @@ export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
     fetchDrops();
   }, [isAdmin, fetchDrops]);
 
-  return { drops, loading, error, refresh: fetchDrops, createDrop, updateDrop, cancelDrop };
+  return { drops, loading, error, refresh: fetchDrops, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct };
 };

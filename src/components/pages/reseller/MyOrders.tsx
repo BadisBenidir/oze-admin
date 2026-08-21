@@ -116,7 +116,7 @@ export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct, onWalletChang
 
       {showRequestModal && (
         <RequestDeliveryModal
-          itemCount={selected.size}
+          items={readyItems.filter((i) => selected.has(i.id))}
           onClose={() => setShowRequestModal(false)}
           onSubmit={handleSubmitRequest}
         />

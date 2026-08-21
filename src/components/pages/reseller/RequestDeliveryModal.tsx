@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
-import { X, Truck, AlertCircle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { X, Truck, AlertCircle, CreditCard } from 'lucide-react';
 import ShippingForm, { ShippingSelection } from './ShippingForm';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
+import { computeShippingCost } from '../../../utils/b2bShippingPricing';
 
 interface RequestDeliveryModalProps {
-  itemCount: number;
+  items: { shipping_points: number }[];
   onClose: () => void;
-  onSubmit: (deliveryType: ShippingSelection['deliveryType'], parcelPoint: ShippingSelection['parcelPoint'], instructions: string | null) => Promise<{ success: boolean; error?: string }>;
+  onSubmit: (deliveryType: ShippingSelection['deliveryType'], parcelPoint: ShippingSelection['parcelPoint'], instructions: string | null) => Promise<{ success: boolean; url?: string; error?: string }>;
 }
 
 /**
@@ -14,9 +15,12 @@ interface RequestDeliveryModalProps {
  * CartPage) : c'est ici, une seule fois par demande de livraison plutôt
  * qu'une fois par commande, que le revendeur les choisit — au moment où il
  * demande effectivement la livraison des articles ready_to_ship qu'il a
- * sélectionnés (voir reseller_request_item_delivery).
+ * sélectionnés. Les frais de port sont désormais payants (carte uniquement,
+ * barème par points) : la confirmation redirige vers Stripe plutôt que de
+ * créer immédiatement la demande — voir finalize_b2b_delivery_request,
+ * appelée seulement après paiement confirmé par b2b-stripe-webhook.
  */
-export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ itemCount, onClose, onSubmit }) => {
+export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ items, onClose, onSubmit }) => {
   const { profile } = useResellerAuth();
   const hasAddress = Boolean(profile?.address && profile?.city && profile?.postal_code);
 
@@ -28,6 +32,11 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const pricePreview = useMemo(
+    () => computeShippingCost(items.map((i) => ({ points: i.shipping_points })), shipping.deliveryType),
+    [items, shipping.deliveryType]
+  );
+
   const handleSubmit = async () => {
     if (shipping.deliveryType === 'domicile' && !hasAddress) return;
     if (shipping.deliveryType === 'point_relais' && !shipping.parcelPoint) {
@@ -37,12 +46,14 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
     setError(null);
     setSubmitting(true);
     const result = await onSubmit(shipping.deliveryType, shipping.parcelPoint, instructions || null);
-    setSubmitting(false);
     if (!result.success) {
+      setSubmitting(false);
       setError(result.error || 'Une erreur est survenue');
       return;
     }
-    onClose();
+    // Redirection immédiate vers Stripe — la demande n'est créée qu'après
+    // paiement confirmé (webhook), on ne repasse jamais ici.
+    window.location.href = result.url!;
   };
 
   return (
@@ -55,7 +66,7 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Demander la livraison</h3>
               <p className="text-sm text-gray-500 mt-1">
-                {itemCount} article{itemCount > 1 ? 's' : ''} sélectionné{itemCount > 1 ? 's' : ''}
+                {items.length} article{items.length > 1 ? 's' : ''} sélectionné{items.length > 1 ? 's' : ''} — {pricePreview.parcelCount} colis
               </p>
             </div>
             <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
@@ -95,14 +106,28 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
               </div>
             )}
 
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center justify-between">
+              <span className="text-sm text-gray-700">Frais de port ({pricePreview.parcelCount} colis)</span>
+              <span className="text-base font-semibold text-gray-900">{pricePreview.cost.toFixed(2)} €</span>
+            </div>
+
             <button
               onClick={handleSubmit}
               disabled={submitting}
               className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
-              <Truck className="h-4 w-4" />
-              <span>{submitting ? 'Envoi de la demande...' : 'Confirmer la demande de livraison'}</span>
+              {submitting ? (
+                <span>Redirection vers le paiement...</span>
+              ) : (
+                <>
+                  <CreditCard className="h-4 w-4" />
+                  <span>Payer {pricePreview.cost.toFixed(2)} € et demander la livraison</span>
+                </>
+              )}
             </button>
+            <p className="text-xs text-gray-400 text-center flex items-center justify-center gap-1">
+              <Truck className="h-3 w-3" /> Paiement sécurisé par carte, via Stripe.
+            </p>
           </div>
         </div>
       </div>

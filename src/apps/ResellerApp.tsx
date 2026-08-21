@@ -11,6 +11,7 @@ import { Catalog } from '../components/pages/reseller/Catalog';
 import { ProductPage } from '../components/pages/reseller/ProductPage';
 import { CartPage } from '../components/pages/reseller/CartPage';
 import { MyOrders } from '../components/pages/reseller/MyOrders';
+import { MyShipments } from '../components/pages/reseller/MyShipments';
 import { ResellerProfile } from '../components/pages/reseller/ResellerProfile';
 import { Team } from '../components/pages/reseller/Team';
 import { WalletPage } from '../components/pages/reseller/WalletPage';
@@ -33,6 +34,7 @@ const parseProductId = (pathname: string): string | null => {
 const TAB_TITLES: Record<string, string> = {
   catalog: 'Catalogue B2B | OZË Paris',
   'my-orders': 'Mes Commandes | OZË Paris',
+  shipments: 'Suivi livraisons | OZË Paris',
   wallet: 'Mon Portefeuille | OZË Paris',
   profile: 'Mon Profil | OZË Paris',
 };
@@ -50,6 +52,7 @@ function ResellerApp() {
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
   const [checkoutOrderId, setCheckoutOrderId] = useState<string | null>(null);
   const [topUpStatus, setTopUpStatus] = useState<'success' | 'cancel' | null>(null);
+  const [deliveryRequestStatus, setDeliveryRequestStatus] = useState<'success' | 'cancel' | null>(null);
   const [pathname, setPathname] = useState(window.location.pathname);
   // Retour Stripe = rechargement COMPLET de la page : à ce tout premier
   // montage, `profile` (donc `cart`'s cartKey, dérivé de profile.id) n'est
@@ -117,6 +120,12 @@ function ResellerApp() {
         wallet.refresh();
       }
     }
+
+    const delivery = params.get('b2b_delivery');
+    if (delivery === 'success' || delivery === 'cancel') {
+      setDeliveryRequestStatus(delivery);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -164,6 +173,8 @@ function ResellerApp() {
     switch (currentTab) {
       case 'my-orders':
         return <MyOrders onOpenProduct={openProduct} onWalletChanged={wallet.refresh} />;
+      case 'shipments':
+        return <MyShipments />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':
@@ -276,6 +287,22 @@ function ResellerApp() {
           <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
             <p className="text-sm text-amber-800">Recharge annulée.</p>
             <button onClick={() => setTopUpStatus(null)} className="p-1 text-amber-600 hover:text-amber-800">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        {deliveryRequestStatus === 'success' && (
+          <div className="m-4 md:m-6 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+            <p className="text-sm text-green-800">Paiement confirmé — votre demande de livraison a bien été prise en compte.</p>
+            <button onClick={() => setDeliveryRequestStatus(null)} className="p-1 text-green-600 hover:text-green-800">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        {deliveryRequestStatus === 'cancel' && (
+          <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+            <p className="text-sm text-amber-800">Paiement des frais de port annulé — aucune livraison n'a été demandée.</p>
+            <button onClick={() => setDeliveryRequestStatus(null)} className="p-1 text-amber-600 hover:text-amber-800">
               <X className="h-4 w-4" />
             </button>
           </div>

@@ -393,7 +393,11 @@ export const Accounting: React.FC<AccountingProps> = ({ activeSubTab }) => {
         <Kpi label="Chiffre d'affaires" value={EUR(stats?.ca || 0)} icon={DollarSign} tone="green" hint="Ventes en ligne + Live enchères" />
         <Kpi label="Dépenses" value={EUR(stats?.expensesTotal || 0)} icon={TrendingDown} tone="red" />
         <Kpi label="Marge brute" value={EUR(stats?.grossMargin || 0)} icon={PiggyBank} hint="CA − coût d'achat des articles vendus" />
-        <Kpi label="Bénéfice net" value={EUR(stats?.netProfit || 0)} icon={Wallet} tone={(stats?.netProfit || 0) >= 0 ? 'green' : 'red'} hint="Marge brute − dépenses" />
+        <Kpi label="Bénéfice net" value={EUR(stats?.netProfit || 0)} icon={Wallet} tone={(stats?.netProfit || 0) >= 0 ? 'green' : 'red'} hint="Marge brute − dépenses − bonus de rechargement offerts" />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
+        <Kpi label="Bonus de rechargement offerts" value={EUR(stats?.bonusExpense || 0)} icon={TrendingDown} tone="red" hint="Montants crédités au-delà du montant payé sur les recharges de portefeuille B2B" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">

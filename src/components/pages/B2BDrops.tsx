@@ -5,7 +5,7 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useDrops, Drop } from '../../hooks/useDrops';
 import { CreateDropModal } from './b2b/CreateDropModal';
 import { DropDetailModal } from './b2b/DropDetailModal';
-import { Rocket, Plus, AlertCircle, Package, Pencil, Ban, Eye } from 'lucide-react';
+import { Rocket, Plus, AlertCircle, Package, Pencil, Ban, Eye, GitMerge, X } from 'lucide-react';
 
 const statusBadge = (status: Drop['status']) => {
   switch (status) {
@@ -21,14 +21,87 @@ const statusBadge = (status: Drop['status']) => {
 const formatDateTime = (iso: string): string =>
   new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+interface MergeDropModalProps {
+  source: Drop;
+  otherDrops: Drop[];
+  onClose: () => void;
+  onConfirm: (targetId: string) => Promise<void>;
+}
+
+const MergeDropModal: React.FC<MergeDropModalProps> = ({ source, otherDrops, onClose, onConfirm }) => {
+  const [targetId, setTargetId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleConfirm = async () => {
+    if (!targetId) return;
+    setSubmitting(true);
+    await onConfirm(targetId);
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] overflow-y-auto">
+      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-5 border-b border-gray-100">
+            <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <GitMerge className="h-4 w-4" /> Fusionner ce drop
+            </h3>
+            <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="p-5 space-y-4">
+            <p className="text-sm text-gray-500">
+              Les {source.product_ids.length} article{source.product_ids.length > 1 ? 's' : ''} de "{source.title || 'Drop sans nom'}" seront ajoutés au drop choisi, et ce drop sera annulé.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Fusionner dans</label>
+              <select
+                value={targetId}
+                onChange={(e) => setTargetId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm bg-white"
+              >
+                <option value="">Sélectionner un drop...</option>
+                {otherDrops.map((d) => (
+                  <option key={d.id} value={d.id}>{d.title || 'Drop sans nom'} ({formatDateTime(d.scheduled_at)})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 p-5 pt-0">
+            <button onClick={onClose} disabled={submitting} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-sm disabled:opacity-50">
+              Annuler
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={submitting || !targetId}
+              className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              {submitting ? 'Fusion...' : 'Confirmer la fusion'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const B2BDrops: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { drops, loading, error, createDrop, updateDrop, cancelDrop } = useDrops(isAdmin);
+  const { drops, loading, error, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct } = useDrops(isAdmin);
 
   const [showModal, setShowModal] = useState(false);
   const [editingDrop, setEditingDrop] = useState<Drop | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [viewingDrop, setViewingDrop] = useState<Drop | null>(null);
+  const [viewingDropId, setViewingDropId] = useState<string | null>(null);
+  const [mergingDrop, setMergingDrop] = useState<Drop | null>(null);
+
+  // Dérivé en direct de `drops` (pas une copie figée) : un déplacement
+  // d'article depuis la modale met à jour product_ids immédiatement, sans
+  // avoir à la refermer/rouvrir.
+  const viewingDrop = drops.find((d) => d.id === viewingDropId) || null;
 
   const handleCreate = () => {
     setEditingDrop(null);
@@ -47,6 +120,18 @@ export const B2BDrops: React.FC = () => {
     setCancellingId(drop.id);
     await cancelDrop(drop.id);
     setCancellingId(null);
+  };
+
+  const handleRename = async (drop: Drop) => {
+    const title = window.prompt('Nouveau nom du drop :', drop.title || '');
+    if (title === null) return;
+    await renameDrop(drop.id, title);
+  };
+
+  const handleMergeConfirm = async (targetId: string) => {
+    if (!mergingDrop) return;
+    await mergeDrops(mergingDrop.id, targetId);
+    setMergingDrop(null);
   };
 
   const upcoming = drops.filter((d) => d.status === 'planifie');
@@ -109,7 +194,7 @@ export const B2BDrops: React.FC = () => {
                     <div className="flex items-center gap-2">
                       {statusBadge(drop.status)}
                       <button
-                        onClick={() => setViewingDrop(drop)}
+                        onClick={() => setViewingDropId(drop.id)}
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Voir le détail"
                       >
@@ -121,6 +206,20 @@ export const B2BDrops: React.FC = () => {
                         title="Modifier"
                       >
                         <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleRename(drop)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Renommer"
+                      >
+                        <span className="text-xs font-semibold">Aa</span>
+                      </button>
+                      <button
+                        onClick={() => setMergingDrop(drop)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Fusionner avec un autre drop"
+                      >
+                        <GitMerge className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleCancel(drop)}
@@ -168,13 +267,31 @@ export const B2BDrops: React.FC = () => {
                         </td>
                         <td className="py-3 px-4 md:px-6">{statusBadge(drop.status)}</td>
                         <td className="py-3 px-4 md:px-6 text-right">
-                          <button
-                            onClick={() => setViewingDrop(drop)}
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Voir le détail"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => setViewingDropId(drop.id)}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Voir le détail"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleRename(drop)}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Renommer"
+                            >
+                              <span className="text-xs font-semibold">Aa</span>
+                            </button>
+                            {drop.status !== 'annule' && (
+                              <button
+                                onClick={() => setMergingDrop(drop)}
+                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Fusionner avec un autre drop"
+                              >
+                                <GitMerge className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -193,7 +310,21 @@ export const B2BDrops: React.FC = () => {
         editingDrop={editingDrop}
       />
 
-      <DropDetailModal drop={viewingDrop} onClose={() => setViewingDrop(null)} />
+      <DropDetailModal
+        drop={viewingDrop}
+        onClose={() => setViewingDropId(null)}
+        otherDrops={drops.filter((d) => d.id !== viewingDropId)}
+        onReassignProduct={reassignDropProduct}
+      />
+
+      {mergingDrop && (
+        <MergeDropModal
+          source={mergingDrop}
+          otherDrops={drops.filter((d) => d.id !== mergingDrop.id && d.status !== 'annule')}
+          onClose={() => setMergingDrop(null)}
+          onConfirm={handleMergeConfirm}
+        />
+      )}
     </div>
   );
 };

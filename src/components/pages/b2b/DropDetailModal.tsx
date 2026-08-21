@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { X, Package, ImageOff } from 'lucide-react';
 import { Drop } from '../../../hooks/useDrops';
 import { useDropProducts } from '../../../hooks/useDropProducts';
@@ -11,12 +11,27 @@ const isSold = (status: string) => status.startsWith('sold-');
 interface DropDetailModalProps {
   drop: Drop | null;
   onClose: () => void;
+  /** Autres drops disponibles pour y déplacer un article (tout statut, hors ce drop). */
+  otherDrops?: Drop[];
+  onReassignProduct?: (productId: string, fromDropId: string, toDropId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose }) => {
+export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose, otherDrops = [], onReassignProduct }) => {
+  // `drop` est dérivé en direct de la liste `drops` du parent (voir
+  // B2BDrops.tsx) : product_ids se met à jour automatiquement après un
+  // déplacement, ce qui redéclenche useDropProducts via sa dépendance sur
+  // productIds.join(',') — pas besoin d'un refresh manuel ici.
   const { products, loading, error } = useDropProducts(drop?.product_ids ?? null);
+  const [movingProductId, setMovingProductId] = useState<string | null>(null);
 
   if (!drop) return null;
+
+  const handleMove = async (productId: string, toDropId: string) => {
+    if (!onReassignProduct || !toDropId) return;
+    setMovingProductId(productId);
+    await onReassignProduct(productId, drop.id, toDropId);
+    setMovingProductId(null);
+  };
 
   const totalPurchase = products.reduce((sum, p) => sum + (p.purchase_price || 0), 0);
   const totalSale = products.reduce((sum, p) => sum + p.sale_price, 0);
@@ -52,20 +67,21 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose 
                     <th className="text-left py-2.5 px-4 font-medium text-gray-500 text-xs">Produit</th>
                     <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Prix d'achat</th>
                     <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Prix de vente / Statut</th>
+                    {otherDrops.length > 0 && <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Déplacer</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     [...Array(3)].map((_, i) => (
                       <tr key={`skeleton-${i}`} className="border-b border-gray-50">
-                        <td className="py-3 px-4" colSpan={3}>
+                        <td className="py-3 px-4" colSpan={4}>
                           <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
                         </td>
                       </tr>
                     ))
                   ) : products.length === 0 ? (
                     <tr>
-                      <td className="py-8 px-4 text-center text-sm text-gray-500" colSpan={3}>
+                      <td className="py-8 px-4 text-center text-sm text-gray-500" colSpan={4}>
                         Aucun article trouvé pour ce drop.
                       </td>
                     </tr>
@@ -100,6 +116,21 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose 
                               <span className="text-sm font-semibold text-gray-900">{p.sale_price.toFixed(2)} €</span>
                             )}
                           </td>
+                          {otherDrops.length > 0 && (
+                            <td className="py-3 px-4 text-right">
+                              <select
+                                value=""
+                                disabled={movingProductId === p.id}
+                                onChange={(e) => handleMove(p.id, e.target.value)}
+                                className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white focus:outline-none focus:border-gray-400 disabled:opacity-50"
+                              >
+                                <option value="">Déplacer vers...</option>
+                                {otherDrops.map((d) => (
+                                  <option key={d.id} value={d.id}>{d.title || 'Drop sans nom'}</option>
+                                ))}
+                              </select>
+                            </td>
+                          )}
                         </tr>
                       );
                     })

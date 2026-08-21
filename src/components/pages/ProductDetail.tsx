@@ -7,6 +7,7 @@ import { ProductLabel } from '../products/ProductLabel';
 import { BarcodeScanner } from '../products/BarcodeScanner';
 import { Modal } from '../ui/Modal';
 import { validateProductByBarcode } from '../../services/productValidationService';
+import { DirectB2BSaleModal } from '../products/DirectB2BSaleModal';
 import {
   ArrowLeft,
   Package,
@@ -22,7 +23,8 @@ import {
   ScanLine,
   AlertTriangle,
   ZoomIn,
-  X
+  X,
+  Handshake
 } from 'lucide-react';
 
 interface ProductDetailProps {
@@ -40,6 +42,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [zoomedDefectImage, setZoomedDefectImage] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [showDirectSaleModal, setShowDirectSaleModal] = useState(false);
   const [statusUpdateSuccess, setStatusUpdateSuccess] = useState(false);
 
   // Validation par scan (mise en ligne après lecture du code-barres)
@@ -460,6 +463,15 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                     {statusUpdateSuccess && (
                       <p className="text-xs text-green-600 mt-1">✓ Statut mis à jour avec succès</p>
                     )}
+                    {product.status === 'draft' && (
+                      <button
+                        onClick={() => setShowDirectSaleModal(true)}
+                        className="mt-2 flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-gray-900"
+                      >
+                        <Handshake className="h-3.5 w-3.5" />
+                        Vendu B2B (vente directe)
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -602,6 +614,19 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
           )}
         </div>
       </Modal>
+
+      {showDirectSaleModal && (
+        <DirectB2BSaleModal
+          productId={productId}
+          defaultPrice={product.sale_price}
+          onClose={() => setShowDirectSaleModal(false)}
+          onSuccess={() => {
+            setShowDirectSaleModal(false);
+            setProduct((prev) => (prev ? { ...prev, status: 'sold-b2b' as any } : null));
+            onProductUpdate?.();
+          }}
+        />
+      )}
 
       {zoomedDefectImage && (
         <div
