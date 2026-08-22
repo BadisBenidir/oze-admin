@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, MapPin, Package } from 'lucide-react';
+import { X, MapPin, Package, User, Phone } from 'lucide-react';
 import { AdminShipment } from '../../../hooks/useAdminShipments';
 import { ParcelSplitEditor } from './ParcelSplitEditor';
 
@@ -22,9 +22,9 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
         <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-start justify-between p-6 border-b border-gray-100">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">{shipment.companyName}</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{shipment.requester.fullName}</h3>
               <p className="text-sm text-gray-500 mt-1">
-                Demandé le {new Date(shipment.requested_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                {shipment.companyName} — demandé le {new Date(shipment.requested_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
               </p>
             </div>
             <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
@@ -44,7 +44,19 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                     {pp.network && <p className="text-xs text-gray-500 mt-1">{pp.network}</p>}
                   </>
                 ) : (
-                  <p>Livraison à l'adresse enregistrée du revendeur</p>
+                  <>
+                    <p className="font-medium flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-gray-400" /> {shipment.requester.fullName}
+                    </p>
+                    {shipment.requester.address && <p>{shipment.requester.address}</p>}
+                    <p>{shipment.requester.postalCode} {shipment.requester.city}</p>
+                    {shipment.requester.country && <p>{shipment.requester.country}</p>}
+                    {shipment.requester.phone && (
+                      <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                        <Phone className="h-3 w-3" /> {shipment.requester.phone}
+                      </p>
+                    )}
+                  </>
                 )}
                 {shipment.delivery_instructions && (
                   <p className="text-xs text-gray-500 mt-1 italic">{shipment.delivery_instructions}</p>

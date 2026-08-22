@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown } from 'lucide-react';
+import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye } from 'lucide-react';
 import { AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { useGenerateShipmentLabels, ParcelResult } from '../../../hooks/useGenerateShipmentLabels';
+import { ProductDetail } from '../ProductDetail';
 
 interface ParcelDraft {
   items: string[];
@@ -13,7 +14,8 @@ interface ParcelSplitEditorProps {
   onGenerated: () => void;
 }
 
-const itemLabel = (item: AdminShipmentItem) => item.product_snapshot?.name || 'Article';
+const itemRef = (item: AdminShipmentItem) =>
+  item.product?.b2b_reference || item.product?.reference || item.product?.product_code || '—';
 
 export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, onGenerated }) => {
   const { generate } = useGenerateShipmentLabels();
@@ -21,6 +23,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
   const [generating, setGenerating] = useState(false);
   const [results, setResults] = useState<ParcelResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [viewingProductId, setViewingProductId] = useState<string | null>(null);
 
   const parcelOf = (itemId: string) => parcels.findIndex((p) => p.items.includes(itemId));
 
@@ -106,10 +109,40 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
               <tbody>
                 {items.map((item) => {
                   const current = parcelOf(item.id);
+                  const product = item.product;
+                  const image = product?.images?.[product.main_image_index] || product?.images?.[0];
                   return (
                     <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
-                      <td className="py-2 px-3 text-sm text-gray-900">{itemLabel(item)}</td>
-                      <td className="py-2 px-3 text-right">
+                      <td className="py-2 px-3">
+                        <div className="flex items-start gap-3">
+                          {image ? (
+                            <img src={image} alt={product?.name || 'Article'} className="h-12 w-12 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
+                          ) : (
+                            <div className="h-12 w-12 rounded-lg bg-gray-100 flex-shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm text-gray-900 font-medium truncate">{product?.name || 'Article'}</p>
+                            <p className="text-xs text-gray-500">
+                              {product?.brand?.name && <span>{product.brand.name} · </span>}
+                              Réf. {itemRef(item)}
+                              {product?.condition && <span> · État {product.condition}</span>}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs font-medium text-gray-700">{item.line_total.toFixed(2)} €</span>
+                              {item.product_id && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingProductId(item.product_id)}
+                                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  <Eye className="h-3 w-3" /> Voir la fiche
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-2 px-3 text-right align-top">
                         <div className="inline-flex gap-1">
                           {parcels.map((_, idx) => (
                             <button
@@ -154,6 +187,12 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
       {results && stillPendingCount === 0 && (
         <div className="flex items-center gap-2 text-sm text-green-700">
           <CheckCircle className="h-4 w-4" /> Tous les articles de cette demande ont été expédiés.
+        </div>
+      )}
+
+      {viewingProductId && (
+        <div className="fixed inset-0 z-[80] bg-white overflow-y-auto">
+          <ProductDetail productId={viewingProductId} onBack={() => setViewingProductId(null)} />
         </div>
       )}
     </div>

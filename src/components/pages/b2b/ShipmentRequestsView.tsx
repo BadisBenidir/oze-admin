@@ -54,7 +54,7 @@ export const ShipmentRequestsView: React.FC = () => {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Revendeur</th>
+                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Demandeur</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Demandée le</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden md:table-cell">Articles</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Statut</th>
@@ -73,7 +73,10 @@ export const ShipmentRequestsView: React.FC = () => {
                   ) : (
                     shipments.map((shipment) => (
                       <tr key={shipment.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                        <td className="py-4 px-4 md:px-6 text-sm text-gray-900 font-medium">{shipment.companyName}</td>
+                        <td className="py-4 px-4 md:px-6 text-sm">
+                          <p className="text-gray-900 font-medium">{shipment.requester.fullName}</p>
+                          <p className="text-xs text-gray-500">{shipment.companyName}</p>
+                        </td>
                         <td className="py-4 px-4 md:px-6 text-sm text-gray-600">{new Date(shipment.requested_at).toLocaleDateString('fr-FR')}</td>
                         <td className="py-4 px-4 md:px-6 hidden md:table-cell text-sm text-gray-600">
                           {shipment.pendingItems.length} pièce{shipment.pendingItems.length > 1 ? 's' : ''}
