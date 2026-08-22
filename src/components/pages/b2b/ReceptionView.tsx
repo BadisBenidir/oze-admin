@@ -36,6 +36,7 @@ export const ReceptionView: React.FC = () => {
   const { groups, loading, error, markReceived, markReadyToShip } = useReceptionItems(isAdmin);
   const [selection, setSelection] = useState<Record<string, Set<string>>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const selectedFor = (groupKey: string) => selection[groupKey] || new Set<string>();
 
@@ -55,19 +56,29 @@ export const ReceptionView: React.FC = () => {
   const handleMarkReceived = async (groupKey: string) => {
     const ids = Array.from(selectedFor(groupKey));
     if (ids.length === 0) return;
+    setActionError(null);
     setBusyKey(groupKey);
-    await markReceived(ids);
-    clearSelection(groupKey);
+    const result = await markReceived(ids);
     setBusyKey(null);
+    if (!result.success) {
+      setActionError(result.error || "Impossible de marquer ces articles comme reçus");
+      return;
+    }
+    clearSelection(groupKey);
   };
 
   const handleMarkReadyToShip = async (groupKey: string) => {
     const ids = Array.from(selectedFor(groupKey));
     if (ids.length === 0) return;
+    setActionError(null);
     setBusyKey(groupKey);
-    await markReadyToShip(ids);
-    clearSelection(groupKey);
+    const result = await markReadyToShip(ids);
     setBusyKey(null);
+    if (!result.success) {
+      setActionError(result.error || "Impossible de marquer ces articles comme prêts à être livrés");
+      return;
+    }
+    clearSelection(groupKey);
   };
 
   return (
@@ -81,6 +92,16 @@ export const ReceptionView: React.FC = () => {
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
           <p className="text-sm text-red-700">Erreur : {error}</p>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+            <p className="text-sm text-red-700">{actionError}</p>
+          </div>
+          <button onClick={() => setActionError(null)} className="text-red-600 hover:text-red-800 text-sm flex-shrink-0">✕</button>
         </div>
       )}
 
