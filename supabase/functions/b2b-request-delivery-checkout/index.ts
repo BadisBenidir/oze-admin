@@ -105,15 +105,31 @@ Deno.serve(async (req: Request) => {
     // Recharge en confiance : items éligibles + points produits LIVE (jamais
     // le product_snapshot, capturé avant la création de ce champ pour les
     // anciennes commandes).
+    // Même règle que la policy RLS order_items_reseller_select_own : ses
+    // propres commandes toujours, celles de toute l'entreprise seulement
+    // s'il est le contact principal — jamais accepté du client, revalidé ici
+    // en autorité (adminClient = service_role, contourne RLS).
+    const { data: contact } = await adminClient
+      .from('reseller_contacts')
+      .select('is_primary')
+      .eq('profile_id', user.id)
+      .eq('reseller_id', resellerId)
+      .maybeSingle();
+    const isPrimary = Boolean(contact?.is_primary);
+
     const { data: items, error: itemsError } = await adminClient
       .from('order_items')
-      .select('id, line_total, fulfillment_status, product_id, order:orders!inner(reseller_id, order_channel)')
+      .select('id, line_total, fulfillment_status, product_id, order:orders!inner(reseller_id, order_channel, placed_by_profile_id)')
       .in('id', item_ids)
       .eq('status', 'active');
     if (itemsError) return json({ error: itemsError.message }, 500);
 
     const eligible = (items || []).filter(
-      (it: any) => it.fulfillment_status === 'ready_to_ship' && it.order?.order_channel === 'b2b' && it.order?.reseller_id === resellerId
+      (it: any) =>
+        it.fulfillment_status === 'ready_to_ship' &&
+        it.order?.order_channel === 'b2b' &&
+        it.order?.reseller_id === resellerId &&
+        (it.order?.placed_by_profile_id === user.id || isPrimary)
     );
     if (eligible.length !== item_ids.length) {
       return json({ error: 'Certains articles ne sont plus disponibles pour une demande de livraison' }, 409);

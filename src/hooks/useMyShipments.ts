@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { useResellerAuth } from './useResellerAuth';
 
 export interface MyShipmentParcel {
   id: string;
@@ -24,16 +25,25 @@ export interface MyShipment {
 }
 
 /**
- * Expéditions du revendeur connecté (toute l'entreprise, via RLS
- * current_reseller_id()) — page "Suivi livraisons" : adresse/point relais
- * choisi, colis et liens de tracking Sendcloud.
+ * Expéditions du revendeur connecté (toute l'entreprise — un shipment
+ * regroupe des articles demandés par n'importe quel membre de l'équipe,
+ * donc visible par toute l'équipe, pas seulement son auteur). Filtre
+ * explicite en défense en profondeur en plus de la policy RLS
+ * (reseller_id = current_reseller_id()) : ne pas dépendre uniquement de RLS,
+ * surtout après la fuite corrigée en 0075 sur orders/order_items.
  */
 export const useMyShipments = (isAuthenticated: boolean = false) => {
+  const { profile } = useResellerAuth();
   const [shipments, setShipments] = useState<MyShipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchShipments = useCallback(async () => {
+    if (!profile) {
+      setShipments([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -41,6 +51,7 @@ export const useMyShipments = (isAuthenticated: boolean = false) => {
       const { data: shipmentRows, error: shipmentsError } = await supabase
         .from('shipments')
         .select('id, status, delivery_type, parcel_point, delivery_instructions, shipping_cost, requested_at')
+        .eq('reseller_id', profile.reseller_id)
         .order('requested_at', { ascending: false });
       if (shipmentsError) throw new Error(shipmentsError.message);
 
@@ -85,7 +96,7 @@ export const useMyShipments = (isAuthenticated: boolean = false) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile]);
 
   useEffect(() => {
     if (!isAuthenticated) {
