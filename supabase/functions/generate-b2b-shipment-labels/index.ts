@@ -54,6 +54,32 @@ const toCountryCode = (raw: string | null | undefined): string => {
   return (s.length === 2 ? s : (COUNTRY_CODES[s.toLowerCase()] || 'FR')).toUpperCase();
 };
 
+// Sendcloud (surtout Mondial Relay) valide plus strictement quand la voie et
+// le numéro de rue sont dissociés — "12 Rue de la Paix" -> house_number "12",
+// address_line_1 "Rue de la Paix". Sans numéro détectable, house_number reste
+// vide (Sendcloud l'accepte, une adresse sans numéro n'est pas invalide en soi).
+const splitAddress = (raw: string | null | undefined): { line1: string; houseNumber: string } => {
+  const s = String(raw || '').trim();
+  const m = s.match(/^(\d+\s?(?:bis|ter|quater)?)\b[,\s]+(.+)$/i);
+  if (m) return { houseNumber: m[1].trim(), line1: m[2].trim() };
+  return { line1: s, houseNumber: '' };
+};
+
+// Extrait le message d'erreur le plus précis possible du corps de réponse
+// Sendcloud (le détail du champ en cause est souvent dans error.errors, pas
+// dans error.message qui reste générique) pour pouvoir diagnostiquer sans
+// deviner — voir aussi le log console.error juste avant l'appel.
+const describeSendcloudError = (data: Record<string, unknown>, status: number): string => {
+  const err = (data?.error as Record<string, unknown>) || null;
+  if (err?.message) {
+    const fieldErrors = err.errors ? ` — ${JSON.stringify(err.errors)}` : '';
+    return `${err.message}${fieldErrors}`;
+  }
+  if (data?.message) return typeof data.message === 'string' ? data.message : JSON.stringify(data.message);
+  if (data && Object.keys(data).length > 0) return JSON.stringify(data);
+  return `Erreur Sendcloud (${status})`;
+};
+
 const checkoutMethodName = (deliveryType: string, network: string, hasCode: boolean): string => {
   const carrier = network.toLowerCase().includes('mondial') ? 'Mondial Relay' : 'Colissimo';
   return `${carrier} - ${deliveryType === 'point_relais' ? 'Point Relais' : 'Domicile'}`;
@@ -153,29 +179,42 @@ Deno.serve(async (req: Request) => {
     }
 
     // Adresse de destination, résolue une fois — partagée par tous les colis
-    // de cet appel (ils appartiennent au même shipment/demande).
-    let toAddress: Record<string, unknown>;
-    let network = '';
-    let hasRealCode = false;
-    let email = '';
-    let phone = '';
+    // de cet appel (ils appartiennent au même shipment/demande). Pour un VRAI
+    // point relais (code Sendcloud connu), le routage physique passe par
+    // to_service_point/ship_with plus bas : to_address reste l'identité du
+    // revendeur (nom, coordonnées, adresse individuelle déjà collectée à
+    // l'activation du compte — voir useResellerAuth.ts), même pattern déjà
+    // éprouvé côté oze-storefront (_shared/finalizeOrder.ts). Ce n'est QUE
+    // pour un point relais saisi manuellement (pas de code réel, donc aucun
+    // routage possible) qu'on retombe sur l'adresse du point relais lui-même,
+    // seule information disponible pour acheminer le colis.
+    const pp = (shipment.parcel_point || {}) as Record<string, unknown>;
+    const network = shipment.delivery_type === 'point_relais' ? String(pp.network || '') : '';
+    const hasRealCode = shipment.delivery_type === 'point_relais' && Boolean(pp.code);
 
-    if (shipment.delivery_type === 'point_relais') {
-      const pp = (shipment.parcel_point || {}) as Record<string, unknown>;
-      network = String(pp.network || '');
-      hasRealCode = Boolean(pp.code);
-      const { data: profile } = await adminClient
-        .from('profiles')
-        .select('email, phone, first_name, last_name')
-        .eq('id', shipment.requested_by_profile_id)
-        .maybeSingle();
-      email = profile?.email || '';
-      phone = profile?.phone || '';
-      const contactName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Revendeur';
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('email, phone, first_name, last_name, address, city, postal_code, country')
+      .eq('id', shipment.requested_by_profile_id)
+      .maybeSingle();
+    const email = profile?.email || '';
+    const phone = profile?.phone || '';
+    const contactName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Revendeur';
+
+    if (!email || !phone) {
+      return json({
+        error: `Impossible de générer l'étiquette : ${!email ? 'email' : 'téléphone'} manquant sur le profil du demandeur — requis par Sendcloud (Mondial Relay en particulier). Complétez-le puis réessayez.`,
+      }, 400);
+    }
+
+    let toAddress: Record<string, unknown>;
+    if (shipment.delivery_type === 'point_relais' && !hasRealCode) {
+      const { line1, houseNumber } = splitAddress(String(pp.address || pp.name || ''));
       toAddress = {
         name: contactName,
-        address_line_1: String(pp.name || pp.address || ''),
+        address_line_1: String(pp.name || line1 || ''),
         ...(pp.address && pp.name ? { address_line_2: String(pp.address) } : {}),
+        ...(houseNumber ? { house_number: houseNumber } : {}),
         city: String(pp.city || ''),
         postal_code: String(pp.zipCode || ''),
         country_code: toCountryCode(String(pp.country || 'FR')),
@@ -183,17 +222,11 @@ Deno.serve(async (req: Request) => {
         email,
       };
     } else {
-      const { data: profile } = await adminClient
-        .from('profiles')
-        .select('email, phone, first_name, last_name, address, city, postal_code, country')
-        .eq('id', shipment.requested_by_profile_id)
-        .maybeSingle();
-      email = profile?.email || '';
-      phone = profile?.phone || '';
-      const contactName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Revendeur';
+      const { line1, houseNumber } = splitAddress(profile?.address);
       toAddress = {
         name: contactName,
-        address_line_1: profile?.address || '',
+        address_line_1: line1,
+        ...(houseNumber ? { house_number: houseNumber } : {}),
         city: profile?.city || '',
         postal_code: profile?.postal_code || '',
         country_code: toCountryCode(profile?.country),
@@ -215,7 +248,10 @@ Deno.serve(async (req: Request) => {
       const items = parcel.item_ids.map((id: string) => itemsById.get(id)!);
 
       const weightGrams = items.reduce((sum, it) => sum + Number(it.product_snapshot?.weight || 0), 0);
-      const weightKg = parcel.weight_kg ?? Math.max(0.1, weightGrams / 1000);
+      // 1.0 kg par défaut si aucun poids produit n'est connu (0.1 kg minimal
+      // précédent pouvait être rejeté comme irréaliste par certains
+      // transporteurs, Mondial Relay en particulier).
+      const weightKg = parcel.weight_kg ?? (weightGrams > 0 ? weightGrams / 1000 : 1.0);
       const totalValue = items.reduce((sum, it) => sum + Number(it.line_total) + (it.insured ? Number(it.insurance_cost) : 0), 0);
 
       // Toujours recalculé juste avant l'insert : jamais fourni par le
@@ -244,7 +280,6 @@ Deno.serve(async (req: Request) => {
       };
       if (shipWith) payload.ship_with = shipWith;
       if (hasRealCode) {
-        const pp = (shipment.parcel_point || {}) as Record<string, unknown>;
         payload.to_service_point = { id: String(pp.code) };
       }
 
@@ -257,7 +292,8 @@ Deno.serve(async (req: Request) => {
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
-          const errorMessage = data?.error?.message || `Erreur Sendcloud (${res.status})`;
+          const errorMessage = describeSendcloudError(data, res.status);
+          console.error('[Sendcloud] Échec création colis', { status: res.status, payload, response: data });
           await adminClient.from('shipment_parcels').insert({
             shipment_id, parcel_index: parcelIndex, status: 'failed', weight_kg: weightKg, error_message: errorMessage,
           });
