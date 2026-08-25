@@ -54,22 +54,27 @@ export interface AdminShipment {
   delivery_instructions: string | null;
   status: 'requested' | 'partially_shipped' | 'shipped';
   pendingItems: AdminShipmentItem[];
+  shippedItems: AdminShipmentItem[];
   parcels: AdminShipmentParcel[];
 }
 
+const DEFAULT_STATUSES: AdminShipment['status'][] = ['requested', 'partially_shipped'];
+
 /**
- * Demandes de livraison B2B en attente de traitement (voir
- * finalize_b2b_delivery_request, 0065_paid_delivery_schema_and_rpc.sql) —
- * pour chaque shipment 'requested'/'partially_shipped', qui l'a demandé (le
- * sous-compte réel, pas seulement le revendeur), son adresse (domicile —
- * point_relais est déjà dans parcel_point), et les articles à préparer
- * (données produit LIVE, pas le snapshot figé à la commande, pour avoir
- * marque/référence/état à jour + product_id pour le lien fiche produit).
+ * Demandes de livraison B2B (voir finalize_b2b_delivery_request,
+ * 0065_paid_delivery_schema_and_rpc.sql), filtrées par statut de shipment
+ * (`statuses`, par défaut la file "en attente d'expédition") — qui l'a
+ * demandé (le sous-compte réel, pas seulement le revendeur), son adresse
+ * (domicile — point_relais est déjà dans parcel_point), les articles encore
+ * à préparer (pendingItems, données produit LIVE) et ceux déjà expédiés
+ * (shippedItems, pour l'historique/réimpression même une fois le shipment
+ * passé au statut 'shipped' — voir ShipmentDetailModal).
  */
-export const useAdminShipments = (isAuthenticated: boolean = false) => {
+export const useAdminShipments = (isAuthenticated: boolean = false, statuses: AdminShipment['status'][] = DEFAULT_STATUSES) => {
   const [shipments, setShipments] = useState<AdminShipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const statusesKey = statuses.join(',');
 
   const fetchShipments = useCallback(async () => {
     try {
@@ -83,8 +88,8 @@ export const useAdminShipments = (isAuthenticated: boolean = false) => {
           'reseller:resellers(company_name), ' +
           'requester:profiles(first_name, last_name, email, phone, address, city, postal_code, country)'
         )
-        .in('status', ['requested', 'partially_shipped'])
-        .order('requested_at', { ascending: true });
+        .in('status', statusesKey.split(','))
+        .order('requested_at', { ascending: !statuses.includes('shipped') });
       if (shipmentsError) throw new Error(shipmentsError.message);
 
       type ShipmentRow = {
@@ -109,6 +114,11 @@ export const useAdminShipments = (isAuthenticated: boolean = false) => {
         return;
       }
 
+      // Aucun filtre de statut sur les articles : on récupère tout le contenu
+      // du shipment (encore à préparer OU déjà expédié) puis on répartit
+      // ci-dessous — nécessaire pour l'onglet historique (ShipmentDetailModal
+      // doit pouvoir montrer les pièces déjà envoyées + réimprimer leur
+      // étiquette même une fois le shipment passé au statut 'shipped').
       const [{ data: itemRows, error: itemsError }, { data: parcelRows, error: parcelsError }] = await Promise.all([
         supabase
           .from('order_items')
@@ -116,8 +126,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false) => {
             'id, line_total, insured, insurance_cost, fulfillment_status, product_id, shipment_id, ' +
             'product:products(name, images, main_image_index, product_code, reference, b2b_reference, condition, sale_price, brand:brands(name))'
           )
-          .in('shipment_id', shipmentIds)
-          .eq('fulfillment_status', 'delivery_requested'),
+          .in('shipment_id', shipmentIds),
         supabase
           .from('shipment_parcels')
           .select('id, shipment_id, parcel_index, status, sendcloud_parcel_id, tracking_number, tracking_url, label_url, weight_kg, error_message')
@@ -127,11 +136,13 @@ export const useAdminShipments = (isAuthenticated: boolean = false) => {
       if (itemsError) throw new Error(itemsError.message);
       if (parcelsError) throw new Error(parcelsError.message);
 
-      const itemsByShipment = new Map<string, AdminShipmentItem[]>();
+      const pendingByShipment = new Map<string, AdminShipmentItem[]>();
+      const shippedByShipment = new Map<string, AdminShipmentItem[]>();
       for (const row of (itemRows || []) as unknown as Array<AdminShipmentItem & { shipment_id: string }>) {
-        const list = itemsByShipment.get(row.shipment_id) || [];
+        const target = row.fulfillment_status === 'shipped' ? shippedByShipment : pendingByShipment;
+        const list = target.get(row.shipment_id) || [];
         list.push(row);
-        itemsByShipment.set(row.shipment_id, list);
+        target.set(row.shipment_id, list);
       }
       const parcelsByShipment = new Map<string, AdminShipmentParcel[]>();
       for (const row of (parcelRows || []) as Array<AdminShipmentParcel & { shipment_id: string }>) {
@@ -162,7 +173,8 @@ export const useAdminShipments = (isAuthenticated: boolean = false) => {
             parcel_point: s.parcel_point,
             delivery_instructions: s.delivery_instructions,
             status: s.status,
-            pendingItems: itemsByShipment.get(s.id) || [],
+            pendingItems: pendingByShipment.get(s.id) || [],
+            shippedItems: shippedByShipment.get(s.id) || [],
             parcels: parcelsByShipment.get(s.id) || [],
           };
         })
@@ -173,7 +185,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [statusesKey]);
 
   useEffect(() => {
     if (!isAuthenticated) {

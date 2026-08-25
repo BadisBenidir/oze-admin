@@ -1,6 +1,6 @@
 import React from 'react';
-import { X, MapPin, Package, User, Phone } from 'lucide-react';
-import { AdminShipment } from '../../../hooks/useAdminShipments';
+import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink } from 'lucide-react';
+import { AdminShipment, AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { ParcelSplitEditor } from './ParcelSplitEditor';
 
 interface ShipmentDetailModalProps {
@@ -9,10 +9,35 @@ interface ShipmentDetailModalProps {
   onGenerated: () => void;
 }
 
+const itemRef = (item: AdminShipmentItem) =>
+  item.product?.b2b_reference || item.product?.reference || item.product?.product_code || '—';
+
+const ShippedItemRow: React.FC<{ item: AdminShipmentItem }> = ({ item }) => {
+  const product = item.product;
+  const image = product?.images?.[product.main_image_index] || product?.images?.[0];
+  return (
+    <div className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-b-0">
+      {image ? (
+        <img src={image} alt={product?.name || 'Article'} className="h-10 w-10 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
+      ) : (
+        <div className="h-10 w-10 rounded-lg bg-gray-100 flex-shrink-0" />
+      )}
+      <div className="min-w-0">
+        <p className="text-sm text-gray-900 font-medium truncate">{product?.name || 'Article'}</p>
+        <p className="text-xs text-gray-500">
+          {product?.brand?.name && <span>{product.brand.name} · </span>}
+          Réf. {itemRef(item)}
+        </p>
+      </div>
+    </div>
+  );
+};
+
 export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipment, onClose, onGenerated }) => {
   if (!shipment) return null;
 
   const pp = (shipment.parcel_point || {}) as Record<string, string>;
+  const shippedParcels = shipment.parcels.filter((p) => p.status === 'shipped');
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -64,12 +89,49 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
               </div>
             </div>
 
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                <Package className="h-3.5 w-3.5" /> {shipment.pendingItems.length} article{shipment.pendingItems.length > 1 ? 's' : ''} en attente
-              </p>
-              <ParcelSplitEditor shipmentId={shipment.id} items={shipment.pendingItems} onGenerated={onGenerated} />
-            </div>
+            {shipment.pendingItems.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <Package className="h-3.5 w-3.5" /> {shipment.pendingItems.length} article{shipment.pendingItems.length > 1 ? 's' : ''} en attente
+                </p>
+                <ParcelSplitEditor shipmentId={shipment.id} items={shipment.pendingItems} onGenerated={onGenerated} />
+              </div>
+            )}
+
+            {shipment.shippedItems.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <Truck className="h-3.5 w-3.5" /> {shipment.shippedItems.length} article{shipment.shippedItems.length > 1 ? 's' : ''} expédié{shipment.shippedItems.length > 1 ? 's' : ''}
+                </p>
+                <div className="border border-gray-100 rounded-lg px-3 mb-3">
+                  {shipment.shippedItems.map((item) => <ShippedItemRow key={item.id} item={item} />)}
+                </div>
+                <div className="space-y-2">
+                  {shippedParcels.map((p) => (
+                    <div key={p.id} className="rounded-lg p-3 border bg-green-50 border-green-200">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-green-800">Colis {p.parcel_index}</p>
+                        {p.label_url && (
+                          <a href={p.label_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-green-700 underline hover:text-green-900">
+                            <FileDown className="h-3.5 w-3.5" /> Réimprimer l'étiquette
+                          </a>
+                        )}
+                      </div>
+                      {p.tracking_number && (
+                        <p className="text-xs text-green-700 mt-1">
+                          Suivi : {p.tracking_number}{' '}
+                          {p.tracking_url && (
+                            <a href={p.tracking_url} target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-0.5">
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

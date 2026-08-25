@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 
 export interface ReceptionItem {
   id: string;
-  fulfillment_status: 'ordered' | 'received';
+  fulfillment_status: 'ordered' | 'received' | 'ready_to_ship';
   product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string } | null;
   order: { id: string; order_number: string } | null;
 }
@@ -13,6 +13,7 @@ export interface ReceptionGroup {
   companyName: string;
   toReceive: ReceptionItem[];
   received: ReceptionItem[];
+  readyToShip: ReceptionItem[];
 }
 
 interface ActionResult {
@@ -21,10 +22,11 @@ interface ActionResult {
 }
 
 /**
- * Articles B2B pas encore expédiés au stade "réception" (ordered/received),
- * groupés par revendeur — voir 0062_shipments_schema.sql /
- * 0063_shipment_fulfillment_rpcs.sql. "Marquer comme reçu" et "Marquer comme
- * prêt à être livré" sont deux actions distinctes de cette même vue.
+ * Articles B2B pas encore expédiés au stade "réception" (ordered/received/
+ * ready_to_ship), groupés par revendeur — voir 0062_shipments_schema.sql /
+ * 0063_shipment_fulfillment_rpcs.sql. "Marquer comme reçu", "Marquer comme
+ * prêt à être livré" et "Remettre en attente" (rollback ready_to_ship ->
+ * received, 0080) sont trois actions distinctes de cette même vue.
  */
 export const useReceptionItems = (isAuthenticated: boolean = false) => {
   const [groups, setGroups] = useState<ReceptionGroup[]>([]);
@@ -43,7 +45,7 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
         )
         .eq('status', 'active')
         .eq('order.order_channel', 'b2b')
-        .in('fulfillment_status', ['ordered', 'received'])
+        .in('fulfillment_status', ['ordered', 'received', 'ready_to_ship'])
         .order('created_at', { ascending: true });
 
       if (fetchError) throw new Error(fetchError.message);
@@ -51,7 +53,7 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
       const byReseller = new Map<string, ReceptionGroup>();
       for (const row of (data || []) as unknown as Array<{
         id: string;
-        fulfillment_status: 'ordered' | 'received';
+        fulfillment_status: 'ordered' | 'received' | 'ready_to_ship';
         product_snapshot: ReceptionItem['product_snapshot'];
         order: { id: string; order_number: string; reseller_id: string; reseller: { company_name: string } | null } | null;
       }>) {
@@ -63,6 +65,7 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
             companyName: row.order.reseller?.company_name || 'Revendeur',
             toReceive: [],
             received: [],
+            readyToShip: [],
           });
         }
         const group = byReseller.get(resellerId)!;
@@ -73,7 +76,8 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
           order: { id: row.order.id, order_number: row.order.order_number },
         };
         if (row.fulfillment_status === 'ordered') group.toReceive.push(item);
-        else group.received.push(item);
+        else if (row.fulfillment_status === 'received') group.received.push(item);
+        else group.readyToShip.push(item);
       }
 
       setGroups(Array.from(byReseller.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)));
@@ -107,5 +111,15 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
     return { success: true };
   };
 
-  return { groups, loading, error, refresh: fetchItems, markReceived, markReadyToShip };
+  const revertToReceived = async (itemIds: string[]): Promise<ActionResult> => {
+    const { data, error: rpcError } = await supabase.rpc('admin_revert_item_to_received', { p_item_ids: itemIds });
+    if (rpcError) return { success: false, error: rpcError.message };
+    if ((data?.updated_count || 0) === 0) {
+      return { success: false, error: "Ces articles ne sont plus 'prêts à être livrés' (une demande de livraison a peut-être déjà été formulée)" };
+    }
+    await fetchItems();
+    return { success: true };
+  };
+
+  return { groups, loading, error, refresh: fetchItems, markReceived, markReadyToShip, revertToReceived };
 };

@@ -2,38 +2,53 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { useReceptionItems, ReceptionItem } from '../../../hooks/useReceptionItems';
-import { AlertCircle, ImageOff, PackageCheck, PackagePlus } from 'lucide-react';
+import { AlertCircle, ImageOff, PackageCheck, PackagePlus, Undo2 } from 'lucide-react';
 
 interface ItemRowProps {
   item: ReceptionItem;
   checked: boolean;
   onToggle: (id: string) => void;
+  onRevertOne?: (id: string) => void;
+  revertBusy?: boolean;
 }
 
-const ItemRow: React.FC<ItemRowProps> = ({ item, checked, onToggle }) => {
+const ItemRow: React.FC<ItemRowProps> = ({ item, checked, onToggle, onRevertOne, revertBusy }) => {
   const image = item.product_snapshot?.images?.[item.product_snapshot?.main_image_index ?? 0] || item.product_snapshot?.images?.[0];
   return (
-    <label className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0 cursor-pointer hover:bg-gray-50">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={() => onToggle(item.id)}
-        className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0"
-      />
-      <div className="h-9 w-9 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
-        {image ? <img src={image} alt={item.product_snapshot?.name} className="h-full w-full object-cover" /> : <ImageOff className="h-4 w-4 text-gray-300" />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-gray-900 truncate">{item.product_snapshot?.name || 'Article'}</p>
-        <p className="text-xs text-gray-400 font-mono">{item.order?.order_number}</p>
-      </div>
-    </label>
+    <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50">
+      <label className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={() => onToggle(item.id)}
+          className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0"
+        />
+        <div className="h-9 w-9 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
+          {image ? <img src={image} alt={item.product_snapshot?.name} className="h-full w-full object-cover" /> : <ImageOff className="h-4 w-4 text-gray-300" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-gray-900 truncate">{item.product_snapshot?.name || 'Article'}</p>
+          <p className="text-xs text-gray-400 font-mono">{item.order?.order_number}</p>
+        </div>
+      </label>
+      {onRevertOne && (
+        <button
+          type="button"
+          onClick={() => onRevertOne(item.id)}
+          disabled={revertBusy}
+          title="Remettre en attente"
+          className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
   );
 };
 
 export const ReceptionView: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { groups, loading, error, markReceived, markReadyToShip } = useReceptionItems(isAdmin);
+  const { groups, loading, error, markReceived, markReadyToShip, revertToReceived } = useReceptionItems(isAdmin);
   const [selection, setSelection] = useState<Record<string, Set<string>>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -81,6 +96,19 @@ export const ReceptionView: React.FC = () => {
     clearSelection(groupKey);
   };
 
+  const handleRevert = async (groupKey: string, ids: string[]) => {
+    if (ids.length === 0) return;
+    setActionError(null);
+    setBusyKey(groupKey);
+    const result = await revertToReceived(ids);
+    setBusyKey(null);
+    if (!result.success) {
+      setActionError(result.error || "Impossible de remettre ces articles en attente");
+      return;
+    }
+    clearSelection(groupKey);
+  };
+
   return (
     <div className="p-4 md:p-6">
       <div className="mb-6">
@@ -121,11 +149,12 @@ export const ReceptionView: React.FC = () => {
       {!loading && groups.map((group) => {
         const toReceiveKey = `${group.resellerId}:toReceive`;
         const receivedKey = `${group.resellerId}:received`;
+        const readyToShipKey = `${group.resellerId}:readyToShip`;
         return (
           <div key={group.resellerId} className="mb-8">
             <h4 className="text-sm font-semibold text-gray-900 mb-3">{group.companyName}</h4>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">À réceptionner ({group.toReceive.length})</p>
@@ -170,6 +199,38 @@ export const ReceptionView: React.FC = () => {
                     ) : (
                       group.received.map((item) => (
                         <ItemRow key={item.id} item={item} checked={selectedFor(receivedKey).has(item.id)} onToggle={(id) => toggle(receivedKey, id)} />
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Prêts à être livrés ({group.readyToShip.length})</p>
+                  <button
+                    onClick={() => handleRevert(readyToShipKey, Array.from(selectedFor(readyToShipKey)))}
+                    disabled={selectedFor(readyToShipKey).size === 0 || busyKey === readyToShipKey}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Undo2 className="h-3.5 w-3.5" />
+                    Remettre en attente
+                  </button>
+                </div>
+                <Card>
+                  <CardContent className="p-0">
+                    {group.readyToShip.length === 0 ? (
+                      <p className="text-xs text-gray-400 px-4 py-6 text-center">Rien de prêt à être livré.</p>
+                    ) : (
+                      group.readyToShip.map((item) => (
+                        <ItemRow
+                          key={item.id}
+                          item={item}
+                          checked={selectedFor(readyToShipKey).has(item.id)}
+                          onToggle={(id) => toggle(readyToShipKey, id)}
+                          onRevertOne={(id) => handleRevert(readyToShipKey, [id])}
+                          revertBusy={busyKey === readyToShipKey}
+                        />
                       ))
                     )}
                   </CardContent>
