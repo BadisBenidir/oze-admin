@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye } from 'lucide-react';
 import { AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { useGenerateShipmentLabels, ParcelResult } from '../../../hooks/useGenerateShipmentLabels';
+import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
 import { ProductDetail } from '../ProductDetail';
 import { isPlausiblePhone } from '../../../utils/phoneValidation';
 
@@ -21,6 +22,7 @@ const itemRef = (item: AdminShipmentItem) =>
 
 export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, onGenerated }) => {
   const { generate } = useGenerateShipmentLabels();
+  const { download: downloadLabel, downloadingUrl } = useDownloadShipmentLabel();
   const [parcels, setParcels] = useState<ParcelDraft[]>([{ items: items.map((i) => i.id) }]);
   const [generating, setGenerating] = useState(false);
   const [results, setResults] = useState<ParcelResult[] | null>(null);
@@ -28,6 +30,13 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
   const [viewingProductId, setViewingProductId] = useState<string | null>(null);
   const phoneMissing = !isPlausiblePhone(requesterPhone);
   const [phoneOverride, setPhoneOverride] = useState('');
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const handleDownloadLabel = async (labelUrl: string) => {
+    setDownloadError(null);
+    const result = await downloadLabel(labelUrl);
+    if (!result.success) setDownloadError(result.error || "Impossible d'ouvrir le bordereau");
+  };
 
   const parcelOf = (itemId: string) => parcels.findIndex((p) => p.items.includes(itemId));
 
@@ -69,6 +78,13 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
         </div>
       )}
 
+      {downloadError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700">{downloadError}</p>
+        </div>
+      )}
+
       {results && (
         <div className="space-y-2">
           {results.map((r) => (
@@ -78,9 +94,14 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                   Colis {r.parcel_index} — {r.status === 'shipped' ? 'expédié' : 'échec'}
                 </p>
                 {r.status === 'shipped' && r.label_url && (
-                  <a href={r.label_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-green-700 underline hover:text-green-900">
-                    <FileDown className="h-3.5 w-3.5" /> Étiquette
-                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadLabel(r.label_url!)}
+                    disabled={downloadingUrl === r.label_url}
+                    className="flex items-center gap-1 text-xs text-green-700 underline hover:text-green-900 disabled:opacity-50"
+                  >
+                    <FileDown className="h-3.5 w-3.5" /> {downloadingUrl === r.label_url ? 'Ouverture...' : 'Étiquette'}
+                  </button>
                 )}
               </div>
               {r.status === 'shipped' && r.tracking_number && (

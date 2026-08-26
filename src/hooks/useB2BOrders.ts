@@ -50,7 +50,7 @@ export interface B2BOrder {
   order_items: B2BOrderItem[];
 }
 
-export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: string) => {
+export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: string, placedByProfileId?: string) => {
   const [orders, setOrders] = useState<B2BOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +70,12 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
       if (resellerId) {
         query = query.eq('reseller_id', resellerId);
       }
+      // Isole les commandes d'UN sous-compte précis (voir ResellerDetail.tsx,
+      // action "Voir les commandes" par contact) plutôt que la vue
+      // consolidée de toute l'entreprise.
+      if (placedByProfileId) {
+        query = query.eq('placed_by_profile_id', placedByProfileId);
+      }
 
       const { data, error: fetchError } = await query.order('created_at', { ascending: false });
 
@@ -84,7 +90,7 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
     } finally {
       setLoading(false);
     }
-  }, [resellerId]);
+  }, [resellerId, placedByProfileId]);
 
   useEffect(() => {
     if (!isAuthenticated) {

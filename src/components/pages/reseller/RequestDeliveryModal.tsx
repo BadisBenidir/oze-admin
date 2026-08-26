@@ -42,6 +42,17 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
     [items, shipping.deliveryType]
   );
 
+  // Prix réel par mode, pour les badges de ShippingForm — remplace un ancien
+  // tarif statique qui affichait 0,00 € pour le point relais (voir
+  // ShippingForm.tsx).
+  const priceByMode = useMemo(() => {
+    const points = items.map((i) => ({ points: i.shipping_points }));
+    return {
+      domicile: computeShippingCost(points, 'domicile').cost,
+      point_relais: computeShippingCost(points, 'point_relais').cost,
+    };
+  }, [items]);
+
   const handleSubmit = async () => {
     if (shipping.deliveryType === 'domicile' && !hasAddress) return;
     if (shipping.deliveryType === 'point_relais' && !shipping.parcelPoint) {
@@ -114,6 +125,7 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
               }}
               value={shipping}
               onChange={setShipping}
+              priceByMode={priceByMode}
             />
 
             {shipping.deliveryType === 'domicile' && (

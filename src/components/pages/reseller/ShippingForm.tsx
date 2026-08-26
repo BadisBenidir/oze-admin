@@ -5,15 +5,6 @@ import { openServicePointPicker } from '../../../services/sendcloudService';
 
 export type DeliveryType = 'point_relais' | 'domicile';
 
-// Tarifs affichés côté client à titre indicatif — le prix réellement facturé
-// est toujours recalculé côté serveur (b2b-checkout), jamais accepté tel quel.
-// ⚠️ TEMPORAIRE : point_relais à 0€ pour un test en cours — remettre à 4.9
-// une fois le test terminé (voir aussi b2b-checkout/index.ts, même valeur).
-export const SHIPPING_RATES: Record<DeliveryType, number> = {
-  point_relais: 0,
-  domicile: 14.9,
-};
-
 export interface ShippingSelection {
   deliveryType: DeliveryType;
   parcelPoint: ChronopostPickupPoint | null;
@@ -30,6 +21,13 @@ interface ShippingFormProps {
   companyAddress: CompanyAddress;
   value: ShippingSelection;
   onChange: (selection: ShippingSelection) => void;
+  /**
+   * Prix RÉEL par mode de livraison, calculé par l'appelant à partir des
+   * articles sélectionnés (voir computeShippingCost) — remplace un ancien
+   * tarif statique affiché ici (dont point_relais était resté à 0€, un
+   * réglage temporaire jamais retiré, cause du bug d'affichage "0,00 €").
+   */
+  priceByMode: Record<DeliveryType, number>;
 }
 
 // Adapté de oze-storefront/ShippingForm.tsx : l'adresse d'un revendeur est
@@ -38,7 +36,7 @@ interface ShippingFormProps {
 // pas de formulaire d'adresse ici, seulement le choix du mode de livraison.
 // Composant contrôlé (pas d'étape/soumission propre) : fait partie de la
 // page panier fusionnée, la sélection vit dans CartPage.
-const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, value, onChange }) => {
+const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, value, onChange, priceByMode }) => {
   const [searchPostalCode, setSearchPostalCode] = useState(companyAddress.postalCode);
   const [searchCity, setSearchCity] = useState(companyAddress.city);
   const [pickerLoading, setPickerLoading] = useState(false);
@@ -101,7 +99,7 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, value, onCh
               <Clock className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
               Livrée le lendemain ou le surlendemain
             </p>
-            <div className="mt-2 text-lg font-bold text-gray-900">{SHIPPING_RATES.domicile.toFixed(2)} €</div>
+            <div className="mt-2 text-lg font-bold text-gray-900">{priceByMode.domicile.toFixed(2)} €</div>
           </button>
 
           <button
@@ -129,7 +127,7 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, value, onCh
               <Clock className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
               3 jours ouvrés
             </p>
-            <div className="mt-2 text-lg font-bold text-gray-900">{SHIPPING_RATES.point_relais.toFixed(2)} €</div>
+            <div className="mt-2 text-lg font-bold text-gray-900">{priceByMode.point_relais.toFixed(2)} €</div>
           </button>
         </div>
 

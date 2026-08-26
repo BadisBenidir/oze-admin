@@ -9,10 +9,11 @@ import { useAdminWallet } from '../../hooks/useAdminWallet';
 import { ResellerFormModal } from './ResellerFormModal';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { WalletAdjustModal } from './b2b/WalletAdjustModal';
+import { ResellerContactEditModal } from './b2b/ResellerContactEditModal';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
-  Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2,
+  Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, X,
 } from 'lucide-react';
 import type { B2BOrder } from '../../hooks/useB2BOrders';
 
@@ -49,7 +50,7 @@ const orderStatusBadge = (status: string) => {
 
 export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack, onResellerUpdated }) => {
   const { isAdmin } = useAdminAuth();
-  const { fetchContacts, resetContactPassword } = useResellers(false);
+  const { fetchContacts, resetContactPassword, updateContactEmail, updateContactProfile } = useResellers(false);
 
   // Copie locale pour refléter immédiatement une édition sans devoir
   // recharger toute la liste des revendeurs depuis le parent.
@@ -58,7 +59,11 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
     setCurrentReseller(reseller);
   }, [reseller]);
 
-  const { orders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useB2BOrders(isAdmin, currentReseller.id);
+  // Vue "Historique des commandes" : consolidée par défaut (toute
+  // l'entreprise), ou isolée sur UN sous-compte précis quand l'admin clique
+  // "Voir les commandes" depuis l'onglet Structure & Sous-comptes.
+  const [ordersFilterContact, setOrdersFilterContact] = useState<ResellerContact | null>(null);
+  const { orders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useB2BOrders(isAdmin, currentReseller.id, ordersFilterContact?.profile_id);
 
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
@@ -81,6 +86,26 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   }, [primaryContact]);
   const selectedContact = contacts.find((c) => c.id === selectedContactId) || primaryContact;
   const wallet = useAdminWallet(selectedContact?.profile_id);
+
+  const [editingContact, setEditingContact] = useState<ResellerContact | null>(null);
+
+  const handleSaveContact = async (
+    profileId: string,
+    profileData: { first_name: string; last_name: string; phone: string; address: string; city: string; postal_code: string; country: string },
+    newEmail: string | null
+  ) => {
+    const result = await updateContactProfile(profileId, profileData);
+    if (!result.success) return result;
+
+    if (newEmail) {
+      const emailResult = await updateContactEmail(profileId, newEmail);
+      if (!emailResult.success) return emailResult;
+    }
+
+    const refreshed = await fetchContacts(currentReseller.id);
+    setContacts(refreshed);
+    return { success: true };
+  };
 
   const [resettingContact, setResettingContact] = useState<ResellerContact | null>(null);
   const [newPassword, setNewPassword] = useState<string | null>(null);
@@ -319,6 +344,20 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                         <td className="py-3 px-4 md:px-6">
                           <div className="flex items-center gap-1">
                             <button
+                              onClick={() => { setOrdersFilterContact(c); setActiveTab('orders'); }}
+                              className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                              title="Voir les commandes de ce sous-compte"
+                            >
+                              <ShoppingBag className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setEditingContact(c)}
+                              className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Modifier ce sous-compte"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
                               onClick={() => { setSelectedContactId(c.id); setActiveTab('wallet'); }}
                               className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                               title="Voir le portefeuille de ce membre"
@@ -347,6 +386,19 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
       {activeTab === 'orders' && (
         <Card>
           <CardContent className="p-0">
+            {ordersFilterContact && (
+              <div className="m-4 bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center justify-between gap-3">
+                <p className="text-sm text-purple-800">
+                  Commandes de <strong>{ordersFilterContact.first_name} {ordersFilterContact.last_name}</strong> uniquement
+                </p>
+                <button
+                  onClick={() => setOrdersFilterContact(null)}
+                  className="flex items-center gap-1 text-xs text-purple-700 hover:text-purple-900 flex-shrink-0"
+                >
+                  <X className="h-3.5 w-3.5" /> Voir toutes les commandes
+                </button>
+              </div>
+            )}
             {ordersError && (
               <div className="m-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
                 <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
@@ -631,6 +683,12 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
         reseller={currentReseller}
         onClose={() => setShowEditModal(false)}
         onSaved={handleResellerSaved}
+      />
+
+      <ResellerContactEditModal
+        contact={editingContact}
+        onClose={() => setEditingContact(null)}
+        onSave={handleSaveContact}
       />
 
       <WalletAdjustModal
