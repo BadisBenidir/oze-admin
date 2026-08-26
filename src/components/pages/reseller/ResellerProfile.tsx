@@ -6,6 +6,7 @@ import { supabase } from '../../../lib/supabase';
 import { openServicePointPicker } from '../../../services/sendcloudService';
 import { ChronopostPickupPoint } from '../../../services/chronopostService';
 import { Building2, CheckCircle2, AlertCircle, Lock, Eye, EyeOff, Check, Circle, Truck, Package, MapPin } from 'lucide-react';
+import { isPlausiblePhone } from '../../../utils/phoneValidation';
 
 export const ResellerProfile: React.FC = () => {
   const { profile } = useResellerAuth();
@@ -80,19 +81,24 @@ export const ResellerProfile: React.FC = () => {
     e.preventDefault();
     if (!profile) return;
 
+    if (phone.trim() && !isPlausiblePhone(phone)) {
+      setError('Le numéro de téléphone renseigné ne semble pas valide.');
+      return;
+    }
+
     setSaving(true);
     setError(null);
     setSuccess(false);
 
-    // "Informations personnelles" (prénom/nom/téléphone) est verrouillé côté
-    // UI — seules les préférences de livraison sont modifiables par le
-    // revendeur, donc seules elles sont envoyées ici. Les inclure quand même
-    // (avec leur valeur inchangée) ne casserait rien, mais les omettre rend
-    // explicite que ce formulaire ne peut plus les toucher, même si un futur
-    // changement réactive un input par erreur.
+    // Prénom/nom/email restent verrouillés côté UI (gérés par un admin OZË) —
+    // seul le téléphone est désormais modifiable ici en plus des préférences
+    // de livraison : Sendcloud (Mondial Relay en particulier) exige un
+    // téléphone valide pour générer un bordereau, et ce champ était jusqu'ici
+    // bloqué sans aucun moyen de le renseigner soi-même.
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
+        phone: phone.trim() || null,
         address: address.trim() || null,
         city: city.trim() || null,
         postal_code: postalCode.trim() || null,
@@ -190,11 +196,11 @@ export const ResellerProfile: React.FC = () => {
                 <input
                   type="tel"
                   value={phone}
-                  readOnly
-                  disabled
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                   placeholder="06 12 34 56 78"
                 />
+                <p className="text-xs text-gray-500 mt-1">Requis par le transporteur pour générer une étiquette de livraison.</p>
               </div>
             </CardContent>
           </Card>

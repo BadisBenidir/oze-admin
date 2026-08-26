@@ -3,6 +3,8 @@ import { X, Truck, AlertCircle, CreditCard } from 'lucide-react';
 import ShippingForm, { ShippingSelection } from './ShippingForm';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { computeShippingCost } from '../../../utils/b2bShippingPricing';
+import { isPlausiblePhone } from '../../../utils/phoneValidation';
+import { supabase } from '../../../lib/supabase';
 
 interface RequestDeliveryModalProps {
   items: { shipping_points: number }[];
@@ -29,8 +31,11 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
     parcelPoint: null,
   });
   const [instructions, setInstructions] = useState(profile?.delivery_instructions || '');
+  const [phone, setPhone] = useState(profile?.phone || '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const needsPhone = !isPlausiblePhone(profile?.phone);
 
   const pricePreview = useMemo(
     () => computeShippingCost(items.map((i) => ({ points: i.shipping_points })), shipping.deliveryType),
@@ -43,8 +48,26 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
       setError('Veuillez sélectionner un point relais avant de confirmer.');
       return;
     }
+    if (needsPhone && !isPlausiblePhone(phone)) {
+      setError('Un numéro de téléphone valide est requis par le transporteur pour livrer votre commande.');
+      return;
+    }
     setError(null);
     setSubmitting(true);
+
+    // Le téléphone est requis par Sendcloud (Mondial Relay en particulier) au
+    // moment de générer le bordereau, bien après cette demande — enregistré
+    // ici une bonne fois sur le profil dès qu'il manquait, pour ne plus
+    // jamais avoir à le redemander.
+    if (needsPhone && profile) {
+      const { error: phoneError } = await supabase.from('profiles').update({ phone: phone.trim() }).eq('id', profile.id);
+      if (phoneError) {
+        setSubmitting(false);
+        setError("Impossible d'enregistrer le numéro de téléphone : " + phoneError.message);
+        return;
+      }
+    }
+
     const result = await onSubmit(shipping.deliveryType, shipping.parcelPoint, instructions || null);
     if (!result.success) {
       setSubmitting(false);
@@ -106,6 +129,22 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
               </div>
             )}
 
+            {needsPhone && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Numéro de téléphone (requis par le transporteur)</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-gray-400 ${
+                    phone.length > 0 && !isPlausiblePhone(phone) ? 'border-red-300' : 'border-gray-200'
+                  }`}
+                  placeholder="06 12 34 56 78"
+                />
+                <p className="text-xs text-gray-500 mt-1">Aucun numéro n'est enregistré sur votre profil — requis pour livrer votre colis.</p>
+              </div>
+            )}
+
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center justify-between">
               <span className="text-sm text-gray-700">Frais de port ({pricePreview.parcelCount} colis)</span>
               <span className="text-base font-semibold text-gray-900">{pricePreview.cost.toFixed(2)} €</span>
@@ -113,7 +152,7 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
 
             <button
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || (needsPhone && !isPlausiblePhone(phone))}
               className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
               {submitting ? (

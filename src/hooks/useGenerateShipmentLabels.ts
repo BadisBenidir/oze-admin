@@ -24,10 +24,10 @@ interface GenerateResult {
 
 /** Appelle generate-b2b-shipment-labels : 1 appel Sendcloud par colis configuré. */
 export const useGenerateShipmentLabels = () => {
-  const generate = async (shipmentId: string, parcels: ParcelInput[]): Promise<GenerateResult> => {
+  const generate = async (shipmentId: string, parcels: ParcelInput[], phoneOverride?: string): Promise<GenerateResult> => {
     const { data, error } = await invokeEdgeFunction<{ success: boolean; shipment_status: string; parcels: ParcelResult[] }>(
       'generate-b2b-shipment-labels',
-      { shipment_id: shipmentId, parcels }
+      { shipment_id: shipmentId, parcels, ...(phoneOverride ? { phone_override: phoneOverride } : {}) }
     );
     if (error) return { success: false, error };
     return { success: true, shipment_status: data?.shipment_status, parcels: data?.parcels || [] };

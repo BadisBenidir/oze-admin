@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 
 export interface ReceptionItem {
   id: string;
-  fulfillment_status: 'ordered' | 'received' | 'ready_to_ship';
+  fulfillment_status: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested';
   product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string } | null;
   order: { id: string; order_number: string } | null;
 }
@@ -14,6 +14,7 @@ export interface ReceptionGroup {
   toReceive: ReceptionItem[];
   received: ReceptionItem[];
   readyToShip: ReceptionItem[];
+  inDeliveryRequest: ReceptionItem[];
 }
 
 interface ActionResult {
@@ -23,10 +24,12 @@ interface ActionResult {
 
 /**
  * Articles B2B pas encore expédiés au stade "réception" (ordered/received/
- * ready_to_ship), groupés par revendeur — voir 0062_shipments_schema.sql /
- * 0063_shipment_fulfillment_rpcs.sql. "Marquer comme reçu", "Marquer comme
- * prêt à être livré" et "Remettre en attente" (rollback ready_to_ship ->
- * received, 0080) sont trois actions distinctes de cette même vue.
+ * ready_to_ship/delivery_requested), groupés par revendeur — voir
+ * 0062_shipments_schema.sql / 0063_shipment_fulfillment_rpcs.sql. "Marquer
+ * comme reçu", "Marquer comme prêt à être livré" et "Remettre en attente"
+ * (rollback ready_to_ship OU delivery_requested -> received, 0080/0081) sont
+ * les actions distinctes de cette même vue — le rollback fonctionne même sur
+ * une demande de livraison déjà formulée, seul `shipped` reste verrouillé.
  */
 export const useReceptionItems = (isAuthenticated: boolean = false) => {
   const [groups, setGroups] = useState<ReceptionGroup[]>([]);
@@ -45,7 +48,7 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
         )
         .eq('status', 'active')
         .eq('order.order_channel', 'b2b')
-        .in('fulfillment_status', ['ordered', 'received', 'ready_to_ship'])
+        .in('fulfillment_status', ['ordered', 'received', 'ready_to_ship', 'delivery_requested'])
         .order('created_at', { ascending: true });
 
       if (fetchError) throw new Error(fetchError.message);
@@ -53,7 +56,7 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
       const byReseller = new Map<string, ReceptionGroup>();
       for (const row of (data || []) as unknown as Array<{
         id: string;
-        fulfillment_status: 'ordered' | 'received' | 'ready_to_ship';
+        fulfillment_status: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested';
         product_snapshot: ReceptionItem['product_snapshot'];
         order: { id: string; order_number: string; reseller_id: string; reseller: { company_name: string } | null } | null;
       }>) {
@@ -66,6 +69,7 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
             toReceive: [],
             received: [],
             readyToShip: [],
+            inDeliveryRequest: [],
           });
         }
         const group = byReseller.get(resellerId)!;
@@ -77,7 +81,8 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
         };
         if (row.fulfillment_status === 'ordered') group.toReceive.push(item);
         else if (row.fulfillment_status === 'received') group.received.push(item);
-        else group.readyToShip.push(item);
+        else if (row.fulfillment_status === 'ready_to_ship') group.readyToShip.push(item);
+        else group.inDeliveryRequest.push(item);
       }
 
       setGroups(Array.from(byReseller.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)));
@@ -115,7 +120,7 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
     const { data, error: rpcError } = await supabase.rpc('admin_revert_item_to_received', { p_item_ids: itemIds });
     if (rpcError) return { success: false, error: rpcError.message };
     if ((data?.updated_count || 0) === 0) {
-      return { success: false, error: "Ces articles ne sont plus 'prêts à être livrés' (une demande de livraison a peut-être déjà été formulée)" };
+      return { success: false, error: "Ces articles ne sont plus modifiables (probablement déjà expédiés — seul un bordereau déjà généré verrouille définitivement un article)" };
     }
     await fetchItems();
     return { success: true };

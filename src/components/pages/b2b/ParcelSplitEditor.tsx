@@ -3,6 +3,7 @@ import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye } fr
 import { AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { useGenerateShipmentLabels, ParcelResult } from '../../../hooks/useGenerateShipmentLabels';
 import { ProductDetail } from '../ProductDetail';
+import { isPlausiblePhone } from '../../../utils/phoneValidation';
 
 interface ParcelDraft {
   items: string[];
@@ -11,19 +12,22 @@ interface ParcelDraft {
 interface ParcelSplitEditorProps {
   shipmentId: string;
   items: AdminShipmentItem[];
+  requesterPhone: string | null;
   onGenerated: () => void;
 }
 
 const itemRef = (item: AdminShipmentItem) =>
   item.product?.b2b_reference || item.product?.reference || item.product?.product_code || '—';
 
-export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, onGenerated }) => {
+export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, onGenerated }) => {
   const { generate } = useGenerateShipmentLabels();
   const [parcels, setParcels] = useState<ParcelDraft[]>([{ items: items.map((i) => i.id) }]);
   const [generating, setGenerating] = useState(false);
   const [results, setResults] = useState<ParcelResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewingProductId, setViewingProductId] = useState<string | null>(null);
+  const phoneMissing = !isPlausiblePhone(requesterPhone);
+  const [phoneOverride, setPhoneOverride] = useState('');
 
   const parcelOf = (itemId: string) => parcels.findIndex((p) => p.items.includes(itemId));
 
@@ -38,9 +42,13 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
   const handleGenerate = async () => {
     const nonEmpty = parcels.filter((p) => p.items.length > 0);
     if (nonEmpty.length === 0) return;
+    if (phoneMissing && !isPlausiblePhone(phoneOverride)) {
+      setError('Un numéro de téléphone valide est requis par Sendcloud pour générer le bordereau.');
+      return;
+    }
     setError(null);
     setGenerating(true);
-    const result = await generate(shipmentId, nonEmpty.map((p) => ({ item_ids: p.items })));
+    const result = await generate(shipmentId, nonEmpty.map((p) => ({ item_ids: p.items })), phoneMissing ? phoneOverride.trim() : undefined);
     setGenerating(false);
     if (!result.success) {
       setError(result.error || 'Une erreur est survenue');
@@ -173,9 +181,26 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
             <Plus className="h-4 w-4" /> Ajouter un {parcels.length + 1}e colis
           </button>
 
+          {phoneMissing && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <label className="block text-xs font-medium text-amber-800 mb-1">
+                Numéro de téléphone manquant ou invalide sur le profil du demandeur — requis par Sendcloud (Mondial Relay en particulier)
+              </label>
+              <input
+                type="tel"
+                value={phoneOverride}
+                onChange={(e) => setPhoneOverride(e.target.value)}
+                placeholder="06 12 34 56 78"
+                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-gray-400 ${
+                  phoneOverride.length > 0 && !isPlausiblePhone(phoneOverride) ? 'border-red-300' : 'border-gray-200'
+                }`}
+              />
+            </div>
+          )}
+
           <button
             onClick={handleGenerate}
-            disabled={generating || parcels.every((p) => p.items.length === 0)}
+            disabled={generating || parcels.every((p) => p.items.length === 0) || (phoneMissing && !isPlausiblePhone(phoneOverride))}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             <Truck className="h-4 w-4" />

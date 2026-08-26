@@ -150,11 +150,12 @@ export const ReceptionView: React.FC = () => {
         const toReceiveKey = `${group.resellerId}:toReceive`;
         const receivedKey = `${group.resellerId}:received`;
         const readyToShipKey = `${group.resellerId}:readyToShip`;
+        const inDeliveryRequestKey = `${group.resellerId}:inDeliveryRequest`;
         return (
           <div key={group.resellerId} className="mb-8">
             <h4 className="text-sm font-semibold text-gray-900 mb-3">{group.companyName}</h4>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">À réceptionner ({group.toReceive.length})</p>
@@ -230,6 +231,38 @@ export const ReceptionView: React.FC = () => {
                           onToggle={(id) => toggle(readyToShipKey, id)}
                           onRevertOne={(id) => handleRevert(readyToShipKey, [id])}
                           revertBusy={busyKey === readyToShipKey}
+                        />
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Demande en cours ({group.inDeliveryRequest.length})</p>
+                  <button
+                    onClick={() => handleRevert(inDeliveryRequestKey, Array.from(selectedFor(inDeliveryRequestKey)))}
+                    disabled={selectedFor(inDeliveryRequestKey).size === 0 || busyKey === inDeliveryRequestKey}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Undo2 className="h-3.5 w-3.5" />
+                    Annuler / remettre en attente
+                  </button>
+                </div>
+                <Card>
+                  <CardContent className="p-0">
+                    {group.inDeliveryRequest.length === 0 ? (
+                      <p className="text-xs text-gray-400 px-4 py-6 text-center">Aucune demande de livraison en cours.</p>
+                    ) : (
+                      group.inDeliveryRequest.map((item) => (
+                        <ItemRow
+                          key={item.id}
+                          item={item}
+                          checked={selectedFor(inDeliveryRequestKey).has(item.id)}
+                          onToggle={(id) => toggle(inDeliveryRequestKey, id)}
+                          onRevertOne={(id) => handleRevert(inDeliveryRequestKey, [id])}
+                          revertBusy={busyKey === inDeliveryRequestKey}
                         />
                       ))
                     )}

@@ -94,7 +94,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                   <Package className="h-3.5 w-3.5" /> {shipment.pendingItems.length} article{shipment.pendingItems.length > 1 ? 's' : ''} en attente
                 </p>
-                <ParcelSplitEditor shipmentId={shipment.id} items={shipment.pendingItems} onGenerated={onGenerated} />
+                <ParcelSplitEditor shipmentId={shipment.id} items={shipment.pendingItems} requesterPhone={shipment.requester.phone} onGenerated={onGenerated} />
               </div>
             )}
 

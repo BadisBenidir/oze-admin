@@ -23,6 +23,14 @@ const json = (body: unknown, status = 200) =>
 
 const MAX_POINTS_PER_PARCEL = 6;
 
+// Copie identique de src/utils/phoneValidation.ts (front) — jamais fait
+// confiance à une seule validation côté client, Sendcloud (Mondial Relay en
+// particulier) rejette un bordereau sans téléphone valide côté destinataire.
+function isPlausiblePhone(raw: string | null | undefined): boolean {
+  const digits = String(raw || '').replace(/[\s.\-()]/g, '');
+  return /^\+?[0-9]{8,15}$/.test(digits);
+}
+
 interface ParcelBin {
   points: number;
   hasBag: boolean;
@@ -148,9 +156,13 @@ Deno.serve(async (req: Request) => {
 
     const { data: profile } = await adminClient
       .from('profiles')
-      .select('email')
+      .select('email, phone')
       .eq('id', user.id)
       .maybeSingle();
+
+    if (!isPlausiblePhone(profile?.phone)) {
+      return json({ error: 'Un numéro de téléphone valide est requis sur votre profil pour générer le bordereau de livraison. Renseignez-le puis réessayez.' }, 400);
+    }
 
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
     const origin = req.headers.get('origin') || 'https://admin.ozeparis.com';

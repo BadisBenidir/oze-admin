@@ -65,6 +65,12 @@ const splitAddress = (raw: string | null | undefined): { line1: string; houseNum
   return { line1: s, houseNumber: '' };
 };
 
+// Copie identique de src/utils/phoneValidation.ts (front).
+const isPlausiblePhone = (raw: string | null | undefined): boolean => {
+  const digits = String(raw || '').replace(/[\s.\-()]/g, '');
+  return /^\+?[0-9]{8,15}$/.test(digits);
+};
+
 // Extrait le message d'erreur le plus précis possible du corps de réponse
 // Sendcloud (le détail du champ en cause est souvent dans error.errors, pas
 // dans error.message qui reste générique) pour pouvoir diagnostiquer sans
@@ -137,7 +143,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Clés Sendcloud manquantes côté serveur' }, 500);
     }
 
-    const { shipment_id, parcels } = await req.json();
+    const { shipment_id, parcels, phone_override } = await req.json();
     if (!shipment_id || !Array.isArray(parcels) || parcels.length === 0) {
       return json({ error: 'shipment_id et parcels (au moins 1 colis) sont requis' }, 400);
     }
@@ -198,13 +204,25 @@ Deno.serve(async (req: Request) => {
       .eq('id', shipment.requested_by_profile_id)
       .maybeSingle();
     const email = profile?.email || '';
-    const phone = profile?.phone || '';
+    // Saisie de secours admin : si le profil n'a pas de téléphone valide,
+    // l'admin peut en fournir un depuis la modale de génération plutôt que
+    // d'échouer — enregistré sur le profil du demandeur pour ne plus jamais
+    // avoir à le ressaisir aux prochaines générations.
+    const phone = isPlausiblePhone(profile?.phone) ? profile!.phone! : (isPlausiblePhone(phone_override) ? String(phone_override).trim() : '');
     const contactName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Revendeur';
 
-    if (!email || !phone) {
+    if (!email) {
       return json({
-        error: `Impossible de générer l'étiquette : ${!email ? 'email' : 'téléphone'} manquant sur le profil du demandeur — requis par Sendcloud (Mondial Relay en particulier). Complétez-le puis réessayez.`,
+        error: `Impossible de générer l'étiquette : email manquant sur le profil du demandeur — requis par Sendcloud. Complétez-le puis réessayez.`,
       }, 400);
+    }
+    if (!phone) {
+      return json({
+        error: `Numéro de téléphone manquant ou invalide sur le profil du demandeur — requis par Sendcloud (Mondial Relay en particulier). Saisissez un numéro valide pour générer le bordereau.`,
+      }, 400);
+    }
+    if (isPlausiblePhone(phone_override) && phone_override.trim() !== (profile?.phone || '')) {
+      await adminClient.from('profiles').update({ phone: String(phone_override).trim() }).eq('id', shipment.requested_by_profile_id);
     }
 
     let toAddress: Record<string, unknown>;
