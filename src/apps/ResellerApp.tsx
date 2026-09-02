@@ -16,6 +16,7 @@ import { ResellerProfile } from '../components/pages/reseller/ResellerProfile';
 import { Team } from '../components/pages/reseller/Team';
 import { WalletPage } from '../components/pages/reseller/WalletPage';
 import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
+import { CartBlockingModal } from '../components/pages/reseller/CartBlockingModal';
 import { ShoppingCart, Wallet, X } from 'lucide-react';
 
 // Deux routes "réelles" (URL adressables) de l'app revendeur : la fiche
@@ -309,6 +310,7 @@ function ResellerApp() {
         )}
         {renderContent()}
       </MainLayout>
+      <CartBlockingModal blockingError={cart.blockingError} onClose={cart.dismissBlockingError} />
     </ResellerProtectedRoute>
   );
 }

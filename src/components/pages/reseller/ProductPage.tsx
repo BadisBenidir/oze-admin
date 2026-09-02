@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useB2BProduct } from '../../../hooks/useB2BProduct';
 import { useB2BCart } from '../../../hooks/useB2BCart';
+import { supabase } from '../../../lib/supabase';
 import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
 import {
   ArrowLeft,
@@ -25,6 +26,13 @@ interface ProductPageProps {
   cart: ReturnType<typeof useB2BCart>;
   onBack: () => void;
 }
+
+const formatCountdown = (ms: number): string => {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
 
 const normalizeImageArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -51,6 +59,33 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  // Verrou anti-reset (3 min) : interroge get_item_add_lock pour CET article
+  // avant même une tentative d'ajout, afin de désactiver le bouton avec un
+  // compte à rebours plutôt que de laisser l'utilisateur découvrir le refus
+  // seulement après un clic.
+  const [addLockRetryAt, setAddLockRetryAt] = useState<number | null>(null);
+  const [, setLockTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAddLockRetryAt(null);
+    supabase.rpc('get_item_add_lock', { p_product_id: productId }).then(({ data, error: lockError }) => {
+      if (cancelled || lockError || !data?.locked) return;
+      setAddLockRetryAt(Date.now() + (data.retry_after_seconds || 0) * 1000);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [productId]);
+
+  useEffect(() => {
+    if (addLockRetryAt === null) return;
+    const interval = setInterval(() => {
+      setLockTick((t) => t + 1);
+      if (addLockRetryAt <= Date.now()) setAddLockRetryAt(null);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [addLockRetryAt]);
 
   if (loading) {
     return (
@@ -103,17 +138,25 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
     setAdding(false);
     if (!result.success) {
       setAddError(result.error || "Impossible d'ajouter cet article");
+      if (result.errorCode === 'ITEM_RECENTLY_REMOVED' && result.retryAfterSeconds) {
+        setAddLockRetryAt(Date.now() + result.retryAfterSeconds * 1000);
+      }
       // Un autre utilisateur vient de réserver ce produit entre-temps : on
       // rafraîchit immédiatement pour refléter held_by_other sans attendre.
       refresh();
     }
   };
 
-  const buttonDisabled = adding || inCart || (product.held_by_other && !inCart);
+  const addLockRemainingMs = addLockRetryAt !== null ? addLockRetryAt - Date.now() : null;
+  const isAddLocked = addLockRemainingMs !== null && addLockRemainingMs > 0;
+
+  const buttonDisabled = adding || inCart || isAddLocked || (product.held_by_other && !inCart);
   const buttonLabel = adding
     ? 'Ajout en cours...'
     : inCart
     ? 'Dans le panier'
+    : isAddLocked
+    ? `Patientez ${formatCountdown(addLockRemainingMs!)}`
     : product.held_by_other
     ? 'En cours de réservation'
     : 'Ajouter au panier';

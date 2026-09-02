@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useB2BCart, CART_ITEM_SESSION_MS, INSURANCE_RATE } from '../../../hooks/useB2BCart';
+import { useB2BCart, INSURANCE_RATE } from '../../../hooks/useB2BCart';
 import { useWallet } from '../../../hooks/useWallet';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import CheckoutSummary from './CheckoutSummary';
@@ -67,6 +67,9 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
     }
   };
 
+  const globalRemainingMs = cart.globalExpiresAt !== null ? cart.globalExpiresAt - Date.now() : null;
+  const globalUrgent = globalRemainingMs !== null && globalRemainingMs < 2 * 60 * 1000;
+
   if (cart.items.length === 0) {
     return (
       <div className="p-4 md:p-6">
@@ -99,20 +102,28 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
         <span>Retour au catalogue</span>
       </button>
 
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">Mon panier</h3>
-        <p className="text-sm text-gray-500">{cart.items.length} article{cart.items.length > 1 ? 's' : ''} réservé{cart.items.length > 1 ? 's' : ''}</p>
+      <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Mon panier</h3>
+          <p className="text-sm text-gray-500">{cart.items.length} article{cart.items.length > 1 ? 's' : ''} réservé{cart.items.length > 1 ? 's' : ''}</p>
+        </div>
+        {globalRemainingMs !== null && (
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium tabular-nums ${
+            globalUrgent ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-gray-50 text-gray-700 border border-gray-200'
+          }`}>
+            <Clock className="h-4 w-4 flex-shrink-0" />
+            Panier réservé encore {formatCountdown(globalRemainingMs)}
+          </div>
+        )}
       </div>
 
-      {cart.recentlyExpiredNames.length > 0 && (
+      {cart.cartExpired && (
         <div className="mb-6 rounded-lg border bg-amber-50 border-amber-200 text-amber-800 p-3 flex items-start gap-2">
           <Clock className="h-4 w-4 flex-shrink-0 mt-0.5" />
           <p className="text-sm flex-1">
-            {cart.recentlyExpiredNames.length === 1
-              ? `"${cart.recentlyExpiredNames[0]}" a expiré et a été retiré de votre panier.`
-              : `${cart.recentlyExpiredNames.length} articles ont expiré et ont été retirés de votre panier.`}
+            Votre réservation a expiré : les articles de votre panier ont été libérés.
           </p>
-          <button onClick={cart.clearRecentlyExpired} className="p-0.5 text-amber-600 hover:text-amber-800 flex-shrink-0">
+          <button onClick={cart.clearCartExpired} className="p-0.5 text-amber-600 hover:text-amber-800 flex-shrink-0">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -131,8 +142,6 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
 
           <ul className="space-y-2">
             {cart.items.map((item) => {
-              const remainingMs = item.added_at + CART_ITEM_SESSION_MS - Date.now();
-              const isUrgent = remainingMs < 2 * 60 * 1000;
               const insuranceCost = item.price * INSURANCE_RATE;
               return (
                 <li key={item.id} className="bg-white border border-gray-200 rounded-lg p-3">
@@ -149,10 +158,6 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
                         <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
                         <p className="text-xs text-gray-400">{item.product_code}</p>
                         <p className="text-sm text-gray-700 mt-1">{item.price.toFixed(0)} €</p>
-                        <p className={`text-xs mt-1 flex items-center gap-1 tabular-nums ${isUrgent ? 'text-red-600' : 'text-gray-400'}`}>
-                          <Clock className="h-3 w-3 flex-shrink-0" />
-                          Réservé encore {formatCountdown(Math.max(0, remainingMs))}
-                        </p>
                       </div>
                     </div>
                     <button
