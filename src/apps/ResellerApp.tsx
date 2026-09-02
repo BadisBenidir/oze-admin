@@ -54,6 +54,7 @@ function ResellerApp() {
   const [checkoutOrderId, setCheckoutOrderId] = useState<string | null>(null);
   const [topUpStatus, setTopUpStatus] = useState<'success' | 'cancel' | null>(null);
   const [deliveryRequestStatus, setDeliveryRequestStatus] = useState<'success' | 'cancel' | null>(null);
+  const [entrupyRequestStatus, setEntrupyRequestStatus] = useState<'success' | 'cancel' | null>(null);
   const [pathname, setPathname] = useState(window.location.pathname);
   // Retour Stripe = rechargement COMPLET de la page : à ce tout premier
   // montage, `profile` (donc `cart`'s cartKey, dérivé de profile.id) n'est
@@ -125,6 +126,12 @@ function ResellerApp() {
     const delivery = params.get('b2b_delivery');
     if (delivery === 'success' || delivery === 'cancel') {
       setDeliveryRequestStatus(delivery);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    const entrupy = params.get('b2b_entrupy');
+    if (entrupy === 'success' || entrupy === 'cancel') {
+      setEntrupyRequestStatus(entrupy);
       window.history.replaceState({}, '', window.location.pathname);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -304,6 +311,22 @@ function ResellerApp() {
           <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
             <p className="text-sm text-amber-800">Paiement des frais de port annulé — aucune livraison n'a été demandée.</p>
             <button onClick={() => setDeliveryRequestStatus(null)} className="p-1 text-amber-600 hover:text-amber-800">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        {entrupyRequestStatus === 'success' && (
+          <div className="m-4 md:m-6 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+            <p className="text-sm text-green-800">Paiement confirmé — le certificat d'authenticité Entrupy a bien été ajouté.</p>
+            <button onClick={() => setEntrupyRequestStatus(null)} className="p-1 text-green-600 hover:text-green-800">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        {entrupyRequestStatus === 'cancel' && (
+          <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+            <p className="text-sm text-amber-800">Paiement annulé — aucun certificat Entrupy n'a été ajouté.</p>
+            <button onClick={() => setEntrupyRequestStatus(null)} className="p-1 text-amber-600 hover:text-amber-800">
               <X className="h-4 w-4" />
             </button>
           </div>

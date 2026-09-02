@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye } from 'lucide-react';
+import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye, BadgeCheck } from 'lucide-react';
+import { Badge } from '../../ui/Badge';
 import { AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { useGenerateShipmentLabels, ParcelResult } from '../../../hooks/useGenerateShipmentLabels';
 import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
@@ -156,6 +157,13 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                               Réf. {itemRef(item)}
                               {product?.condition && <span> · État {product.condition}</span>}
                             </p>
+                            {item.entrupy_requested && (
+                              <div className="mt-1">
+                                <Badge variant="purple">
+                                  <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy à joindre
+                                </Badge>
+                              </div>
+                            )}
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-xs font-medium text-gray-700">{item.line_total.toFixed(2)} €</span>
                               {item.product_id && (

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useB2BCart, INSURANCE_RATE } from '../../../hooks/useB2BCart';
+import { useB2BCart, INSURANCE_RATE, ENTRUPY_CERTIFICATE_PRICE } from '../../../hooks/useB2BCart';
 import { useWallet } from '../../../hooks/useWallet';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import CheckoutSummary from './CheckoutSummary';
 import { VolumeDiscountBanner } from './VolumeDiscountBanner';
 import { PromoCodeField, AppliedPromo } from './PromoCodeField';
-import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Wallet } from 'lucide-react';
+import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Wallet, BadgeCheck } from 'lucide-react';
 
 interface CartPageProps {
   cart: ReturnType<typeof useB2BCart>;
@@ -93,7 +93,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
   }
 
   const promoDiscountAmount = appliedPromo?.discountAmount || 0;
-  const total = cart.subtotal - cart.discountAmount - promoDiscountAmount + cart.insuranceTotal;
+  const total = cart.subtotal - cart.discountAmount - promoDiscountAmount + cart.insuranceTotal + cart.entrupyTotal;
 
   return (
     <div className="p-4 md:p-6">
@@ -184,6 +184,22 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
                       +{insuranceCost.toFixed(2)} €
                     </span>
                   </label>
+
+                  <label className="mt-1 flex items-center justify-between gap-2 pt-2 cursor-pointer">
+                    <span className="flex items-center gap-2 text-sm text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={item.entrupyRequested}
+                        onChange={() => cart.toggleEntrupy(item.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400"
+                      />
+                      <BadgeCheck className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                      Certificat d'authenticité Entrupy (+{ENTRUPY_CERTIFICATE_PRICE.toFixed(2)} €)
+                    </span>
+                    <span className={`text-sm font-medium ${item.entrupyRequested ? 'text-gray-900' : 'text-gray-400'}`}>
+                      +{ENTRUPY_CERTIFICATE_PRICE.toFixed(2)} €
+                    </span>
+                  </label>
                 </li>
               );
             })}
@@ -201,6 +217,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
           <CheckoutSummary
             subtotal={cart.subtotal}
             insurance={cart.insuranceTotal}
+            entrupy={cart.entrupyTotal}
             total={total}
             discountRate={cart.discountRate}
             discountAmount={cart.discountAmount}

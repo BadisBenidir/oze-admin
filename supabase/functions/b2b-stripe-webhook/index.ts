@@ -151,6 +151,34 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Ajout post-achat du certificat Entrupy (voir b2b-request-entrupy-
+  // certificate) : chemin distinct — pas de nouvelle commande, juste le
+  // marquage des order_items concernés une fois le paiement carte confirmé.
+  if (metadata.type === 'entrupy_certificate_request') {
+    console.log(`${LOG_PREFIX} Session ${session.id} — certificat Entrupy, reseller_id: ${metadata.reseller_id}`);
+    try {
+      const adminClient = createClient(supabaseUrl, serviceRoleKey);
+      const itemIds = JSON.parse(metadata.item_ids || '[]');
+
+      const { data, error } = await adminClient.rpc('finalize_entrupy_certificate_request', {
+        p_item_ids: itemIds,
+        p_reseller_id: metadata.reseller_id,
+        p_stripe_session_id: session.id,
+      });
+
+      if (error) {
+        console.error(`${LOG_PREFIX} ÉCHEC finalize_entrupy_certificate_request pour la session ${session.id}: ${error.message} (code ${error.code ?? 'n/a'})`);
+        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+      }
+
+      console.log(`${LOG_PREFIX} ${data?.item_count ?? 0} article(s) certifié(s) pour la session ${session.id} (already_processed: ${!!data?.already_processed})`);
+      return new Response(JSON.stringify({ received: true }), { status: 200 });
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Erreur non gérée certificat Entrupy (session ${session.id}):`, err instanceof Error ? err.stack || err.message : err);
+      return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Erreur inconnue' }), { status: 500 });
+    }
+  }
+
   console.log(`${LOG_PREFIX} Session ${session.id} — reseller_id: ${metadata.reseller_id}, product_ids bruts: ${metadata.product_ids}`);
 
   try {
@@ -158,11 +186,13 @@ Deno.serve(async (req: Request) => {
     let shippingAddress: Record<string, unknown>;
     let billingAddress: Record<string, unknown>;
     let insuredProductIds: string[];
+    let entrupyProductIds: string[];
     try {
       productIds = JSON.parse(metadata.product_ids || '[]');
       shippingAddress = JSON.parse(metadata.shipping_address || '{}');
       billingAddress = JSON.parse(metadata.billing_address || '{}');
       insuredProductIds = JSON.parse(metadata.insured_product_ids || '[]');
+      entrupyProductIds = JSON.parse(metadata.entrupy_product_ids || '[]');
     } catch (parseErr) {
       console.error(`${LOG_PREFIX} Échec de parsing des metadata Stripe:`, (parseErr as Error).message, '— metadata brutes:', JSON.stringify(metadata));
       return new Response(JSON.stringify({ error: 'Metadata Stripe invalides' }), { status: 400 });
@@ -191,6 +221,8 @@ Deno.serve(async (req: Request) => {
       p_insured_value: metadata.insured_value ? Number(metadata.insured_value) : 0,
       p_discount_rate: metadata.discount_rate ? Number(metadata.discount_rate) : 0,
       p_discount_amount: metadata.discount_amount ? Number(metadata.discount_amount) : 0,
+      p_entrupy_product_ids: entrupyProductIds,
+      p_entrupy_cost: metadata.entrupy_cost ? Number(metadata.entrupy_cost) : 0,
     };
     console.log(`${LOG_PREFIX} Appel confirm_b2b_payment pour la session ${session.id}, ${productIds.length} article(s)`);
 

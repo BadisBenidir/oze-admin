@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
-import { MyB2BOrder } from '../../../hooks/useMyB2BOrders';
-import { ShoppingBag, ImageOff, AlertCircle, Eye, X, Package, MapPin, Truck, FileDown, Ban } from 'lucide-react';
+import { MyB2BOrder, MyB2BOrderItem } from '../../../hooks/useMyB2BOrders';
+import { useEntrupyCertificate } from '../../../hooks/useEntrupyCertificate';
+import { ShoppingBag, ImageOff, AlertCircle, Eye, X, Package, MapPin, Truck, FileDown, Ban, BadgeCheck } from 'lucide-react';
 import { CancelMyOrderModal } from './CancelMyOrderModal';
+
+/** Un certificat ne peut plus être ajouté une fois la livraison de l'article
+ * demandée ou l'article expédié — au-delà, le colis est déjà en préparation/
+ * parti et l'ajout n'a plus de sens opérationnel. */
+const canRequestEntrupy = (item: MyB2BOrderItem) =>
+  item.status === 'active' && !item.entrupy_requested && !['delivery_requested', 'shipped'].includes(item.fulfillment_status);
 
 const statusBadge = (order: MyB2BOrder) => {
   if (order.status === 'cancelled') return <Badge variant="danger">Annulée</Badge>;
@@ -65,9 +72,24 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
 }) => {
   const [viewingOrder, setViewingOrder] = useState<MyB2BOrder | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState<MyB2BOrder | null>(null);
+  const { requestCertificate } = useEntrupyCertificate();
+  const [requestingItemId, setRequestingItemId] = useState<string | null>(null);
+  const [certificateError, setCertificateError] = useState<string | null>(null);
 
   const handleDownloadInvoice = () => {
     alert("La facture PDF n'est pas encore disponible au téléchargement. Contacte OZË Paris si tu en as besoin dès maintenant.");
+  };
+
+  const handleRequestCertificate = async (itemId: string) => {
+    setCertificateError(null);
+    setRequestingItemId(itemId);
+    const result = await requestCertificate([itemId]);
+    if (!result.success || !result.url) {
+      setRequestingItemId(null);
+      setCertificateError(result.error || "Impossible de lancer le paiement du certificat");
+      return;
+    }
+    window.location.href = result.url;
   };
 
   return (
@@ -217,6 +239,13 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                   </div>
                 </div>
 
+                {certificateError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
+                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                    <p className="text-sm text-red-700">{certificateError}</p>
+                  </div>
+                )}
+
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Panier B2B</p>
                   <div className="border border-gray-100 rounded-lg overflow-hidden">
@@ -257,6 +286,29 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                     {item.is_loyalty_gift && (
                                       <div className="mt-1">
                                         <Badge variant="warning">🎁 Cadeau Fidélité offert</Badge>
+                                      </div>
+                                    )}
+                                    {!isCancelled && item.entrupy_requested && (
+                                      <div className="mt-1">
+                                        <Badge variant="purple">
+                                          <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy
+                                        </Badge>
+                                      </div>
+                                    )}
+                                    {canRequestEntrupy(item) && (
+                                      <div className="mt-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRequestCertificate(item.id);
+                                          }}
+                                          disabled={requestingItemId === item.id}
+                                          className="inline-flex items-center gap-1 text-xs font-medium text-purple-700 hover:text-purple-900 disabled:opacity-50"
+                                        >
+                                          <BadgeCheck className="h-3.5 w-3.5" />
+                                          {requestingItemId === item.id ? 'Redirection...' : 'Ajouter certificat Entrupy (19,99 €)'}
+                                        </button>
                                       </div>
                                     )}
                                     {!isCancelled && item.fulfillment_status === 'shipped' && (

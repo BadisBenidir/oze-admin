@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { product_ids, insured_product_ids, promo_code, payment_method } = await req.json();
+    const { product_ids, insured_product_ids, entrupy_product_ids, promo_code, payment_method } = await req.json();
     if (!Array.isArray(product_ids) || product_ids.length === 0) {
       return new Response(JSON.stringify({ error: 'Le panier est vide' }), {
         status: 400,
@@ -114,6 +114,17 @@ Deno.serve(async (req: Request) => {
     // Valeur déclarée à assurer auprès de Sendcloud (insured_value du colis) —
     // distincte de la prime insuranceCost payée par le client.
     const insuredValue = insuredProducts.reduce((sum, p) => sum + Number(p.sale_price), 0);
+
+    // Certificat d'authenticité Entrupy, opt-out (actif par défaut côté
+    // panier) : prix fixe recalculé ici en autorité — jamais accepté tel quel
+    // du client, seule la LISTE des articles cochés vient du panier. Doit
+    // rester alignée avec ENTRUPY_CERTIFICATE_PRICE dans useB2BCart.ts
+    // (front, affichage uniquement) et avec finalize_entrupy_certificate_
+    // request (0083_entrupy_certificate.sql, ajout post-achat).
+    const ENTRUPY_CERTIFICATE_PRICE = 19.99;
+    const entrupyIds: string[] = Array.isArray(entrupy_product_ids) ? entrupy_product_ids : [];
+    const entrupyProducts = products.filter((p) => entrupyIds.includes(p.id));
+    const entrupyCost = Math.round(entrupyProducts.length * ENTRUPY_CERTIFICATE_PRICE * 100) / 100;
 
     // Remise dégressive sur volume, paliers stricts : <5 articles = 0%,
     // 5-9 = 5%, 10+ = 10% (plafond absolu). Recalculée ici sur le NOMBRE
@@ -221,6 +232,8 @@ Deno.serve(async (req: Request) => {
         p_discount_rate: discountRate,
         p_discount_amount: discountAmount,
         p_promo_discount_amount: promoDiscountAmount,
+        p_entrupy_product_ids: entrupyProducts.map((p) => p.id),
+        p_entrupy_cost: entrupyCost,
       });
 
       if (walletError) {
@@ -288,7 +301,7 @@ Deno.serve(async (req: Request) => {
     // paiement) de cette part.
     let mixedWalletAmount = 0;
     let chargeRatio = 1;
-    const grandTotalBeforeWallet = subtotalAfterDiscounts + shippingCost + insuranceCost;
+    const grandTotalBeforeWallet = subtotalAfterDiscounts + shippingCost + insuranceCost + entrupyCost;
     if (payment_method === 'mixed') {
       const { data: profileRow } = await adminClient
         .from('profiles')
@@ -334,6 +347,16 @@ Deno.serve(async (req: Request) => {
               quantity: 1,
             }]
           : []),
+        ...(entrupyCost > 0
+          ? [{
+              price_data: {
+                currency: 'eur',
+                product_data: { name: `Certificat d'authenticité Entrupy (${entrupyProducts.length} article${entrupyProducts.length > 1 ? 's' : ''})` },
+                unit_amount: Math.round(entrupyCost * chargeRatio * 100),
+              },
+              quantity: 1,
+            }]
+          : []),
       ],
       customer_email: email || undefined,
       metadata: {
@@ -349,6 +372,8 @@ Deno.serve(async (req: Request) => {
         insured_product_ids: JSON.stringify(insuredProducts.map((p) => p.id)),
         insurance_cost: String(insuranceCost),
         insured_value: String(insuredValue),
+        entrupy_product_ids: JSON.stringify(entrupyProducts.map((p) => p.id)),
+        entrupy_cost: String(entrupyCost),
         discount_rate: String(discountRate),
         discount_amount: String(discountAmount),
         promo_code_id: promoCodeId || '',

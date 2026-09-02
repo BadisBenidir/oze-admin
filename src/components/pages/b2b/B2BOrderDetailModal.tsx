@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban } from 'lucide-react';
+import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban, BadgeCheck } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { B2BOrder, B2BOrderItem } from '../../../hooks/useB2BOrders';
 import { cancelOrderItem, cancelOrder } from '../../../hooks/useCancelOrderItem';
@@ -503,6 +503,13 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                   {item.is_loyalty_gift && (
                                     <div className="mt-1">
                                       <Badge variant="warning">🎁 Cadeau Fidélité — 0 €</Badge>
+                                    </div>
+                                  )}
+                                  {!isCancelled && item.entrupy_requested && (
+                                    <div className="mt-1">
+                                      <Badge variant="purple">
+                                        <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy inclus
+                                      </Badge>
                                     </div>
                                   )}
                                   {!isCancelled && fulfillmentBadge(item.fulfillment_status) && (

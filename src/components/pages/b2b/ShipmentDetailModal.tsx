@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2 } from 'lucide-react';
+import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck } from 'lucide-react';
+import { Badge } from '../../ui/Badge';
 import { AdminShipment, AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { ParcelSplitEditor } from './ParcelSplitEditor';
 import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
@@ -36,6 +37,13 @@ const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, reverti
           {product?.brand?.name && <span>{product.brand.name} · </span>}
           Réf. {itemRef(item)}
         </p>
+        {item.entrupy_requested && (
+          <div className="mt-1">
+            <Badge variant="purple">
+              <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy
+            </Badge>
+          </div>
+        )}
       </div>
       <button
         type="button"

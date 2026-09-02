@@ -3,6 +3,7 @@ import React from 'react';
 interface CheckoutSummaryProps {
   subtotal: number;
   insurance: number;
+  entrupy?: number;
   total: number;
   discountRate?: number;
   discountAmount?: number;
@@ -20,6 +21,7 @@ interface CheckoutSummaryProps {
 const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({
   subtotal,
   insurance,
+  entrupy = 0,
   total,
   discountRate = 0,
   discountAmount = 0,
@@ -63,6 +65,12 @@ const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({
           <span className="text-gray-500">Assurance colis</span>
           <span className="text-gray-900">{insurance.toFixed(2)} €</span>
         </div>
+        {entrupy > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-500">Certificat Entrupy</span>
+            <span className="text-gray-900">{entrupy.toFixed(2)} €</span>
+          </div>
+        )}
         <div className="flex items-center justify-between border-t border-gray-100 pt-2">
           <span className="text-sm font-medium text-gray-700">Total</span>
           <span className="text-lg font-semibold text-gray-900">{total.toFixed(2)} €</span>

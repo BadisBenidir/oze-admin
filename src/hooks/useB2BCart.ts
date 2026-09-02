@@ -17,13 +17,24 @@ export interface B2BCartItem {
   categoryName: string | null;
   addedAt: string;
   /** Assurance Sendcloud optionnelle, 0.6% de la valeur de l'article — pure
-   * préférence d'affichage/checkout, non persistée côté serveur. */
+   * préférence d'affichage/checkout, non persistée côté serveur avant
+   * paiement (voir order_items.insured une fois la commande créée). */
   insured: boolean;
+  /** Certificat d'authenticité Entrupy, 19,99 €/pièce, actif par défaut
+   * (opt-out) — même statut que insured : préférence de panier jusqu'au
+   * paiement, recalculée en autorité côté b2b-checkout. */
+  entrupyRequested: boolean;
 }
 
 /** Taux d'assurance Sendcloud (0.6% de la valeur de l'article). Recalculé
  * côté serveur dans b2b-checkout — jamais accepté tel quel du client. */
 export const INSURANCE_RATE = 0.006;
+
+/** Prix du certificat d'authenticité Entrupy, par pièce. Doit rester aligné
+ * avec ENTRUPY_CERTIFICATE_PRICE dans b2b-checkout/index.ts et la constante
+ * v_price de finalize_entrupy_certificate_request (0083_entrupy_certificate.sql) —
+ * affichage uniquement ici, jamais accepté tel quel du client. */
+export const ENTRUPY_CERTIFICATE_PRICE = 19.99;
 
 /** Timer global de réservation du panier (voir cart_add_item côté serveur :
  * réinitialisé à 10 min pour TOUT le panier à chaque ajout réussi). */
@@ -64,23 +75,24 @@ interface AddItemResult {
 }
 
 const INSURANCE_PREFS_PREFIX = 'b2b_cart_insurance_';
+const ENTRUPY_PREFS_PREFIX = 'b2b_cart_entrupy_';
 
-const loadInsurancePrefs = (profileId: string | null): Record<string, boolean> => {
+const loadOptInPrefs = (storagePrefix: string, profileId: string | null): Record<string, boolean> => {
   if (!profileId) return {};
   try {
-    const raw = localStorage.getItem(INSURANCE_PREFS_PREFIX + profileId);
+    const raw = localStorage.getItem(storagePrefix + profileId);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
   }
 };
 
-const saveInsurancePrefs = (profileId: string | null, prefs: Record<string, boolean>) => {
+const saveOptInPrefs = (storagePrefix: string, profileId: string | null, prefs: Record<string, boolean>) => {
   if (!profileId) return;
   try {
-    localStorage.setItem(INSURANCE_PREFS_PREFIX + profileId, JSON.stringify(prefs));
+    localStorage.setItem(storagePrefix + profileId, JSON.stringify(prefs));
   } catch {
-    // Best-effort : une préférence d'assurance non persistée redémarre juste à "assuré" par défaut.
+    // Best-effort : une préférence non persistée redémarre juste à "actif" par défaut (opt-out).
   }
 };
 
@@ -120,11 +132,13 @@ export const useB2BCart = (profileId: string | undefined) => {
   const itemsRef = useRef<B2BCartItem[]>([]);
   itemsRef.current = items;
   const insurancePrefsRef = useRef<Record<string, boolean>>({});
+  const entrupyPrefsRef = useRef<Record<string, boolean>>({});
   const profileIdRef = useRef<string | undefined>(profileId);
   profileIdRef.current = profileId;
 
   useEffect(() => {
-    insurancePrefsRef.current = loadInsurancePrefs(profileId ?? null);
+    insurancePrefsRef.current = loadOptInPrefs(INSURANCE_PREFS_PREFIX, profileId ?? null);
+    entrupyPrefsRef.current = loadOptInPrefs(ENTRUPY_PREFS_PREFIX, profileId ?? null);
   }, [profileId]);
 
   const mapItem = useCallback((raw: RawCartItem): B2BCartItem => ({
@@ -138,6 +152,7 @@ export const useB2BCart = (profileId: string | undefined) => {
     categoryName: raw.category_name,
     addedAt: raw.added_at,
     insured: insurancePrefsRef.current[raw.product_id] !== false,
+    entrupyRequested: entrupyPrefsRef.current[raw.product_id] !== false,
   }), []);
 
   const refresh = useCallback(async () => {
@@ -266,8 +281,16 @@ export const useB2BCart = (profileId: string | undefined) => {
     const currentlyInsured = insurancePrefsRef.current[id] !== false;
     const nextPrefs = { ...insurancePrefsRef.current, [id]: !currentlyInsured };
     insurancePrefsRef.current = nextPrefs;
-    saveInsurancePrefs(profileIdRef.current ?? null, nextPrefs);
+    saveOptInPrefs(INSURANCE_PREFS_PREFIX, profileIdRef.current ?? null, nextPrefs);
     setItems((current) => current.map((i) => (i.id === id ? { ...i, insured: !i.insured } : i)));
+  };
+
+  const toggleEntrupy = (id: string) => {
+    const currentlyRequested = entrupyPrefsRef.current[id] !== false;
+    const nextPrefs = { ...entrupyPrefsRef.current, [id]: !currentlyRequested };
+    entrupyPrefsRef.current = nextPrefs;
+    saveOptInPrefs(ENTRUPY_PREFS_PREFIX, profileIdRef.current ?? null, nextPrefs);
+    setItems((current) => current.map((i) => (i.id === id ? { ...i, entrupyRequested: !i.entrupyRequested } : i)));
   };
 
   const dismissBlockingError = () => setBlockingError(null);
@@ -275,6 +298,7 @@ export const useB2BCart = (profileId: string | undefined) => {
 
   const subtotal = items.reduce((sum, i) => sum + i.price, 0);
   const insuranceTotal = items.reduce((sum, i) => (i.insured ? sum + i.price * INSURANCE_RATE : sum), 0);
+  const entrupyTotal = items.reduce((sum, i) => (i.entrupyRequested ? sum + ENTRUPY_CERTIFICATE_PRICE : sum), 0);
   // Remise dégressive sur volume : porte uniquement sur la valeur des
   // articles, jamais sur la livraison ni l'assurance. Affichage uniquement —
   // recalculée côté serveur dans b2b-checkout à partir du panier réellement
@@ -299,6 +323,7 @@ export const useB2BCart = (profileId: string | undefined) => {
     const { data, error } = await invokeEdgeFunction<{ url?: string; order_id?: string; unavailable_ids?: string[] }>('b2b-checkout', {
       product_ids: items.map((i) => i.id),
       insured_product_ids: items.filter((i) => i.insured).map((i) => i.id),
+      entrupy_product_ids: items.filter((i) => i.entrupyRequested).map((i) => i.id),
       promo_code: promoCode || null,
       payment_method: paymentMethod,
     });
@@ -338,8 +363,10 @@ export const useB2BCart = (profileId: string | undefined) => {
     clear,
     isInCart,
     toggleInsurance,
+    toggleEntrupy,
     subtotal,
     insuranceTotal,
+    entrupyTotal,
     discountRate,
     discountAmount,
     startCheckout,

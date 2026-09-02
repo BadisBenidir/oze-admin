@@ -4,7 +4,7 @@ import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useB2BOrders, B2BOrder } from '../../hooks/useB2BOrders';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
-import { AlertCircle, RefreshCw, ShoppingBag, Eye } from 'lucide-react';
+import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck } from 'lucide-react';
 
 const statusBadge = (status: string) => {
   switch (status) {
@@ -99,7 +99,16 @@ export const B2BOrders: React.FC = () => {
                         <td className="py-4 px-4 md:px-6 text-sm text-gray-700">{order.reseller?.company_name || '—'}</td>
                         <td className="py-4 px-4 md:px-6 hidden md:table-cell text-sm text-gray-600">{order.order_items.length} pièce{order.order_items.length > 1 ? 's' : ''}</td>
                         <td className="py-4 px-4 md:px-6 text-sm font-semibold text-gray-900">{order.total_amount.toFixed(0)} €</td>
-                        <td className="py-4 px-4 md:px-6">{statusBadge(order.status)}</td>
+                        <td className="py-4 px-4 md:px-6">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {statusBadge(order.status)}
+                            {order.order_items.some((i) => i.entrupy_requested) && (
+                              <Badge variant="purple">
+                                <BadgeCheck className="h-3 w-3 mr-1" /> Entrupy
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
                         <td className="py-4 px-4 md:px-6">
                           <button
                             onClick={() => setViewingOrder(order)}
