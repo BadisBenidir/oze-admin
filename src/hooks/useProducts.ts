@@ -30,6 +30,13 @@ export interface Product {
   internal_comments: string | null
   created_at: string
   updated_at: string
+  // Posées à la vente (Stripe, solde B2B ou vente directe — voir
+  // confirm_b2b_payment / pay_b2b_order_with_wallet / admin_record_direct_
+  // b2b_sale) : reserved_by_order_id est le lien fiable vers la commande,
+  // utilisé par ProductSaleDetails pour retrouver l'order_item correspondant.
+  reserved_by_order_id: string | null
+  reserved_by_reseller_id: string | null
+  reserved_at: string | null
   // Relations
   brand?: { id: string, name: string }
   category?: { id: string, name: string }

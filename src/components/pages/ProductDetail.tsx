@@ -8,6 +8,7 @@ import { BarcodeScanner } from '../products/BarcodeScanner';
 import { Modal } from '../ui/Modal';
 import { validateProductByBarcode } from '../../services/productValidationService';
 import { DirectB2BSaleModal } from '../products/DirectB2BSaleModal';
+import { ProductSaleDetails } from '../products/ProductSaleDetails';
 import {
   ArrowLeft,
   Package,
@@ -73,41 +74,42 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
     }
   };
 
-  useEffect(() => {
-    const fetchProduct = async () => {
-      if (!isAdmin) return;
-      
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const { supabase } = await import('../../lib/supabase');
-        
-        const { data, error: fetchError } = await supabase
-          .from('products')
-          .select(`
-            *,
-            brand:brands(id, name),
-            category:categories(id, name)
-          `)
-          .eq('id', productId)
-          .single();
+  const fetchProduct = async () => {
+    if (!isAdmin) return;
 
-        if (fetchError) {
-          throw new Error(fetchError.message);
-        }
+    try {
+      setLoading(true);
+      setError(null);
 
-        setProduct(data);
-        
-      } catch (err) {
-        console.error('Erreur lors du chargement du produit:', err);
-        setError(err instanceof Error ? err.message : 'Erreur inconnue');
-      } finally {
-        setLoading(false);
+      const { supabase } = await import('../../lib/supabase');
+
+      const { data, error: fetchError } = await supabase
+        .from('products')
+        .select(`
+          *,
+          brand:brands(id, name),
+          category:categories(id, name)
+        `)
+        .eq('id', productId)
+        .single();
+
+      if (fetchError) {
+        throw new Error(fetchError.message);
       }
-    };
 
+      setProduct(data);
+
+    } catch (err) {
+      console.error('Erreur lors du chargement du produit:', err);
+      setError(err instanceof Error ? err.message : 'Erreur inconnue');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchProduct();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId, isAdmin]);
 
   const nextImage = () => {
@@ -411,6 +413,8 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
             </CardContent>
           </Card>
 
+          <ProductSaleDetails productId={productId} reservedByOrderId={product.reserved_by_order_id} />
+
           {/* État et statut */}
           <Card>
             <CardHeader>
@@ -622,7 +626,11 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
           onClose={() => setShowDirectSaleModal(false)}
           onSuccess={() => {
             setShowDirectSaleModal(false);
-            setProduct((prev) => (prev ? { ...prev, status: 'sold-b2b' as any } : null));
+            // Recharge entièrement (pas un simple patch de status) : le
+            // nouvel encart "Détails de la vente" a besoin de
+            // reserved_by_order_id, posé par admin_record_direct_b2b_sale
+            // mais absent de l'état local optimiste précédent.
+            fetchProduct();
             onProductUpdate?.();
           }}
         />
