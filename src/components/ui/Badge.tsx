@@ -2,7 +2,7 @@ import React from 'react';
 
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'purple';
+  variant?: 'default' | 'success' | 'successStrong' | 'warning' | 'danger' | 'info' | 'purple';
   size?: 'sm' | 'md';
 }
 
@@ -14,6 +14,10 @@ export const Badge: React.FC<BadgeProps> = ({
   const variants = {
     default: 'bg-gray-100 text-gray-800 border-gray-200',
     success: 'bg-green-50 text-green-800 border-green-200',
+    // Vert plein/foncé, distinct du vert clair 'success' — réservé aux
+    // statuts définitifs/positifs forts (ex. commande B2B livrée), pour ne
+    // pas se confondre visuellement avec un simple "Confirmée".
+    successStrong: 'bg-green-600 text-white border-green-700',
     warning: 'bg-yellow-50 text-yellow-800 border-yellow-200',
     danger: 'bg-red-50 text-red-800 border-red-200',
     info: 'bg-blue-50 text-blue-800 border-blue-200',

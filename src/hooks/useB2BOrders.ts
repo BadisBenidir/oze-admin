@@ -65,6 +65,12 @@ export interface B2BOrder {
    * B2BOrders.tsx / B2BOrderDetailModal.tsx pour l'affichage conditionnel. */
   placed_by_is_primary: boolean;
   order_items: B2BOrderItem[];
+  /** Statut global calculé à partir de l'état RÉEL des articles
+   * (fulfillment_status), pas de la colonne statique orders.status qui reste
+   * bloquée à 'confirmed' dès le paiement — voir computeB2BOrderStatus.
+   * Toujours présent après chargement via useB2BOrders (jamais lu tel quel
+   * depuis la requête). */
+  computedStatus: B2BOrderComputedStatus;
 }
 
 /** Nom/email affichable du sous-compte ayant réellement passé la commande,
@@ -75,6 +81,48 @@ export const getRequesterDisplayName = (order: Pick<B2BOrder, 'placed_by'>): str
   if (!order.placed_by) return null;
   const fullName = `${order.placed_by.first_name || ''} ${order.placed_by.last_name || ''}`.trim();
   return fullName || order.placed_by.email || null;
+};
+
+export type B2BOrderComputedStatus = 'cancelled' | 'delivered' | 'shipped' | 'preparing' | 'in_stock' | 'confirmed';
+
+// Rang de progression de fulfillment_status, du moins au plus avancé — le
+// statut global d'une commande retient le PLUS AVANCÉ atteint par au moins un
+// article actif (sauf "Livrée", qui exige que TOUS les articles actifs y
+// soient — livrer une partie du colis ne rend pas la commande "livrée").
+const FULFILLMENT_RANK: Record<B2BOrderItem['fulfillment_status'], number> = {
+  ordered: 0,
+  received: 1,
+  ready_to_ship: 2,
+  delivery_requested: 3,
+  label_created: 4,
+  shipped: 5,
+  delivered: 6,
+};
+
+/**
+ * Statut global d'une commande B2B, déduit de l'état réel de ses articles
+ * plutôt que de orders.status (posé une seule fois à 'confirmed' par
+ * confirm_b2b_payment/pay_b2b_order_with_wallet et jamais mis à jour
+ * ensuite — d'où le badge "Confirmée" resté figé sur des commandes
+ * anciennes déjà expédiées, voire livrées, depuis longtemps).
+ */
+export const computeB2BOrderStatus = (order: Pick<B2BOrder, 'status' | 'order_items'>): B2BOrderComputedStatus => {
+  if (order.status === 'cancelled') return 'cancelled';
+
+  const activeItems = order.order_items.filter((i) => i.status === 'active');
+  // Tous les articles individuellement annulés (sans annulation de la
+  // commande elle-même au niveau orders.status) : traité comme annulée.
+  if (activeItems.length === 0) return 'cancelled';
+
+  const ranks = activeItems.map((i) => FULFILLMENT_RANK[i.fulfillment_status] ?? 0);
+  const maxRank = Math.max(...ranks);
+  const minRank = Math.min(...ranks);
+
+  if (minRank === FULFILLMENT_RANK.delivered) return 'delivered';
+  if (maxRank >= FULFILLMENT_RANK.shipped) return 'shipped';
+  if (maxRank >= FULFILLMENT_RANK.delivery_requested) return 'preparing';
+  if (maxRank >= FULFILLMENT_RANK.received) return 'in_stock';
+  return 'confirmed';
 };
 
 export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: string, placedByProfileId?: string) => {
@@ -137,6 +185,7 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
         // traité comme "principal" pour ne pas afficher un sous-titre
         // redondant sans information réelle à montrer.
         placed_by_is_primary: o.placed_by_profile_id ? primaryProfileIds.has(o.placed_by_profile_id) : true,
+        computedStatus: computeB2BOrderStatus(o),
       }));
 
       setOrders(ordersWithPrimary);

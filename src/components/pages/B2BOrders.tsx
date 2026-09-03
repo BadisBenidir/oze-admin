@@ -2,17 +2,23 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-import { useB2BOrders, B2BOrder, getRequesterDisplayName } from '../../hooks/useB2BOrders';
+import { useB2BOrders, B2BOrder, B2BOrderComputedStatus, getRequesterDisplayName } from '../../hooks/useB2BOrders';
 import { useSendcloudSync } from '../../hooks/useSendcloudSync';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck } from 'lucide-react';
 
-const statusBadge = (status: string) => {
+// Déduit de l'état réel des articles (computeB2BOrderStatus), pas de la
+// colonne statique orders.status figée à 'confirmed' depuis le paiement.
+const statusBadge = (status: B2BOrderComputedStatus) => {
   switch (status) {
+    case 'delivered':
+      return <Badge variant="successStrong">Livrée</Badge>;
     case 'shipped':
       return <Badge variant="info">Expédiée</Badge>;
-    case 'delivered':
-      return <Badge variant="success">Livrée</Badge>;
+    case 'preparing':
+      return <Badge variant="warning">En préparation</Badge>;
+    case 'in_stock':
+      return <Badge variant="default">En stock</Badge>;
     case 'cancelled':
       return <Badge variant="danger">Annulée</Badge>;
     default:
@@ -161,7 +167,7 @@ export const B2BOrders: React.FC = () => {
                         <td className="py-4 px-4 md:px-6 text-sm font-semibold text-gray-900">{order.total_amount.toFixed(0)} €</td>
                         <td className="py-4 px-4 md:px-6">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {statusBadge(order.status)}
+                            {statusBadge(order.computedStatus)}
                             {order.order_items.some((i) => i.entrupy_requested) && (
                               <Badge variant="purple">
                                 <BadgeCheck className="h-3 w-3 mr-1" /> Entrupy

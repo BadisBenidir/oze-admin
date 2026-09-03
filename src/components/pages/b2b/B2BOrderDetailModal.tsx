@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban, BadgeCheck, RefreshCw } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
-import { B2BOrder, B2BOrderItem, getRequesterDisplayName } from '../../../hooks/useB2BOrders';
+import { B2BOrder, B2BOrderItem, B2BOrderComputedStatus, getRequesterDisplayName } from '../../../hooks/useB2BOrders';
 import { cancelOrderItem, cancelOrder } from '../../../hooks/useCancelOrderItem';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 
@@ -38,12 +38,18 @@ const RESTOCK_OPTIONS: { value: 'draft' | 'for-sale-b2b' | 'archived'; label: st
   { value: 'archived', label: "Archiver l'article" },
 ];
 
-const orderStatusBadge = (status: string) => {
+// Déduit de l'état réel des articles (computeB2BOrderStatus), pas de la
+// colonne statique orders.status figée à 'confirmed' depuis le paiement.
+const orderStatusBadge = (status: B2BOrderComputedStatus) => {
   switch (status) {
+    case 'delivered':
+      return <Badge variant="successStrong">Livrée</Badge>;
     case 'shipped':
       return <Badge variant="info">Expédiée</Badge>;
-    case 'delivered':
-      return <Badge variant="success">Livrée</Badge>;
+    case 'preparing':
+      return <Badge variant="warning">En préparation</Badge>;
+    case 'in_stock':
+      return <Badge variant="default">En stock</Badge>;
     case 'cancelled':
       return <Badge variant="danger">Annulée</Badge>;
     default:
@@ -446,7 +452,7 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                 })()}
               </div>
               <div className="flex items-center gap-3">
-                {orderStatusBadge(order.status)}
+                {orderStatusBadge(order.computedStatus)}
                 <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
                   <X className="h-5 w-5" />
                 </button>
@@ -499,7 +505,7 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Articles</p>
-                  {hasActiveItems && !['shipped', 'delivered', 'cancelled'].includes(order.status) && (
+                  {hasActiveItems && !['shipped', 'delivered', 'cancelled'].includes(order.computedStatus) && (
                     <button
                       onClick={() => setCancellingOrder(true)}
                       className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-800 transition-colors"
