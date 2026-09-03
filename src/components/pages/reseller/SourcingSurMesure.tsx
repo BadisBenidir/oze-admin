@@ -3,11 +3,11 @@ import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useResellerSourcing, ResellerSourcingItem, ResellerSourcingMission } from '../../../hooks/useResellerSourcing';
-import { AlertCircle, PackageSearch, ImageOff } from 'lucide-react';
+import { AlertCircle, PackageSearch, ImageOff, Sparkles } from 'lucide-react';
 
 const missionStatusBadge = (status: ResellerSourcingMission['status']) => {
   if (status === 'completed') return <Badge variant="success">Prêt</Badge>;
-  return <Badge variant="info">En cours de sélection</Badge>;
+  return <Badge variant="info">Sourcing en cours par l'équipe OZË Paris</Badge>;
 };
 
 const itemStatusBadge = (status: ResellerSourcingItem['status']) => {
@@ -21,15 +21,18 @@ const itemStatusBadge = (status: ResellerSourcingItem['status']) => {
   }
 };
 
-/** Portail revendeur "Sourcing sur mesure" — lit uniquement les missions
- * qu'un admin a explicitement publiées (voir SourcingMissionDetailModal.tsx
- * côté admin et 0094_b2b_sourcing_reseller_portal.sql). Jamais de marge ni
- * de coût d'achat ici : useResellerSourcing ne lit que des vues qui les
- * excluent structurellement. */
+/** Portail revendeur "Sourcing sur mesure". La mission (titre, avance,
+ * statut) est toujours visible dès qu'elle existe pour l'entreprise/le
+ * profil du revendeur connecté — seule la galerie de pièces reste
+ * conditionnée à is_published_to_reseller (basculé côté admin via
+ * SourcingMissionDetailModal.tsx). Jamais de marge ni de coût d'achat ici :
+ * useResellerSourcing ne lit que des vues qui les excluent structurellement
+ * — voir 0094/0095_b2b_sourcing_reseller_portal*.sql. */
 export const SourcingSurMesure: React.FC = () => {
   const { isReseller } = useResellerAuth();
-  // Une mission annulée n'a jamais réellement été livrée au client — pas
-  // affichée ici même si elle a été publiée avant son annulation.
+  // Une mission annulée n'a jamais réellement été livrée au client — déjà
+  // exclue par reseller_sourcing_missions, filtre redondant en défense en
+  // profondeur (même principe que useMyShipments.ts).
   const { missions: allMissions, loading, error } = useResellerSourcing(isReseller);
   const missions = allMissions.filter((m) => m.status !== 'cancelled');
 
@@ -69,7 +72,7 @@ export const SourcingSurMesure: React.FC = () => {
                   <div>
                     <p className="text-base font-semibold text-gray-900">{mission.title}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Avance validée : <span className="font-medium text-gray-700">{mission.advance_amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                      Avance versée / Budget confié : <span className="font-medium text-gray-700">{mission.advance_amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
                       {mission.paid_at && <> · le {new Date(mission.paid_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</>}
                     </p>
                   </div>
@@ -78,7 +81,14 @@ export const SourcingSurMesure: React.FC = () => {
               </CardContent>
             </Card>
 
-            {mission.items.length === 0 ? (
+            {!mission.is_published_to_reseller ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                <Sparkles className="h-8 w-8 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-600 max-w-md mx-auto">
+                  Votre sourcing est actuellement entre les mains de notre équipe. Les pièces sélectionnées seront dévoilées ici dès que la sélection sera validée.
+                </p>
+              </div>
+            ) : mission.items.length === 0 ? (
               <p className="text-sm text-gray-400 italic px-1">Notre équipe est en train de sélectionner vos premières pièces.</p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">

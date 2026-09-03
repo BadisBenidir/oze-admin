@@ -18,18 +18,23 @@ export interface ResellerSourcingMission {
   advance_amount: number;
   paid_at: string | null;
   status: 'active' | 'completed' | 'cancelled';
+  /** Contrôle uniquement la galerie de pièces (`items`) — la mission elle-même est toujours visible, voir 0095. */
+  is_published_to_reseller: boolean;
   published_at: string | null;
+  created_at: string;
   items: ResellerSourcingItem[];
 }
 
 /**
  * Missions de sourcing sur mesure visibles par le revendeur connecté —
  * lit exclusivement reseller_sourcing_missions / reseller_sourcing_items
- * (0094_b2b_sourcing_reseller_portal.sql), jamais b2b_sourcing_missions /
- * b2b_sourcing_items directement : ces vues n'exposent QUE les colonnes
- * autorisées (jamais allocated_cost_budget, cost_price, billed_price), et
- * filtrent déjà par entreprise/demandeur + is_published_to_reseller — pas
- * de filtre supplémentaire à reproduire ici.
+ * (0094/0095_b2b_sourcing_reseller_portal*.sql), jamais
+ * b2b_sourcing_missions / b2b_sourcing_items directement : ces vues
+ * n'exposent QUE les colonnes autorisées (jamais allocated_cost_budget,
+ * cost_price, billed_price). La mission est toujours renvoyée dès qu'elle
+ * appartient au revendeur (statut != cancelled) ; seule
+ * reseller_sourcing_items reste conditionnée à is_published_to_reseller —
+ * pas de filtre supplémentaire à reproduire ici.
  */
 export const useResellerSourcing = (isAuthenticated: boolean = false) => {
   const { profile } = useResellerAuth();
@@ -49,8 +54,8 @@ export const useResellerSourcing = (isAuthenticated: boolean = false) => {
 
       const { data: missionRows, error: missionsError } = await supabase
         .from('reseller_sourcing_missions')
-        .select('id, title, advance_amount, paid_at, status, published_at')
-        .order('published_at', { ascending: false });
+        .select('id, title, advance_amount, paid_at, status, is_published_to_reseller, published_at, created_at')
+        .order('created_at', { ascending: false });
       if (missionsError) throw new Error(missionsError.message);
 
       const missionIds = (missionRows || []).map((m) => m.id);
