@@ -355,8 +355,17 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       const parcelIndex = (maxRow?.parcel_index || 0) + 1;
 
+      // apply_shipping_rules: false — cas réel qui cassait Jette (Belgique)
+      // malgré un carrier/contrat déjà correct (Mondial Relay) : Sendcloud
+      // applique côté panel une règle d'expédition dashboard ("Assurance
+      // pour les commandes de haute valeur", id 325800, visible dans
+      // applied_shipping_rules de la réponse d'erreur) qui force une option
+      // d'assurance non supportée par ce transporteur/cette destination,
+      // provoquant "No shipping option could be found...". On ne gère JAMAIS
+      // l'assurance via une règle dashboard opaque et non contrôlée depuis
+      // ce code — total_insured_value n'est d'ailleurs jamais envoyé ici.
       const payload: Record<string, unknown> = {
-        apply_shipping_rules: true,
+        apply_shipping_rules: false,
         apply_shipping_defaults: true,
         delivery_indicator: deliveryIndicator,
         shipping_method_checkout_name: deliveryIndicator,
@@ -370,6 +379,11 @@ Deno.serve(async (req: Request) => {
       if (hasRealCode) {
         payload.to_service_point = { id: String(pp.code) };
       }
+
+      // Log intégral avant l'appel Sendcloud — permet de voir exactement ce
+      // qui a été transmis en cas de nouvel échec, sans devoir reproduire
+      // l'appel manuellement pour inspecter le payload.
+      console.log('[Sendcloud] Payload envoyé', JSON.stringify(payload));
 
       try {
         const res = await fetch('https://panel.sendcloud.sc/api/v3/shipments/announce-with-shipping-rules', {
