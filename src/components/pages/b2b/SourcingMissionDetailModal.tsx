@@ -32,7 +32,7 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
  * affectées à l'enveloppe d'achat, ajout d'une pièce, édition et clôture —
  * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
 export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onItemsChanged }) => {
-  const { items, loading, error, addItem, setItemStatus } = useSourcingItems(mission?.id || null);
+  const { items, loading, error, addItem, addItems, setItemStatus } = useSourcingItems(mission?.id || null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [statusError, setStatusError] = useState('');
@@ -50,6 +50,12 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
 
   const handleAddItem = async (input: Parameters<typeof addItem>[0]) => {
     const result = await addItem(input);
+    if (result.success) onItemsChanged();
+    return result;
+  };
+
+  const handleAddItems = async (inputs: Parameters<typeof addItems>[0]) => {
+    const result = await addItems(inputs);
     if (result.success) onItemsChanged();
     return result;
   };
@@ -237,7 +243,13 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
         </div>
       </div>
 
-      <AddSourcingItemModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSubmit={handleAddItem} />
+      <AddSourcingItemModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSubmit={handleAddItem}
+        onSubmitBatch={handleAddItems}
+        remainingCostBudget={mission.remaining_cost_budget}
+      />
 
       <CreateSourcingMissionModal
         isOpen={showEditModal}

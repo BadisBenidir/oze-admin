@@ -31,6 +31,8 @@ interface UseSourcingItemsResult {
   error: string | null;
   refresh: () => Promise<void>;
   addItem: (input: SourcingItemInput) => Promise<{ success: boolean; error?: string }>;
+  /** Insère plusieurs pièces en une seule requête (sélection multiple depuis le stock, voir AddSourcingItemModal.tsx). */
+  addItems: (inputs: SourcingItemInput[]) => Promise<{ success: boolean; error?: string }>;
   setItemStatus: (id: string, status: SourcingItem['status']) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -81,6 +83,25 @@ export const useSourcingItems = (missionId: string | null): UseSourcingItemsResu
     return { success: true };
   };
 
+  const addItems = async (inputs: SourcingItemInput[]): Promise<{ success: boolean; error?: string }> => {
+    if (!missionId) return { success: false, error: 'Mission inconnue' };
+    if (inputs.length === 0) return { success: false, error: 'Aucun article sélectionné' };
+    const { error: insertError } = await supabase.from('b2b_sourcing_items').insert(
+      inputs.map((input) => ({
+        mission_id: missionId,
+        product_id: input.product_id || null,
+        title: input.title.trim(),
+        brand: input.brand?.trim() || null,
+        cost_price: input.cost_price,
+        photos: input.photos || [],
+      }))
+    );
+
+    if (insertError) return { success: false, error: insertError.message };
+    await fetchItems();
+    return { success: true };
+  };
+
   const setItemStatus = async (id: string, status: SourcingItem['status']): Promise<{ success: boolean; error?: string }> => {
     const { error: updateError } = await supabase.from('b2b_sourcing_items').update({ status }).eq('id', id);
     if (updateError) return { success: false, error: updateError.message };
@@ -92,5 +113,5 @@ export const useSourcingItems = (missionId: string | null): UseSourcingItemsResu
     fetchItems();
   }, [fetchItems]);
 
-  return { items, loading, error, refresh: fetchItems, addItem, setItemStatus };
+  return { items, loading, error, refresh: fetchItems, addItem, addItems, setItemStatus };
 };

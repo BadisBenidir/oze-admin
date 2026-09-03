@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, AlertCircle, Search, Package, Image as ImageIcon, Check } from 'lucide-react';
+import { X, AlertCircle, Search, Package, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { SourcingItemInput } from '../../../hooks/useSourcingItems';
 
@@ -17,20 +17,25 @@ interface StockProduct {
 interface AddSourcingItemModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Mode "Nouvelle pièce" : une pièce ad hoc, saisie manuellement. */
   onSubmit: (input: SourcingItemInput) => Promise<{ success: boolean; error?: string }>;
+  /** Mode "Depuis le stock" : plusieurs pièces à la fois, une seule requête d'insertion. */
+  onSubmitBatch: (inputs: SourcingItemInput[]) => Promise<{ success: boolean; error?: string }>;
+  /** Reste actuel de l'enveloppe d'achat, pour afficher le reste après validation. */
+  remainingCostBudget: number;
 }
 
-/** Ajout d'une pièce sourcée : soit importée du stock existant (tous les
- * brouillons chargés à l'ouverture, filtrés en mémoire à la frappe — même
- * pattern que CreateDropModal.tsx), soit créée à la volée — voir
- * 0089_b2b_sourcing_missions.sql. */
-export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOpen, onClose, onSubmit }) => {
+/** Ajout de pièce(s) sourcée(s) : soit une sélection multiple depuis le stock
+ * existant (tous les brouillons chargés à l'ouverture, filtrés en mémoire à
+ * la frappe — même pattern que CreateDropModal.tsx), soit une pièce créée à
+ * la volée — voir 0089_b2b_sourcing_missions.sql. */
+export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOpen, onClose, onSubmit, onSubmitBatch, remainingCostBudget }) => {
   const [mode, setMode] = useState<'stock' | 'manual'>('stock');
   const [draftProducts, setDraftProducts] = useState<StockProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
-  const [selectedProduct, setSelectedProduct] = useState<StockProduct | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
 
   const [title, setTitle] = useState('');
   const [brand, setBrand] = useState('');
@@ -43,7 +48,7 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
   const reset = () => {
     setMode('stock');
     setSearch('');
-    setSelectedProduct(null);
+    setSelectedProductIds(new Set());
     setTitle('');
     setBrand('');
     setCostPrice('');
@@ -98,10 +103,34 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
     );
   }, [draftProducts, search]);
 
-  const selectProduct = (product: StockProduct) => {
-    setSelectedProduct(product);
-    setCostPrice(product.purchase_price != null ? String(product.purchase_price) : '');
+  const toggleProduct = (id: string) => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
+
+  const allFilteredSelected = filteredProducts.length > 0 && filteredProducts.every((p) => selectedProductIds.has(p.id));
+  const toggleSelectAll = () => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        for (const p of filteredProducts) next.delete(p.id);
+      } else {
+        for (const p of filteredProducts) next.add(p.id);
+      }
+      return next;
+    });
+  };
+
+  const selectedProducts = useMemo(
+    () => draftProducts.filter((p) => selectedProductIds.has(p.id)),
+    [draftProducts, selectedProductIds]
+  );
+  const totalSelectedCost = selectedProducts.reduce((sum, p) => sum + (p.purchase_price ?? 0), 0);
+  const remainingAfter = remainingCostBudget - totalSelectedCost;
 
   const handleUploadPhoto = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -128,18 +157,38 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
     e.preventDefault();
     setError('');
 
-    const effectiveTitle = mode === 'stock' ? selectedProduct?.name || '' : title.trim();
-    if (mode === 'stock' && !selectedProduct) {
-      setError('Sélectionne un article du stock');
+    if (mode === 'stock') {
+      if (selectedProducts.length === 0) {
+        setError('Sélectionne au moins un article du stock');
+        return;
+      }
+      setSubmitting(true);
+      // Coût d'achat pris automatiquement sur la fiche produit (fallback 0
+      // si non renseigné) — voir demande explicite : pas de saisie manuelle
+      // par pièce dans ce flux de sélection multiple.
+      const result = await onSubmitBatch(
+        selectedProducts.map((p) => ({
+          product_id: p.id,
+          title: p.name,
+          brand: p.brand?.name,
+          cost_price: p.purchase_price ?? 0,
+          photos: p.images || [],
+        }))
+      );
+      setSubmitting(false);
+      if (!result.success) {
+        setError(result.error || "Erreur lors de l'ajout des pièces");
+        return;
+      }
+      handleClose();
       return;
     }
+
+    const effectiveTitle = title.trim();
     if (!effectiveTitle) {
       setError('Le titre de la pièce est requis');
       return;
     }
-    // Requis : c'est CE montant qui consomme l'enveloppe d'achat de la
-    // mission dès que la pièce est validée — voir
-    // 0091_b2b_sourcing_mission_budget_split.sql.
     const parsedCost = Number(costPrice);
     if (!Number.isFinite(parsedCost) || parsedCost < 0) {
       setError("Le prix d'achat est requis pour imputer la pièce sur l'enveloppe d'achat");
@@ -148,11 +197,10 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
 
     setSubmitting(true);
     const result = await onSubmit({
-      product_id: mode === 'stock' ? selectedProduct?.id : undefined,
       title: effectiveTitle,
-      brand: mode === 'stock' ? selectedProduct?.brand?.name : brand.trim() || undefined,
+      brand: brand.trim() || undefined,
       cost_price: parsedCost,
-      photos: mode === 'stock' ? (selectedProduct?.images || []) : photos,
+      photos,
     });
     setSubmitting(false);
 
@@ -164,6 +212,12 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
   };
 
   if (!isOpen) return null;
+
+  const submitLabel = mode === 'stock'
+    ? selectedProducts.length > 1
+      ? `Ajouter les ${selectedProducts.length} pièces`
+      : 'Ajouter la pièce'
+    : 'Ajouter la pièce';
 
   return (
     <div className="fixed inset-0 z-[60] overflow-y-auto">
@@ -216,6 +270,21 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                     </div>
                   )}
 
+                  {!loadingProducts && filteredProducts.length > 0 && (
+                    <div className="flex items-center justify-between mb-2">
+                      <button
+                        type="button"
+                        onClick={toggleSelectAll}
+                        className="text-xs text-gray-600 hover:text-gray-900 underline"
+                      >
+                        {allFilteredSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+                      </button>
+                      {selectedProducts.length > 0 && (
+                        <span className="text-xs text-gray-500">{selectedProducts.length} sélectionné{selectedProducts.length > 1 ? 's' : ''}</span>
+                      )}
+                    </div>
+                  )}
+
                   <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto divide-y divide-gray-100">
                     {loadingProducts ? (
                       [...Array(3)].map((_, i) => (
@@ -229,14 +298,18 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                       </div>
                     ) : (
                       filteredProducts.map((product) => {
-                        const isSelected = selectedProduct?.id === product.id;
+                        const isSelected = selectedProductIds.has(product.id);
                         return (
-                          <button
-                            type="button"
+                          <label
                             key={product.id}
-                            onClick={() => selectProduct(product)}
-                            className={`w-full flex items-center gap-3 p-3 transition-colors text-left ${isSelected ? 'bg-gray-900/5' : 'hover:bg-gray-50'}`}
+                            className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${isSelected ? 'bg-gray-900/5' : 'hover:bg-gray-50'}`}
                           >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleProduct(product.id)}
+                              className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 flex-shrink-0"
+                            />
                             <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                               {product.images?.length > 0 ? (
                                 <img src={product.images[product.main_image_index] || product.images[0]} alt={product.name} className="h-full w-full object-cover" />
@@ -251,88 +324,98 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                                 {product.purchase_price != null && <> · Achat {product.purchase_price.toFixed(0)} €</>}
                               </p>
                             </div>
-                            {isSelected && (
-                              <div className="h-5 w-5 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0">
-                                <Check className="h-3 w-3 text-white" />
-                              </div>
-                            )}
-                          </button>
+                          </label>
                         );
                       })
                     )}
                   </div>
+
+                  {selectedProducts.length > 0 && (
+                    <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">{selectedProducts.length} article{selectedProducts.length > 1 ? 's' : ''} sélectionné{selectedProducts.length > 1 ? 's' : ''}</span>
+                        <span className="font-semibold text-gray-900">Total achat : {totalSelectedCost.toFixed(2)} €</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">Reste sur l'enveloppe après validation</span>
+                        <span className={`font-medium ${remainingAfter < 0 ? 'text-red-600' : 'text-gray-600'}`}>{remainingAfter.toFixed(2)} €</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label htmlFor="item-title" className="block text-sm font-medium text-gray-700 mb-1">Titre de la pièce</label>
-                    <input
-                      id="item-title"
-                      type="text"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="Ex : Sac Speedy 30"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label htmlFor="item-brand" className="block text-sm font-medium text-gray-700 mb-1">Marque</label>
-                    <input
-                      id="item-brand"
-                      type="text"
-                      value={brand}
-                      onChange={(e) => setBrand(e.target.value)}
-                      placeholder="Ex : Louis Vuitton"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Photos</label>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {photos.map((url, i) => (
-                        <div key={i} className="h-14 w-14 rounded-lg overflow-hidden border border-gray-200 relative group">
-                          <img src={url} alt="" className="h-full w-full object-cover" />
-                          <button
-                            type="button"
-                            onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
-                            className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-                          >
-                            <X className="h-4 w-4 text-white" />
-                          </button>
-                        </div>
-                      ))}
-                      <label className="h-14 w-14 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-gray-400 transition-colors flex-shrink-0">
-                        {uploadingPhoto ? (
-                          <div className="h-4 w-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                        ) : (
-                          <ImageIcon className="h-5 w-5 text-gray-400" />
-                        )}
-                        <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleUploadPhoto(e.target.files)} />
-                      </label>
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label htmlFor="item-title" className="block text-sm font-medium text-gray-700 mb-1">Titre de la pièce</label>
+                      <input
+                        id="item-title"
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="Ex : Sac Speedy 30"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label htmlFor="item-brand" className="block text-sm font-medium text-gray-700 mb-1">Marque</label>
+                      <input
+                        id="item-brand"
+                        type="text"
+                        value={brand}
+                        onChange={(e) => setBrand(e.target.value)}
+                        placeholder="Ex : Louis Vuitton"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Photos</label>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {photos.map((url, i) => (
+                          <div key={i} className="h-14 w-14 rounded-lg overflow-hidden border border-gray-200 relative group">
+                            <img src={url} alt="" className="h-full w-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+                              className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                            >
+                              <X className="h-4 w-4 text-white" />
+                            </button>
+                          </div>
+                        ))}
+                        <label className="h-14 w-14 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-gray-400 transition-colors flex-shrink-0">
+                          {uploadingPhoto ? (
+                            <div className="h-4 w-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                          ) : (
+                            <ImageIcon className="h-5 w-5 text-gray-400" />
+                          )}
+                          <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleUploadPhoto(e.target.files)} />
+                        </label>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
 
-              <div>
-                <label htmlFor="item-cost-price" className="block text-sm font-medium text-gray-700 mb-1">Coût d'achat réel</label>
-                <div className="relative">
-                  <input
-                    id="item-cost-price"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={costPrice}
-                    onChange={(e) => setCostPrice(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent pr-8 text-sm"
-                    required
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  Ce montant s'impute directement sur l'enveloppe d'achat de la mission une fois la pièce validée.
-                </p>
-              </div>
+                  <div>
+                    <label htmlFor="item-cost-price" className="block text-sm font-medium text-gray-700 mb-1">Coût d'achat réel</label>
+                    <div className="relative">
+                      <input
+                        id="item-cost-price"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={costPrice}
+                        onChange={(e) => setCostPrice(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent pr-8 text-sm"
+                        required
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Ce montant s'impute directement sur l'enveloppe d'achat de la mission une fois la pièce validée.
+                    </p>
+                  </div>
+                </>
+              )}
 
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
@@ -348,10 +431,10 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || (mode === 'stock' && selectedProducts.length === 0)}
                 className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm font-medium"
               >
-                {submitting ? 'Ajout...' : 'Ajouter la pièce'}
+                {submitting ? 'Ajout...' : submitLabel}
               </button>
             </div>
           </form>
