@@ -16,6 +16,12 @@ const statusOptions = [
   { value: 'cadeau-livre', label: '🎁 Cadeau livré' },
 ];
 
+/** value="all" (plutôt que "" comme dans Products.tsx) car "" enlèverait
+ * tout filtre côté useProducts et laisserait passer les statuts B2C (draft,
+ * for-sale-online...) — ici "Tous" doit rester borné à l'univers B2B. */
+const ALL_STATUSES_VALUE = 'all';
+const ALL_B2B_STATUSES = statusOptions.map((o) => o.value);
+
 const statusBadge = (status: string) => {
   switch (status) {
     case 'reserved-b2b':
@@ -53,21 +59,23 @@ export const B2BProducts: React.FC = () => {
   } = useProducts(isAdmin);
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('for-sale-b2b');
+  const [statusFilter, setStatusFilter] = useState(ALL_STATUSES_VALUE);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
 
+  const statusForQuery = (value: string) => (value === ALL_STATUSES_VALUE ? ALL_B2B_STATUSES : value);
+
   useEffect(() => {
     if (isAdmin) {
-      setFilters({ ...filters, status: statusFilter, search: search || undefined });
+      setFilters({ ...filters, status: statusForQuery(statusFilter), search: search || undefined });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, statusFilter]);
 
   const handleSearch = (value: string) => {
     setSearch(value);
-    setFilters({ ...filters, status: statusFilter, search: value || undefined });
+    setFilters({ ...filters, status: statusForQuery(statusFilter), search: value || undefined });
   };
 
   const handleCreate = () => {
@@ -145,6 +153,7 @@ export const B2BProducts: React.FC = () => {
           onChange={(e) => setStatusFilter(e.target.value)}
           className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"
         >
+          <option value={ALL_STATUSES_VALUE}>Tous les statuts</option>
           {statusOptions.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}

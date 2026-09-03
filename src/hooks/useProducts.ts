@@ -45,7 +45,10 @@ export interface Product {
 export interface ProductFilters {
   search?: string
   categoryId?: string
-  status?: string
+  /** Un tableau applique un .in('status', ...) plutôt qu'un .eq() — utilisé
+   * par B2BProducts.tsx pour son option "Tous les statuts" (toutes les
+   * variantes B2B à la fois, sans laisser passer les statuts B2C). */
+  status?: string | string[]
   sortBy?: 'recent' | 'oldest' | 'price-asc' | 'price-desc'
 }
 
@@ -95,7 +98,9 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
       if (currentFilters.categoryId) {
         countQuery = countQuery.eq('category_id', currentFilters.categoryId)
       }
-      if (currentFilters.status) {
+      if (Array.isArray(currentFilters.status)) {
+        if (currentFilters.status.length > 0) countQuery = countQuery.in('status', currentFilters.status)
+      } else if (currentFilters.status) {
         countQuery = countQuery.eq('status', currentFilters.status)
       }
 
@@ -118,7 +123,9 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
       if (currentFilters.categoryId) {
         dataQuery = dataQuery.eq('category_id', currentFilters.categoryId)
       }
-      if (currentFilters.status) {
+      if (Array.isArray(currentFilters.status)) {
+        if (currentFilters.status.length > 0) dataQuery = dataQuery.in('status', currentFilters.status)
+      } else if (currentFilters.status) {
         dataQuery = dataQuery.eq('status', currentFilters.status)
       }
 
