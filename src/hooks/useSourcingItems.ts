@@ -34,6 +34,8 @@ interface UseSourcingItemsResult {
   /** Insère plusieurs pièces en une seule requête (sélection multiple depuis le stock, voir AddSourcingItemModal.tsx). */
   addItems: (inputs: SourcingItemInput[]) => Promise<{ success: boolean; error?: string }>;
   setItemStatus: (id: string, status: SourcingItem['status']) => Promise<{ success: boolean; error?: string }>;
+  /** Détache/supprime définitivement une pièce de la mission. */
+  removeItem: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 /** Pièces sourcées pour UNE mission (voir 0089_b2b_sourcing_missions.sql). */
@@ -109,9 +111,16 @@ export const useSourcingItems = (missionId: string | null): UseSourcingItemsResu
     return { success: true };
   };
 
+  const removeItem = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: deleteError } = await supabase.from('b2b_sourcing_items').delete().eq('id', id);
+    if (deleteError) return { success: false, error: deleteError.message };
+    await fetchItems();
+    return { success: true };
+  };
+
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
 
-  return { items, loading, error, refresh: fetchItems, addItem, addItems, setItemStatus };
+  return { items, loading, error, refresh: fetchItems, addItem, addItems, setItemStatus, removeItem };
 };
