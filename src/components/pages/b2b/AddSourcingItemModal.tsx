@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, AlertCircle, Search, Package, Image as ImageIcon } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { X, AlertCircle, Search, Package, Image as ImageIcon, Check } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { SourcingItemInput } from '../../../hooks/useSourcingItems';
 
@@ -20,15 +20,16 @@ interface AddSourcingItemModalProps {
   onSubmit: (input: SourcingItemInput) => Promise<{ success: boolean; error?: string }>;
 }
 
-/** Ajout d'une pièce sourcée : soit importée du stock existant (recherche
- * serveur, le catalogue complet est trop volumineux pour charger en mémoire
- * comme CreateDropModal le fait pour les seuls brouillons), soit créée à la
- * volée avec juste son prix facturé — voir 0089_b2b_sourcing_missions.sql. */
+/** Ajout d'une pièce sourcée : soit importée du stock existant (tous les
+ * brouillons chargés à l'ouverture, filtrés en mémoire à la frappe — même
+ * pattern que CreateDropModal.tsx), soit créée à la volée — voir
+ * 0089_b2b_sourcing_missions.sql. */
 export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOpen, onClose, onSubmit }) => {
   const [mode, setMode] = useState<'stock' | 'manual'>('stock');
+  const [draftProducts, setDraftProducts] = useState<StockProduct[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<StockProduct[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<StockProduct | null>(null);
 
   const [title, setTitle] = useState('');
@@ -42,7 +43,6 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
   const reset = () => {
     setMode('stock');
     setSearch('');
-    setSearchResults([]);
     setSelectedProduct(null);
     setTitle('');
     setBrand('');
@@ -56,33 +56,47 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
     onClose();
   };
 
-  const runSearch = async (term: string) => {
-    setSearch(term);
-    if (term.trim().length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    setSearching(true);
-    try {
-      // Seuls les articles en brouillon (jamais mis en vente / déjà vendus)
-      // peuvent être liés à une mission de sourcing — même filtre que
-      // CreateDropModal.tsx pour les drops.
-      const { data, error: searchError } = await supabase
-        .from('products')
-        .select('id, name, product_code, sale_price, purchase_price, images, main_image_index, brand:brands(name)')
-        .eq('status', 'draft')
-        .or(`name.ilike.%${term.trim()}%,product_code.ilike.%${term.trim()}%`)
-        .order('created_at', { ascending: false })
-        .limit(20);
-      if (searchError) throw new Error(searchError.message);
-      setSearchResults((data || []) as unknown as StockProduct[]);
-    } catch (err) {
-      console.error('Erreur lors de la recherche de produits:', err);
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
-  };
+  // Chargé une fois à l'ouverture — le catalogue de brouillons reste petit
+  // (contrairement au catalogue complet), donc pas besoin d'une recherche
+  // serveur à la frappe : on filtre en mémoire (voir filteredProducts).
+  useEffect(() => {
+    if (!isOpen) return;
+    let mounted = true;
+
+    const loadDraftProducts = async () => {
+      setLoadingProducts(true);
+      setLoadError('');
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('products')
+          .select('id, name, product_code, sale_price, purchase_price, images, main_image_index, brand:brands(name)')
+          .eq('status', 'draft')
+          .order('created_at', { ascending: false });
+        if (fetchError) throw new Error(fetchError.message);
+        if (mounted) setDraftProducts((data || []) as unknown as StockProduct[]);
+      } catch (err) {
+        if (mounted) setLoadError(err instanceof Error ? err.message : 'Erreur de chargement des articles');
+      } finally {
+        if (mounted) setLoadingProducts(false);
+      }
+    };
+
+    loadDraftProducts();
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen]);
+
+  const filteredProducts = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return draftProducts;
+    return draftProducts.filter(
+      (p) =>
+        p.name.toLowerCase().includes(term) ||
+        p.product_code.toLowerCase().includes(term) ||
+        (p.brand?.name || '').toLowerCase().includes(term)
+    );
+  }, [draftProducts, search]);
 
   const selectProduct = (product: StockProduct) => {
     setSelectedProduct(product);
@@ -184,69 +198,69 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
 
               {mode === 'stock' ? (
                 <div>
-                  {selectedProduct ? (
-                    <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
-                      <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
-                        {selectedProduct.images?.length > 0 ? (
-                          <img src={selectedProduct.images[selectedProduct.main_image_index] || selectedProduct.images[0]} alt={selectedProduct.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <Package className="h-4 w-4 text-gray-400" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900 truncate">{selectedProduct.name}</p>
-                        <p className="text-xs text-gray-500">{selectedProduct.brand?.name || 'Sans marque'}</p>
-                      </div>
-                      <button type="button" onClick={() => setSelectedProduct(null)} className="text-xs text-gray-500 hover:text-gray-900 underline flex-shrink-0">
-                        Changer
-                      </button>
+                  <div className="relative mb-2">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Filtrer par titre, marque ou référence..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm"
+                    />
+                  </div>
+
+                  {loadError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2 mb-2">
+                      <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                      <p className="text-sm text-red-700">{loadError}</p>
                     </div>
-                  ) : (
-                    <>
-                      <div className="relative mb-2">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input
-                          type="text"
-                          placeholder="Rechercher par nom ou code produit..."
-                          value={search}
-                          onChange={(e) => runSearch(e.target.value)}
-                          className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm"
-                        />
-                      </div>
-                      <div className="border border-gray-200 rounded-lg max-h-56 overflow-y-auto divide-y divide-gray-100">
-                        {searching ? (
-                          <div className="p-3">
-                            <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
-                          </div>
-                        ) : search.trim().length < 2 ? (
-                          <div className="p-6 text-center text-sm text-gray-500">Tape au moins 2 caractères pour chercher un article.</div>
-                        ) : searchResults.length === 0 ? (
-                          <div className="p-6 text-center text-sm text-gray-500">Aucun article trouvé pour cette recherche.</div>
-                        ) : (
-                          searchResults.map((product) => (
-                            <button
-                              type="button"
-                              key={product.id}
-                              onClick={() => selectProduct(product)}
-                              className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors text-left"
-                            >
-                              <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                {product.images?.length > 0 ? (
-                                  <img src={product.images[product.main_image_index] || product.images[0]} alt={product.name} className="h-full w-full object-cover" />
-                                ) : (
-                                  <Package className="h-4 w-4 text-gray-400" />
-                                )}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
-                                <p className="text-xs text-gray-500">{product.brand?.name || 'Sans marque'} · {product.sale_price.toFixed(0)} €</p>
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </>
                   )}
+
+                  <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto divide-y divide-gray-100">
+                    {loadingProducts ? (
+                      [...Array(3)].map((_, i) => (
+                        <div key={i} className="p-3">
+                          <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+                        </div>
+                      ))
+                    ) : filteredProducts.length === 0 ? (
+                      <div className="p-6 text-center text-sm text-gray-500">
+                        {draftProducts.length === 0 ? 'Aucun article en brouillon.' : 'Aucun résultat pour cette recherche.'}
+                      </div>
+                    ) : (
+                      filteredProducts.map((product) => {
+                        const isSelected = selectedProduct?.id === product.id;
+                        return (
+                          <button
+                            type="button"
+                            key={product.id}
+                            onClick={() => selectProduct(product)}
+                            className={`w-full flex items-center gap-3 p-3 transition-colors text-left ${isSelected ? 'bg-gray-900/5' : 'hover:bg-gray-50'}`}
+                          >
+                            <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                              {product.images?.length > 0 ? (
+                                <img src={product.images[product.main_image_index] || product.images[0]} alt={product.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <Package className="h-4 w-4 text-gray-400" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
+                              <p className="text-xs text-gray-500">
+                                {product.brand?.name || 'Sans marque'}
+                                {product.purchase_price != null && <> · Achat {product.purchase_price.toFixed(0)} €</>}
+                              </p>
+                            </div>
+                            {isSelected && (
+                              <div className="h-5 w-5 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0">
+                                <Check className="h-3 w-3 text-white" />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
