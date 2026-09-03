@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useProductSaleDetails, ProductSaleDetails as SaleDetails } from '../../hooks/useProductSaleDetails';
-import { Copy, Check, Truck, ExternalLink, FileDown } from 'lucide-react';
+import { useSendcloudSync } from '../../hooks/useSendcloudSync';
+import { Copy, Check, Truck, ExternalLink, FileDown, RefreshCw } from 'lucide-react';
 
 interface ProductSaleDetailsProps {
   productId: string;
@@ -36,8 +37,11 @@ const fulfillmentBadge = (details: SaleDetails) => {
  * profiles/resellers/shipment_parcels).
  */
 export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productId, reservedByOrderId }) => {
-  const { details, loading, error } = useProductSaleDetails(productId, reservedByOrderId);
+  const { details, loading, error, refresh } = useProductSaleDetails(productId, reservedByOrderId);
+  const { sync: syncSendcloud } = useSendcloudSync();
   const [copied, setCopied] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   if (!reservedByOrderId) return null;
   if (loading) {
@@ -65,6 +69,18 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
   };
 
   const showRequesterSubtitle = Boolean(details.requesterName) && !details.requesterIsPrimary;
+
+  const handleSyncSendcloud = async () => {
+    setSyncError(null);
+    setSyncing(true);
+    const result = await syncSendcloud(details.shipmentId || undefined);
+    setSyncing(false);
+    if (!result.success) {
+      setSyncError(result.error || 'Impossible de contacter Sendcloud');
+      return;
+    }
+    refresh();
+  };
 
   return (
     <Card>
@@ -111,8 +127,28 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
           </div>
         </div>
 
+        {syncError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+            <p className="text-sm text-red-700">{syncError}</p>
+          </div>
+        )}
+
         <div>
-          <label className="text-sm font-medium text-gray-500">Statut de l'article</label>
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-gray-500">Statut de l'article</label>
+            {details.parcel && (
+              <button
+                type="button"
+                onClick={handleSyncSendcloud}
+                disabled={syncing}
+                title="Interroge Sendcloud pour rafraîchir le statut réel de ce colis"
+                className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-800 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Actualisation...' : 'Actualiser Sendcloud'}
+              </button>
+            )}
+          </div>
           <div className="mt-1.5 flex items-center gap-2 flex-wrap">
             {fulfillmentBadge(details)}
             {details.parcel?.trackingNumber && (

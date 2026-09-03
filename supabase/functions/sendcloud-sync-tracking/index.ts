@@ -28,6 +28,8 @@ const json = (body: unknown, status = 200) =>
 
 const MAX_PARCELS_PER_RUN = 50;
 
+const STATUS_RANK: Record<string, number> = { label_created: 1, shipped: 2, delivered: 3 };
+
 // Classification par mots-clés plutôt que par code numérique Sendcloud : la
 // liste exhaustive des status_code n'est pas publiquement documentée de
 // façon fiable (voir sendcloud.dev/api/v3/parcel-statuses) — le
@@ -46,6 +48,39 @@ function classifySendcloudStatus(description: string | null | undefined): 'label
     return 'shipped';
   }
   return null;
+}
+
+interface SendcloudTrackingEvent {
+  event_at?: string;
+  status_code?: string | number;
+  status_description?: string;
+}
+
+// BUG corrigé (voir 0086 puis ce fichier) : status_code/status_description ne
+// sont PAS à la racine de la réponse GET /parcels/tracking/{tracking_number}
+// — ils vivent dans CHAQUE élément du tableau `events[]` (confirmé sur
+// l'exemple JSON de sendcloud.dev/api/v3/parcel-tracking). Lire data.
+// status_description directement (ancien code) renvoyait toujours undefined
+// -> classification toujours null -> aucune mise à jour, silencieusement :
+// c'est ce qui faisait rester des colis livrés bloqués sur "En préparation".
+//
+// On classe TOUS les événements plutôt que le seul dernier par date : plus
+// robuste si l'ordre du tableau n'est pas garanti ou si le tout dernier
+// événement est un texte non reconnu par nos mots-clés alors qu'un événement
+// plus tôt (mais toujours après le dernier statut connu, grâce au classement
+// par rang dans apply_sendcloud_parcel_status) l'était déjà.
+function pickBestClassification(events: SendcloudTrackingEvent[]): 'label_created' | 'shipped' | 'delivered' | null {
+  let best: 'label_created' | 'shipped' | 'delivered' | null = null;
+  for (const e of events) {
+    const c = classifySendcloudStatus(e.status_description);
+    if (c && (!best || STATUS_RANK[c] > STATUS_RANK[best])) best = c;
+  }
+  return best;
+}
+
+function latestEvent(events: SendcloudTrackingEvent[]): SendcloudTrackingEvent | null {
+  if (events.length === 0) return null;
+  return [...events].sort((a, b) => new Date(b.event_at || 0).getTime() - new Date(a.event_at || 0).getTime())[0];
 }
 
 Deno.serve(async (req: Request) => {
@@ -115,9 +150,11 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        const statusCode: string | null = data?.status_code != null ? String(data.status_code) : null;
-        const statusDescription: string | null = data?.status_description || null;
-        const classified = classifySendcloudStatus(statusDescription);
+        const events: SendcloudTrackingEvent[] = Array.isArray(data?.events) ? data.events : [];
+        const last = latestEvent(events);
+        const statusCode: string | null = last?.status_code != null ? String(last.status_code) : null;
+        const statusDescription: string | null = last?.status_description || null;
+        const classified = pickBestClassification(events);
 
         if (!parcel.sendcloud_parcel_id) continue;
 

@@ -6,19 +6,21 @@
 // au lieu de rester figés à 'label_created' jusqu'à la prochaine
 // synchronisation manuelle (voir sendcloud-sync-tracking).
 //
-// ⚠️ AVERTISSEMENT — forme du payload non vérifiée en conditions réelles :
-// la documentation Sendcloud (sendcloud.dev/api/v3/webhooks/parcel-status-
-// changed) confirme le HEADER DE SIGNATURE (voir vérification ci-dessous,
-// confirmé) mais PAS le schéma JSON exact du corps — elle indique seulement
-// "la donnée reçue est la même que celle renvoyée en consultant un colis
-// précis". Le parsing ci-dessous couvre les formes les plus probables
-// (`parcel` à la racine ou sous `payload`, `status` en objet {id, message}
-// ou `status_code`/`status_description` à plat) et log TOUJOURS le payload
-// brut en cas d'échec de parsing — à vérifier dans les logs Supabase
+// ⚠️ Forme du payload : la doc Sendcloud (sendcloud.dev/api/v3/webhooks/
+// parcel-status-changed) ne montre pas d'exemple JSON pour cet événement,
+// mais précise "la donnée reçue est la même que celle renvoyée en consultant
+// un colis précis" — et POUR CETTE RÉPONSE-LÀ (GET /parcels/tracking/
+// {tracking_number}, voir sendcloud-sync-tracking/index.ts), l'exemple
+// officiel EST confirmé : status_code/status_description vivent dans
+// `events[]`, pas à la racine, et il n'y a PAS d'id de colis fiable à la
+// racine — seulement `tracking_numbers[].tracking_number`. Le parsing
+// ci-dessous suit donc cette forme, avec repli sur `id`/`status_code` à plat
+// si jamais le payload webhook diffère malgré tout (les deux identifiants
+// sont envoyés à apply_sendcloud_parcel_status, qui matche sur l'un ou
+// l'autre). Log TOUJOURS le payload brut — à vérifier dans les logs Supabase
 // (Dashboard → Edge Functions → sendcloud-webhook → Logs) dès la première
-// vraie notification reçue, et ajuster l'extraction ci-dessous si besoin.
-// Le comportement dégrade sans risque : un événement non reconnu est juste
-// ignoré (log + 200), jamais un crash ni un mauvais statut appliqué.
+// vraie notification, et ajuster si la forme réelle diffère encore. Dégrade
+// sans risque : un événement non reconnu est juste ignoré (log + 200).
 //
 // Vérification de signature : confirmée par la doc Sendcloud — header
 // Sendcloud-Signature, HMAC-SHA256 du corps brut avec la clé secrète du
@@ -39,6 +41,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const LOG_PREFIX = '[sendcloud-webhook]';
 
 // Copie identique de sendcloud-sync-tracking/index.ts.
+const STATUS_RANK: Record<string, number> = { label_created: 1, shipped: 2, delivered: 3 };
+
 function classifySendcloudStatus(description: string | null | undefined): 'label_created' | 'shipped' | 'delivered' | null {
   const d = (description || '').toLowerCase();
   if (!d) return null;
@@ -49,6 +53,26 @@ function classifySendcloudStatus(description: string | null | undefined): 'label
     return 'shipped';
   }
   return null;
+}
+
+interface SendcloudTrackingEvent {
+  event_at?: string;
+  status_code?: string | number;
+  status_description?: string;
+}
+
+function pickBestClassification(events: SendcloudTrackingEvent[]): 'label_created' | 'shipped' | 'delivered' | null {
+  let best: 'label_created' | 'shipped' | 'delivered' | null = null;
+  for (const e of events) {
+    const c = classifySendcloudStatus(e.status_description);
+    if (c && (!best || STATUS_RANK[c] > STATUS_RANK[best])) best = c;
+  }
+  return best;
+}
+
+function latestEvent(events: SendcloudTrackingEvent[]): SendcloudTrackingEvent | null {
+  if (events.length === 0) return null;
+  return [...events].sort((a, b) => new Date(b.event_at || 0).getTime() - new Date(a.event_at || 0).getTime())[0];
 }
 
 async function verifySignature(rawBody: string, signatureHeader: string | null, secret: string): Promise<boolean> {
@@ -101,25 +125,30 @@ Deno.serve(async (req: Request) => {
 
   try {
     // Formes tolérées : { parcel: {...} }, { payload: { parcel: {...} } },
-    // ou le parcel directement à la racine — voir avertissement en tête de
-    // fichier.
+    // ou le payload = le colis directement à la racine (le cas confirmé pour
+    // la réponse de tracking équivalente, voir avertissement en tête de
+    // fichier).
     const parcel = (body?.parcel as Record<string, unknown>)
       || ((body?.payload as Record<string, unknown>)?.parcel as Record<string, unknown>)
       || body;
 
+    const events: SendcloudTrackingEvent[] = Array.isArray(parcel?.events) ? (parcel.events as SendcloudTrackingEvent[]) : [];
+    const trackingNumbers = Array.isArray(parcel?.tracking_numbers) ? (parcel.tracking_numbers as Array<{ tracking_number?: string }>) : [];
+    const trackingNumber = trackingNumbers[0]?.tracking_number || (parcel?.tracking_number as string) || null;
+    // Repli si le vrai payload s'avère différent de la forme confirmée (ex.
+    // exposait bien un id à plat) : les deux identifiants sont envoyés à la
+    // RPC, qui matche sur l'un ou l'autre.
     const sendcloudParcelId = parcel?.id != null ? String(parcel.id) : null;
-    if (!sendcloudParcelId) {
-      console.error(`${LOG_PREFIX} Aucun id de colis trouvé dans le payload — forme inattendue, voir le log ci-dessus`);
+
+    if (!sendcloudParcelId && !trackingNumber) {
+      console.error(`${LOG_PREFIX} Ni id ni tracking_number trouvés dans le payload — forme inattendue, voir le log ci-dessus`);
       return new Response(JSON.stringify({ received: true }), { status: 200 });
     }
 
-    const statusObj = (parcel?.status as Record<string, unknown>) || null;
-    const statusCode = statusObj?.id != null
-      ? String(statusObj.id)
-      : (parcel?.status_code != null ? String(parcel.status_code) : null);
-    const statusMessage = (statusObj?.message as string) || (parcel?.status_description as string) || null;
-
-    const classified = classifySendcloudStatus(statusMessage);
+    const last = latestEvent(events);
+    const statusCode = last?.status_code != null ? String(last.status_code) : null;
+    const statusMessage = last?.status_description || null;
+    const classified = pickBestClassification(events);
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data, error } = await adminClient.rpc('apply_sendcloud_parcel_status', {
@@ -127,10 +156,13 @@ Deno.serve(async (req: Request) => {
       p_new_status: classified,
       p_carrier_status_code: statusCode,
       p_carrier_status_message: statusMessage,
+      p_tracking_number: trackingNumber,
     });
 
+    const identifier = trackingNumber || sendcloudParcelId;
+
     if (error) {
-      console.error(`${LOG_PREFIX} Échec apply_sendcloud_parcel_status pour le colis ${sendcloudParcelId}:`, error.message);
+      console.error(`${LOG_PREFIX} Échec apply_sendcloud_parcel_status pour ${identifier}:`, error.message);
       // 200 quand même : une erreur applicative ne doit pas déclencher de
       // retries en boucle côté Sendcloud pour un événement qu'on ne pourra
       // de toute façon pas mieux traiter au prochain essai identique.
@@ -138,9 +170,9 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!data?.found) {
-      console.log(`${LOG_PREFIX} Aucun shipment_parcels ne correspond à sendcloud_parcel_id=${sendcloudParcelId} (colis hors périmètre B2B ?)`);
+      console.log(`${LOG_PREFIX} Aucun shipment_parcels ne correspond à ${identifier} (colis hors périmètre B2B ?)`);
     } else {
-      console.log(`${LOG_PREFIX} Colis ${sendcloudParcelId} — statut classifié: ${classified ?? '(non reconnu)'} — shipment ${data.shipment_id} -> ${data.shipment_status}`);
+      console.log(`${LOG_PREFIX} Colis ${identifier} — statut classifié: ${classified ?? '(non reconnu)'} — shipment ${data.shipment_id} -> ${data.shipment_status}`);
     }
 
     return new Response(JSON.stringify({ received: true }), { status: 200 });

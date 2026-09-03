@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban, BadgeCheck } from 'lucide-react';
+import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban, BadgeCheck, RefreshCw } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { B2BOrder, B2BOrderItem, getRequesterDisplayName } from '../../../hooks/useB2BOrders';
 import { cancelOrderItem, cancelOrder } from '../../../hooks/useCancelOrderItem';
+import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 
 // `orders.shipping_address` est stocké dans la forme assemblée par
 // b2b-checkout (address/postcode/city/country/pickup_point_*/delivery_type/
@@ -372,12 +373,27 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const [cancellingItem, setCancellingItem] = useState<B2BOrderItem | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState(false);
   const [refundNotice, setRefundNotice] = useState<string | null>(null);
+  const { sync: syncSendcloud } = useSendcloudSync();
+  const [syncingShipmentId, setSyncingShipmentId] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   if (!order) return null;
 
   const isPaid = order.payment_status === 'paid';
   const hasStripePayment = Boolean(order.stripe_payment_intent_id);
   const hasActiveItems = order.order_items.some((i) => i.status === 'active');
+
+  const handleSyncSendcloud = async (shipmentId: string) => {
+    setSyncError(null);
+    setSyncingShipmentId(shipmentId);
+    const result = await syncSendcloud(shipmentId);
+    setSyncingShipmentId(null);
+    if (!result.success) {
+      setSyncError(result.error || 'Impossible de contacter Sendcloud');
+      return;
+    }
+    onOrderUpdated();
+  };
 
   const handleItemConfirmed = (result: { refund_status?: string; refund_method?: string | null; refund_error?: string }) => {
     setCancellingItem(null);
@@ -442,6 +458,12 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-blue-800">{refundNotice}</p>
+                </div>
+              )}
+
+              {syncError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-sm text-red-700">{syncError}</p>
                 </div>
               )}
 
@@ -530,6 +552,17 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                   {!isCancelled && fulfillmentBadge(item.fulfillment_status) && (
                                     <div className="mt-1 flex items-center gap-2 flex-wrap">
                                       {fulfillmentBadge(item.fulfillment_status)}
+                                      {item.shipment_id && ['label_created', 'shipped'].includes(item.fulfillment_status) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSyncSendcloud(item.shipment_id!)}
+                                          disabled={syncingShipmentId === item.shipment_id}
+                                          title="Interroge Sendcloud pour rafraîchir le statut réel de ce colis"
+                                          className="p-0.5 text-gray-400 hover:text-gray-700 disabled:opacity-50"
+                                        >
+                                          <RefreshCw className={`h-3 w-3 ${syncingShipmentId === item.shipment_id ? 'animate-spin' : ''}`} />
+                                        </button>
+                                      )}
                                       {item.shipment_parcel?.tracking_number && (
                                         <span className="text-xs text-gray-500">
                                           Suivi : {item.shipment_parcel.tracking_number}

@@ -18,6 +18,9 @@ export interface ProductSaleDetails {
    * inconnu) : dans ce cas, requesterName n'apporte rien de plus que
    * companyName — voir ProductSaleDetails.tsx pour l'affichage conditionnel. */
   requesterIsPrimary: boolean;
+  /** Nécessaire pour cibler l'actualisation Sendcloud sur CE shipment précis
+   * depuis la fiche produit (voir ProductSaleDetails.tsx). */
+  shipmentId: string | null;
   parcel: {
     parcelIndex: number;
     trackingNumber: string | null;
@@ -54,7 +57,7 @@ export const useProductSaleDetails = (productId: string | undefined, reservedByO
       const { data, error: fetchError } = await supabase
         .from('order_items')
         .select(
-          'id, status, fulfillment_status, ' +
+          'id, status, fulfillment_status, shipment_id, ' +
           'shipment_parcel:shipment_parcels(parcel_index, tracking_number, tracking_url, label_url), ' +
           'order:orders(id, order_number, created_at, placed_by_profile_id, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email))'
         )
@@ -72,6 +75,7 @@ export const useProductSaleDetails = (productId: string | undefined, reservedByO
         id: string;
         status: 'active' | 'cancelled';
         fulfillment_status: ProductSaleDetails['fulfillmentStatus'];
+        shipment_id: string | null;
         shipment_parcel: { parcel_index: number; tracking_number: string | null; tracking_url: string | null; label_url: string | null } | null;
         order: {
           id: string;
@@ -109,6 +113,7 @@ export const useProductSaleDetails = (productId: string | undefined, reservedByO
         },
         requesterName,
         requesterIsPrimary,
+        shipmentId: row.shipment_id,
         parcel: row.shipment_parcel
           ? {
               parcelIndex: row.shipment_parcel.parcel_index,
