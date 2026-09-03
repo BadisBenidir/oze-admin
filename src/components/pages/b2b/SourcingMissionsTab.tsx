@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Briefcase, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
@@ -28,9 +28,17 @@ const missionStatusBadge = (status: SourcingMission['status']) => {
  * revendeur, servant d'enveloppe budgétaire pour des pièces sourcées à la
  * demande (voir SourcingMissionDetailModal pour le détail des pièces). */
 export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resellerId, resellerName, isAdmin }) => {
-  const { missions, loading, error, refresh, createMission, setMissionStatus } = useSourcingMissions(resellerId, isAdmin);
+  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus } = useSourcingMissions(resellerId, isAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<SourcingMission | null>(null);
+
+  // Garde la mission ouverte synchronisée avec la liste (statut, ajout de
+  // pièce, ou édition changent tous les montants affichés dans le détail).
+  useEffect(() => {
+    if (!viewingMission) return;
+    const updated = missions.find((m) => m.id === viewingMission.id);
+    if (updated) setViewingMission(updated);
+  }, [missions, viewingMission]);
 
   return (
     <div className="space-y-4">
@@ -70,8 +78,8 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
       ) : (
         <div className="space-y-3">
           {missions.map((mission) => {
-            const consumedRatio = mission.budget_amount > 0 ? Math.min(mission.consumed_amount / mission.budget_amount, 1) : 0;
-            const overBudget = mission.remaining_amount < 0;
+            const consumedRatio = mission.allocated_cost_budget > 0 ? Math.min(mission.consumed_cost_amount / mission.allocated_cost_budget, 1) : 0;
+            const overBudget = mission.remaining_cost_budget < 0;
             return (
               <Card key={mission.id} hover onClick={() => setViewingMission(mission)} className="cursor-pointer">
                 <CardContent className="p-4">
@@ -79,7 +87,7 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{mission.title}</p>
                       <p className="text-xs text-gray-500">
-                        {mission.items_count} pièce{mission.items_count > 1 ? 's' : ''} sourcée{mission.items_count > 1 ? 's' : ''}
+                        Avance {mission.advance_amount.toFixed(2)} € · {mission.items_count} pièce{mission.items_count > 1 ? 's' : ''} sourcée{mission.items_count > 1 ? 's' : ''}
                         {mission.paid_at && <> · Payée le {new Date(mission.paid_at).toLocaleDateString('fr-FR')}</>}
                       </p>
                     </div>
@@ -92,9 +100,9 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
                     />
                   </div>
                   <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>{mission.consumed_amount.toFixed(2)} € consommés</span>
-                    <span className={overBudget ? 'text-red-600 font-medium' : ''}>
-                      Budget {mission.budget_amount.toFixed(2)} € · reste {mission.remaining_amount.toFixed(2)} €
+                    <span>{mission.consumed_cost_amount.toFixed(2)} € / {mission.allocated_cost_budget.toFixed(2)} € sourcés</span>
+                    <span className={overBudget ? 'text-red-600 font-medium' : mission.gross_margin < 0 ? 'text-red-600 font-medium' : ''}>
+                      Marge {mission.gross_margin.toFixed(2)} €
                     </span>
                   </div>
                 </CardContent>
@@ -116,9 +124,11 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
         onClose={() => setViewingMission(null)}
         onStatusChange={async (status) => {
           if (!viewingMission) return { success: false, error: 'Mission inconnue' };
-          const result = await setMissionStatus(viewingMission.id, status);
-          if (result.success) setViewingMission((prev) => (prev ? { ...prev, status } : prev));
-          return result;
+          return setMissionStatus(viewingMission.id, status);
+        }}
+        onUpdateMission={async (input) => {
+          if (!viewingMission) return { success: false, error: 'Mission inconnue' };
+          return updateMission(viewingMission.id, input);
         }}
         onItemsChanged={refresh}
       />

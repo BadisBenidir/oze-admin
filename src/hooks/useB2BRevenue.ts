@@ -33,7 +33,7 @@ export const useB2BRevenue = (isAuthenticated: boolean = false) => {
       // classique — une mission annulée n'a jamais été réellement encaissée.
       const { data: sourcingData, error: sourcingError } = await supabase
         .from('b2b_sourcing_missions')
-        .select('reseller_id, budget_amount, resellers(company_name)')
+        .select('reseller_id, advance_amount, resellers(company_name)')
         .not('paid_at', 'is', null)
         .neq('status', 'cancelled');
 
@@ -71,7 +71,7 @@ export const useB2BRevenue = (isAuthenticated: boolean = false) => {
         byReseller.set(row.reseller_id, existing);
       }
 
-      type SourcingRow = { reseller_id: string; budget_amount: number; resellers: { company_name: string } | null };
+      type SourcingRow = { reseller_id: string; advance_amount: number; resellers: { company_name: string } | null };
       for (const row of (sourcingData || []) as unknown as SourcingRow[]) {
         const existing = byReseller.get(row.reseller_id) || {
           reseller_id: row.reseller_id,
@@ -82,7 +82,7 @@ export const useB2BRevenue = (isAuthenticated: boolean = false) => {
           total_profit: 0,
           orderIds: new Set<string>(),
         };
-        existing.total_revenue += Number(row.budget_amount) || 0;
+        existing.total_revenue += Number(row.advance_amount) || 0;
         byReseller.set(row.reseller_id, existing);
       }
 

@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { X, AlertCircle, Plus, Package, CheckCircle2 } from 'lucide-react';
+import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
-import { SourcingMission } from '../../../hooks/useSourcingMissions';
+import { SourcingMission, SourcingMissionInput } from '../../../hooks/useSourcingMissions';
 import { useSourcingItems, SourcingItem } from '../../../hooks/useSourcingItems';
 import { AddSourcingItemModal } from './AddSourcingItemModal';
+import { CreateSourcingMissionModal } from './CreateSourcingMissionModal';
 
 interface SourcingMissionDetailModalProps {
   mission: SourcingMission | null;
   onClose: () => void;
   onStatusChange: (status: 'active' | 'completed' | 'cancelled') => Promise<{ success: boolean; error?: string }>;
+  onUpdateMission: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
   /** Rafraîchit la liste des missions (montants consommés) après ajout d'une pièce. */
   onItemsChanged: () => void;
 }
@@ -26,11 +28,13 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
   }
 };
 
-/** Détail d'une mission de sourcing : pièces affectées à son budget, ajout
- * d'une nouvelle pièce, et clôture — voir SourcingMissionsTab.tsx. */
-export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onItemsChanged }) => {
+/** Détail d'une mission de sourcing : cartouche avance/budget/marge, pièces
+ * affectées à l'enveloppe d'achat, ajout d'une pièce, édition et clôture —
+ * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
+export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onItemsChanged }) => {
   const { items, loading, error, addItem, setItemStatus } = useSourcingItems(mission?.id || null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [statusError, setStatusError] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
@@ -40,8 +44,9 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
 
   if (!mission) return null;
 
-  const consumedRatio = mission.budget_amount > 0 ? Math.min(mission.consumed_amount / mission.budget_amount, 1) : 0;
-  const overBudget = mission.remaining_amount < 0;
+  const consumedRatio = mission.allocated_cost_budget > 0 ? Math.min(mission.consumed_cost_amount / mission.allocated_cost_budget, 1) : 0;
+  const overBudget = mission.remaining_cost_budget < 0;
+  const marginPercent = mission.advance_amount > 0 ? (mission.gross_margin / mission.advance_amount) * 100 : null;
 
   const handleAddItem = async (input: Parameters<typeof addItem>[0]) => {
     const result = await addItem(input);
@@ -49,7 +54,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     return result;
   };
 
-  const handleClose = async () => {
+  const handleCloseMission = async () => {
     setUpdatingStatus(true);
     setStatusError('');
     const result = await onStatusChange('completed');
@@ -63,37 +68,59 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between p-5 border-b border-gray-100 flex-shrink-0">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900">{mission.title}</h3>
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-gray-900 truncate">{mission.title}</h3>
               {mission.notes && <p className="text-xs text-gray-500 mt-0.5">{mission.notes}</p>}
             </div>
-            <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors flex-shrink-0">
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Modifier la mission"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           <div className="p-5 space-y-4 overflow-y-auto flex-1">
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden mb-2">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center mb-3">
+                <div>
+                  <p className="text-xs text-gray-500">Avance client</p>
+                  <p className="text-sm font-semibold text-gray-900">{mission.advance_amount.toFixed(2)} €</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Enveloppe d'achat</p>
+                  <p className="text-sm font-semibold text-gray-900">{mission.allocated_cost_budget.toFixed(2)} €</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Dépensé (achats)</p>
+                  <p className="text-sm font-semibold text-gray-900">{mission.consumed_cost_amount.toFixed(2)} €</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Reste à dépenser</p>
+                  <p className={`text-sm font-semibold ${overBudget ? 'text-red-600' : 'text-gray-900'}`}>{mission.remaining_cost_budget.toFixed(2)} €</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Marge</p>
+                  <p className={`text-sm font-semibold ${mission.gross_margin < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {mission.gross_margin.toFixed(2)} €{marginPercent !== null && ` (${marginPercent.toFixed(0)}%)`}
+                  </p>
+                </div>
+              </div>
+              <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full ${overBudget ? 'bg-red-500' : consumedRatio >= 1 ? 'bg-amber-500' : 'bg-gray-900'}`}
                   style={{ width: `${consumedRatio * 100}%` }}
                 />
               </div>
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div>
-                  <p className="text-xs text-gray-500">Budget initial</p>
-                  <p className="text-sm font-semibold text-gray-900">{mission.budget_amount.toFixed(2)} €</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Consommé</p>
-                  <p className="text-sm font-semibold text-gray-900">{mission.consumed_amount.toFixed(2)} €</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Reste à consommer</p>
-                  <p className={`text-sm font-semibold ${overBudget ? 'text-red-600' : 'text-gray-900'}`}>{mission.remaining_amount.toFixed(2)} €</p>
-                </div>
-              </div>
+              <p className="text-xs text-gray-400 mt-1.5">
+                {mission.consumed_cost_amount.toFixed(2)} € / {mission.allocated_cost_budget.toFixed(2)} € sourcés
+              </p>
             </div>
 
             {statusError && (
@@ -127,7 +154,8 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Pièce</th>
-                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Prix facturé</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Prix d'achat</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs hidden sm:table-cell">Prix de vente</th>
                       <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Statut</th>
                     </tr>
                   </thead>
@@ -135,14 +163,14 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                     {loading ? (
                       [...Array(2)].map((_, i) => (
                         <tr key={`skeleton-${i}`} className="border-b border-gray-50">
-                          <td className="py-3 px-3" colSpan={3}>
+                          <td className="py-3 px-3" colSpan={4}>
                             <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
                           </td>
                         </tr>
                       ))
                     ) : items.length === 0 ? (
                       <tr>
-                        <td className="py-6 px-3 text-center text-sm text-gray-500" colSpan={3}>
+                        <td className="py-6 px-3 text-center text-sm text-gray-500" colSpan={4}>
                           Aucune pièce sourcée pour l'instant sur cette mission.
                         </td>
                       </tr>
@@ -167,6 +195,9 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                               </div>
                             </td>
                             <td className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums">
+                              {item.cost_price != null ? `${item.cost_price.toFixed(2)} €` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-sm text-gray-600 tabular-nums hidden sm:table-cell">
                               {item.billed_price.toFixed(2)} €
                             </td>
                             <td className="py-2.5 px-3">
@@ -198,7 +229,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
             </span>
             {mission.status === 'active' && (
               <button
-                onClick={handleClose}
+                onClick={handleCloseMission}
                 disabled={updatingStatus}
                 className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
               >
@@ -211,6 +242,13 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
       </div>
 
       <AddSourcingItemModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSubmit={handleAddItem} />
+
+      <CreateSourcingMissionModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSubmit={onUpdateMission}
+        editingMission={mission}
+      />
     </div>
   );
 };

@@ -12,15 +12,21 @@ export interface SourcingMission {
   reseller_id: string;
   user_id: string | null;
   title: string;
-  budget_amount: number;
+  /** Avance versée par le client — alimente le CA B2B encaissé (voir useB2BRevenue.ts). */
+  advance_amount: number;
+  /** Enveloppe allouée aux achats sur le terrain — jamais confondue avec advance_amount. */
+  allocated_cost_budget: number;
   status: 'active' | 'completed' | 'cancelled';
   payment_method: string | null;
   paid_at: string | null;
   notes: string | null;
   created_at: string;
-  consumed_amount: number;
-  remaining_amount: number;
+  /** Somme des cost_price des pièces validées/expédiées — voir b2b_sourcing_mission_totals (0091). */
+  consumed_cost_amount: number;
+  remaining_cost_budget: number;
   items_count: number;
+  /** Marge brute théorique = advance_amount - allocated_cost_budget (calculée côté client, simple soustraction). */
+  gross_margin: number;
   /** Nom de l'entreprise — toujours présent (vue globale et onglet fiche revendeur). */
   company_name: string;
   /** Sous-compte précis ayant demandé la mission, si renseigné (voir 0090). */
@@ -31,7 +37,8 @@ export interface SourcingMissionInput {
   reseller_id: string;
   user_id?: string;
   title: string;
-  budget_amount: number;
+  advance_amount: number;
+  allocated_cost_budget: number;
   payment_method?: string;
   paid_at?: string;
   notes?: string;
@@ -43,10 +50,11 @@ interface UseSourcingMissionsResult {
   error: string | null;
   refresh: () => Promise<void>;
   createMission: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
+  updateMission: (id: string, input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
   setMissionStatus: (id: string, status: 'active' | 'completed' | 'cancelled') => Promise<{ success: boolean; error?: string }>;
 }
 
-/** Missions de sourcing sur mesure (voir 0089/0090_b2b_sourcing_missions*.sql) —
+/** Missions de sourcing sur mesure (voir 0089/0090/0091_b2b_sourcing_missions*.sql) —
  * scope sur UN revendeur (fiche revendeur, `resellerId` renseigné) ou
  * globales toutes entreprises confondues (`resellerId` omis, vue B2BSourcing.tsx). */
 export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean = false): UseSourcingMissionsResult => {
@@ -72,7 +80,7 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
 
       if (fetchError) throw new Error(fetchError.message);
 
-      type Row = Omit<SourcingMission, 'consumed_amount' | 'remaining_amount' | 'items_count' | 'company_name' | 'requester'> & {
+      type Row = Omit<SourcingMission, 'consumed_cost_amount' | 'remaining_cost_budget' | 'items_count' | 'company_name' | 'requester' | 'gross_margin'> & {
         resellers: { company_name: string } | null;
         requester: SourcingMissionRequester | null;
       };
@@ -83,7 +91,7 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
       // PostgREST pour un embed automatique — on fusionne par mission_id
       // côté client, même approche que useB2BRevenue.ts pour le CA.
       const missionIds = rows.map((r) => r.id);
-      type Totals = { mission_id: string; consumed_amount: number; remaining_amount: number; items_count: number };
+      type Totals = { mission_id: string; consumed_cost_amount: number; remaining_cost_budget: number; items_count: number };
       let totalsByMission = new Map<string, Totals>();
       if (missionIds.length > 0) {
         const { data: totalsData, error: totalsError } = await supabase
@@ -101,9 +109,10 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
             ...row,
             company_name: row.resellers?.company_name || '—',
             requester: row.requester,
-            consumed_amount: Number(totals?.consumed_amount) || 0,
-            remaining_amount: totals ? Number(totals.remaining_amount) : Number(row.budget_amount),
+            consumed_cost_amount: Number(totals?.consumed_cost_amount) || 0,
+            remaining_cost_budget: totals ? Number(totals.remaining_cost_budget) : Number(row.allocated_cost_budget),
             items_count: totals?.items_count || 0,
+            gross_margin: Number(row.advance_amount) - Number(row.allocated_cost_budget),
           };
         })
       );
@@ -120,13 +129,30 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
       reseller_id: input.reseller_id,
       user_id: input.user_id || null,
       title: input.title.trim(),
-      budget_amount: input.budget_amount,
+      advance_amount: input.advance_amount,
+      allocated_cost_budget: input.allocated_cost_budget,
       payment_method: input.payment_method?.trim() || null,
       paid_at: input.paid_at || null,
       notes: input.notes?.trim() || null,
     });
 
     if (insertError) return { success: false, error: insertError.message };
+    await fetchMissions();
+    return { success: true };
+  };
+
+  const updateMission = async (id: string, input: SourcingMissionInput): Promise<{ success: boolean; error?: string }> => {
+    const { error: updateError } = await supabase.from('b2b_sourcing_missions').update({
+      user_id: input.user_id || null,
+      title: input.title.trim(),
+      advance_amount: input.advance_amount,
+      allocated_cost_budget: input.allocated_cost_budget,
+      payment_method: input.payment_method?.trim() || null,
+      paid_at: input.paid_at || null,
+      notes: input.notes?.trim() || null,
+    }).eq('id', id);
+
+    if (updateError) return { success: false, error: updateError.message };
     await fetchMissions();
     return { success: true };
   };
@@ -146,5 +172,5 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     fetchMissions();
   }, [isAdmin, fetchMissions]);
 
-  return { missions, loading, error, refresh: fetchMissions, createMission, setMissionStatus };
+  return { missions, loading, error, refresh: fetchMissions, createMission, updateMission, setMissionStatus };
 };

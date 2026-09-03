@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Plus, Briefcase, AlertCircle, Banknote, PieChart, Wallet } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Plus, Briefcase, AlertCircle, Banknote, PieChart, Wallet, TrendingUp } from 'lucide-react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
@@ -26,14 +26,23 @@ const requesterLabel = (mission: SourcingMission): string => {
 
 /** Vue globale de toutes les missions de sourcing sur mesure, toutes
  * entreprises confondues — voir aussi SourcingMissionsTab.tsx pour l'accès
- * contextuel depuis la fiche d'un revendeur précis. */
+ * contextuel depuis la fiche d'un revendeur précis, et
+ * 0091_b2b_sourcing_mission_budget_split.sql pour le modèle avance/enveloppe. */
 export const B2BSourcing: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { missions, loading, error, refresh, createMission, setMissionStatus } = useSourcingMissions(undefined, isAdmin);
+  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus } = useSourcingMissions(undefined, isAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<SourcingMission | null>(null);
   const [resellerFilter, setResellerFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | SourcingMission['status']>('all');
+
+  // Garde la mission ouverte synchronisée avec la liste (statut, ajout de
+  // pièce, ou édition changent tous les montants affichés dans le détail).
+  useEffect(() => {
+    if (!viewingMission) return;
+    const updated = missions.find((m) => m.id === viewingMission.id);
+    if (updated) setViewingMission(updated);
+  }, [missions, viewingMission]);
 
   const resellerOptions = useMemo(() => {
     const byId = new Map<string, string>();
@@ -51,9 +60,11 @@ export const B2BSourcing: React.FC = () => {
 
   // Totaux hors missions annulées — jamais réellement disponibles à consommer.
   const activeMissions = missions.filter((m) => m.status !== 'cancelled');
-  const totalBudget = activeMissions.reduce((sum, m) => sum + m.budget_amount, 0);
-  const totalConsumed = activeMissions.reduce((sum, m) => sum + m.consumed_amount, 0);
-  const totalRemaining = activeMissions.reduce((sum, m) => sum + m.remaining_amount, 0);
+  const totalAdvance = activeMissions.reduce((sum, m) => sum + m.advance_amount, 0);
+  const totalCostBudget = activeMissions.reduce((sum, m) => sum + m.allocated_cost_budget, 0);
+  const totalConsumed = activeMissions.reduce((sum, m) => sum + m.consumed_cost_amount, 0);
+  const totalRemaining = activeMissions.reduce((sum, m) => sum + m.remaining_cost_budget, 0);
+  const totalMargin = totalAdvance - totalCostBudget;
 
   return (
     <div className="p-4 md:p-6">
@@ -72,21 +83,30 @@ export const B2BSourcing: React.FC = () => {
       </div>
 
       {!loading && !error && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <Banknote className="h-4 w-4 text-gray-400" />
-                <p className="text-xs text-gray-500">Total budgets avancés</p>
+                <p className="text-xs text-gray-500">Total avances encaissées</p>
               </div>
-              <p className="text-xl font-semibold text-gray-900">{totalBudget.toFixed(2)} €</p>
+              <p className="text-xl font-semibold text-gray-900">{totalAdvance.toFixed(2)} €</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Wallet className="h-4 w-4 text-gray-400" />
+                <p className="text-xs text-gray-500">Enveloppes achats allouées</p>
+              </div>
+              <p className="text-xl font-semibold text-gray-900">{totalCostBudget.toFixed(2)} €</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <PieChart className="h-4 w-4 text-gray-400" />
-                <p className="text-xs text-gray-500">Total consommé</p>
+                <p className="text-xs text-gray-500">Consommé (achats)</p>
               </div>
               <p className="text-xl font-semibold text-gray-900">{totalConsumed.toFixed(2)} €</p>
             </CardContent>
@@ -98,6 +118,15 @@ export const B2BSourcing: React.FC = () => {
                 <p className="text-xs text-gray-500">Reste à sourcer</p>
               </div>
               <p className="text-xl font-semibold text-gray-900">{totalRemaining.toFixed(2)} €</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="h-4 w-4 text-green-500" />
+                <p className="text-xs text-gray-500">Marge brute totale</p>
+              </div>
+              <p className={`text-xl font-semibold ${totalMargin < 0 ? 'text-red-600' : 'text-green-600'}`}>{totalMargin.toFixed(2)} €</p>
             </CardContent>
           </Card>
         </div>
@@ -149,31 +178,33 @@ export const B2BSourcing: React.FC = () => {
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Mission</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Entreprise</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden lg:table-cell">Demandeur</th>
-                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Budget</th>
-                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Consommé</th>
+                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Avance</th>
+                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden md:table-cell">Enveloppe achat</th>
+                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden md:table-cell">Consommé</th>
                     <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Reste</th>
+                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Marge</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Statut</th>
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden md:table-cell">Avance</th>
+                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden lg:table-cell">Date d'avance</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     [...Array(3)].map((_, i) => (
                       <tr key={`skeleton-${i}`} className="border-b border-gray-50">
-                        <td className="py-4 px-4 md:px-6" colSpan={8}>
+                        <td className="py-4 px-4 md:px-6" colSpan={10}>
                           <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
                         </td>
                       </tr>
                     ))
                   ) : filteredMissions.length === 0 ? (
                     <tr>
-                      <td className="py-8 px-4 md:px-6 text-center text-sm text-gray-500" colSpan={8}>
+                      <td className="py-8 px-4 md:px-6 text-center text-sm text-gray-500" colSpan={10}>
                         Aucune mission ne correspond à ces filtres.
                       </td>
                     </tr>
                   ) : (
                     filteredMissions.map((mission) => {
-                      const overBudget = mission.remaining_amount < 0;
+                      const overBudget = mission.remaining_cost_budget < 0;
                       return (
                         <tr
                           key={mission.id}
@@ -190,13 +221,17 @@ export const B2BSourcing: React.FC = () => {
                               </>
                             ) : '—'}
                           </td>
-                          <td className="py-3 px-4 md:px-6 text-right text-sm text-gray-900 tabular-nums">{mission.budget_amount.toFixed(2)} €</td>
-                          <td className="py-3 px-4 md:px-6 text-right text-sm text-gray-900 tabular-nums">{mission.consumed_amount.toFixed(2)} €</td>
+                          <td className="py-3 px-4 md:px-6 text-right text-sm text-gray-900 tabular-nums">{mission.advance_amount.toFixed(2)} €</td>
+                          <td className="py-3 px-4 md:px-6 hidden md:table-cell text-right text-sm text-gray-600 tabular-nums">{mission.allocated_cost_budget.toFixed(2)} €</td>
+                          <td className="py-3 px-4 md:px-6 hidden md:table-cell text-right text-sm text-gray-600 tabular-nums">{mission.consumed_cost_amount.toFixed(2)} €</td>
                           <td className={`py-3 px-4 md:px-6 text-right text-sm font-semibold tabular-nums ${overBudget ? 'text-red-600' : 'text-gray-900'}`}>
-                            {mission.remaining_amount.toFixed(2)} €
+                            {mission.remaining_cost_budget.toFixed(2)} €
+                          </td>
+                          <td className={`py-3 px-4 md:px-6 text-right text-sm font-semibold tabular-nums ${mission.gross_margin < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {mission.gross_margin.toFixed(2)} €
                           </td>
                           <td className="py-3 px-4 md:px-6">{missionStatusBadge(mission.status)}</td>
-                          <td className="py-3 px-4 md:px-6 hidden md:table-cell text-sm text-gray-600">
+                          <td className="py-3 px-4 md:px-6 hidden lg:table-cell text-sm text-gray-600">
                             {mission.paid_at ? new Date(mission.paid_at).toLocaleDateString('fr-FR') : '—'}
                           </td>
                         </tr>
@@ -217,9 +252,11 @@ export const B2BSourcing: React.FC = () => {
         onClose={() => setViewingMission(null)}
         onStatusChange={async (status) => {
           if (!viewingMission) return { success: false, error: 'Mission inconnue' };
-          const result = await setMissionStatus(viewingMission.id, status);
-          if (result.success) setViewingMission((prev) => (prev ? { ...prev, status } : prev));
-          return result;
+          return setMissionStatus(viewingMission.id, status);
+        }}
+        onUpdateMission={async (input) => {
+          if (!viewingMission) return { success: false, error: 'Mission inconnue' };
+          return updateMission(viewingMission.id, input);
         }}
         onItemsChanged={refresh}
       />

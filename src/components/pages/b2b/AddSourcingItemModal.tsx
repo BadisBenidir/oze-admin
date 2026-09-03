@@ -124,12 +124,15 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
     }
     const parsedBilled = Number(billedPrice);
     if (!Number.isFinite(parsedBilled) || parsedBilled <= 0) {
-      setError('Le prix facturé doit être supérieur à 0');
+      setError('Le prix de vente prévu doit être supérieur à 0');
       return;
     }
-    const parsedCost = costPrice.trim() ? Number(costPrice) : undefined;
-    if (parsedCost !== undefined && (!Number.isFinite(parsedCost) || parsedCost < 0)) {
-      setError('Le coût d\'achat est invalide');
+    // Requis (pas juste optionnel) : c'est CE montant qui consomme
+    // l'enveloppe d'achat de la mission dès que la pièce est validée — voir
+    // 0091_b2b_sourcing_mission_budget_split.sql.
+    const parsedCost = Number(costPrice);
+    if (!Number.isFinite(parsedCost) || parsedCost < 0) {
+      setError("Le prix d'achat est requis pour imputer la pièce sur l'enveloppe d'achat");
       return;
     }
 
@@ -304,7 +307,23 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="item-billed-price" className="block text-sm font-medium text-gray-700 mb-1">Prix facturé (imputé au budget)</label>
+                  <label htmlFor="item-cost-price" className="block text-sm font-medium text-gray-700 mb-1">Prix d'achat (imputé sur l'enveloppe)</label>
+                  <div className="relative">
+                    <input
+                      id="item-cost-price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={costPrice}
+                      onChange={(e) => setCostPrice(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent pr-8 text-sm"
+                      required
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="item-billed-price" className="block text-sm font-medium text-gray-700 mb-1">Prix de vente prévu</label>
                   <div className="relative">
                     <input
                       id="item-billed-price"
@@ -319,22 +338,10 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
                   </div>
                 </div>
-                <div>
-                  <label htmlFor="item-cost-price" className="block text-sm font-medium text-gray-700 mb-1">Coût d'achat (optionnel)</label>
-                  <div className="relative">
-                    <input
-                      id="item-cost-price"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={costPrice}
-                      onChange={(e) => setCostPrice(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent pr-8 text-sm"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
-                  </div>
-                </div>
               </div>
+              <p className="text-xs text-gray-400 -mt-2">
+                Le prix d'achat consomme l'enveloppe de la mission une fois la pièce validée — le prix de vente prévu ne sert qu'au suivi de marge par pièce.
+              </p>
 
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
