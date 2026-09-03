@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Modal } from '../ui/Modal';
@@ -13,7 +13,7 @@ import { ResellerContactEditModal } from './b2b/ResellerContactEditModal';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
-  Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, X,
+  Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, X, Search,
 } from 'lucide-react';
 import type { B2BOrder } from '../../hooks/useB2BOrders';
 
@@ -23,6 +23,12 @@ interface ResellerDetailProps {
   /** Remonte la version à jour au parent (liste principale) après une édition. */
   onResellerUpdated?: (updated: Reseller) => void;
 }
+
+// Insensible aux accents (ex. "Béatrice" trouvé en tapant "beatrice") et à la
+// casse, pour la recherche sur les sous-comptes.
+const DIACRITICS_REGEX = new RegExp('[\\u0300-\\u036f]', 'g');
+const normalizeSearch = (value: string): string =>
+  value.normalize('NFD').replace(DIACRITICS_REGEX, '').toLowerCase().trim();
 
 const resellerStatusBadge = (status: Reseller['status']) => {
   switch (status) {
@@ -68,6 +74,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [contactsError, setContactsError] = useState<string | null>(null);
+  const [contactSearch, setContactSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'team' | 'orders' | 'wallet'>('team');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
@@ -77,6 +84,14 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   // choisit ici quel membre de l'équipe consulter/ajuster (par défaut le
   // contact principal), au lieu d'être limité à ce dernier.
   const primaryContact = contacts.find((c) => c.is_primary);
+  const filteredContacts = useMemo(() => {
+    const query = normalizeSearch(contactSearch);
+    if (!query) return contacts;
+    return contacts.filter((c) =>
+      normalizeSearch(`${c.first_name} ${c.last_name}`).includes(query) ||
+      normalizeSearch(c.email).includes(query)
+    );
+  }, [contacts, contactSearch]);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   useEffect(() => {
     if (!selectedContactId && primaryContact) {
@@ -295,6 +310,30 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                 <p className="text-sm text-red-700">{contactsError}</p>
               </div>
             )}
+            {contacts.length > 0 && (
+              <div className="p-4 border-b border-gray-100">
+                <div className="relative max-w-sm">
+                  <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={contactSearch}
+                    onChange={(e) => setContactSearch(e.target.value)}
+                    placeholder="Rechercher par nom ou email..."
+                    className="w-full pl-9 pr-9 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400"
+                  />
+                  {contactSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setContactSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-700 rounded"
+                      title="Effacer la recherche"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -322,8 +361,14 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                         Aucun sous-compte pour ce revendeur.
                       </td>
                     </tr>
+                  ) : filteredContacts.length === 0 ? (
+                    <tr>
+                      <td className="py-8 px-4 md:px-6 text-center text-sm text-gray-500" colSpan={6}>
+                        Aucun sous-compte trouvé pour cette recherche.
+                      </td>
+                    </tr>
                   ) : (
-                    contacts.map((c) => (
+                    filteredContacts.map((c) => (
                       <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="py-3 px-4 md:px-6">
                           <div className="flex items-center gap-2">
