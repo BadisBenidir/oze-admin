@@ -1,14 +1,26 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, AlertCircle } from 'lucide-react';
 import { SourcingMissionInput } from '../../../hooks/useSourcingMissions';
+import { useResellers, ResellerContact } from '../../../hooks/useResellers';
 
 interface CreateSourcingMissionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
+  /** Fixe l'entreprise (ouverture depuis l'onglet de la fiche revendeur) — masque le sélecteur entreprise. */
+  fixedReseller?: { id: string; company_name: string };
 }
 
-export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProps> = ({ isOpen, onClose, onSubmit }) => {
+export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProps> = ({ isOpen, onClose, onSubmit, fixedReseller }) => {
+  // Liste des entreprises chargée seulement en mode "global" (pas de
+  // fixedReseller) — inutile de la récupérer depuis l'onglet fiche
+  // revendeur, où l'entreprise est déjà connue.
+  const { resellers, fetchContacts } = useResellers(isOpen && !fixedReseller);
+  const [resellerId, setResellerId] = useState('');
+  const [contacts, setContacts] = useState<ResellerContact[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [userId, setUserId] = useState('');
+
   const [title, setTitle] = useState('');
   const [budgetAmount, setBudgetAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -17,7 +29,40 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setResellerId(fixedReseller?.id || '');
+  }, [isOpen, fixedReseller]);
+
+  // Sous-comptes rechargés dynamiquement dès que l'entreprise change (fixe
+  // ou choisie dans le sélecteur) — même pattern que ResellerDetail.tsx.
+  useEffect(() => {
+    if (!isOpen || !resellerId) {
+      setContacts([]);
+      setUserId('');
+      return;
+    }
+    let mounted = true;
+    setLoadingContacts(true);
+    fetchContacts(resellerId)
+      .then((data) => {
+        if (!mounted) return;
+        setContacts(data);
+        setUserId(data.find((c) => c.is_primary)?.profile_id || '');
+      })
+      .finally(() => {
+        if (mounted) setLoadingContacts(false);
+      });
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, resellerId]);
+
   const reset = () => {
+    setResellerId('');
+    setContacts([]);
+    setUserId('');
     setTitle('');
     setBudgetAmount('');
     setPaymentMethod('');
@@ -33,6 +78,10 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!resellerId) {
+      setError("L'entreprise est requise");
+      return;
+    }
     if (!title.trim()) {
       setError('Le titre de la mission est requis');
       return;
@@ -46,6 +95,8 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
     setSubmitting(true);
     setError('');
     const result = await onSubmit({
+      reseller_id: resellerId,
+      user_id: userId || undefined,
       title: title.trim(),
       budget_amount: parsedBudget,
       payment_method: paymentMethod.trim() || undefined,
@@ -76,6 +127,52 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
           </div>
 
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            {fixedReseller ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Entreprise</label>
+                <p className="text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">{fixedReseller.company_name}</p>
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="mission-reseller" className="block text-sm font-medium text-gray-700 mb-1">Entreprise</label>
+                <select
+                  id="mission-reseller"
+                  value={resellerId}
+                  onChange={(e) => setResellerId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
+                  required
+                >
+                  <option value="">Choisir une entreprise...</option>
+                  {resellers.map((r) => (
+                    <option key={r.id} value={r.id}>{r.company_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="mission-requester" className="block text-sm font-medium text-gray-700 mb-1">
+                Demandeur (sous-compte)
+              </label>
+              <select
+                id="mission-requester"
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                disabled={!resellerId || loadingContacts}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
+              >
+                <option value="">Non précisé</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.profile_id}>
+                    {c.first_name} {c.last_name} — {c.email}{c.is_primary ? ' (Principal)' : ''}
+                  </option>
+                ))}
+              </select>
+              {!resellerId && (
+                <p className="text-xs text-gray-400 mt-1">Choisis d'abord une entreprise pour voir ses sous-comptes.</p>
+              )}
+            </div>
+
             <div>
               <label htmlFor="mission-title" className="block text-sm font-medium text-gray-700 mb-1">Titre de la mission</label>
               <input

@@ -1,9 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
+export interface SourcingMissionRequester {
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+}
+
 export interface SourcingMission {
   id: string;
   reseller_id: string;
+  user_id: string | null;
   title: string;
   budget_amount: number;
   status: 'active' | 'completed' | 'cancelled';
@@ -14,9 +21,15 @@ export interface SourcingMission {
   consumed_amount: number;
   remaining_amount: number;
   items_count: number;
+  /** Nom de l'entreprise — toujours présent (vue globale et onglet fiche revendeur). */
+  company_name: string;
+  /** Sous-compte précis ayant demandé la mission, si renseigné (voir 0090). */
+  requester: SourcingMissionRequester | null;
 }
 
 export interface SourcingMissionInput {
+  reseller_id: string;
+  user_id?: string;
   title: string;
   budget_amount: number;
   payment_method?: string;
@@ -33,14 +46,16 @@ interface UseSourcingMissionsResult {
   setMissionStatus: (id: string, status: 'active' | 'completed' | 'cancelled') => Promise<{ success: boolean; error?: string }>;
 }
 
-/** Missions de sourcing sur mesure d'UN revendeur (voir 0089_b2b_sourcing_missions.sql). */
-export const useSourcingMissions = (resellerId: string | null, isAdmin: boolean = false): UseSourcingMissionsResult => {
+/** Missions de sourcing sur mesure (voir 0089/0090_b2b_sourcing_missions*.sql) —
+ * scope sur UN revendeur (fiche revendeur, `resellerId` renseigné) ou
+ * globales toutes entreprises confondues (`resellerId` omis, vue B2BSourcing.tsx). */
+export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean = false): UseSourcingMissionsResult => {
   const [missions, setMissions] = useState<SourcingMission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMissions = useCallback(async () => {
-    if (!resellerId) {
+    if (resellerId === null) {
       setMissions([]);
       setLoading(false);
       return;
@@ -48,15 +63,20 @@ export const useSourcingMissions = (resellerId: string | null, isAdmin: boolean 
     try {
       setLoading(true);
       setError(null);
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('b2b_sourcing_missions')
-        .select('*')
-        .eq('reseller_id', resellerId)
+        .select('*, resellers(company_name), requester:profiles!user_id(first_name, last_name, email)')
         .order('created_at', { ascending: false });
+      if (resellerId) query = query.eq('reseller_id', resellerId);
+      const { data, error: fetchError } = await query;
 
       if (fetchError) throw new Error(fetchError.message);
 
-      const rows = (data || []) as Array<Omit<SourcingMission, 'consumed_amount' | 'remaining_amount' | 'items_count'>>;
+      type Row = Omit<SourcingMission, 'consumed_amount' | 'remaining_amount' | 'items_count' | 'company_name' | 'requester'> & {
+        resellers: { company_name: string } | null;
+        requester: SourcingMissionRequester | null;
+      };
+      const rows = (data || []) as unknown as Row[];
 
       // Requête séparée (pas d'embed imbriqué) : b2b_sourcing_mission_totals
       // est une vue, sans contrainte de clé étrangère détectable par
@@ -79,6 +99,8 @@ export const useSourcingMissions = (resellerId: string | null, isAdmin: boolean 
           const totals = totalsByMission.get(row.id);
           return {
             ...row,
+            company_name: row.resellers?.company_name || '—',
+            requester: row.requester,
             consumed_amount: Number(totals?.consumed_amount) || 0,
             remaining_amount: totals ? Number(totals.remaining_amount) : Number(row.budget_amount),
             items_count: totals?.items_count || 0,
@@ -94,9 +116,9 @@ export const useSourcingMissions = (resellerId: string | null, isAdmin: boolean 
   }, [resellerId]);
 
   const createMission = async (input: SourcingMissionInput): Promise<{ success: boolean; error?: string }> => {
-    if (!resellerId) return { success: false, error: 'Revendeur inconnu' };
     const { error: insertError } = await supabase.from('b2b_sourcing_missions').insert({
-      reseller_id: resellerId,
+      reseller_id: input.reseller_id,
+      user_id: input.user_id || null,
       title: input.title.trim(),
       budget_amount: input.budget_amount,
       payment_method: input.payment_method?.trim() || null,

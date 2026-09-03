@@ -696,7 +696,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
       )}
 
       {activeTab === 'sourcing' && (
-        <SourcingMissionsTab resellerId={currentReseller.id} isAdmin={isAdmin} />
+        <SourcingMissionsTab resellerId={currentReseller.id} resellerName={currentReseller.company_name} isAdmin={isAdmin} />
       )}
 
       {/* Modal réinitialisation mot de passe */}

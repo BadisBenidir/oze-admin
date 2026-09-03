@@ -8,6 +8,7 @@ import { SourcingMissionDetailModal } from './SourcingMissionDetailModal';
 
 interface SourcingMissionsTabProps {
   resellerId: string;
+  resellerName: string;
   isAdmin: boolean;
 }
 
@@ -26,7 +27,7 @@ const missionStatusBadge = (status: SourcingMission['status']) => {
  * 0089_b2b_sourcing_missions.sql. Une mission = une avance versée par le
  * revendeur, servant d'enveloppe budgétaire pour des pièces sourcées à la
  * demande (voir SourcingMissionDetailModal pour le détail des pièces). */
-export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resellerId, isAdmin }) => {
+export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resellerId, resellerName, isAdmin }) => {
   const { missions, loading, error, refresh, createMission, setMissionStatus } = useSourcingMissions(resellerId, isAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<SourcingMission | null>(null);
@@ -107,6 +108,7 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSubmit={createMission}
+        fixedReseller={{ id: resellerId, company_name: resellerName }}
       />
 
       <SourcingMissionDetailModal
