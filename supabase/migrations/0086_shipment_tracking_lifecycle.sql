@@ -27,7 +27,12 @@
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
--- 1. order_items : nouvelles colonnes, backfill, puis contrainte élargie.
+-- 1. order_items : nouvelles colonnes, contrainte DROPPÉE, backfill des
+-- lignes existantes, PUIS contrainte élargie recréée — dans cet ordre précis :
+-- une contrainte CHECK valide immédiatement TOUTES les lignes existantes dès
+-- son ADD, donc l'ajouter avant le backfill échoue sur toute ligne encore
+-- dans l'ancien état (c'est l'erreur remontée : la contrainte doit être
+-- reposée seulement une fois les données conformes).
 -- ----------------------------------------------------------------------------
 alter table public.order_items add column if not exists label_created_at timestamptz;
 alter table public.order_items add column if not exists delivered_at timestamptz;
@@ -46,27 +51,42 @@ begin
   end if;
 end $$;
 
-alter table public.order_items
-  add constraint order_items_fulfillment_status_check
-  check (fulfillment_status in ('ordered', 'received', 'ready_to_ship', 'delivery_requested', 'label_created', 'shipped', 'delivered'));
-
--- Backfill : toute ligne 'shipped' existante ne représentait qu'une étiquette
--- imprimée (ancien comportement de generate-b2b-shipment-labels) — jamais une
--- vraie prise en charge, qu'on ne peut pas déduire rétroactivement sans
--- interroger Sendcloud (voir sendcloud-sync-tracking, à lancer après cette
--- migration pour rattraper l'état réel des colis encore en cours).
+-- Backfill AVANT de reposer la contrainte : toute ligne 'shipped' existante
+-- ne représentait qu'une étiquette imprimée (ancien comportement de
+-- generate-b2b-shipment-labels) — jamais une vraie prise en charge, qu'on ne
+-- peut pas déduire rétroactivement sans interroger Sendcloud (voir
+-- sendcloud-sync-tracking, à lancer après cette migration pour rattraper
+-- l'état réel des colis encore en cours). Sans contrainte active à ce
+-- moment, ce backfill ne peut pas échouer.
 update public.order_items
 set label_created_at = shipped_at,
     shipped_at = null,
     fulfillment_status = 'label_created'
 where fulfillment_status = 'shipped';
 
+alter table public.order_items
+  add constraint order_items_fulfillment_status_check
+  check (fulfillment_status in ('ordered', 'received', 'ready_to_ship', 'delivery_requested', 'label_created', 'shipped', 'delivered'));
+
 -- ----------------------------------------------------------------------------
--- 2. shipment_parcels : renomme shipped_at (même correction de sens), ajoute
--- delivered_at + les champs de diagnostic Sendcloud bruts, puis élargit la
--- contrainte et bascule les lignes existantes.
+-- 2. shipment_parcels : renomme shipped_at (même correction de sens, idempotent
+-- — ne rejoue pas le rename si déjà fait par un essai précédent), ajoute
+-- delivered_at + les champs de diagnostic Sendcloud bruts, DROP la contrainte,
+-- backfill, PUIS recrée la contrainte élargie (même ordre qu'au point 1).
 -- ----------------------------------------------------------------------------
-alter table public.shipment_parcels rename column shipped_at to label_created_at;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'shipment_parcels' and column_name = 'shipped_at'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'shipment_parcels' and column_name = 'label_created_at'
+  ) then
+    alter table public.shipment_parcels rename column shipped_at to label_created_at;
+  end if;
+end $$;
+
 alter table public.shipment_parcels add column if not exists shipped_at timestamptz;
 alter table public.shipment_parcels add column if not exists delivered_at timestamptz;
 alter table public.shipment_parcels add column if not exists carrier_status_code text;
@@ -87,14 +107,21 @@ begin
   end if;
 end $$;
 
+update public.shipment_parcels set status = 'label_created' where status = 'shipped';
+
 alter table public.shipment_parcels
   add constraint shipment_parcels_status_check
   check (status in ('pending', 'label_created', 'shipped', 'delivered', 'failed'));
 
-update public.shipment_parcels set status = 'label_created' where status = 'shipped';
-
 -- ----------------------------------------------------------------------------
--- 3. shipments (agrégat) : nouveau vocabulaire à 4 états.
+-- 3. shipments (agrégat) : nouveau vocabulaire à 4 états. C'est ICI que la
+-- migration précédente échouait ("check constraint ... is violated by some
+-- row") : la contrainte était ajoutée AVANT le backfill des lignes
+-- 'partially_shipped'/'shipped' (les deux seules valeurs héritées possibles
+-- — status était déjà contraint à ('requested','partially_shipped','shipped')
+-- depuis 0062, aucune autre valeur ne peut exister), alors qu'un ADD
+-- CONSTRAINT valide immédiatement toutes les lignes déjà en base. Backfill
+-- d'abord, contrainte ensuite — même ordre qu'aux points 1 et 2.
 -- ----------------------------------------------------------------------------
 do $$
 declare
@@ -111,11 +138,17 @@ begin
   end if;
 end $$;
 
+update public.shipments set status = 'preparing' where status in ('partially_shipped', 'shipped');
+
+-- Filet de sécurité : toute valeur qui ne serait ni 'requested' ni déjà
+-- convertie en 'preparing' ci-dessus (ne devrait jamais arriver vu la
+-- contrainte 0062, mais coûte peu à couvrir) retombe sur 'requested' plutôt
+-- que de faire échouer l'ADD CONSTRAINT qui suit.
+update public.shipments set status = 'requested' where status not in ('requested', 'preparing', 'in_transit', 'delivered');
+
 alter table public.shipments
   add constraint shipments_status_check
   check (status in ('requested', 'preparing', 'in_transit', 'delivered'));
-
-update public.shipments set status = 'preparing' where status in ('partially_shipped', 'shipped');
 
 -- ----------------------------------------------------------------------------
 -- 4. recompute_shipment_status : logique d'agrégation partagée, appelée par
