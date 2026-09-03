@@ -86,12 +86,16 @@ const toCountryCode = (raw: string | null | undefined, postalCodeHint?: string |
   return postalGuess || 'FR';
 };
 
-// Sendcloud rejette silencieusement (ou avec une erreur de validation peu
-// lisible) tout champ dépassant sa longueur maximale — ex. "Ensure this
-// value has at most 30 characters" sur city quand le widget de sélection du
-// point relais concatène parfois un nom de boutique à la ville. Tronquer
-// systématiquement plutôt que de faire confiance à la donnée source, qu'on
-// ne contrôle pas (widget tiers / saisie manuelle du revendeur).
+// Sendcloud (Mondial Relay en particulier) rejette avec une erreur de
+// validation par champ ("Ensure that city has at most 26 characters (it has
+// 30)", cas réel Timothée Vrigneau) tout champ dépassant sa longueur
+// maximale documentée — le widget de sélection du point relais concatène
+// parfois un nom de boutique à la ville, ou une adresse dépasse la limite du
+// transporteur. Limites Mondial Relay appliquées ci-dessous : name/
+// company_name/address_line_1/address_line_2 = 30, city = 26 (PAS 30 : plus
+// stricte que les autres champs), postal_code = 10. Tronquer systématiquement
+// plutôt que de faire confiance à la donnée source, qu'on ne contrôle pas
+// (widget tiers / saisie manuelle du revendeur).
 const truncate = (value: unknown, maxLength: number): string =>
   String(value || '').trim().slice(0, maxLength);
 
@@ -377,11 +381,11 @@ Deno.serve(async (req: Request) => {
       const { line1, houseNumber } = splitAddress(String(pp.address || pp.name || ''));
       const zipCode = String(pp.zipCode || '');
       toAddress = {
-        name: truncate(contactName, 40),
-        address_line_1: truncate(pp.name || line1 || '', 40),
-        ...(pp.address && pp.name ? { address_line_2: truncate(pp.address, 40) } : {}),
+        name: truncate(contactName, 30),
+        address_line_1: truncate(pp.name || line1 || '', 30),
+        ...(pp.address && pp.name ? { address_line_2: truncate(pp.address, 30) } : {}),
         ...(houseNumber ? { house_number: houseNumber } : {}),
-        city: truncate(pp.city, 30),
+        city: truncate(pp.city, 26),
         postal_code: truncate(zipCode, 10),
         country_code: toCountryCode(String(pp.country || ''), zipCode),
         phone_number: phone,
@@ -401,10 +405,10 @@ Deno.serve(async (req: Request) => {
       // évidemment ceux du profil — seule vraie adresse de destination.
       const isRelayDelivery = shipment.delivery_type === 'point_relais';
       toAddress = {
-        name: truncate(contactName, 40),
-        address_line_1: truncate(line1, 40),
+        name: truncate(contactName, 30),
+        address_line_1: truncate(line1, 30),
         ...(houseNumber ? { house_number: houseNumber } : {}),
-        city: truncate(profile?.city, 30),
+        city: truncate(profile?.city, 26),
         postal_code: isRelayDelivery ? truncate(pp.zipCode, 10) : truncate(profile?.postal_code, 10),
         country_code: isRelayDelivery ? relayCountry : toCountryCode(profile?.country, profile?.postal_code),
         phone_number: phone,
