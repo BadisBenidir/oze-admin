@@ -7,17 +7,21 @@ import { AlertCircle, Truck, MapPin, FileDown, ExternalLink } from 'lucide-react
 
 const statusBadge = (status: MyShipment['status']) => {
   switch (status) {
-    case 'shipped':
-      return <Badge variant="success">Expédié</Badge>;
-    case 'partially_shipped':
-      return <Badge variant="warning">Partiellement expédié</Badge>;
+    case 'delivered':
+      return <Badge variant="success">Livré</Badge>;
+    case 'in_transit':
+      return <Badge variant="info">Expédié / En transit</Badge>;
+    case 'preparing':
+      return <Badge variant="warning">En préparation</Badge>;
     default:
-      return <Badge variant="info">En préparation</Badge>;
+      return <Badge variant="info">Livraison demandée</Badge>;
   }
 };
 
 const parcelStatusBadge = (status: string) => {
-  if (status === 'shipped') return <Badge variant="success">Expédié</Badge>;
+  if (status === 'delivered') return <Badge variant="success">Livré</Badge>;
+  if (status === 'shipped') return <Badge variant="info">Expédié / En transit</Badge>;
+  if (status === 'label_created') return <Badge variant="warning">En préparation</Badge>;
   if (status === 'failed') return <Badge variant="danger">Échec</Badge>;
   return <Badge variant="warning">En attente</Badge>;
 };

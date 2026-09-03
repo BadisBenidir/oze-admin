@@ -25,7 +25,7 @@ export interface MyB2BOrderItem {
   refund_status: 'not_applicable' | 'succeeded' | 'failed' | null;
   refund_method: 'wallet' | 'stripe' | null;
   is_loyalty_gift: boolean;
-  fulfillment_status: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'shipped';
+  fulfillment_status: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'label_created' | 'shipped' | 'delivered';
   shipment_id: string | null;
   parcel_id: string | null;
   shipment_parcel: MyB2BShipmentParcel | null;

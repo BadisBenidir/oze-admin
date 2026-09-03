@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 export interface ProductSaleDetails {
   orderItemId: string;
   orderItemStatus: 'active' | 'cancelled';
-  fulfillmentStatus: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'shipped';
+  fulfillmentStatus: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'label_created' | 'shipped' | 'delivered';
   order: {
     id: string;
     orderNumber: string;

@@ -327,12 +327,17 @@ Deno.serve(async (req: Request) => {
         const trackingUrl = p.tracking_url || sendcloudShipment.tracking_url || null;
         const labelUrl = labelDoc?.link || null;
 
+        // 'label_created', pas 'shipped' : le bordereau est imprimé mais rien
+        // ne garantit que le colis a déjà été remis au transporteur — voir
+        // 0086_shipment_tracking_lifecycle.sql. Le passage à 'shipped' (vraie
+        // prise en charge) puis 'delivered' arrive plus tard, via
+        // sendcloud-webhook ou sendcloud-sync-tracking.
         const { data: newParcel, error: insertError } = await adminClient
           .from('shipment_parcels')
           .insert({
-            shipment_id, parcel_index: parcelIndex, status: 'shipped',
+            shipment_id, parcel_index: parcelIndex, status: 'label_created',
             sendcloud_parcel_id: sendcloudParcelId, tracking_number: trackingNumber, tracking_url: trackingUrl, label_url: labelUrl,
-            weight_kg: weightKg, shipped_at: new Date().toISOString(),
+            weight_kg: weightKg, label_created_at: new Date().toISOString(),
           })
           .select('id')
           .single();
@@ -343,10 +348,10 @@ Deno.serve(async (req: Request) => {
 
         await adminClient
           .from('order_items')
-          .update({ fulfillment_status: 'shipped', parcel_id: newParcel.id, shipped_at: new Date().toISOString() })
+          .update({ fulfillment_status: 'label_created', parcel_id: newParcel.id, label_created_at: new Date().toISOString() })
           .in('id', parcel.item_ids);
 
-        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'shipped', tracking_number: trackingNumber, tracking_url: trackingUrl, label_url: labelUrl });
+        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'label_created', tracking_number: trackingNumber, tracking_url: trackingUrl, label_url: labelUrl });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Erreur réseau Sendcloud inconnue';
         await adminClient.from('shipment_parcels').insert({
@@ -356,21 +361,16 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const { count: remainingCount } = await adminClient
-      .from('order_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('shipment_id', shipment_id)
-      .eq('fulfillment_status', 'delivery_requested');
-
-    const anySucceeded = results.some((r) => r.status === 'shipped');
+    // Agrégat partagé avec apply_sendcloud_parcel_status / admin_revert_item_
+    // to_received / admin_unassign_items_from_parcel — voir
+    // recompute_shipment_status (0086_shipment_tracking_lifecycle.sql) :
+    // 'preparing' dès qu'au moins un colis a une étiquette, peu importe s'il
+    // en reste d'autres encore à préparer.
     let newStatus: string | null = null;
-    if ((remainingCount || 0) === 0) {
-      newStatus = 'shipped';
-    } else if (anySucceeded) {
-      newStatus = 'partially_shipped';
-    }
-    if (newStatus) {
-      await adminClient.from('shipments').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', shipment_id);
+    const anySucceeded = results.some((r) => r.status === 'label_created');
+    if (anySucceeded) {
+      const { data: recomputed } = await adminClient.rpc('recompute_shipment_status', { p_shipment_id: shipment_id });
+      newStatus = recomputed as string | null;
     }
 
     return json({ success: true, shipment_status: newStatus || shipment.status, parcels: results });

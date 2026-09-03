@@ -8,7 +8,7 @@ export interface ParcelInput {
 export interface ParcelResult {
   parcel_index: number;
   item_ids: string[];
-  status: 'shipped' | 'failed';
+  status: 'label_created' | 'failed';
   tracking_number?: string | null;
   tracking_url?: string | null;
   label_url?: string | null;

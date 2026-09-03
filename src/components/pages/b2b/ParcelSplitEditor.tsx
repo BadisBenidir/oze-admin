@@ -68,7 +68,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
     onGenerated();
   };
 
-  const stillPendingCount = items.length - (results || []).filter((r) => r.status === 'shipped').flatMap((r) => r.item_ids).length;
+  const stillPendingCount = items.length - (results || []).filter((r) => r.status === 'label_created').flatMap((r) => r.item_ids).length;
 
   return (
     <div className="space-y-4">
@@ -89,12 +89,12 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
       {results && (
         <div className="space-y-2">
           {results.map((r) => (
-            <div key={r.parcel_index} className={`rounded-lg p-3 border ${r.status === 'shipped' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <div key={r.parcel_index} className={`rounded-lg p-3 border ${r.status === 'label_created' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
               <div className="flex items-center justify-between">
-                <p className={`text-sm font-medium ${r.status === 'shipped' ? 'text-green-800' : 'text-red-800'}`}>
-                  Colis {r.parcel_index} — {r.status === 'shipped' ? 'expédié' : 'échec'}
+                <p className={`text-sm font-medium ${r.status === 'label_created' ? 'text-green-800' : 'text-red-800'}`}>
+                  Colis {r.parcel_index} — {r.status === 'label_created' ? 'étiquette créée' : 'échec'}
                 </p>
-                {r.status === 'shipped' && r.label_url && (
+                {r.status === 'label_created' && r.label_url && (
                   <button
                     type="button"
                     onClick={() => handleDownloadLabel(r.label_url!)}
@@ -105,7 +105,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                   </button>
                 )}
               </div>
-              {r.status === 'shipped' && r.tracking_number && (
+              {r.status === 'label_created' && r.tracking_number && (
                 <p className="text-xs text-green-700 mt-1">
                   Suivi : {r.tracking_number}{' '}
                   {r.tracking_url && (
@@ -240,7 +240,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
 
       {results && stillPendingCount === 0 && (
         <div className="flex items-center gap-2 text-sm text-green-700">
-          <CheckCircle className="h-4 w-4" /> Tous les articles de cette demande ont été expédiés.
+          <CheckCircle className="h-4 w-4" /> Tous les articles de cette demande ont leur étiquette — en attente de dépôt chez le transporteur.
         </div>
       )}
 

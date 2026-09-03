@@ -5,7 +5,7 @@ import { useResellerAuth } from './useResellerAuth';
 export interface MyShipmentParcel {
   id: string;
   parcel_index: number;
-  status: 'pending' | 'shipped' | 'failed';
+  status: 'pending' | 'label_created' | 'shipped' | 'delivered' | 'failed';
   tracking_number: string | null;
   tracking_url: string | null;
   label_url: string | null;
@@ -18,7 +18,7 @@ export interface MyShipmentParcel {
 
 export interface MyShipment {
   id: string;
-  status: 'requested' | 'partially_shipped' | 'shipped';
+  status: 'requested' | 'preparing' | 'in_transit' | 'delivered';
   delivery_type: 'domicile' | 'point_relais';
   parcel_point: Record<string, unknown> | null;
   delivery_instructions: string | null;

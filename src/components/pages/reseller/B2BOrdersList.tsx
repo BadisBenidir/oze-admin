@@ -6,11 +6,12 @@ import { useEntrupyCertificate } from '../../../hooks/useEntrupyCertificate';
 import { ShoppingBag, ImageOff, AlertCircle, Eye, X, Package, MapPin, Truck, FileDown, Ban, BadgeCheck } from 'lucide-react';
 import { CancelMyOrderModal } from './CancelMyOrderModal';
 
-/** Un certificat ne peut plus être ajouté une fois la livraison de l'article
- * demandée ou l'article expédié — au-delà, le colis est déjà en préparation/
- * parti et l'ajout n'a plus de sens opérationnel. */
+/** Un certificat ne peut plus être ajouté dès que la livraison de l'article a
+ * été demandée — au-delà, le colis est déjà en préparation/parti et l'ajout
+ * n'a plus de sens opérationnel. */
 const canRequestEntrupy = (item: MyB2BOrderItem) =>
-  item.status === 'active' && !item.entrupy_requested && !['delivery_requested', 'shipped'].includes(item.fulfillment_status);
+  item.status === 'active' && !item.entrupy_requested &&
+  !['delivery_requested', 'label_created', 'shipped', 'delivered'].includes(item.fulfillment_status);
 
 const statusBadge = (order: MyB2BOrder) => {
   if (order.status === 'cancelled') return <Badge variant="danger">Annulée</Badge>;
@@ -311,9 +312,11 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                         </button>
                                       </div>
                                     )}
-                                    {!isCancelled && item.fulfillment_status === 'shipped' && (
+                                    {!isCancelled && ['label_created', 'shipped', 'delivered'].includes(item.fulfillment_status) && (
                                       <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                                        <Badge variant="success">Expédié</Badge>
+                                        {item.fulfillment_status === 'label_created' && <Badge variant="warning">En préparation</Badge>}
+                                        {item.fulfillment_status === 'shipped' && <Badge variant="info">Expédié / En transit</Badge>}
+                                        {item.fulfillment_status === 'delivered' && <Badge variant="success">Livré</Badge>}
                                         {item.shipment_parcel?.tracking_number && (
                                           <span className="text-xs text-gray-500" onClick={(e) => e.stopPropagation()}>
                                             {item.shipment_parcel.tracking_number}

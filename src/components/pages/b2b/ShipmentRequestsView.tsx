@@ -3,12 +3,14 @@ import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { useAdminShipments, AdminShipment } from '../../../hooks/useAdminShipments';
+import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 import { ShipmentDetailModal } from './ShipmentDetailModal';
-import { AlertCircle, Truck, Eye, CheckCircle } from 'lucide-react';
+import { AlertCircle, Truck, Eye, CheckCircle, RefreshCw } from 'lucide-react';
 
 const statusBadge = (status: AdminShipment['status']) => {
-  if (status === 'partially_shipped') return <Badge variant="warning">Partiellement expédié</Badge>;
-  if (status === 'shipped') return <Badge variant="success">Expédié</Badge>;
+  if (status === 'preparing') return <Badge variant="warning">En préparation</Badge>;
+  if (status === 'in_transit') return <Badge variant="info">Expédié / En transit</Badge>;
+  if (status === 'delivered') return <Badge variant="success">Livré</Badge>;
   return <Badge variant="info">Livraison demandée</Badge>;
 };
 
@@ -17,9 +19,25 @@ type Tab = 'pending' | 'shipped';
 export const ShipmentRequestsView: React.FC = () => {
   const { isAdmin } = useAdminAuth();
   const [tab, setTab] = useState<Tab>('pending');
-  const pendingData = useAdminShipments(isAdmin, ['requested', 'partially_shipped']);
-  const shippedData = useAdminShipments(isAdmin, ['shipped']);
+  const pendingData = useAdminShipments(isAdmin, ['requested', 'preparing']);
+  const shippedData = useAdminShipments(isAdmin, ['in_transit', 'delivered']);
   const { shipments, loading, error } = tab === 'pending' ? pendingData : shippedData;
+  const { sync: syncSendcloud } = useSendcloudSync();
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const handleSyncAll = async () => {
+    setSyncError(null);
+    setSyncing(true);
+    const result = await syncSendcloud();
+    setSyncing(false);
+    if (!result.success) {
+      setSyncError(result.error || 'Impossible de contacter Sendcloud');
+      return;
+    }
+    pendingData.refresh();
+    shippedData.refresh();
+  };
 
   const [viewingId, setViewingId] = useState<string | null>(null);
   // Snapshot indépendant de la liste filtrée par onglet : dès qu'un shipment
@@ -56,10 +74,27 @@ export const ShipmentRequestsView: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6">
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">Demandes de livraison</h3>
-        <p className="text-sm text-gray-500">{loading ? 'Chargement...' : `${shipments.length} demande${shipments.length > 1 ? 's' : ''}`}</p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Demandes de livraison</h3>
+          <p className="text-sm text-gray-500">{loading ? 'Chargement...' : `${shipments.length} demande${shipments.length > 1 ? 's' : ''}`}</p>
+        </div>
+        <button
+          onClick={handleSyncAll}
+          disabled={syncing}
+          title="Interroge Sendcloud pour rafraîchir le statut réel de tous les colis en cours"
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+          {syncing ? 'Actualisation...' : 'Actualiser les statuts Sendcloud'}
+        </button>
       </div>
+
+      {syncError && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+          <p className="text-sm text-red-700">{syncError}</p>
+        </div>
+      )}
 
       <div className="mb-4 flex items-center gap-1 border-b border-gray-100">
         <button

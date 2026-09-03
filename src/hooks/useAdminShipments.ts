@@ -7,7 +7,7 @@ export interface AdminShipmentItem {
   insured: boolean;
   insurance_cost: number;
   entrupy_requested: boolean;
-  fulfillment_status: string;
+  fulfillment_status: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'label_created' | 'shipped' | 'delivered';
   parcel_id: string | null;
   product_id: string;
   product: {
@@ -26,13 +26,16 @@ export interface AdminShipmentItem {
 export interface AdminShipmentParcel {
   id: string;
   parcel_index: number;
-  status: 'pending' | 'shipped' | 'failed';
+  status: 'pending' | 'label_created' | 'shipped' | 'delivered' | 'failed';
   sendcloud_parcel_id: string | null;
   tracking_number: string | null;
   tracking_url: string | null;
   label_url: string | null;
   weight_kg: number | null;
   error_message: string | null;
+  /** Dernier statut brut Sendcloud (webhook ou sendcloud-sync-tracking) —
+   * affichage/diagnostic uniquement, jamais utilisé pour la logique. */
+  carrier_status_message: string | null;
 }
 
 export interface AdminShipmentRequester {
@@ -54,13 +57,14 @@ export interface AdminShipment {
   delivery_type: 'domicile' | 'point_relais';
   parcel_point: Record<string, unknown> | null;
   delivery_instructions: string | null;
-  status: 'requested' | 'partially_shipped' | 'shipped';
+  status: 'requested' | 'preparing' | 'in_transit' | 'delivered';
   pendingItems: AdminShipmentItem[];
   shippedItems: AdminShipmentItem[];
   parcels: AdminShipmentParcel[];
 }
 
-const DEFAULT_STATUSES: AdminShipment['status'][] = ['requested', 'partially_shipped'];
+const DEFAULT_STATUSES: AdminShipment['status'][] = ['requested', 'preparing'];
+const FINAL_STATUSES: AdminShipment['status'][] = ['in_transit', 'delivered'];
 
 /**
  * Demandes de livraison B2B (voir finalize_b2b_delivery_request,
@@ -91,7 +95,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
           'requester:profiles(first_name, last_name, email, phone, address, city, postal_code, country)'
         )
         .in('status', statusesKey.split(','))
-        .order('requested_at', { ascending: !statuses.includes('shipped') });
+        .order('requested_at', { ascending: !statuses.some((s) => FINAL_STATUSES.includes(s)) });
       if (shipmentsError) throw new Error(shipmentsError.message);
 
       type ShipmentRow = {
@@ -101,7 +105,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
         delivery_type: 'domicile' | 'point_relais';
         parcel_point: Record<string, unknown> | null;
         delivery_instructions: string | null;
-        status: 'requested' | 'partially_shipped' | 'shipped';
+        status: 'requested' | 'preparing' | 'in_transit' | 'delivered';
         reseller: { company_name: string } | null;
         requester: {
           first_name: string | null; last_name: string | null; email: string | null; phone: string | null;
@@ -131,17 +135,23 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
           .in('shipment_id', shipmentIds),
         supabase
           .from('shipment_parcels')
-          .select('id, shipment_id, parcel_index, status, sendcloud_parcel_id, tracking_number, tracking_url, label_url, weight_kg, error_message')
+          .select('id, shipment_id, parcel_index, status, sendcloud_parcel_id, tracking_number, tracking_url, label_url, weight_kg, error_message, carrier_status_message')
           .in('shipment_id', shipmentIds)
           .order('parcel_index', { ascending: true }),
       ]);
       if (itemsError) throw new Error(itemsError.message);
       if (parcelsError) throw new Error(parcelsError.message);
 
+      // "pending" = pas encore d'étiquette (fulfillment_status ===
+      // 'delivery_requested', le seul état éligible à ParcelSplitEditor) ;
+      // "shipped" = a déjà un colis, quel que soit son avancement réel
+      // (label_created/shipped/delivered) — c'est ce bucket qu'affiche la
+      // section "articles expédiés" de ShipmentDetailModal, avec un badge
+      // par article pour distinguer les 3 sous-états.
       const pendingByShipment = new Map<string, AdminShipmentItem[]>();
       const shippedByShipment = new Map<string, AdminShipmentItem[]>();
       for (const row of (itemRows || []) as unknown as Array<AdminShipmentItem & { shipment_id: string }>) {
-        const target = row.fulfillment_status === 'shipped' ? shippedByShipment : pendingByShipment;
+        const target = row.fulfillment_status === 'delivery_requested' ? pendingByShipment : shippedByShipment;
         const list = target.get(row.shipment_id) || [];
         list.push(row);
         target.set(row.shipment_id, list);

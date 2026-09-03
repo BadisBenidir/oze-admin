@@ -14,8 +14,12 @@ const fulfillmentBadge = (details: SaleDetails) => {
   switch (details.fulfillmentStatus) {
     case 'delivery_requested':
       return <Badge variant="info">Livraison demandée</Badge>;
+    case 'label_created':
+      return <Badge variant="warning">En préparation</Badge>;
     case 'shipped':
-      return <Badge variant="success">Expédié</Badge>;
+      return <Badge variant="info">Expédié / En transit</Badge>;
+    case 'delivered':
+      return <Badge variant="success">Livré</Badge>;
     case 'ordered':
     case 'received':
     case 'ready_to_ship':
