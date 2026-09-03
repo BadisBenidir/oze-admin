@@ -17,8 +17,20 @@
 //
 // Réservé aux admins OZË. Appelable pour UN shipment précis (bouton
 // "Actualiser les statuts Sendcloud" dans une demande de livraison, une
-// commande, ou la fiche produit) ou sans argument (balaie un lot borné de
-// colis non finalisés).
+// commande, ou la fiche produit) ou sans argument (balaie un lot de colis non
+// finalisés, triés par updated_at croissant — apply_sendcloud_parcel_status
+// remet à jour updated_at à chaque passage, donc les colis déjà vérifiés
+// récemment repassent naturellement en fin de file : plusieurs appels
+// successifs couvrent tout l'arriéré sans jamais boucler sur les mêmes
+// colis. C'est cette propriété que useSendcloudSync.syncAll() exploite côté
+// front pour une synchronisation globale en un clic — voir has_more
+// ci-dessous).
+//
+// PLAFONDS PAR APPEL, pour rester sous la limite de temps d'exécution d'une
+// edge function ET ne pas bombarder l'API Sendcloud : au plus
+// MAX_PARCELS_PER_RUN colis, et on s'arrête aussi si MAX_DURATION_MS est
+// dépassé même si le lot n'est pas fini — has_more indique alors qu'il reste
+// du travail, à l'appelant de relancer un appel identique pour continuer.
 //
 // Déploiement : `supabase functions deploy sendcloud-sync-tracking`
 
@@ -34,7 +46,14 @@ const corsHeaders = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-const MAX_PARCELS_PER_RUN = 50;
+const MAX_PARCELS_PER_RUN = 100;
+// Sendcloud n'annonce pas de limite de débit publique précise pour ce
+// endpoint v2 — un espacement prudent entre deux appels reste la façon la
+// plus sûre d'éviter un 429 en rafale plutôt que de deviner un chiffre exact.
+const THROTTLE_MS = 150;
+// Marge sous la limite d'exécution standard d'une edge function Supabase
+// (150s) : on s'arrête proprement avant, jamais coupé en pleine écriture.
+const MAX_DURATION_MS = 100_000;
 
 // Mots-clés en repli du code numérique (id === 11 = "Delivered", convention
 // Sendcloud v2 de longue date mais non retrouvée verbatim dans la doc
@@ -123,16 +142,24 @@ Deno.serve(async (req: Request) => {
       return json({ error: parcelsError.message }, 500);
     }
 
-    console.log(`${LOG_PREFIX} ${parcels?.length || 0} colis à vérifier`);
+    console.log(`${LOG_PREFIX} ${parcels?.length || 0} colis à vérifier (plafond ${MAX_PARCELS_PER_RUN})`);
 
     const authHeaderValue = 'Basic ' + btoa(`${sendcloudPublicKey}:${sendcloudSecretKey}`);
     let checked = 0;
     let updated = 0;
+    let stoppedOnTimeBudget = false;
     const errors: Array<{ tracking_number: string; error: string }> = [];
     const results: Array<{ tracking_number: string; new_status: string | null }> = [];
     const shipmentIdsTouched = new Set<string>();
+    const startedAt = Date.now();
 
     for (const parcel of parcels || []) {
+      if (Date.now() - startedAt > MAX_DURATION_MS) {
+        stoppedOnTimeBudget = true;
+        console.log(`${LOG_PREFIX} Budget de temps atteint après ${checked} colis — le reste sera traité au prochain appel`);
+        break;
+      }
+      if (checked > 0) await new Promise((resolve) => setTimeout(resolve, THROTTLE_MS));
       checked++;
       try {
         const url = `https://panel.sendcloud.sc/api/v2/parcels?tracking_number=${encodeURIComponent(parcel.tracking_number)}`;
@@ -191,8 +218,16 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    console.log(`${LOG_PREFIX} terminé — checked=${checked} updated=${updated} errors=${errors.length}`);
-    return json({ success: true, checked, updated, errors, results, shipment_ids: [...shipmentIdsTouched] });
+    // Un lot plein (ou coupé par le budget de temps) ne prouve pas à lui
+    // seul qu'il en reste — si ce lot était JUSTEMENT le dernier de
+    // l'arriéré, le prochain appel reviendra simplement avec checked=0. On
+    // laisse l'appelant relancer dans ce cas plutôt que de recompter ici
+    // (un COUNT supplémentaire coûterait une requête de plus à chaque appel
+    // pour un gain marginal).
+    const hasMore = stoppedOnTimeBudget || checked >= MAX_PARCELS_PER_RUN;
+
+    console.log(`${LOG_PREFIX} terminé — checked=${checked} updated=${updated} errors=${errors.length} has_more=${hasMore}`);
+    return json({ success: true, checked, updated, errors, results, has_more: hasMore, shipment_ids: [...shipmentIdsTouched] });
   } catch (err) {
     console.error(`${LOG_PREFIX} Erreur non gérée:`, err instanceof Error ? err.stack || err.message : err);
     return json({ error: err instanceof Error ? err.message : 'Erreur inconnue' }, 500);

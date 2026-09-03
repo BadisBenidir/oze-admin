@@ -25,18 +25,26 @@ export const ShipmentRequestsView: React.FC = () => {
   const { sync: syncSendcloud } = useSendcloudSync();
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncProgress, setSyncProgress] = useState<{ checked: number; updated: number } | null>(null);
 
   const handleSyncAll = async () => {
     setSyncError(null);
+    setSyncProgress(null);
     setSyncing(true);
-    const result = await syncSendcloud();
+    // Sans shipmentId : balaie tout l'arriéré, en plusieurs appels internes
+    // tant que le serveur signale qu'il en reste (voir useSendcloudSync) —
+    // reste un seul clic côté admin même sur un gros arriéré.
+    const result = await syncSendcloud(undefined, setSyncProgress);
     setSyncing(false);
+    pendingData.refresh();
+    shippedData.refresh();
     if (!result.success) {
       setSyncError(result.error || 'Impossible de contacter Sendcloud');
       return;
     }
-    pendingData.refresh();
-    shippedData.refresh();
+    if (result.incomplete) {
+      setSyncError(`Arriéré important : ${result.checked} colis vérifiés (${result.updated} mis à jour), relance encore pour continuer.`);
+    }
   };
 
   const [viewingId, setViewingId] = useState<string | null>(null);
@@ -86,13 +94,17 @@ export const ShipmentRequestsView: React.FC = () => {
           className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-          {syncing ? 'Actualisation...' : 'Actualiser les statuts Sendcloud'}
+          {syncing
+            ? syncProgress
+              ? `Actualisation... (${syncProgress.checked} vérifiés)`
+              : 'Actualisation...'
+            : 'Actualiser les statuts Sendcloud'}
         </button>
       </div>
 
       {syncError && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-sm text-red-700">{syncError}</p>
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <p className="text-sm text-amber-800">{syncError}</p>
         </div>
       )}
 

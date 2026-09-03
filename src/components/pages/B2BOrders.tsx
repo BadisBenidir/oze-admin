@@ -3,6 +3,7 @@ import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useB2BOrders, B2BOrder, getRequesterDisplayName } from '../../hooks/useB2BOrders';
+import { useSendcloudSync } from '../../hooks/useSendcloudSync';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck } from 'lucide-react';
 
@@ -23,6 +24,31 @@ export const B2BOrders: React.FC = () => {
   const { isAdmin } = useAdminAuth();
   const { orders, loading, error, refresh } = useB2BOrders(isAdmin);
   const [viewingOrder, setViewingOrder] = useState<B2BOrder | null>(null);
+  const { sync: syncSendcloud } = useSendcloudSync();
+  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{ checked: number; updated: number } | null>(null);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+
+  const handleSyncSendcloud = async () => {
+    setSyncNotice(null);
+    setSyncProgress(null);
+    setSyncing(true);
+    // Sans shipmentId : balaie tout l'arriéré de colis non livrés, en
+    // plusieurs appels internes tant que le serveur signale qu'il en reste
+    // (voir useSendcloudSync) — un seul clic même sur un gros arriéré.
+    const result = await syncSendcloud(undefined, setSyncProgress);
+    setSyncing(false);
+    refresh();
+    if (!result.success) {
+      setSyncNotice(result.error || 'Impossible de contacter Sendcloud');
+      return;
+    }
+    setSyncNotice(
+      result.incomplete
+        ? `Arriéré important : ${result.checked} colis vérifiés (${result.updated} mis à jour), relance encore pour continuer.`
+        : `${result.checked} colis vérifiés, ${result.updated} mis à jour.`
+    );
+  };
 
   // Après annulation d'un article, `orders` se rafraîchit mais `viewingOrder`
   // pointe encore sur l'ancien objet : on le resynchronise pour que la modal
@@ -41,14 +67,35 @@ export const B2BOrders: React.FC = () => {
           <h3 className="text-lg font-semibold text-gray-900">Commandes B2B</h3>
           <p className="text-sm text-gray-500">{loading ? 'Chargement...' : `${orders.length} commande${orders.length > 1 ? 's' : ''}`}</p>
         </div>
-        <button
-          onClick={refresh}
-          className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-        >
-          <RefreshCw className="h-4 w-4" />
-          <span className="hidden sm:inline">Actualiser</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleSyncSendcloud}
+            disabled={syncing}
+            title="Interroge Sendcloud pour rafraîchir le statut réel de tous les colis pas encore livrés"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing
+              ? syncProgress
+                ? `Actualisation... (${syncProgress.checked} vérifiés)`
+                : 'Actualisation...'
+              : 'Actualiser les statuts Sendcloud'}
+          </button>
+          <button
+            onClick={refresh}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span className="hidden sm:inline">Actualiser</span>
+          </button>
+        </div>
       </div>
+
+      {syncNotice && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <p className="text-sm text-amber-800">{syncNotice}</p>
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
