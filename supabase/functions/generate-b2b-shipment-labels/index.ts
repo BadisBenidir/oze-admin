@@ -129,26 +129,17 @@ const describeSendcloudError = (data: Record<string, unknown>, status: number): 
 
 type CarrierOverride = 'mondial_relay' | 'colissimo' | null;
 
-// Décide Mondial Relay vs Colissimo. Le texte `network` (renvoyé par le point
-// relais choisi par le revendeur) est le signal par défaut, mais NE SUFFIT
-// PAS seul : cas réel qui cassait la génération — "PRESS SHOP REINE ASTRID"
-// à Jette (Belgique) était étiqueté "Colissimo" côté network, alors que le
-// contrat Colissimo de ce compte Sendcloud ne couvre AUCUN point de retrait
-// hors France (seul Mondial Relay le fait) → Sendcloud répondait "No
-// shipping option could be found for the given country or postal code
-// combination". Le pays RÉEL du point relais (relayCountry, jamais celui de
-// l'adresse du revendeur — voir son calcul plus bas) prime donc sur le texte
-// network dès qu'on est hors France en point relais — et cette règle est
-// PRIORITAIRE ABSOLUE, y compris sur `carrierOverride` (sélecteur manuel
-// admin, voir ParcelSplitEditor.tsx) : un point relais hors France ne peut
-// PHYSIQUEMENT pas partir via Colissimo sur ce compte (aucune couverture de
-// point de retrait hors France sur ce contrat), donc honorer un override
-// 'colissimo' dans ce cas précis ne ferait jamais qu'échouer à coup sûr.
-// `carrierOverride` ne sert donc qu'à trancher les cas ambigus (network
-// illisible, France) où les deux transporteurs sont réellement possibles.
-const resolveCarrier = (deliveryType: string, network: string, relayCountry: string, carrierOverride: CarrierOverride): 'mondial_relay' | 'colissimo' => {
-  const forceMondial = deliveryType === 'point_relais' && relayCountry !== 'FR';
-  if (forceMondial) return 'mondial_relay';
+// Décide Mondial Relay vs Colissimo pour les cas STATIQUES : point relais
+// France ou point relais saisi manuellement (pas de code Sendcloud réel,
+// donc aucune méthode interrogeable). Pour un point relais hors France AVEC
+// code réel, voir plus bas fetchShippingMethods/selectShippingMethod — un carrier
+// deviné à l'avance s'est révélé faux : le diagnostic réel du compte (voir
+// fetchShippingMethods) a confirmé que Mondial Relay n'est PAS activé pour
+// la Belgique sur ce compte, et que c'est Colissimo Point Retrait
+// International qui couvre ces points relais. On ne force donc plus AUCUN
+// transporteur à l'avance ici — network / carrierOverride tranchent
+// uniquement les cas où les deux sont réellement plausibles (France).
+const resolveCarrier = (network: string, carrierOverride: CarrierOverride): 'mondial_relay' | 'colissimo' => {
   if (carrierOverride) return carrierOverride;
   return network.toLowerCase().includes('mondial') ? 'mondial_relay' : 'colissimo';
 };
@@ -160,66 +151,75 @@ const checkoutMethodName = (deliveryType: string, carrier: 'mondial_relay' | 'co
 
 // Même logique que shipWithFor de finalizeOrder.ts : seul un VRAI point
 // Sendcloud (code non-vide) peut être routé via to_service_point/ship_with.
-//
-// ⚠️ contract_id (7443 Mondial Relay, 1337 Colissimo) est un identifiant de
-// CONTRAT Sendcloud propre au compte OZË. Le contrat Colissimo est confirmé
-// France uniquement (voir commentaire de resolveCarrier ci-dessus) — jamais
-// utilisé hors France en point relais, quel que soit `network`.
-//
-// ⚠️ Le shipping_option_code "mondial_relay:service_point,dualapi/size=l,c2c"
-// (+ contract_id 7443) est lui-même confirmé FR uniquement : reproduit en
-// conditions réelles sur le cas Jette (Belgique), Sendcloud renvoie 400 "No
-// shipping option could be found for the given country or postal code
-// combination" EXACTEMENT sur ce couple option/contrat, même une fois le
-// carrier et to_address.country_code correctement forcés sur 'BE'.
-//
-// ⚠️ Omettre complètement ship_with (en comptant sur apply_shipping_defaults)
-// a ensuite échoué avec une AUTRE erreur Sendcloud confirmée : "No shipping
-// rules were found that define the 'ship_with' for this shipment" — avec
-// apply_shipping_rules:false (nécessaire pour éviter la règle d'assurance
-// dashboard, voir plus haut), Sendcloud EXIGE un ship_with explicite, il n'y
-// a pas de résolution automatique possible. On tente donc le flux "b2c" du
-// même contrat Mondial Relay (7443) plutôt que "c2c" (réservé au dépôt
-// particulier FR) pour la destination internationale. Si cela échoue aussi,
-// voir le diagnostic `shipping_methods_diagnostic` loggé juste avant l'appel
-// Sendcloud (liste des méthodes Mondial Relay réellement actives pour ce
-// pays/ce point relais sur CE compte) plutôt que deviner un 3e code à
-// l'aveugle — on ne peut pas vérifier depuis ce code lequel de ces slugs
-// existe réellement sans accès direct au compte Sendcloud.
-const shipWithFor = (carrier: 'mondial_relay' | 'colissimo', hasCode: boolean, isFrenchDestination: boolean) => {
+// Ces deux codes sont confirmés FR uniquement (le mondial_relay a d'ailleurs
+// été testé et rejeté par Sendcloud sur un point belge) — ils ne sont donc
+// utilisés QUE pour un point relais FRANÇAIS avec code réel. Pour un point
+// relais hors France, voir resolveInternationalShippingMethod ci-dessous qui
+// interroge directement le compte au lieu de deviner un contrat/code.
+const shipWithFor = (carrier: 'mondial_relay' | 'colissimo', hasCode: boolean) => {
   if (!hasCode) return null;
   if (carrier === 'mondial_relay') {
-    return isFrenchDestination
-      ? { type: 'shipping_option_code', properties: { shipping_option_code: 'mondial_relay:service_point,dualapi/size=l,c2c', contract_id: 7443 } }
-      : { type: 'shipping_option_code', properties: { shipping_option_code: 'mondial_relay:service_point,dualapi/size=l,b2c', contract_id: 7443 } };
+    return { type: 'shipping_option_code', properties: { shipping_option_code: 'mondial_relay:service_point,dualapi/size=l,c2c', contract_id: 7443 } };
   }
   return { type: 'shipping_option_code', properties: { shipping_option_code: 'colissimo:post-office', contract_id: 1337 } };
 };
 
-// Diagnostic best-effort (jamais bloquant) : liste les méthodes d'expédition
-// v2 réellement actives sur ce compte pour ce pays + ce point relais précis.
-// Sert uniquement à alimenter le log en cas de nouvel échec du couple
-// shipping_option_code ci-dessus, pour remplacer une 3e supposition à
-// l'aveugle par une preuve concrète (nom exact, transporteur, id) de ce qui
-// est vraiment disponible sur ce compte — jamais injecté dans le payload v3
-// lui-même : Sendcloud confirme que les ID de méthode v2 ne sont pas
-// directement réutilisables dans l'API v3 (qui attend un shipping_option_code,
-// pas un id v2), donc un mappage automatique aurait été une supposition de
-// plus, pas une garantie.
-const fetchShippingMethodsDiagnostic = async (
+interface SendcloudShippingMethod {
+  id: number;
+  name: string;
+  carrier: string;
+  min_weight: string;
+  max_weight: string;
+  service_point_input: string;
+}
+
+// Liste les méthodes v2 réellement actives sur CE compte pour ce pays et ce
+// point relais précis (filtre officiel `service_point_id`, voir doc
+// Sendcloud). Remplace toute hypothèse de contrat/carrier : le diagnostic
+// réel sur le cas Jette (Belgique) a montré que Mondial Relay n'a AUCUNE
+// méthode active pour la Belgique sur ce compte, et que "Colissimo Point
+// Retrait International" (ids réels 8742 pour 0.5-1kg, 8743 pour 1-2kg) est
+// la méthode qui couvre ces points relais.
+const fetchShippingMethods = async (
   publicKey: string,
   secretKey: string,
   toCountry: string,
   servicePointId: string,
-): Promise<unknown> => {
-  try {
-    const url = `https://panel.sendcloud.sc/api/v2/shipping_methods?to_country=${encodeURIComponent(toCountry)}&service_point_id=${encodeURIComponent(servicePointId)}`;
-    const res = await fetch(url, { headers: { Authorization: 'Basic ' + btoa(`${publicKey}:${secretKey}`) } });
-    const data = await res.json().catch(() => null);
-    return { status: res.status, shipping_methods: (data as { shipping_methods?: unknown })?.shipping_methods ?? data };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Échec appel diagnostic shipping_methods' };
-  }
+): Promise<SendcloudShippingMethod[]> => {
+  const url = `https://panel.sendcloud.sc/api/v2/shipping_methods?to_country=${encodeURIComponent(toCountry)}&service_point_id=${encodeURIComponent(servicePointId)}`;
+  const res = await fetch(url, { headers: { Authorization: 'Basic ' + btoa(`${publicKey}:${secretKey}`) } });
+  const data = await res.json().catch(() => null) as { shipping_methods?: SendcloudShippingMethod[] } | null;
+  return Array.isArray(data?.shipping_methods) ? data!.shipping_methods! : [];
+};
+
+// Choisit, parmi les méthodes réellement actives pour ce point relais, celle
+// dont la tranche de poids couvre le colis (ex. 8742 pour 0.5-1kg, 8743 pour
+// 1-2kg) — la sélection se fait uniquement sur les données retournées par
+// Sendcloud pour CE compte, jamais sur un id ou un carrier deviné à l'avance.
+const selectShippingMethod = (methods: SendcloudShippingMethod[], weightKg: number): SendcloudShippingMethod | null => {
+  const eligible = methods.filter((m) => m.service_point_input && m.service_point_input !== 'none');
+  const inRange = eligible.find((m) => weightKg >= Number(m.min_weight) && weightKg <= Number(m.max_weight));
+  return inRange || eligible[0] || null;
+};
+
+// L'API v3 (utilisée pour la création du colis) n'accepte pas un id de
+// méthode v2 directement — Sendcloud le confirme dans sa doc de migration
+// v2→v3 : v3 attend un `shipping_option_code`. L'endpoint de compatibilité
+// officiel `/api/v3/compat/shipping-options` fait cette traduction id→code
+// sans qu'on ait besoin de deviner le code nous-mêmes.
+const resolveShippingOptionCode = async (
+  publicKey: string,
+  secretKey: string,
+  methodId: number,
+): Promise<string | null> => {
+  const res = await fetch('https://panel.sendcloud.sc/api/v3/compat/shipping-options', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Basic ' + btoa(`${publicKey}:${secretKey}`) },
+    body: JSON.stringify({ shipping_method_ids: [methodId] }),
+  });
+  const data = await res.json().catch(() => null) as { data?: Record<string, string | null> } | null;
+  const code = data?.data?.[String(methodId)];
+  return typeof code === 'string' ? code : null;
 };
 
 interface ItemRow {
@@ -327,14 +327,22 @@ Deno.serve(async (req: Request) => {
     const relayCountry = shipment.delivery_type === 'point_relais'
       ? toCountryCode(String(pp.country || ''), String(pp.zipCode || ''))
       : 'FR';
-    const carrier = resolveCarrier(shipment.delivery_type, network, relayCountry, carrierOverride);
+    // Point relais hors France AVEC code Sendcloud réel : plus aucun carrier
+    // statique deviné à l'avance (voir resolveCarrier ci-dessus) — la méthode
+    // d'expédition est résolue dynamiquement par colis (elle dépend du poids,
+    // voir dans la boucle plus bas) à partir de ce que CE compte a réellement
+    // d'actif pour ce pays + ce point relais précis.
+    const isInternationalRelay = hasRealCode && relayCountry !== 'FR';
+    const carrier = isInternationalRelay ? null : resolveCarrier(network, carrierOverride);
     console.log('[Sendcloud] Résolution transporteur', {
-      shipment_id, delivery_type: shipment.delivery_type, network, relayCountry, carrierOverride, hasRealCode, carrier,
+      shipment_id, delivery_type: shipment.delivery_type, network, relayCountry, carrierOverride, hasRealCode, isInternationalRelay, carrier,
       parcel_point_country_raw: pp.country, parcel_point_zip: pp.zipCode,
     });
-    if (hasRealCode && relayCountry !== 'FR') {
-      const diagnostic = await fetchShippingMethodsDiagnostic(sendcloudPublicKey, sendcloudSecretKey, relayCountry, String(pp.code));
-      console.log('[Sendcloud] Méthodes disponibles pour ce pays/point relais (diagnostic, non utilisé dans le payload)', diagnostic);
+    const internationalMethods = isInternationalRelay
+      ? await fetchShippingMethods(sendcloudPublicKey, sendcloudSecretKey, relayCountry, String(pp.code))
+      : [];
+    if (isInternationalRelay) {
+      console.log('[Sendcloud] Méthodes actives pour ce pays/point relais', internationalMethods);
     }
 
     const { data: profile } = await adminClient
@@ -404,8 +412,12 @@ Deno.serve(async (req: Request) => {
       };
     }
 
-    const deliveryIndicator = checkoutMethodName(shipment.delivery_type, carrier);
-    const shipWith = shipment.delivery_type === 'point_relais' ? shipWithFor(carrier, hasRealCode, relayCountry === 'FR') : null;
+    // Pour un point relais international, deliveryIndicator/shipWith sont
+    // résolus PAR COLIS dans la boucle (la méthode dépend du poids) — ces
+    // valeurs par défaut ne servent qu'aux autres cas (FR domestique,
+    // domicile, point relais manuel).
+    const deliveryIndicator = isInternationalRelay ? '' : checkoutMethodName(shipment.delivery_type, carrier!);
+    const shipWith = shipment.delivery_type === 'point_relais' && !isInternationalRelay ? shipWithFor(carrier!, hasRealCode) : null;
 
     // Boucle SÉQUENTIELLE (pas Promise.all) : chaque colis est commité
     // indépendamment dès son propre succès, sans attendre les autres — un
@@ -436,6 +448,38 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       const parcelIndex = (maxRow?.parcel_index || 0) + 1;
 
+      // Résolution par colis pour un point relais international : le poids
+      // détermine quelle méthode réellement active sur ce compte s'applique
+      // (ex. Colissimo Point Retrait International 0.5-1kg vs 1-2kg pour la
+      // Belgique) — jamais un carrier/contrat deviné à l'avance.
+      let parcelCarrier: 'mondial_relay' | 'colissimo' | null = carrier;
+      let parcelShipWith = shipWith;
+      let parcelDeliveryIndicator = deliveryIndicator;
+      if (isInternationalRelay) {
+        const method = selectShippingMethod(internationalMethods, weightKg);
+        if (!method) {
+          const errorMessage = `Aucune méthode d'expédition compatible avec ce point relais (${relayCountry}) et ce poids (${weightKg.toFixed(2)}kg) n'est active sur ce compte Sendcloud — vérifiez Settings → Shipping methods sur panel.sendcloud.sc.`;
+          await adminClient.from('shipment_parcels').insert({
+            shipment_id, parcel_index: parcelIndex, status: 'failed', weight_kg: weightKg, error_message: errorMessage,
+          });
+          results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier: null, error: errorMessage });
+          continue;
+        }
+        const optionCode = await resolveShippingOptionCode(sendcloudPublicKey, sendcloudSecretKey, method.id);
+        if (!optionCode) {
+          const errorMessage = `Méthode "${method.name}" (id ${method.id}) trouvée mais impossible à traduire en code d'expédition v3 via l'endpoint de compatibilité Sendcloud.`;
+          await adminClient.from('shipment_parcels').insert({
+            shipment_id, parcel_index: parcelIndex, status: 'failed', weight_kg: weightKg, error_message: errorMessage,
+          });
+          results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier: null, error: errorMessage });
+          continue;
+        }
+        parcelCarrier = method.carrier.toLowerCase().includes('mondial') ? 'mondial_relay' : 'colissimo';
+        parcelShipWith = { type: 'shipping_option_code', properties: { shipping_option_code: optionCode } };
+        parcelDeliveryIndicator = `${method.name} - Point Relais International`;
+        console.log('[Sendcloud] Méthode internationale résolue pour ce colis', { shipment_id, parcel_index: parcelIndex, weightKg, method, optionCode });
+      }
+
       // apply_shipping_rules: false — cas réel qui cassait Jette (Belgique)
       // malgré un carrier/contrat déjà correct (Mondial Relay) : Sendcloud
       // applique côté panel une règle d'expédition dashboard ("Assurance
@@ -448,15 +492,15 @@ Deno.serve(async (req: Request) => {
       const payload: Record<string, unknown> = {
         apply_shipping_rules: false,
         apply_shipping_defaults: true,
-        delivery_indicator: deliveryIndicator,
-        shipping_method_checkout_name: deliveryIndicator,
+        delivery_indicator: parcelDeliveryIndicator,
+        shipping_method_checkout_name: parcelDeliveryIndicator,
         order_number: `B2B-SHIP-${shipment_id.slice(0, 8)}-${parcelIndex}`,
         total_order_price: { currency: 'EUR', value: totalValue.toFixed(2) },
         from_address: SENDER_ADDRESS,
         to_address: toAddress,
         parcels: [{ weight: { value: weightKg.toFixed(3), unit: 'kg' } }],
       };
-      if (shipWith) payload.ship_with = shipWith;
+      if (parcelShipWith) payload.ship_with = parcelShipWith;
       if (hasRealCode) {
         payload.to_service_point = { id: String(pp.code) };
       }
@@ -480,7 +524,7 @@ Deno.serve(async (req: Request) => {
           await adminClient.from('shipment_parcels').insert({
             shipment_id, parcel_index: parcelIndex, status: 'failed', weight_kg: weightKg, error_message: errorMessage,
           });
-          results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier, error: errorMessage });
+          results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier: parcelCarrier, error: errorMessage });
           continue;
         }
 
@@ -507,7 +551,7 @@ Deno.serve(async (req: Request) => {
           .select('id')
           .single();
         if (insertError || !newParcel) {
-          results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier, error: `Colis créé chez Sendcloud mais échec d'enregistrement : ${insertError?.message}` });
+          results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier: parcelCarrier, error: `Colis créé chez Sendcloud mais échec d'enregistrement : ${insertError?.message}` });
           continue;
         }
 
@@ -516,13 +560,13 @@ Deno.serve(async (req: Request) => {
           .update({ fulfillment_status: 'label_created', parcel_id: newParcel.id, label_created_at: new Date().toISOString() })
           .in('id', parcel.item_ids);
 
-        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'label_created', carrier, tracking_number: trackingNumber, tracking_url: trackingUrl, label_url: labelUrl });
+        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'label_created', carrier: parcelCarrier, tracking_number: trackingNumber, tracking_url: trackingUrl, label_url: labelUrl });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Erreur réseau Sendcloud inconnue';
         await adminClient.from('shipment_parcels').insert({
           shipment_id, parcel_index: parcelIndex, status: 'failed', weight_kg: weightKg, error_message: errorMessage,
         });
-        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier, error: errorMessage });
+        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier: parcelCarrier, error: errorMessage });
       }
     }
 

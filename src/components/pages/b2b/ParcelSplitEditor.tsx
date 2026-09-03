@@ -37,15 +37,15 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
   const [phoneOverride, setPhoneOverride] = useState('');
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const isPointRelais = deliveryType === 'point_relais';
-  // Un point relais hors France (Colissimo n'y a aucune couverture sur ce
-  // compte, voir generate-b2b-shipment-labels/index.ts::resolveCarrier) est
-  // présélectionné sur Mondial Relay dès l'affichage, plutôt que de laisser
-  // "Automatique" masquer ce choix à l'admin — cas réel qui a fait échouer
-  // silencieusement la détection auto : un point relais belge dont le pays
-  // avait été enregistré comme "FR" par erreur au moment de la demande.
-  const [carrierOverride, setCarrierOverride] = useState<CarrierOverride | 'auto'>(
-    isPointRelais && parcelPointCountry && parcelPointCountry !== 'FR' ? 'mondial_relay' : 'auto'
-  );
+  // Le transporteur d'un point relais hors France (ex. Belgique) est
+  // maintenant résolu automatiquement côté edge function à partir de ce que
+  // le compte Sendcloud a réellement d'actif pour ce pays précis (voir
+  // generate-b2b-shipment-labels/index.ts::fetchShippingMethods) — un carrier
+  // deviné à l'avance (Mondial Relay ou Colissimo) s'est révélé faux dans les
+  // deux sens selon les cas, donc ce sélecteur ne s'applique plus qu'aux cas
+  // France/points relais saisis manuellement ; "Automatique" reste le bon
+  // choix par défaut partout ailleurs.
+  const [carrierOverride, setCarrierOverride] = useState<CarrierOverride | 'auto'>('auto');
 
   const handleDownloadLabel = async (labelUrl: string) => {
     setDownloadError(null);
@@ -261,7 +261,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                 ))}
               </div>
               <p className="text-[11px] text-gray-400 mt-1.5">
-                En automatique, un point relais hors France bascule sur Mondial Relay (Colissimo ne couvre pas les points relais hors France sur ce compte).
+                Pour un point relais hors France, la méthode réellement disponible sur le compte Sendcloud est détectée automatiquement (ce choix ne s'applique alors pas).
               </p>
             </div>
           )}
