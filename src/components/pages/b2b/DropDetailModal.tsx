@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Package, ImageOff } from 'lucide-react';
+import { X, Package, ImageOff, Trash2 } from 'lucide-react';
 import { Drop } from '../../../hooks/useDrops';
 import { useDropProducts } from '../../../hooks/useDropProducts';
 
@@ -14,15 +14,20 @@ interface DropDetailModalProps {
   /** Autres drops disponibles pour y déplacer un article (tout statut, hors ce drop). */
   otherDrops?: Drop[];
   onReassignProduct?: (productId: string, fromDropId: string, toDropId: string) => Promise<{ success: boolean; error?: string }>;
+  /** Refusé par admin_delete_drop si un article du drop a déjà été vendu —
+   * l'erreur est alors affichée ici plutôt que de fermer la modale. */
+  onDelete?: (dropId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose, otherDrops = [], onReassignProduct }) => {
+export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose, otherDrops = [], onReassignProduct, onDelete }) => {
   // `drop` est dérivé en direct de la liste `drops` du parent (voir
   // B2BDrops.tsx) : product_ids se met à jour automatiquement après un
   // déplacement, ce qui redéclenche useDropProducts via sa dépendance sur
   // productIds.join(',') — pas besoin d'un refresh manuel ici.
   const { products, loading, error } = useDropProducts(drop?.product_ids ?? null);
   const [movingProductId, setMovingProductId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   if (!drop) return null;
 
@@ -31,6 +36,22 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
     setMovingProductId(productId);
     await onReassignProduct(productId, drop.id, toDropId);
     setMovingProductId(null);
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce drop ? Cette action est irréversible.')) {
+      return;
+    }
+    setDeleteError(null);
+    setDeleting(true);
+    const result = await onDelete(drop.id);
+    setDeleting(false);
+    if (!result.success) {
+      setDeleteError(result.error || 'Impossible de supprimer ce drop');
+      return;
+    }
+    onClose();
   };
 
   const totalPurchase = products.reduce((sum, p) => sum + (p.purchase_price || 0), 0);
@@ -50,12 +71,27 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
                 {formatDateTime(drop.scheduled_at)} · {drop.product_ids.length} article{drop.product_ids.length > 1 ? 's' : ''}
               </p>
             </div>
-            <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {onDelete && (
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                  title="Supprimer le drop"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              )}
+              <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           <div className="p-6 space-y-4">
+            {deleteError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{deleteError}</div>
+            )}
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">Erreur : {error}</div>
             )}

@@ -5,7 +5,7 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useDrops, Drop } from '../../hooks/useDrops';
 import { CreateDropModal } from './b2b/CreateDropModal';
 import { DropDetailModal } from './b2b/DropDetailModal';
-import { Rocket, Plus, AlertCircle, Package, Pencil, Ban, Eye, GitMerge, X } from 'lucide-react';
+import { Rocket, Plus, AlertCircle, Package, Pencil, Ban, Eye, GitMerge, X, Trash2 } from 'lucide-react';
 
 const statusBadge = (status: Drop['status']) => {
   switch (status) {
@@ -90,13 +90,15 @@ const MergeDropModal: React.FC<MergeDropModalProps> = ({ source, otherDrops, onC
 
 export const B2BDrops: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { drops, loading, error, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct } = useDrops(isAdmin);
+  const { drops, loading, error, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop } = useDrops(isAdmin);
 
   const [showModal, setShowModal] = useState(false);
   const [editingDrop, setEditingDrop] = useState<Drop | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [viewingDropId, setViewingDropId] = useState<string | null>(null);
   const [mergingDrop, setMergingDrop] = useState<Drop | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Dérivé en direct de `drops` (pas une copie figée) : un déplacement
   // d'article depuis la modale met à jour product_ids immédiatement, sans
@@ -134,6 +136,19 @@ export const B2BDrops: React.FC = () => {
     setMergingDrop(null);
   };
 
+  const handleDelete = async (drop: Drop) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce drop ? Cette action est irréversible.')) {
+      return;
+    }
+    setDeleteError(null);
+    setDeletingId(drop.id);
+    const result = await deleteDrop(drop.id);
+    setDeletingId(null);
+    if (!result.success) {
+      setDeleteError(result.error || 'Impossible de supprimer ce drop');
+    }
+  };
+
   const upcoming = drops.filter((d) => d.status === 'planifie');
   const history = drops.filter((d) => d.status !== 'planifie');
 
@@ -157,6 +172,13 @@ export const B2BDrops: React.FC = () => {
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
           <p className="text-sm text-red-700">Erreur : {error}</p>
+        </div>
+      )}
+
+      {deleteError && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+          <p className="text-sm text-red-700">{deleteError}</p>
         </div>
       )}
 
@@ -229,6 +251,14 @@ export const B2BDrops: React.FC = () => {
                       >
                         <Ban className="h-4 w-4" />
                       </button>
+                      <button
+                        onClick={() => handleDelete(drop)}
+                        disabled={deletingId === drop.id}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="Supprimer le drop"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </CardContent>
                 </Card>
@@ -291,6 +321,14 @@ export const B2BDrops: React.FC = () => {
                                 <GitMerge className="h-4 w-4" />
                               </button>
                             )}
+                            <button
+                              onClick={() => handleDelete(drop)}
+                              disabled={deletingId === drop.id}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                              title="Supprimer le drop"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -315,6 +353,7 @@ export const B2BDrops: React.FC = () => {
         onClose={() => setViewingDropId(null)}
         otherDrops={drops.filter((d) => d.id !== viewingDropId)}
         onReassignProduct={reassignDropProduct}
+        onDelete={deleteDrop}
       />
 
       {mergingDrop && (

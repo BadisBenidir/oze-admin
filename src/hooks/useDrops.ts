@@ -32,6 +32,9 @@ interface UseDropsResult {
   mergeDrops: (sourceId: string, targetId: string) => Promise<{ success: boolean; error?: string }>;
   /** Déplace un article d'un drop vers un autre — fonctionne pour des drops de tout statut. */
   reassignDropProduct: (productId: string, fromDropId: string, toDropId: string) => Promise<{ success: boolean; error?: string }>;
+  /** Supprime définitivement un drop — refusé par admin_delete_drop si l'un
+   * de ses articles a déjà été vendu (voir 0088). */
+  deleteDrop: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
@@ -125,6 +128,13 @@ export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
     return { success: true };
   };
 
+  const deleteDrop = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: rpcError } = await supabase.rpc('admin_delete_drop', { p_drop_id: id });
+    if (rpcError) return { success: false, error: rpcError.message };
+    await fetchDrops();
+    return { success: true };
+  };
+
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
@@ -133,5 +143,5 @@ export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
     fetchDrops();
   }, [isAdmin, fetchDrops]);
 
-  return { drops, loading, error, refresh: fetchDrops, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct };
+  return { drops, loading, error, refresh: fetchDrops, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop };
 };
