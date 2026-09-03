@@ -3,7 +3,7 @@ import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Modal } from '../ui/Modal';
 import { useResellers, Reseller, ResellerContact, ResellerFormData } from '../../hooks/useResellers';
-import { useB2BOrders } from '../../hooks/useB2BOrders';
+import { useB2BOrders, getRequesterDisplayName } from '../../hooks/useB2BOrders';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useAdminWallet } from '../../hooks/useAdminWallet';
 import { ResellerFormModal } from './ResellerFormModal';
@@ -41,17 +41,22 @@ const resellerStatusBadge = (status: Reseller['status']) => {
   }
 };
 
-const orderStatusBadge = (status: string) => {
+const orderStatusLabel = (status: string): string => {
   switch (status) {
     case 'shipped':
-      return <Badge variant="info">Expédiée</Badge>;
+      return 'Expédiée';
     case 'delivered':
-      return <Badge variant="success">Livrée</Badge>;
+      return 'Livrée';
     case 'cancelled':
-      return <Badge variant="danger">Annulée</Badge>;
+      return 'Annulée';
     default:
-      return <Badge variant="success">Confirmée</Badge>;
+      return 'Confirmée';
   }
+};
+
+const orderStatusBadge = (status: string) => {
+  const variant = status === 'shipped' ? 'info' : status === 'delivered' ? 'success' : status === 'cancelled' ? 'danger' : 'success';
+  return <Badge variant={variant}>{orderStatusLabel(status)}</Badge>;
 };
 
 export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack, onResellerUpdated }) => {
@@ -70,6 +75,17 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   // "Voir les commandes" depuis l'onglet Structure & Sous-comptes.
   const [ordersFilterContact, setOrdersFilterContact] = useState<ResellerContact | null>(null);
   const { orders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useB2BOrders(isAdmin, currentReseller.id, ordersFilterContact?.profile_id);
+  const [orderSearch, setOrderSearch] = useState('');
+  const filteredOrders = useMemo(() => {
+    const query = normalizeSearch(orderSearch);
+    if (!query) return orders;
+    return orders.filter((order) => {
+      const requesterName = getRequesterDisplayName(order) || '';
+      const itemNames = order.order_items.map((i) => i.product_snapshot?.name || '').join(' ');
+      const haystack = [order.order_number, requesterName, order.email, orderStatusLabel(order.status), itemNames].join(' ');
+      return normalizeSearch(haystack).includes(query);
+    });
+  }, [orders, orderSearch]);
 
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
@@ -450,6 +466,30 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                 <p className="text-sm text-red-700">{ordersError}</p>
               </div>
             )}
+            {orders.length > 0 && (
+              <div className="p-4 border-b border-gray-100">
+                <div className="relative max-w-md">
+                  <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    placeholder="Rechercher par n° de commande, client, article, statut..."
+                    className="w-full pl-9 pr-9 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400"
+                  />
+                  {orderSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setOrderSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-700 rounded"
+                      title="Effacer la recherche"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -478,8 +518,14 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                         Aucune commande pour ce revendeur.
                       </td>
                     </tr>
+                  ) : filteredOrders.length === 0 ? (
+                    <tr>
+                      <td className="py-8 px-4 md:px-6 text-center text-sm text-gray-500" colSpan={7}>
+                        Aucune commande trouvée pour cette recherche.
+                      </td>
+                    </tr>
                   ) : (
-                    orders.map((order) => (
+                    filteredOrders.map((order) => (
                       <tr key={order.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="py-3 px-4 md:px-6 text-sm font-medium text-gray-900">{order.order_number}</td>
                         <td className="py-3 px-4 md:px-6 text-sm text-gray-600">{order.email}</td>
