@@ -34,6 +34,12 @@ export interface B2BOrderItem {
   shipment_parcel: B2BShipmentParcel | null;
 }
 
+export interface B2BOrderRequester {
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+}
+
 export interface B2BOrder {
   id: string;
   order_number: string;
@@ -49,8 +55,27 @@ export interface B2BOrder {
   created_at: string;
   reseller_id: string;
   reseller: { company_name: string } | null;
+  /** Profil ayant réellement validé la commande (peut être un sous-compte,
+   * pas forcément le contact principal de l'entreprise) — null pour les
+   * commandes créées avant l'ajout de placed_by_profile_id (0017). */
+  placed_by: B2BOrderRequester | null;
+  /** true si placed_by est le contact principal de son entreprise (ou si
+   * placed_by_profile_id est inconnu/absent) : dans ce cas, le nom du
+   * sous-compte n'apporte rien de plus que reseller.company_name — voir
+   * B2BOrders.tsx / B2BOrderDetailModal.tsx pour l'affichage conditionnel. */
+  placed_by_is_primary: boolean;
   order_items: B2BOrderItem[];
 }
+
+/** Nom/email affichable du sous-compte ayant réellement passé la commande,
+ * ou null si inconnu (commande antérieure à placed_by_profile_id) — utilisé
+ * par B2BOrders.tsx et B2BOrderDetailModal.tsx pour la ligne en gras
+ * au-dessus de reseller.company_name. */
+export const getRequesterDisplayName = (order: Pick<B2BOrder, 'placed_by'>): string | null => {
+  if (!order.placed_by) return null;
+  const fullName = `${order.placed_by.first_name || ''} ${order.placed_by.last_name || ''}`.trim();
+  return fullName || order.placed_by.email || null;
+};
 
 export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: string, placedByProfileId?: string) => {
   const [orders, setOrders] = useState<B2BOrder[]>([]);
@@ -65,7 +90,9 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
       let query = supabase
         .from('orders')
         .select(
-          'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg))'
+          'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), ' +
+          'placed_by:profiles!placed_by_profile_id(first_name, last_name, email), ' +
+          'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg))'
         )
         .eq('order_channel', 'b2b');
 
@@ -85,7 +112,34 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
         throw new Error(fetchError.message);
       }
 
-      setOrders((data || []) as unknown as B2BOrder[]);
+      const rows = (data || []) as unknown as (B2BOrder & { placed_by_is_primary?: boolean })[];
+
+      // is_primary se lit par CONTACT (reseller_contacts), pas par commande :
+      // une seconde requête ciblée sur les profils réellement rencontrés
+      // évite d'avoir à l'embarquer dans le select ci-dessus (aucune relation
+      // directe orders -> reseller_contacts). profile_id est unique dans
+      // reseller_contacts (voir useB2BCart.ts) : un profil n'appartient
+      // jamais qu'à un seul revendeur, donc pas besoin de croiser reseller_id.
+      const placedByIds = [...new Set(rows.map((o) => o.placed_by_profile_id).filter((id): id is string => Boolean(id)))];
+      let primaryProfileIds = new Set<string>();
+      if (placedByIds.length > 0) {
+        const { data: contacts, error: contactsError } = await supabase
+          .from('reseller_contacts')
+          .select('profile_id, is_primary')
+          .in('profile_id', placedByIds);
+        if (contactsError) throw new Error(contactsError.message);
+        primaryProfileIds = new Set((contacts || []).filter((c) => c.is_primary).map((c) => c.profile_id));
+      }
+
+      const ordersWithPrimary: B2BOrder[] = rows.map((o) => ({
+        ...o,
+        // Pas de placed_by_profile_id connu (commandes antérieures à 0017) :
+        // traité comme "principal" pour ne pas afficher un sous-titre
+        // redondant sans information réelle à montrer.
+        placed_by_is_primary: o.placed_by_profile_id ? primaryProfileIds.has(o.placed_by_profile_id) : true,
+      }));
+
+      setOrders(ordersWithPrimary);
     } catch (err) {
       console.error('Erreur lors du chargement des commandes B2B:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');

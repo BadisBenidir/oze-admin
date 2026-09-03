@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-import { useB2BOrders, B2BOrder } from '../../hooks/useB2BOrders';
+import { useB2BOrders, B2BOrder, getRequesterDisplayName } from '../../hooks/useB2BOrders';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck } from 'lucide-react';
 
@@ -96,7 +96,20 @@ export const B2BOrders: React.FC = () => {
                           <p className="font-medium text-gray-900 text-sm">{order.order_number}</p>
                           <p className="text-xs text-gray-500">{new Date(order.created_at).toLocaleDateString('fr-FR')}</p>
                         </td>
-                        <td className="py-4 px-4 md:px-6 text-sm text-gray-700">{order.reseller?.company_name || '—'}</td>
+                        <td className="py-4 px-4 md:px-6 text-sm">
+                          {(() => {
+                            const requesterName = getRequesterDisplayName(order);
+                            const showSubtitle = Boolean(requesterName) && !order.placed_by_is_primary;
+                            return showSubtitle ? (
+                              <>
+                                <p className="font-medium text-gray-900">{requesterName}</p>
+                                <p className="text-xs text-gray-400">{order.reseller?.company_name || '—'}</p>
+                              </>
+                            ) : (
+                              <p className="text-gray-700">{order.reseller?.company_name || '—'}</p>
+                            );
+                          })()}
+                        </td>
                         <td className="py-4 px-4 md:px-6 hidden md:table-cell text-sm text-gray-600">{order.order_items.length} pièce{order.order_items.length > 1 ? 's' : ''}</td>
                         <td className="py-4 px-4 md:px-6 text-sm font-semibold text-gray-900">{order.total_amount.toFixed(0)} €</td>
                         <td className="py-4 px-4 md:px-6">

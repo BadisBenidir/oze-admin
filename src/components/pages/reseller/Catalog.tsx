@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
+import { supabase } from '../../../lib/supabase';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useB2BCatalog, B2BCatalogItem } from '../../../hooks/useB2BCatalog';
 import { useB2BCart } from '../../../hooks/useB2BCart';
@@ -61,14 +62,40 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
   } = useB2BCatalog(isReseller);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  // Le statut "Dans un panier" d'un article (held_by_other) dépend d'un hold
-  // posé par un AUTRE revendeur : rafraîchir périodiquement pour refléter sa
-  // libération (chrono écoulé côté serveur ou panier vidé) sans attendre un
-  // changement de filtre/page.
+  // Le statut "Dans un panier" d'un article (held_by_other) dépend de la
+  // réservation exclusive d'un AUTRE revendeur (cart_items) : product_
+  // reservation_signals (une table dédiée, sans user_id, lisible par tout
+  // revendeur actif — voir 0084_realtime_held_by_other.sql) porte le signal
+  // en Realtime, car cart_items lui-même a une RLS stricte qui empêcherait
+  // tout abonnement direct de voir les réservations des AUTRES utilisateurs.
+  // Un debounce évite une rafale de refetch si plusieurs signaux arrivent
+  // en quelques millisecondes (plusieurs revendeurs actifs en même temps).
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
   useEffect(() => {
-    const interval = setInterval(refresh, 20000);
-    return () => clearInterval(interval);
-  }, [refresh]);
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => refreshRef.current(), 400);
+    };
+
+    const channel = supabase
+      .channel('catalog-reservation-signals')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_reservation_signals' }, scheduleRefresh)
+      .subscribe();
+
+    // Filet de sécurité si la connexion Realtime se coupe (veille de
+    // l'onglet, réseau instable...) — bien plus espacé qu'avant puisque ce
+    // n'est plus le mécanisme principal de mise à jour.
+    const fallbackInterval = setInterval(refreshRef.current, 60000);
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      clearInterval(fallbackInterval);
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const toggleInList = (id: string, list: string[]) =>
     list.includes(id) ? list.filter((v) => v !== id) : [...list, id];

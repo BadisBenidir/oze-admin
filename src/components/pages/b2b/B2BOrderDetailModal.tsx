@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban, BadgeCheck } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
-import { B2BOrder, B2BOrderItem } from '../../../hooks/useB2BOrders';
+import { B2BOrder, B2BOrderItem, getRequesterDisplayName } from '../../../hooks/useB2BOrders';
 import { cancelOrderItem, cancelOrder } from '../../../hooks/useCancelOrderItem';
 
 // `orders.shipping_address` est stocké dans la forme assemblée par
@@ -411,8 +411,19 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                 <h3 className="text-lg font-semibold text-gray-900">#{order.order_number}</h3>
                 <p className="text-sm text-gray-500 mt-1">
                   {new Date(order.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                  {order.reseller?.company_name ? ` · ${order.reseller.company_name}` : ''}
                 </p>
+                {(() => {
+                  const requesterName = getRequesterDisplayName(order);
+                  const showSubtitle = Boolean(requesterName) && !order.placed_by_is_primary;
+                  return showSubtitle ? (
+                    <p className="text-sm mt-1">
+                      <span className="font-medium text-gray-900">{requesterName}</span>
+                      <span className="text-xs text-gray-400 ml-1.5">{order.reseller?.company_name || '—'}</span>
+                    </p>
+                  ) : order.reseller?.company_name ? (
+                    <p className="text-sm text-gray-500 mt-1">{order.reseller.company_name}</p>
+                  ) : null;
+                })()}
               </div>
               <div className="flex items-center gap-3">
                 {orderStatusBadge(order.status)}

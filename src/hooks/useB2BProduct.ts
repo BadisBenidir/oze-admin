@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { B2BCatalogItem } from './useB2BCatalog';
 
@@ -55,6 +55,30 @@ export const useB2BProduct = (productId: string | undefined, isAuthenticated: bo
   useEffect(() => {
     fetchProduct();
   }, [fetchProduct]);
+
+  // held_by_other dépend de la réservation exclusive d'un AUTRE revendeur
+  // (cart_items, RLS stricte) : product_reservation_signals porte le signal
+  // en Realtime pour CE produit précis (voir Catalog.tsx pour la même
+  // logique côté liste, et 0084_realtime_held_by_other.sql côté SQL).
+  const fetchProductRef = useRef(fetchProduct);
+  fetchProductRef.current = fetchProduct;
+
+  useEffect(() => {
+    if (!productId || !isAuthenticated) return;
+
+    const channel = supabase
+      .channel(`product-reservation-signal-${productId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'product_reservation_signals', filter: `product_id=eq.${productId}` },
+        () => fetchProductRef.current()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [productId, isAuthenticated]);
 
   return { product, loading, error, refresh: fetchProduct };
 };
