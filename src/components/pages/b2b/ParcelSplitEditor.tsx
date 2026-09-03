@@ -17,13 +17,15 @@ interface ParcelSplitEditorProps {
   requesterPhone: string | null;
   deliveryType?: string | null;
   parcelPointNetwork?: string | null;
+  /** Pays RÉEL du point relais (code ISO2), voir calcul dans ShipmentDetailModal.tsx. */
+  parcelPointCountry?: string | null;
   onGenerated: () => void;
 }
 
 const itemRef = (item: AdminShipmentItem) =>
   item.product?.b2b_reference || item.product?.reference || item.product?.product_code || '—';
 
-export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, deliveryType, parcelPointNetwork, onGenerated }) => {
+export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, deliveryType, parcelPointNetwork, parcelPointCountry, onGenerated }) => {
   const { generate } = useGenerateShipmentLabels();
   const { download: downloadLabel, downloadingUrl } = useDownloadShipmentLabel();
   const [parcels, setParcels] = useState<ParcelDraft[]>([{ items: items.map((i) => i.id) }]);
@@ -35,7 +37,15 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
   const [phoneOverride, setPhoneOverride] = useState('');
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const isPointRelais = deliveryType === 'point_relais';
-  const [carrierOverride, setCarrierOverride] = useState<CarrierOverride | 'auto'>('auto');
+  // Un point relais hors France (Colissimo n'y a aucune couverture sur ce
+  // compte, voir generate-b2b-shipment-labels/index.ts::resolveCarrier) est
+  // présélectionné sur Mondial Relay dès l'affichage, plutôt que de laisser
+  // "Automatique" masquer ce choix à l'admin — cas réel qui a fait échouer
+  // silencieusement la détection auto : un point relais belge dont le pays
+  // avait été enregistré comme "FR" par erreur au moment de la demande.
+  const [carrierOverride, setCarrierOverride] = useState<CarrierOverride | 'auto'>(
+    isPointRelais && parcelPointCountry && parcelPointCountry !== 'FR' ? 'mondial_relay' : 'auto'
+  );
 
   const handleDownloadLabel = async (labelUrl: string) => {
     setDownloadError(null);
@@ -223,8 +233,11 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
               <label className="block text-xs font-medium text-gray-700 mb-1.5">
                 Transporteur
-                {parcelPointNetwork && (
-                  <span className="font-normal text-gray-400"> — point relais détecté : {parcelPointNetwork}</span>
+                {(parcelPointNetwork || parcelPointCountry) && (
+                  <span className="font-normal text-gray-400">
+                    {' — point relais détecté : '}
+                    {[parcelPointNetwork, parcelPointCountry].filter(Boolean).join(' · ')}
+                  </span>
                 )}
               </label>
               <div className="flex gap-1.5">

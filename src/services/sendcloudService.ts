@@ -107,10 +107,25 @@ export async function openServicePointPicker(
   });
 }
 
+/**
+ * Repli quand Sendcloud ne renvoie pas de champ pays exploitable : un code
+ * postal à 4 chiffres n'est JAMAIS un vrai code postal français (toujours 5
+ * chiffres) et correspond en pratique à la Belgique pour nos revendeurs. Sans
+ * ce repli, `country` défaultait silencieusement sur "FR" et restait figé
+ * ainsi dans `shipments.parcel_point` pour toute la vie de la demande — bug
+ * réel qui a fait échouer la génération d'étiquette Sendcloud pour un point
+ * relais belge (Jette, 1090) enregistré comme France.
+ */
+function guessCountryFromPostalCode(postalCode: string): string | null {
+  if (/^\d{4}$/.test(postalCode.trim())) return 'BE';
+  return null;
+}
+
 /** Normalise l'objet point relais Sendcloud vers notre type interne. */
 function mapServicePoint(sp: any): ChronopostPickupPoint {
   const lat = parseFloat(sp.latitude);
   const lng = parseFloat(sp.longitude);
+  const zipCode = sp.postal_code ?? '';
   return {
     code: String(sp.id ?? sp.code ?? ''),
     name: sp.name ?? '',
@@ -118,8 +133,8 @@ function mapServicePoint(sp: any): ChronopostPickupPoint {
     network: sp.carrier_name ?? sp.carrier ?? 'Colissimo',
     address: [sp.street, sp.house_number].filter(Boolean).join(' ').trim(),
     city: sp.city ?? '',
-    zipCode: sp.postal_code ?? '',
-    country: (sp.country ?? 'FR').toUpperCase(),
+    zipCode,
+    country: (sp.country || guessCountryFromPostalCode(zipCode) || 'FR').toUpperCase(),
     lat: Number.isFinite(lat) ? lat : 0,
     lng: Number.isFinite(lng) ? lng : 0,
     distance: typeof sp.distance === 'number' ? sp.distance : undefined,

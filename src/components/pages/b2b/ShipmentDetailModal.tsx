@@ -16,6 +16,21 @@ interface ShipmentDetailModalProps {
 const itemRef = (item: AdminShipmentItem) =>
   item.product?.b2b_reference || item.product?.reference || item.product?.product_code || '—';
 
+// Même heuristique que generate-b2b-shipment-labels/index.ts::toCountryCode :
+// un code postal à 4 chiffres n'existe JAMAIS en France (toujours 5
+// chiffres) — ce signal prime sur un pays enregistré, y compris "FR", qui
+// peut être un défaut silencieux erroné posé au moment de la demande (voir
+// sendcloudService.ts::mapServicePoint). Sert uniquement à présélectionner
+// le bon transporteur dans ParcelSplitEditor ; le calcul faisant foi pour
+// la génération reste côté edge function.
+const guessRelayCountry = (pp: Record<string, unknown> | null): string | null => {
+  if (!pp) return null;
+  const zip = String(pp.zipCode || '').trim();
+  if (/^\d{4}$/.test(zip)) return 'BE';
+  const raw = String(pp.country || '').trim();
+  return raw ? raw.toUpperCase() : (/^\d{5}$/.test(zip) ? 'FR' : null);
+};
+
 const itemFulfillmentBadge = (status: AdminShipmentItem['fulfillment_status']) => {
   switch (status) {
     case 'label_created':
@@ -269,6 +284,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                   requesterPhone={shipment.requester.phone}
                   deliveryType={shipment.delivery_type}
                   parcelPointNetwork={shipment.parcel_point ? String((shipment.parcel_point as Record<string, unknown>).network || '') || null : null}
+                  parcelPointCountry={guessRelayCountry(shipment.parcel_point)}
                   onGenerated={onGenerated}
                 />
               </div>

@@ -67,10 +67,23 @@ const guessCountryFromPostalCode = (postalCode: string | null | undefined): stri
 
 const toCountryCode = (raw: string | null | undefined, postalCodeHint?: string | null): string => {
   const s = String(raw || '').trim();
+  const postalGuess = guessCountryFromPostalCode(postalCodeHint);
+  // Un code postal à 4 chiffres n'est JAMAIS un vrai code postal français
+  // (toujours 5 chiffres) : ce signal prime donc sur un pays stocké valant
+  // "FR", car ce dernier peut être un défaut silencieux erroné posé côté
+  // widget de sélection du point relais (voir sendcloudService.ts
+  // mapServicePoint, qui a longtemps défaulté `country` sur "FR" quand
+  // Sendcloud ne renvoyait pas ce champ) plutôt qu'une vraie valeur — cas
+  // réel : le point relais "PRESS SHOP REINE ASTRID" à 1090 Jette (Belgique)
+  // était enregistré avec country="FR", empêchant toute détection auto de
+  // basculer sur Mondial Relay malgré la correction précédente.
+  if (postalGuess === 'BE' && (!s || s.toUpperCase() === 'FR')) {
+    return 'BE';
+  }
   if (s) {
     return (s.length === 2 ? s : (COUNTRY_CODES[s.toLowerCase()] || 'FR')).toUpperCase();
   }
-  return guessCountryFromPostalCode(postalCodeHint) || 'FR';
+  return postalGuess || 'FR';
 };
 
 // Sendcloud rejette silencieusement (ou avec une erreur de validation peu
@@ -266,6 +279,10 @@ Deno.serve(async (req: Request) => {
       ? toCountryCode(String(pp.country || ''), String(pp.zipCode || ''))
       : 'FR';
     const carrier = resolveCarrier(shipment.delivery_type, network, relayCountry, carrierOverride);
+    console.log('[Sendcloud] Résolution transporteur', {
+      shipment_id, delivery_type: shipment.delivery_type, network, relayCountry, carrierOverride, hasRealCode, carrier,
+      parcel_point_country_raw: pp.country, parcel_point_zip: pp.zipCode,
+    });
 
     const { data: profile } = await adminClient
       .from('profiles')
