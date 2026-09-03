@@ -49,10 +49,38 @@ const COUNTRY_CODES: Record<string, string> = {
   france: 'FR', belgique: 'BE', belgium: 'BE', suisse: 'CH', switzerland: 'CH', luxembourg: 'LU',
 };
 
-const toCountryCode = (raw: string | null | undefined): string => {
-  const s = String(raw || 'FR').trim();
-  return (s.length === 2 ? s : (COUNTRY_CODES[s.toLowerCase()] || 'FR')).toUpperCase();
+// Repli quand aucun pays explicite n'est fourni par le point relais (le
+// widget de sélection ne renseigne pas toujours ce champ) : un code postal à
+// 4 chiffres n'est JAMAIS un vrai code postal français (toujours 5 chiffres),
+// et correspond en pratique presque toujours à la Belgique pour nos
+// revendeurs. Cas réel corrigé ici : un point relais belge (ex. "1090
+// JETTE") envoyé à Sendcloud avec country_code="FR" par défaut silencieux —
+// Sendcloud ne trouve alors aucune règle d'expédition pour FR + un code
+// postal qui n'existe pas en France ("No shipping option could be found for
+// the given country or postal code combination").
+const guessCountryFromPostalCode = (postalCode: string | null | undefined): string | null => {
+  const digits = String(postalCode || '').trim();
+  if (/^\d{4}$/.test(digits)) return 'BE';
+  if (/^\d{5}$/.test(digits)) return 'FR';
+  return null;
 };
+
+const toCountryCode = (raw: string | null | undefined, postalCodeHint?: string | null): string => {
+  const s = String(raw || '').trim();
+  if (s) {
+    return (s.length === 2 ? s : (COUNTRY_CODES[s.toLowerCase()] || 'FR')).toUpperCase();
+  }
+  return guessCountryFromPostalCode(postalCodeHint) || 'FR';
+};
+
+// Sendcloud rejette silencieusement (ou avec une erreur de validation peu
+// lisible) tout champ dépassant sa longueur maximale — ex. "Ensure this
+// value has at most 30 characters" sur city quand le widget de sélection du
+// point relais concatène parfois un nom de boutique à la ville. Tronquer
+// systématiquement plutôt que de faire confiance à la donnée source, qu'on
+// ne contrôle pas (widget tiers / saisie manuelle du revendeur).
+const truncate = (value: unknown, maxLength: number): string =>
+  String(value || '').trim().slice(0, maxLength);
 
 // Sendcloud (surtout Mondial Relay) valide plus strictement quand la voie et
 // le numéro de rue sont dissociés — "12 Rue de la Paix" -> house_number "12",
@@ -93,6 +121,16 @@ const checkoutMethodName = (deliveryType: string, network: string, hasCode: bool
 
 // Même logique que shipWithFor de finalizeOrder.ts : seul un VRAI point
 // Sendcloud (code non-vide) peut être routé via to_service_point/ship_with.
+//
+// ⚠️ contract_id (7443 Mondial Relay, 1337 Colissimo) est un identifiant de
+// CONTRAT Sendcloud propre au compte OZË — je n'ai aucun moyen de vérifier
+// depuis ce code si ces contrats couvrent l'international (Belgique...) ou
+// sont limités à la France. Si "No shipping option could be found" persiste
+// sur un VRAI point relais Sendcloud (hasCode=true, donc ce chemin, pas le
+// fallback to_address ci-dessous) même après la correction du country_code,
+// c'est le signe que le contrat Mondial Relay du compte doit être étendu à
+// l'international dans le dashboard Sendcloud (Settings → Shipping methods) —
+// aucun changement de code ne peut compenser un contrat non éligible.
 const shipWithFor = (network: string, hasCode: boolean) => {
   if (!hasCode) return null;
   if (network.toLowerCase().includes('mondial')) {
@@ -228,26 +266,27 @@ Deno.serve(async (req: Request) => {
     let toAddress: Record<string, unknown>;
     if (shipment.delivery_type === 'point_relais' && !hasRealCode) {
       const { line1, houseNumber } = splitAddress(String(pp.address || pp.name || ''));
+      const zipCode = String(pp.zipCode || '');
       toAddress = {
-        name: contactName,
-        address_line_1: String(pp.name || line1 || ''),
-        ...(pp.address && pp.name ? { address_line_2: String(pp.address) } : {}),
+        name: truncate(contactName, 40),
+        address_line_1: truncate(pp.name || line1 || '', 40),
+        ...(pp.address && pp.name ? { address_line_2: truncate(pp.address, 40) } : {}),
         ...(houseNumber ? { house_number: houseNumber } : {}),
-        city: String(pp.city || ''),
-        postal_code: String(pp.zipCode || ''),
-        country_code: toCountryCode(String(pp.country || 'FR')),
+        city: truncate(pp.city, 30),
+        postal_code: truncate(zipCode, 10),
+        country_code: toCountryCode(String(pp.country || ''), zipCode),
         phone_number: phone,
         email,
       };
     } else {
       const { line1, houseNumber } = splitAddress(profile?.address);
       toAddress = {
-        name: contactName,
-        address_line_1: line1,
+        name: truncate(contactName, 40),
+        address_line_1: truncate(line1, 40),
         ...(houseNumber ? { house_number: houseNumber } : {}),
-        city: profile?.city || '',
-        postal_code: profile?.postal_code || '',
-        country_code: toCountryCode(profile?.country),
+        city: truncate(profile?.city, 30),
+        postal_code: truncate(profile?.postal_code, 10),
+        country_code: toCountryCode(profile?.country, profile?.postal_code),
         phone_number: phone,
         email,
       };
