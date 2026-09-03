@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Briefcase, AlertCircle } from 'lucide-react';
+import { Plus, Briefcase, AlertCircle, Eye } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useSourcingMissions, SourcingMission } from '../../../hooks/useSourcingMissions';
@@ -28,7 +28,7 @@ const missionStatusBadge = (status: SourcingMission['status']) => {
  * revendeur, servant d'enveloppe budgétaire pour des pièces sourcées à la
  * demande (voir SourcingMissionDetailModal pour le détail des pièces). */
 export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resellerId, resellerName, isAdmin }) => {
-  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus } = useSourcingMissions(resellerId, isAdmin);
+  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished } = useSourcingMissions(resellerId, isAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<SourcingMission | null>(null);
 
@@ -91,7 +91,12 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
                         {mission.paid_at && <> · Payée le {new Date(mission.paid_at).toLocaleDateString('fr-FR')}</>}
                       </p>
                     </div>
-                    {missionStatusBadge(mission.status)}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {mission.is_published_to_reseller && (
+                        <Badge variant="success"><Eye className="h-3 w-3 mr-1" />Revendeur</Badge>
+                      )}
+                      {missionStatusBadge(mission.status)}
+                    </div>
                   </div>
                   <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-1.5">
                     <div
@@ -129,6 +134,10 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
         onUpdateMission={async (input) => {
           if (!viewingMission) return { success: false, error: 'Mission inconnue' };
           return updateMission(viewingMission.id, input);
+        }}
+        onPublishChange={async (published) => {
+          if (!viewingMission) return { success: false, error: 'Mission inconnue' };
+          return setMissionPublished(viewingMission.id, published);
         }}
         onItemsChanged={refresh}
       />

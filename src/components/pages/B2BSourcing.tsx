@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Briefcase, AlertCircle, Banknote, PieChart, Wallet, TrendingUp } from 'lucide-react';
+import { Plus, Briefcase, AlertCircle, Banknote, PieChart, Wallet, TrendingUp, Eye } from 'lucide-react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
@@ -30,7 +30,7 @@ const requesterLabel = (mission: SourcingMission): string => {
  * 0091_b2b_sourcing_mission_budget_split.sql pour le modèle avance/enveloppe. */
 export const B2BSourcing: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus } = useSourcingMissions(undefined, isAdmin);
+  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished } = useSourcingMissions(undefined, isAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<SourcingMission | null>(null);
   const [resellerFilter, setResellerFilter] = useState('all');
@@ -230,7 +230,14 @@ export const B2BSourcing: React.FC = () => {
                           <td className={`py-3 px-4 md:px-6 text-right text-sm font-semibold tabular-nums ${mission.gross_margin < 0 ? 'text-red-600' : 'text-green-600'}`}>
                             {mission.gross_margin.toFixed(2)} €
                           </td>
-                          <td className="py-3 px-4 md:px-6">{missionStatusBadge(mission.status)}</td>
+                          <td className="py-3 px-4 md:px-6">
+                            <div className="flex items-center gap-1.5">
+                              {mission.is_published_to_reseller && (
+                                <Badge variant="success"><Eye className="h-3 w-3" /></Badge>
+                              )}
+                              {missionStatusBadge(mission.status)}
+                            </div>
+                          </td>
                           <td className="py-3 px-4 md:px-6 hidden lg:table-cell text-sm text-gray-600">
                             {mission.paid_at ? new Date(mission.paid_at).toLocaleDateString('fr-FR') : '—'}
                           </td>
@@ -257,6 +264,10 @@ export const B2BSourcing: React.FC = () => {
         onUpdateMission={async (input) => {
           if (!viewingMission) return { success: false, error: 'Mission inconnue' };
           return updateMission(viewingMission.id, input);
+        }}
+        onPublishChange={async (published) => {
+          if (!viewingMission) return { success: false, error: 'Mission inconnue' };
+          return setMissionPublished(viewingMission.id, published);
         }}
         onItemsChanged={refresh}
       />

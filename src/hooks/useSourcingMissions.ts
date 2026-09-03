@@ -21,6 +21,9 @@ export interface SourcingMission {
   paid_at: string | null;
   notes: string | null;
   created_at: string;
+  /** Visible dans le portail revendeur (pro.ozeparis.com) dès true — voir 0094. */
+  is_published_to_reseller: boolean;
+  published_at: string | null;
   /** Somme des cost_price des pièces validées/expédiées — voir b2b_sourcing_mission_totals (0091). */
   consumed_cost_amount: number;
   remaining_cost_budget: number;
@@ -52,6 +55,8 @@ interface UseSourcingMissionsResult {
   createMission: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
   updateMission: (id: string, input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
   setMissionStatus: (id: string, status: 'active' | 'completed' | 'cancelled') => Promise<{ success: boolean; error?: string }>;
+  /** Bascule la visibilité côté portail revendeur (reseller_sourcing_missions/items, voir 0094). */
+  setMissionPublished: (id: string, published: boolean) => Promise<{ success: boolean; error?: string }>;
 }
 
 /** Missions de sourcing sur mesure (voir 0089/0090/0091_b2b_sourcing_missions*.sql) —
@@ -164,6 +169,16 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     return { success: true };
   };
 
+  const setMissionPublished = async (id: string, published: boolean): Promise<{ success: boolean; error?: string }> => {
+    const { error: updateError } = await supabase
+      .from('b2b_sourcing_missions')
+      .update({ is_published_to_reseller: published, ...(published ? { published_at: new Date().toISOString() } : {}) })
+      .eq('id', id);
+    if (updateError) return { success: false, error: updateError.message };
+    await fetchMissions();
+    return { success: true };
+  };
+
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
@@ -172,5 +187,5 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     fetchMissions();
   }, [isAdmin, fetchMissions]);
 
-  return { missions, loading, error, refresh: fetchMissions, createMission, updateMission, setMissionStatus };
+  return { missions, loading, error, refresh: fetchMissions, createMission, updateMission, setMissionStatus, setMissionPublished };
 };

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil, Trash2 } from 'lucide-react';
+import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil, Trash2, Eye, EyeOff } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { SourcingMission, SourcingMissionInput } from '../../../hooks/useSourcingMissions';
 import { useSourcingItems, SourcingItem } from '../../../hooks/useSourcingItems';
@@ -11,6 +11,7 @@ interface SourcingMissionDetailModalProps {
   onClose: () => void;
   onStatusChange: (status: 'active' | 'completed' | 'cancelled') => Promise<{ success: boolean; error?: string }>;
   onUpdateMission: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
+  onPublishChange: (published: boolean) => Promise<{ success: boolean; error?: string }>;
   /** Rafraîchit la liste des missions (montants consommés) après ajout d'une pièce. */
   onItemsChanged: () => void;
 }
@@ -31,12 +32,14 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
 /** Détail d'une mission de sourcing : cartouche avance/budget/marge, pièces
  * affectées à l'enveloppe d'achat, ajout d'une pièce, édition et clôture —
  * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
-export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onItemsChanged }) => {
+export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onItemsChanged }) => {
   const { items, loading, error, addItem, addItems, setItemStatus, removeItem } = useSourcingItems(mission?.id || null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [statusError, setStatusError] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [publishError, setPublishError] = useState('');
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
     setStatusError('');
@@ -68,6 +71,18 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     const result = await addItems(inputs);
     if (result.success) onItemsChanged();
     return result;
+  };
+
+  const handleTogglePublish = async () => {
+    const nextPublished = !mission.is_published_to_reseller;
+    if (nextPublished && !window.confirm('Rendre cette mission visible au revendeur dans son portail "Sourcing sur mesure" ? Seuls le titre, l\'avance et les pièces (hors coûts) lui seront montrés.')) {
+      return;
+    }
+    setPublishing(true);
+    setPublishError('');
+    const result = await onPublishChange(nextPublished);
+    setPublishing(false);
+    if (!result.success) setPublishError(result.error || 'Erreur lors de la mise à jour de la visibilité');
   };
 
   const handleCloseMission = async () => {
@@ -103,6 +118,40 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
           </div>
 
           <div className="p-5 space-y-4 overflow-y-auto flex-1">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              {mission.is_published_to_reseller ? (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="success">
+                    <Eye className="h-3 w-3 mr-1" /> Visible par le revendeur
+                  </Badge>
+                  <button
+                    onClick={handleTogglePublish}
+                    disabled={publishing}
+                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 underline disabled:opacity-50"
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                    {publishing ? 'Masquage...' : 'Masquer'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleTogglePublish}
+                  disabled={publishing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-xs font-medium"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  {publishing ? 'Publication...' : 'Afficher au revendeur'}
+                </button>
+              )}
+            </div>
+
+            {publishError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                <p className="text-sm text-red-700">{publishError}</p>
+              </div>
+            )}
+
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center mb-3">
                 <div>

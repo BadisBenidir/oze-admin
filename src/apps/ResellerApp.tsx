@@ -12,6 +12,7 @@ import { ProductPage } from '../components/pages/reseller/ProductPage';
 import { CartPage } from '../components/pages/reseller/CartPage';
 import { MyOrders } from '../components/pages/reseller/MyOrders';
 import { MyShipments } from '../components/pages/reseller/MyShipments';
+import { SourcingSurMesure } from '../components/pages/reseller/SourcingSurMesure';
 import { ResellerProfile } from '../components/pages/reseller/ResellerProfile';
 import { Team } from '../components/pages/reseller/Team';
 import { WalletPage } from '../components/pages/reseller/WalletPage';
@@ -36,6 +37,7 @@ const TAB_TITLES: Record<string, string> = {
   catalog: 'Catalogue B2B | OZË Paris',
   'my-orders': 'Mes Commandes | OZË Paris',
   shipments: 'Suivi livraisons | OZË Paris',
+  sourcing: 'Sourcing sur mesure | OZË Paris',
   wallet: 'Mon Portefeuille | OZË Paris',
   profile: 'Mon Profil | OZË Paris',
 };
@@ -183,6 +185,8 @@ function ResellerApp() {
         return <MyOrders onOpenProduct={openProduct} onWalletChanged={wallet.refresh} />;
       case 'shipments':
         return <MyShipments />;
+      case 'sourcing':
+        return <SourcingSurMesure />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':
