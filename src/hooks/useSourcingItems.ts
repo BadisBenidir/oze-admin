@@ -7,7 +7,9 @@ export interface SourcingItem {
   product_id: string | null;
   title: string;
   brand: string | null;
-  billed_price: number;
+  /** Prix de vente prévu — non saisi depuis le formulaire actuel (voir 0092), jamais utilisé pour la consommation du budget. */
+  billed_price: number | null;
+  /** Prix d'achat réel — seul montant imputé sur allocated_cost_budget (voir 0091). */
   cost_price: number | null;
   status: 'sourced' | 'validated' | 'shipped' | 'cancelled';
   photos: string[];
@@ -19,8 +21,7 @@ export interface SourcingItemInput {
   product_id?: string;
   title: string;
   brand?: string;
-  billed_price: number;
-  cost_price?: number;
+  cost_price: number;
   photos?: string[];
 }
 
@@ -71,8 +72,7 @@ export const useSourcingItems = (missionId: string | null): UseSourcingItemsResu
       product_id: input.product_id || null,
       title: input.title.trim(),
       brand: input.brand?.trim() || null,
-      billed_price: input.billed_price,
-      cost_price: input.cost_price ?? null,
+      cost_price: input.cost_price,
       photos: input.photos || [],
     });
 

@@ -33,7 +33,6 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
 
   const [title, setTitle] = useState('');
   const [brand, setBrand] = useState('');
-  const [billedPrice, setBilledPrice] = useState('');
   const [costPrice, setCostPrice] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -47,7 +46,6 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
     setSelectedProduct(null);
     setTitle('');
     setBrand('');
-    setBilledPrice('');
     setCostPrice('');
     setPhotos([]);
     setError('');
@@ -66,9 +64,13 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
     }
     setSearching(true);
     try {
+      // Seuls les articles en brouillon (jamais mis en vente / déjà vendus)
+      // peuvent être liés à une mission de sourcing — même filtre que
+      // CreateDropModal.tsx pour les drops.
       const { data, error: searchError } = await supabase
         .from('products')
         .select('id, name, product_code, sale_price, purchase_price, images, main_image_index, brand:brands(name)')
+        .eq('status', 'draft')
         .or(`name.ilike.%${term.trim()}%,product_code.ilike.%${term.trim()}%`)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -84,7 +86,6 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
 
   const selectProduct = (product: StockProduct) => {
     setSelectedProduct(product);
-    setBilledPrice(String(product.sale_price ?? ''));
     setCostPrice(product.purchase_price != null ? String(product.purchase_price) : '');
   };
 
@@ -122,13 +123,8 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
       setError('Le titre de la pièce est requis');
       return;
     }
-    const parsedBilled = Number(billedPrice);
-    if (!Number.isFinite(parsedBilled) || parsedBilled <= 0) {
-      setError('Le prix de vente prévu doit être supérieur à 0');
-      return;
-    }
-    // Requis (pas juste optionnel) : c'est CE montant qui consomme
-    // l'enveloppe d'achat de la mission dès que la pièce est validée — voir
+    // Requis : c'est CE montant qui consomme l'enveloppe d'achat de la
+    // mission dès que la pièce est validée — voir
     // 0091_b2b_sourcing_mission_budget_split.sql.
     const parsedCost = Number(costPrice);
     if (!Number.isFinite(parsedCost) || parsedCost < 0) {
@@ -141,7 +137,6 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
       product_id: mode === 'stock' ? selectedProduct?.id : undefined,
       title: effectiveTitle,
       brand: mode === 'stock' ? selectedProduct?.brand?.name : brand.trim() || undefined,
-      billed_price: parsedBilled,
       cost_price: parsedCost,
       photos: mode === 'stock' ? (selectedProduct?.images || []) : photos,
     });
@@ -305,43 +300,25 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="item-cost-price" className="block text-sm font-medium text-gray-700 mb-1">Prix d'achat (imputé sur l'enveloppe)</label>
-                  <div className="relative">
-                    <input
-                      id="item-cost-price"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={costPrice}
-                      onChange={(e) => setCostPrice(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent pr-8 text-sm"
-                      required
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
-                  </div>
+              <div>
+                <label htmlFor="item-cost-price" className="block text-sm font-medium text-gray-700 mb-1">Coût d'achat réel</label>
+                <div className="relative">
+                  <input
+                    id="item-cost-price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={costPrice}
+                    onChange={(e) => setCostPrice(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent pr-8 text-sm"
+                    required
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
                 </div>
-                <div>
-                  <label htmlFor="item-billed-price" className="block text-sm font-medium text-gray-700 mb-1">Prix de vente prévu</label>
-                  <div className="relative">
-                    <input
-                      id="item-billed-price"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={billedPrice}
-                      onChange={(e) => setBilledPrice(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent pr-8 text-sm"
-                      required
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">€</span>
-                  </div>
-                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Ce montant s'impute directement sur l'enveloppe d'achat de la mission une fois la pièce validée.
+                </p>
               </div>
-              <p className="text-xs text-gray-400 -mt-2">
-                Le prix d'achat consomme l'enveloppe de la mission une fois la pièce validée — le prix de vente prévu ne sert qu'au suivi de marge par pièce.
-              </p>
 
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">

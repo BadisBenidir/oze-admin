@@ -154,8 +154,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Pièce</th>
-                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Prix d'achat</th>
-                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs hidden sm:table-cell">Prix de vente</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Coût d'achat</th>
                       <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Statut</th>
                     </tr>
                   </thead>
@@ -163,14 +162,14 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                     {loading ? (
                       [...Array(2)].map((_, i) => (
                         <tr key={`skeleton-${i}`} className="border-b border-gray-50">
-                          <td className="py-3 px-3" colSpan={4}>
+                          <td className="py-3 px-3" colSpan={3}>
                             <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
                           </td>
                         </tr>
                       ))
                     ) : items.length === 0 ? (
                       <tr>
-                        <td className="py-6 px-3 text-center text-sm text-gray-500" colSpan={4}>
+                        <td className="py-6 px-3 text-center text-sm text-gray-500" colSpan={3}>
                           Aucune pièce sourcée pour l'instant sur cette mission.
                         </td>
                       </tr>
@@ -196,9 +195,6 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                             </td>
                             <td className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums">
                               {item.cost_price != null ? `${item.cost_price.toFixed(2)} €` : '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-right text-sm text-gray-600 tabular-nums hidden sm:table-cell">
-                              {item.billed_price.toFixed(2)} €
                             </td>
                             <td className="py-2.5 px-3">
                               <select
