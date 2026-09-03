@@ -164,16 +164,30 @@ const checkoutMethodName = (deliveryType: string, carrier: 'mondial_relay' | 'co
 // ⚠️ contract_id (7443 Mondial Relay, 1337 Colissimo) est un identifiant de
 // CONTRAT Sendcloud propre au compte OZË. Le contrat Colissimo est confirmé
 // France uniquement (voir commentaire de resolveCarrier ci-dessus) — jamais
-// utilisé hors France en point relais, quel que soit `network`. Si "No
-// shipping option could be found" persiste malgré tout sur un pays donné,
-// c'est que le contrat Mondial Relay lui-même ne couvre pas encore ce pays
-// sur ce compte — à étendre dans le dashboard Sendcloud (Settings → Shipping
-// methods), aucun changement de code ne peut compenser un contrat non
-// éligible.
-const shipWithFor = (carrier: 'mondial_relay' | 'colissimo', hasCode: boolean) => {
+// utilisé hors France en point relais, quel que soit `network`.
+//
+// ⚠️ Le shipping_option_code "mondial_relay:service_point,dualapi/size=l,c2c"
+// (+ contract_id 7443) est lui-même confirmé FR uniquement : reproduit en
+// conditions réelles sur le cas Jette (Belgique), Sendcloud renvoie 400 "No
+// shipping option could be found for the given country or postal code
+// combination" EXACTEMENT sur ce couple option/contrat, même une fois le
+// carrier et to_address.country_code correctement forcés sur 'BE'. Pour
+// toute destination hors France, on n'envoie donc PAS ce ship_with : avec
+// to_service_point renseigné, to_address.country_code correct et
+// apply_shipping_defaults=true (voir payload plus bas), Sendcloud résout
+// lui-même la bonne méthode Mondial Relay internationale disponible sur ce
+// compte — on ne devine pas un second code qu'on ne peut pas vérifier sans
+// accès direct au compte. Si "No shipping option could be found" persiste
+// malgré tout, c'est que ce compte n'a tout simplement aucune méthode
+// Mondial Relay activée pour ce pays — à activer dans le dashboard Sendcloud
+// (Settings → Shipping methods), aucun changement de code ne peut compenser
+// une méthode non éligible sur le compte.
+const shipWithFor = (carrier: 'mondial_relay' | 'colissimo', hasCode: boolean, isFrenchDestination: boolean) => {
   if (!hasCode) return null;
   if (carrier === 'mondial_relay') {
-    return { type: 'shipping_option_code', properties: { shipping_option_code: 'mondial_relay:service_point,dualapi/size=l,c2c', contract_id: 7443 } };
+    return isFrenchDestination
+      ? { type: 'shipping_option_code', properties: { shipping_option_code: 'mondial_relay:service_point,dualapi/size=l,c2c', contract_id: 7443 } }
+      : null;
   }
   return { type: 'shipping_option_code', properties: { shipping_option_code: 'colissimo:post-office', contract_id: 1337 } };
 };
@@ -357,7 +371,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const deliveryIndicator = checkoutMethodName(shipment.delivery_type, carrier);
-    const shipWith = shipment.delivery_type === 'point_relais' ? shipWithFor(carrier, hasRealCode) : null;
+    const shipWith = shipment.delivery_type === 'point_relais' ? shipWithFor(carrier, hasRealCode, relayCountry === 'FR') : null;
 
     // Boucle SÉQUENTIELLE (pas Promise.all) : chaque colis est commité
     // indépendamment dès son propre succès, sans attendre les autres — un
