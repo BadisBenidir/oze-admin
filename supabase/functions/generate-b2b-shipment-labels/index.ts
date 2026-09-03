@@ -114,26 +114,47 @@ const describeSendcloudError = (data: Record<string, unknown>, status: number): 
   return `Erreur Sendcloud (${status})`;
 };
 
-const checkoutMethodName = (deliveryType: string, network: string, hasCode: boolean): string => {
-  const carrier = network.toLowerCase().includes('mondial') ? 'Mondial Relay' : 'Colissimo';
-  return `${carrier} - ${deliveryType === 'point_relais' ? 'Point Relais' : 'Domicile'}`;
+type CarrierOverride = 'mondial_relay' | 'colissimo' | null;
+
+// Décide Mondial Relay vs Colissimo. Le texte `network` (renvoyé par le point
+// relais choisi par le revendeur) est le signal par défaut, mais NE SUFFIT
+// PAS seul : cas réel qui cassait la génération — "PRESS SHOP REINE ASTRID"
+// à Jette (Belgique) était étiqueté "Colissimo" côté network, alors que le
+// contrat Colissimo de ce compte Sendcloud ne couvre AUCUN point de retrait
+// hors France (seul Mondial Relay le fait) → Sendcloud répondait "No
+// shipping option could be found for the given country or postal code
+// combination". Le pays RÉEL du point relais (relayCountry, jamais celui de
+// l'adresse du revendeur — voir son calcul plus bas) prime donc sur le texte
+// network dès qu'on est hors France en point relais. `carrierOverride`
+// (sélecteur manuel admin, voir ParcelSplitEditor.tsx) prime sur tout le
+// reste — filet de sécurité si cette détection automatique se trompe encore
+// sur un cas non prévu.
+const resolveCarrier = (deliveryType: string, network: string, relayCountry: string, carrierOverride: CarrierOverride): 'mondial_relay' | 'colissimo' => {
+  if (carrierOverride) return carrierOverride;
+  const forceMondial = deliveryType === 'point_relais' && relayCountry !== 'FR';
+  return network.toLowerCase().includes('mondial') || forceMondial ? 'mondial_relay' : 'colissimo';
+};
+
+const checkoutMethodName = (deliveryType: string, carrier: 'mondial_relay' | 'colissimo'): string => {
+  const label = carrier === 'mondial_relay' ? 'Mondial Relay' : 'Colissimo';
+  return `${label} - ${deliveryType === 'point_relais' ? 'Point Relais' : 'Domicile'}`;
 };
 
 // Même logique que shipWithFor de finalizeOrder.ts : seul un VRAI point
 // Sendcloud (code non-vide) peut être routé via to_service_point/ship_with.
 //
 // ⚠️ contract_id (7443 Mondial Relay, 1337 Colissimo) est un identifiant de
-// CONTRAT Sendcloud propre au compte OZË — je n'ai aucun moyen de vérifier
-// depuis ce code si ces contrats couvrent l'international (Belgique...) ou
-// sont limités à la France. Si "No shipping option could be found" persiste
-// sur un VRAI point relais Sendcloud (hasCode=true, donc ce chemin, pas le
-// fallback to_address ci-dessous) même après la correction du country_code,
-// c'est le signe que le contrat Mondial Relay du compte doit être étendu à
-// l'international dans le dashboard Sendcloud (Settings → Shipping methods) —
-// aucun changement de code ne peut compenser un contrat non éligible.
-const shipWithFor = (network: string, hasCode: boolean) => {
+// CONTRAT Sendcloud propre au compte OZË. Le contrat Colissimo est confirmé
+// France uniquement (voir commentaire de resolveCarrier ci-dessus) — jamais
+// utilisé hors France en point relais, quel que soit `network`. Si "No
+// shipping option could be found" persiste malgré tout sur un pays donné,
+// c'est que le contrat Mondial Relay lui-même ne couvre pas encore ce pays
+// sur ce compte — à étendre dans le dashboard Sendcloud (Settings → Shipping
+// methods), aucun changement de code ne peut compenser un contrat non
+// éligible.
+const shipWithFor = (carrier: 'mondial_relay' | 'colissimo', hasCode: boolean) => {
   if (!hasCode) return null;
-  if (network.toLowerCase().includes('mondial')) {
+  if (carrier === 'mondial_relay') {
     return { type: 'shipping_option_code', properties: { shipping_option_code: 'mondial_relay:service_point,dualapi/size=l,c2c', contract_id: 7443 } };
   }
   return { type: 'shipping_option_code', properties: { shipping_option_code: 'colissimo:post-office', contract_id: 1337 } };
@@ -181,10 +202,12 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Clés Sendcloud manquantes côté serveur' }, 500);
     }
 
-    const { shipment_id, parcels, phone_override } = await req.json();
+    const { shipment_id, parcels, phone_override, carrier_override } = await req.json();
     if (!shipment_id || !Array.isArray(parcels) || parcels.length === 0) {
       return json({ error: 'shipment_id et parcels (au moins 1 colis) sont requis' }, 400);
     }
+    const carrierOverride: CarrierOverride =
+      carrier_override === 'mondial_relay' || carrier_override === 'colissimo' ? carrier_override : null;
     for (const p of parcels) {
       if (!Array.isArray(p.item_ids) || p.item_ids.length === 0) {
         return json({ error: 'Chaque colis doit contenir au moins un article' }, 400);
@@ -235,6 +258,14 @@ Deno.serve(async (req: Request) => {
     const pp = (shipment.parcel_point || {}) as Record<string, unknown>;
     const network = shipment.delivery_type === 'point_relais' ? String(pp.network || '') : '';
     const hasRealCode = shipment.delivery_type === 'point_relais' && Boolean(pp.code);
+    // Pays RÉEL du point relais — jamais celui de to_address (qui, pour un
+    // point avec code Sendcloud connu, reste l'identité/adresse du revendeur,
+    // voir plus bas) : le choix du transporteur doit se baser sur où le colis
+    // part PHYSIQUEMENT, pas sur l'adresse de facturation du destinataire.
+    const relayCountry = shipment.delivery_type === 'point_relais'
+      ? toCountryCode(String(pp.country || ''), String(pp.zipCode || ''))
+      : 'FR';
+    const carrier = resolveCarrier(shipment.delivery_type, network, relayCountry, carrierOverride);
 
     const { data: profile } = await adminClient
       .from('profiles')
@@ -292,8 +323,8 @@ Deno.serve(async (req: Request) => {
       };
     }
 
-    const deliveryIndicator = checkoutMethodName(shipment.delivery_type, network, hasRealCode);
-    const shipWith = shipment.delivery_type === 'point_relais' ? shipWithFor(network, hasRealCode) : null;
+    const deliveryIndicator = checkoutMethodName(shipment.delivery_type, carrier);
+    const shipWith = shipment.delivery_type === 'point_relais' ? shipWithFor(carrier, hasRealCode) : null;
 
     // Boucle SÉQUENTIELLE (pas Promise.all) : chaque colis est commité
     // indépendamment dès son propre succès, sans attendre les autres — un
@@ -354,7 +385,7 @@ Deno.serve(async (req: Request) => {
           await adminClient.from('shipment_parcels').insert({
             shipment_id, parcel_index: parcelIndex, status: 'failed', weight_kg: weightKg, error_message: errorMessage,
           });
-          results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', error: errorMessage });
+          results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier, error: errorMessage });
           continue;
         }
 
@@ -381,7 +412,7 @@ Deno.serve(async (req: Request) => {
           .select('id')
           .single();
         if (insertError || !newParcel) {
-          results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', error: `Colis créé chez Sendcloud mais échec d'enregistrement : ${insertError?.message}` });
+          results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier, error: `Colis créé chez Sendcloud mais échec d'enregistrement : ${insertError?.message}` });
           continue;
         }
 
@@ -390,13 +421,13 @@ Deno.serve(async (req: Request) => {
           .update({ fulfillment_status: 'label_created', parcel_id: newParcel.id, label_created_at: new Date().toISOString() })
           .in('id', parcel.item_ids);
 
-        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'label_created', tracking_number: trackingNumber, tracking_url: trackingUrl, label_url: labelUrl });
+        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'label_created', carrier, tracking_number: trackingNumber, tracking_url: trackingUrl, label_url: labelUrl });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Erreur réseau Sendcloud inconnue';
         await adminClient.from('shipment_parcels').insert({
           shipment_id, parcel_index: parcelIndex, status: 'failed', weight_kg: weightKg, error_message: errorMessage,
         });
-        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', error: errorMessage });
+        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'failed', carrier, error: errorMessage });
       }
     }
 

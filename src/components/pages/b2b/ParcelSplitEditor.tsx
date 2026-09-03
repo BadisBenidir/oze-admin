@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye, BadgeCheck } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipmentItem } from '../../../hooks/useAdminShipments';
-import { useGenerateShipmentLabels, ParcelResult } from '../../../hooks/useGenerateShipmentLabels';
+import { useGenerateShipmentLabels, ParcelResult, CarrierOverride } from '../../../hooks/useGenerateShipmentLabels';
 import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
 import { ProductDetail } from '../ProductDetail';
 import { isPlausiblePhone } from '../../../utils/phoneValidation';
@@ -15,13 +15,15 @@ interface ParcelSplitEditorProps {
   shipmentId: string;
   items: AdminShipmentItem[];
   requesterPhone: string | null;
+  deliveryType?: string | null;
+  parcelPointNetwork?: string | null;
   onGenerated: () => void;
 }
 
 const itemRef = (item: AdminShipmentItem) =>
   item.product?.b2b_reference || item.product?.reference || item.product?.product_code || '—';
 
-export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, onGenerated }) => {
+export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, deliveryType, parcelPointNetwork, onGenerated }) => {
   const { generate } = useGenerateShipmentLabels();
   const { download: downloadLabel, downloadingUrl } = useDownloadShipmentLabel();
   const [parcels, setParcels] = useState<ParcelDraft[]>([{ items: items.map((i) => i.id) }]);
@@ -32,6 +34,8 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
   const phoneMissing = !isPlausiblePhone(requesterPhone);
   const [phoneOverride, setPhoneOverride] = useState('');
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const isPointRelais = deliveryType === 'point_relais';
+  const [carrierOverride, setCarrierOverride] = useState<CarrierOverride | 'auto'>('auto');
 
   const handleDownloadLabel = async (labelUrl: string) => {
     setDownloadError(null);
@@ -58,7 +62,12 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
     }
     setError(null);
     setGenerating(true);
-    const result = await generate(shipmentId, nonEmpty.map((p) => ({ item_ids: p.items })), phoneMissing ? phoneOverride.trim() : undefined);
+    const result = await generate(
+      shipmentId,
+      nonEmpty.map((p) => ({ item_ids: p.items })),
+      phoneMissing ? phoneOverride.trim() : undefined,
+      carrierOverride === 'auto' ? undefined : carrierOverride
+    );
     setGenerating(false);
     if (!result.success) {
       setError(result.error || 'Une erreur est survenue');
@@ -209,6 +218,40 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
           >
             <Plus className="h-4 w-4" /> Ajouter un {parcels.length + 1}e colis
           </button>
+
+          {isPointRelais && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Transporteur
+                {parcelPointNetwork && (
+                  <span className="font-normal text-gray-400"> — point relais détecté : {parcelPointNetwork}</span>
+                )}
+              </label>
+              <div className="flex gap-1.5">
+                {([
+                  { value: 'auto', label: 'Automatique' },
+                  { value: 'mondial_relay', label: 'Mondial Relay' },
+                  { value: 'colissimo', label: 'Colissimo' },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setCarrierOverride(opt.value)}
+                    className={`px-2.5 py-1.5 text-xs rounded-lg border ${
+                      carrierOverride === opt.value
+                        ? 'bg-gray-900 text-white border-gray-900'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                En automatique, un point relais hors France bascule sur Mondial Relay (Colissimo ne couvre pas les points relais hors France sur ce compte).
+              </p>
+            </div>
+          )}
 
           {phoneMissing && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
