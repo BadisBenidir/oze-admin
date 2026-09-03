@@ -138,14 +138,19 @@ type CarrierOverride = 'mondial_relay' | 'colissimo' | null;
 // shipping option could be found for the given country or postal code
 // combination". Le pays RÉEL du point relais (relayCountry, jamais celui de
 // l'adresse du revendeur — voir son calcul plus bas) prime donc sur le texte
-// network dès qu'on est hors France en point relais. `carrierOverride`
-// (sélecteur manuel admin, voir ParcelSplitEditor.tsx) prime sur tout le
-// reste — filet de sécurité si cette détection automatique se trompe encore
-// sur un cas non prévu.
+// network dès qu'on est hors France en point relais — et cette règle est
+// PRIORITAIRE ABSOLUE, y compris sur `carrierOverride` (sélecteur manuel
+// admin, voir ParcelSplitEditor.tsx) : un point relais hors France ne peut
+// PHYSIQUEMENT pas partir via Colissimo sur ce compte (aucune couverture de
+// point de retrait hors France sur ce contrat), donc honorer un override
+// 'colissimo' dans ce cas précis ne ferait jamais qu'échouer à coup sûr.
+// `carrierOverride` ne sert donc qu'à trancher les cas ambigus (network
+// illisible, France) où les deux transporteurs sont réellement possibles.
 const resolveCarrier = (deliveryType: string, network: string, relayCountry: string, carrierOverride: CarrierOverride): 'mondial_relay' | 'colissimo' => {
-  if (carrierOverride) return carrierOverride;
   const forceMondial = deliveryType === 'point_relais' && relayCountry !== 'FR';
-  return network.toLowerCase().includes('mondial') || forceMondial ? 'mondial_relay' : 'colissimo';
+  if (forceMondial) return 'mondial_relay';
+  if (carrierOverride) return carrierOverride;
+  return network.toLowerCase().includes('mondial') ? 'mondial_relay' : 'colissimo';
 };
 
 const checkoutMethodName = (deliveryType: string, carrier: 'mondial_relay' | 'colissimo'): string => {
@@ -261,13 +266,13 @@ Deno.serve(async (req: Request) => {
     // Adresse de destination, résolue une fois — partagée par tous les colis
     // de cet appel (ils appartiennent au même shipment/demande). Pour un VRAI
     // point relais (code Sendcloud connu), le routage physique passe par
-    // to_service_point/ship_with plus bas : to_address reste l'identité du
-    // revendeur (nom, coordonnées, adresse individuelle déjà collectée à
-    // l'activation du compte — voir useResellerAuth.ts), même pattern déjà
-    // éprouvé côté oze-storefront (_shared/finalizeOrder.ts). Ce n'est QUE
-    // pour un point relais saisi manuellement (pas de code réel, donc aucun
-    // routage possible) qu'on retombe sur l'adresse du point relais lui-même,
-    // seule information disponible pour acheminer le colis.
+    // to_service_point/ship_with plus bas ; to_address garde l'identité du
+    // revendeur (nom, coordonnées) — MAIS pas son pays/code postal, qui
+    // doivent être ceux du point relais (voir plus bas, cas réel Jette/
+    // Belgique où profil et point relais étaient dans deux pays différents,
+    // ce que Sendcloud rejette). Un point relais saisi manuellement (pas de
+    // code réel) utilise l'adresse du point relais en intégralité, seule
+    // information disponible pour acheminer le colis.
     const pp = (shipment.parcel_point || {}) as Record<string, unknown>;
     const network = shipment.delivery_type === 'point_relais' ? String(pp.network || '') : '';
     const hasRealCode = shipment.delivery_type === 'point_relais' && Boolean(pp.code);
@@ -328,13 +333,24 @@ Deno.serve(async (req: Request) => {
       };
     } else {
       const { line1, houseNumber } = splitAddress(profile?.address);
+      // Pays/code postal : pour un point relais (hasRealCode), ce sont ceux
+      // du POINT RELAIS lui-même qui priment, jamais ceux du profil du
+      // revendeur — cas réel qui cassait Jette (Belgique) malgré un carrier
+      // déjà correctement forcé sur Mondial Relay : to_address portait le
+      // pays/code postal du profil du revendeur (France), incohérent avec un
+      // to_service_point situé en Belgique, ce que Sendcloud rejette avec
+      // exactement "No shipping option could be found for the given country
+      // or postal code combination" (le message cite express. country ET
+      // postal code). Pour une livraison à domicile, ces champs restent
+      // évidemment ceux du profil — seule vraie adresse de destination.
+      const isRelayDelivery = shipment.delivery_type === 'point_relais';
       toAddress = {
         name: truncate(contactName, 40),
         address_line_1: truncate(line1, 40),
         ...(houseNumber ? { house_number: houseNumber } : {}),
         city: truncate(profile?.city, 30),
-        postal_code: truncate(profile?.postal_code, 10),
-        country_code: toCountryCode(profile?.country, profile?.postal_code),
+        postal_code: isRelayDelivery ? truncate(pp.zipCode, 10) : truncate(profile?.postal_code, 10),
+        country_code: isRelayDelivery ? relayCountry : toCountryCode(profile?.country, profile?.postal_code),
         phone_number: phone,
         email,
       };
