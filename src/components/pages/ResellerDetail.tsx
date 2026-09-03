@@ -10,6 +10,7 @@ import { ResellerFormModal } from './ResellerFormModal';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { WalletAdjustModal } from './b2b/WalletAdjustModal';
 import { ResellerContactEditModal } from './b2b/ResellerContactEditModal';
+import { SourcingMissionsTab } from './b2b/SourcingMissionsTab';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
@@ -91,7 +92,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   const [contactsLoading, setContactsLoading] = useState(true);
   const [contactsError, setContactsError] = useState<string | null>(null);
   const [contactSearch, setContactSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'team' | 'orders' | 'wallet'>('team');
+  const [activeTab, setActiveTab] = useState<'team' | 'orders' | 'wallet' | 'sourcing'>('team');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
 
@@ -314,6 +315,14 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
           }`}
         >
           Portefeuille B2B
+        </button>
+        <button
+          onClick={() => setActiveTab('sourcing')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'sourcing' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Sourcing sur mesure
         </button>
       </div>
 
@@ -684,6 +693,10 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
             </>
           )}
         </div>
+      )}
+
+      {activeTab === 'sourcing' && (
+        <SourcingMissionsTab resellerId={currentReseller.id} isAdmin={isAdmin} />
       )}
 
       {/* Modal réinitialisation mot de passe */}

@@ -28,6 +28,19 @@ export const useB2BRevenue = (isAuthenticated: boolean = false) => {
         throw new Error(fetchError.message);
       }
 
+      // Avances de sourcing sur mesure (0089_b2b_sourcing_missions.sql) :
+      // comptées dans le CA B2B encaissé dès leur paiement, comme une vente
+      // classique — une mission annulée n'a jamais été réellement encaissée.
+      const { data: sourcingData, error: sourcingError } = await supabase
+        .from('b2b_sourcing_missions')
+        .select('reseller_id, budget_amount, resellers(company_name)')
+        .not('paid_at', 'is', null)
+        .neq('status', 'cancelled');
+
+      if (sourcingError) {
+        throw new Error(sourcingError.message);
+      }
+
       type Row = {
         order_id: string;
         reseller_id: string;
@@ -55,6 +68,21 @@ export const useB2BRevenue = (isAuthenticated: boolean = false) => {
         existing.orderIds.add(row.order_id);
         existing.total_revenue += Number(row.line_total) || 0;
         existing.total_purchase_price += Number(row.purchase_price) || 0;
+        byReseller.set(row.reseller_id, existing);
+      }
+
+      type SourcingRow = { reseller_id: string; budget_amount: number; resellers: { company_name: string } | null };
+      for (const row of (sourcingData || []) as unknown as SourcingRow[]) {
+        const existing = byReseller.get(row.reseller_id) || {
+          reseller_id: row.reseller_id,
+          company_name: row.resellers?.company_name || '—',
+          orders_count: 0,
+          total_revenue: 0,
+          total_purchase_price: 0,
+          total_profit: 0,
+          orderIds: new Set<string>(),
+        };
+        existing.total_revenue += Number(row.budget_amount) || 0;
         byReseller.set(row.reseller_id, existing);
       }
 
