@@ -171,25 +171,55 @@ const checkoutMethodName = (deliveryType: string, carrier: 'mondial_relay' | 'co
 // conditions réelles sur le cas Jette (Belgique), Sendcloud renvoie 400 "No
 // shipping option could be found for the given country or postal code
 // combination" EXACTEMENT sur ce couple option/contrat, même une fois le
-// carrier et to_address.country_code correctement forcés sur 'BE'. Pour
-// toute destination hors France, on n'envoie donc PAS ce ship_with : avec
-// to_service_point renseigné, to_address.country_code correct et
-// apply_shipping_defaults=true (voir payload plus bas), Sendcloud résout
-// lui-même la bonne méthode Mondial Relay internationale disponible sur ce
-// compte — on ne devine pas un second code qu'on ne peut pas vérifier sans
-// accès direct au compte. Si "No shipping option could be found" persiste
-// malgré tout, c'est que ce compte n'a tout simplement aucune méthode
-// Mondial Relay activée pour ce pays — à activer dans le dashboard Sendcloud
-// (Settings → Shipping methods), aucun changement de code ne peut compenser
-// une méthode non éligible sur le compte.
+// carrier et to_address.country_code correctement forcés sur 'BE'.
+//
+// ⚠️ Omettre complètement ship_with (en comptant sur apply_shipping_defaults)
+// a ensuite échoué avec une AUTRE erreur Sendcloud confirmée : "No shipping
+// rules were found that define the 'ship_with' for this shipment" — avec
+// apply_shipping_rules:false (nécessaire pour éviter la règle d'assurance
+// dashboard, voir plus haut), Sendcloud EXIGE un ship_with explicite, il n'y
+// a pas de résolution automatique possible. On tente donc le flux "b2c" du
+// même contrat Mondial Relay (7443) plutôt que "c2c" (réservé au dépôt
+// particulier FR) pour la destination internationale. Si cela échoue aussi,
+// voir le diagnostic `shipping_methods_diagnostic` loggé juste avant l'appel
+// Sendcloud (liste des méthodes Mondial Relay réellement actives pour ce
+// pays/ce point relais sur CE compte) plutôt que deviner un 3e code à
+// l'aveugle — on ne peut pas vérifier depuis ce code lequel de ces slugs
+// existe réellement sans accès direct au compte Sendcloud.
 const shipWithFor = (carrier: 'mondial_relay' | 'colissimo', hasCode: boolean, isFrenchDestination: boolean) => {
   if (!hasCode) return null;
   if (carrier === 'mondial_relay') {
     return isFrenchDestination
       ? { type: 'shipping_option_code', properties: { shipping_option_code: 'mondial_relay:service_point,dualapi/size=l,c2c', contract_id: 7443 } }
-      : null;
+      : { type: 'shipping_option_code', properties: { shipping_option_code: 'mondial_relay:service_point,dualapi/size=l,b2c', contract_id: 7443 } };
   }
   return { type: 'shipping_option_code', properties: { shipping_option_code: 'colissimo:post-office', contract_id: 1337 } };
+};
+
+// Diagnostic best-effort (jamais bloquant) : liste les méthodes d'expédition
+// v2 réellement actives sur ce compte pour ce pays + ce point relais précis.
+// Sert uniquement à alimenter le log en cas de nouvel échec du couple
+// shipping_option_code ci-dessus, pour remplacer une 3e supposition à
+// l'aveugle par une preuve concrète (nom exact, transporteur, id) de ce qui
+// est vraiment disponible sur ce compte — jamais injecté dans le payload v3
+// lui-même : Sendcloud confirme que les ID de méthode v2 ne sont pas
+// directement réutilisables dans l'API v3 (qui attend un shipping_option_code,
+// pas un id v2), donc un mappage automatique aurait été une supposition de
+// plus, pas une garantie.
+const fetchShippingMethodsDiagnostic = async (
+  publicKey: string,
+  secretKey: string,
+  toCountry: string,
+  servicePointId: string,
+): Promise<unknown> => {
+  try {
+    const url = `https://panel.sendcloud.sc/api/v2/shipping_methods?to_country=${encodeURIComponent(toCountry)}&service_point_id=${encodeURIComponent(servicePointId)}`;
+    const res = await fetch(url, { headers: { Authorization: 'Basic ' + btoa(`${publicKey}:${secretKey}`) } });
+    const data = await res.json().catch(() => null);
+    return { status: res.status, shipping_methods: (data as { shipping_methods?: unknown })?.shipping_methods ?? data };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Échec appel diagnostic shipping_methods' };
+  }
 };
 
 interface ItemRow {
@@ -302,6 +332,10 @@ Deno.serve(async (req: Request) => {
       shipment_id, delivery_type: shipment.delivery_type, network, relayCountry, carrierOverride, hasRealCode, carrier,
       parcel_point_country_raw: pp.country, parcel_point_zip: pp.zipCode,
     });
+    if (hasRealCode && relayCountry !== 'FR') {
+      const diagnostic = await fetchShippingMethodsDiagnostic(sendcloudPublicKey, sendcloudSecretKey, relayCountry, String(pp.code));
+      console.log('[Sendcloud] Méthodes disponibles pour ce pays/point relais (diagnostic, non utilisé dans le payload)', diagnostic);
+    }
 
     const { data: profile } = await adminClient
       .from('profiles')
