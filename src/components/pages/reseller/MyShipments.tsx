@@ -92,28 +92,35 @@ export const MyShipments: React.FC = () => {
                 ) : (
                   <div className="space-y-2">
                     {shipment.parcels.map((parcel) => (
-                      <div key={parcel.id} className="flex items-center justify-between bg-white border border-gray-100 rounded-lg px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-700">Colis {parcel.parcel_index}</span>
-                          {parcelStatusBadge(parcel.status)}
+                      <div key={parcel.id} className="bg-white border border-gray-100 rounded-lg px-3 py-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-700">Colis {parcel.parcel_index}</span>
+                            {parcelStatusBadge(parcel.status)}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {parcel.tracking_number && (
+                              <span className="text-xs text-gray-500">
+                                {parcel.tracking_number}
+                                {parcel.tracking_url && (
+                                  <a href={parcel.tracking_url} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-600 underline inline-flex items-center gap-0.5">
+                                    suivre <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </span>
+                            )}
+                            {parcel.label_url && (
+                              <a href={parcel.label_url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-600 underline inline-flex items-center gap-1">
+                                <FileDown className="h-3 w-3" /> Étiquette
+                              </a>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          {parcel.tracking_number && (
-                            <span className="text-xs text-gray-500">
-                              {parcel.tracking_number}
-                              {parcel.tracking_url && (
-                                <a href={parcel.tracking_url} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-600 underline inline-flex items-center gap-0.5">
-                                  suivre <ExternalLink className="h-3 w-3" />
-                                </a>
-                              )}
-                            </span>
-                          )}
-                          {parcel.label_url && (
-                            <a href={parcel.label_url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-600 underline inline-flex items-center gap-1">
-                              <FileDown className="h-3 w-3" /> Étiquette
-                            </a>
-                          )}
-                        </div>
+                        {parcel.itemNames.length > 0 && (
+                          <p className="text-xs text-gray-400 mt-1.5">
+                            Contenu : {parcel.itemNames.join(', ')}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>

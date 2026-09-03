@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck } from 'lucide-react';
+import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipment, AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { ParcelSplitEditor } from './ParcelSplitEditor';
@@ -19,13 +19,26 @@ interface ShippedItemRowProps {
   item: AdminShipmentItem;
   onRevert: (itemId: string) => void;
   reverting: boolean;
+  /** Mode scission actif : remplace le bouton "Annuler" par une case à
+   * cocher pour choisir les articles à déplacer vers un nouveau colis. */
+  splitMode: boolean;
+  selected: boolean;
+  onToggleSelect: (itemId: string) => void;
 }
 
-const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, reverting }) => {
+const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, reverting, splitMode, selected, onToggleSelect }) => {
   const product = item.product;
   const image = product?.images?.[product.main_image_index] || product?.images?.[0];
   return (
     <div className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0">
+      {splitMode && (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(item.id)}
+          className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0"
+        />
+      )}
       {image ? (
         <img src={image} alt={product?.name || 'Article'} className="h-10 w-10 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
       ) : (
@@ -45,15 +58,17 @@ const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, reverti
           </div>
         )}
       </div>
-      <button
-        type="button"
-        onClick={() => onRevert(item.id)}
-        disabled={reverting}
-        title="Annuler l'expédition de cet article (remet en attente côté réception)"
-        className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-      >
-        <Undo2 className="h-3.5 w-3.5" />
-      </button>
+      {!splitMode && (
+        <button
+          type="button"
+          onClick={() => onRevert(item.id)}
+          disabled={reverting}
+          title="Annuler l'expédition de cet article (remet en attente côté réception)"
+          className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 };
@@ -62,6 +77,16 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   const { download: downloadLabel, downloadingUrl } = useDownloadShipmentLabel();
   const [revertingId, setRevertingId] = useState<string | null>(null);
   const [revertError, setRevertError] = useState<string | null>(null);
+  // Scinder l'expédition : sélectionner des articles déjà expédiés (colis 1)
+  // pour les faire basculer dans un nouveau colis, sans toucher au premier —
+  // voir admin_unassign_items_from_parcel (0085). Une fois libérés, ils
+  // réapparaissent automatiquement dans "articles en attente" ci-dessus, où
+  // ParcelSplitEditor (déjà fonctionnel pour un tout premier envoi) permet
+  // de leur générer l'étiquette.
+  const [splitMode, setSplitMode] = useState(false);
+  const [selectedForSplit, setSelectedForSplit] = useState<Set<string>>(new Set());
+  const [splitting, setSplitting] = useState(false);
+  const [splitError, setSplitError] = useState<string | null>(null);
 
   if (!shipment) return null;
 
@@ -84,8 +109,48 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     onGenerated();
   };
 
+  const toggleSplitMode = () => {
+    setSplitMode((current) => !current);
+    setSelectedForSplit(new Set());
+    setSplitError(null);
+  };
+
+  const toggleSelectForSplit = (itemId: string) => {
+    setSelectedForSplit((current) => {
+      const next = new Set(current);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
+  const handleCreateNewParcel = async () => {
+    if (selectedForSplit.size === 0) return;
+    setSplitError(null);
+    setSplitting(true);
+    const { data, error } = await supabase.rpc('admin_unassign_items_from_parcel', { p_item_ids: [...selectedForSplit] });
+    setSplitting(false);
+    if (error) {
+      setSplitError(error.message);
+      return;
+    }
+    if ((data?.updated_count || 0) === 0) {
+      setSplitError("Ces articles n'ont pas pu être déplacés vers un nouveau colis.");
+      return;
+    }
+    setSplitMode(false);
+    setSelectedForSplit(new Set());
+    onGenerated();
+  };
+
   const pp = (shipment.parcel_point || {}) as Record<string, string>;
   const shippedParcels = shipment.parcels.filter((p) => p.status === 'shipped');
+  const itemCountByParcel = new Map<string, number>();
+  for (const item of shipment.shippedItems) {
+    if (!item.parcel_id) continue;
+    itemCountByParcel.set(item.parcel_id, (itemCountByParcel.get(item.parcel_id) || 0) + 1);
+  }
+  const pendingItemsKey = shipment.pendingItems.map((i) => i.id).sort().join(',');
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -142,7 +207,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                   <Package className="h-3.5 w-3.5" /> {shipment.pendingItems.length} article{shipment.pendingItems.length > 1 ? 's' : ''} en attente
                 </p>
-                <ParcelSplitEditor shipmentId={shipment.id} items={shipment.pendingItems} requesterPhone={shipment.requester.phone} onGenerated={onGenerated} />
+                <ParcelSplitEditor key={pendingItemsKey} shipmentId={shipment.id} items={shipment.pendingItems} requesterPhone={shipment.requester.phone} onGenerated={onGenerated} />
               </div>
             )}
 
@@ -154,14 +219,60 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
 
             {shipment.shippedItems.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                  <Truck className="h-3.5 w-3.5" /> {shipment.shippedItems.length} article{shipment.shippedItems.length > 1 ? 's' : ''} expédié{shipment.shippedItems.length > 1 ? 's' : ''}
-                </p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                    <Truck className="h-3.5 w-3.5" /> {shipment.shippedItems.length} article{shipment.shippedItems.length > 1 ? 's' : ''} expédié{shipment.shippedItems.length > 1 ? 's' : ''}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={toggleSplitMode}
+                    className="flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
+                  >
+                    <Split className="h-3.5 w-3.5" />
+                    {splitMode ? 'Annuler' : "Ajouter un nouveau colis"}
+                  </button>
+                </div>
+
+                {splitMode && (
+                  <p className="text-xs text-gray-500 mb-2">
+                    Cochez les articles à déplacer vers un nouveau colis (ex. les articles qui ne rentraient pas dans le premier carton) — le colis déjà expédié n'est pas modifié.
+                  </p>
+                )}
+
                 <div className="border border-gray-100 rounded-lg px-3 mb-3">
                   {shipment.shippedItems.map((item) => (
-                    <ShippedItemRow key={item.id} item={item} onRevert={handleRevertShippedItem} reverting={revertingId === item.id} />
+                    <ShippedItemRow
+                      key={item.id}
+                      item={item}
+                      onRevert={handleRevertShippedItem}
+                      reverting={revertingId === item.id}
+                      splitMode={splitMode}
+                      selected={selectedForSplit.has(item.id)}
+                      onToggleSelect={toggleSelectForSplit}
+                    />
                   ))}
                 </div>
+
+                {splitMode && (
+                  <>
+                    {splitError && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+                        <p className="text-sm text-red-700">{splitError}</p>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleCreateNewParcel}
+                      disabled={selectedForSplit.size === 0 || splitting}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm mb-3"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      {splitting
+                        ? 'Déplacement en cours...'
+                        : `Passer ${selectedForSplit.size || ''} article${selectedForSplit.size > 1 ? 's' : ''} en nouveau colis`}
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
@@ -174,7 +285,12 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                 {shippedParcels.map((p) => (
                   <div key={p.id} className="rounded-lg p-3 border bg-green-50 border-green-200">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-green-800">Colis {p.parcel_index}</p>
+                      <p className="text-sm font-medium text-green-800">
+                        Colis {p.parcel_index}
+                        {itemCountByParcel.has(p.id) && (
+                          <span className="font-normal text-green-700"> ({itemCountByParcel.get(p.id)} article{(itemCountByParcel.get(p.id) || 0) > 1 ? 's' : ''})</span>
+                        )}
+                      </p>
                       {p.label_url && (
                         <button
                           type="button"

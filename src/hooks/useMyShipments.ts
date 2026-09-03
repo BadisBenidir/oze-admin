@@ -10,6 +10,10 @@ export interface MyShipmentParcel {
   tracking_url: string | null;
   label_url: string | null;
   weight_kg: number | null;
+  /** Noms des articles effectivement rattachés à CE colis (order_items.parcel_id) —
+   * absent/vide pour un colis encore 'pending' (les articles n'ont pas
+   * encore de parcel_id tant que l'étiquette n'est pas générée). */
+  itemNames: string[];
 }
 
 export interface MyShipment {
@@ -70,19 +74,29 @@ export const useMyShipments = (isAuthenticated: boolean = false) => {
           .select('id, shipment_id, parcel_index, status, tracking_number, tracking_url, label_url, weight_kg')
           .in('shipment_id', shipmentIds)
           .order('parcel_index', { ascending: true }),
-        supabase.from('order_items').select('id, shipment_id').in('shipment_id', shipmentIds),
+        supabase.from('order_items').select('id, shipment_id, parcel_id, product_snapshot').in('shipment_id', shipmentIds),
       ]);
       if (parcelsError) throw new Error(parcelsError.message);
       if (itemsError) throw new Error(itemsError.message);
 
+      const itemRowsTyped = (itemRows || []) as Array<{ shipment_id: string; parcel_id: string | null; product_snapshot: { name?: string } | null }>;
+
+      const namesByParcel = new Map<string, string[]>();
+      for (const row of itemRowsTyped) {
+        if (!row.parcel_id) continue;
+        const list = namesByParcel.get(row.parcel_id) || [];
+        list.push(row.product_snapshot?.name || 'Article');
+        namesByParcel.set(row.parcel_id, list);
+      }
+
       const parcelsByShipment = new Map<string, MyShipmentParcel[]>();
-      for (const row of (parcelRows || []) as Array<MyShipmentParcel & { shipment_id: string }>) {
+      for (const row of (parcelRows || []) as Array<Omit<MyShipmentParcel, 'itemNames'> & { shipment_id: string }>) {
         const list = parcelsByShipment.get(row.shipment_id) || [];
-        list.push(row);
+        list.push({ ...row, itemNames: namesByParcel.get(row.id) || [] });
         parcelsByShipment.set(row.shipment_id, list);
       }
       const countByShipment = new Map<string, number>();
-      for (const row of (itemRows || []) as Array<{ shipment_id: string }>) {
+      for (const row of itemRowsTyped) {
         countByShipment.set(row.shipment_id, (countByShipment.get(row.shipment_id) || 0) + 1);
       }
 

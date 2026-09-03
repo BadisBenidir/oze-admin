@@ -8,6 +8,7 @@ export interface AdminShipmentItem {
   insurance_cost: number;
   entrupy_requested: boolean;
   fulfillment_status: string;
+  parcel_id: string | null;
   product_id: string;
   product: {
     name: string;
@@ -124,7 +125,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
         supabase
           .from('order_items')
           .select(
-            'id, line_total, insured, insurance_cost, entrupy_requested, fulfillment_status, product_id, shipment_id, ' +
+            'id, line_total, insured, insurance_cost, entrupy_requested, fulfillment_status, parcel_id, product_id, shipment_id, ' +
             'product:products(name, images, main_image_index, product_code, reference, b2b_reference, condition, sale_price, brand:brands(name))'
           )
           .in('shipment_id', shipmentIds),
