@@ -28,7 +28,7 @@ const missionStatusBadge = (status: SourcingMission['status']) => {
  * revendeur, servant d'enveloppe budgétaire pour des pièces sourcées à la
  * demande (voir SourcingMissionDetailModal pour le détail des pièces). */
 export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resellerId, resellerName, isAdmin }) => {
-  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished } = useSourcingMissions(resellerId, isAdmin);
+  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation } = useSourcingMissions(resellerId, isAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<SourcingMission | null>(null);
 
@@ -139,6 +139,10 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
         onPublishChange={async (published) => {
           if (!viewingMission) return { success: false, error: 'Mission inconnue' };
           return setMissionPublished(viewingMission.id, published);
+        }}
+        onCancelValidation={async () => {
+          if (!viewingMission) return { success: false, error: 'Mission inconnue' };
+          return cancelValidation(viewingMission.id);
         }}
         onItemsChanged={refresh}
       />

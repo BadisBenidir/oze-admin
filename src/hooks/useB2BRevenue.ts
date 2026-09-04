@@ -31,11 +31,32 @@ export const useB2BRevenue = (isAuthenticated: boolean = false) => {
       // Avances de sourcing sur mesure (0089_b2b_sourcing_missions.sql) :
       // comptées dans le CA B2B encaissé dès leur paiement, comme une vente
       // classique — une mission annulée n'a jamais été réellement encaissée.
-      const { data: sourcingData, error: sourcingError } = await supabase
+      // Dès que la mission est validée (order_id renseigné, voir
+      // 0098_sourcing_validation_lifecycle.sql), une vraie commande existe
+      // et son total (== advance_amount, par construction) est déjà compté
+      // ci-dessus via b2b_order_item_revenue — on exclut alors cette avance
+      // ici pour ne pas la compter deux fois.
+      let { data: sourcingData, error: sourcingError } = await supabase
         .from('b2b_sourcing_missions')
         .select('reseller_id, advance_amount, resellers(company_name)')
         .not('paid_at', 'is', null)
-        .neq('status', 'cancelled');
+        .neq('status', 'cancelled')
+        .is('order_id', null);
+
+      // Repli : la migration 0098 (colonne order_id) n'est peut-être pas
+      // encore appliquée sur cet environnement — on retombe sur l'ancien
+      // calcul (sans filtre order_id) plutôt que de casser tout l'écran de
+      // CA pour une protection anti-double-comptage qui ne s'applique de
+      // toute façon qu'aux missions déjà validées.
+      if (sourcingError?.message?.includes('order_id')) {
+        const fallback = await supabase
+          .from('b2b_sourcing_missions')
+          .select('reseller_id, advance_amount, resellers(company_name)')
+          .not('paid_at', 'is', null)
+          .neq('status', 'cancelled');
+        sourcingData = fallback.data;
+        sourcingError = fallback.error;
+      }
 
       if (sourcingError) {
         throw new Error(sourcingError.message);

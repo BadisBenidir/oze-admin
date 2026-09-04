@@ -23,6 +23,10 @@ export interface SourcingMission {
   paid_at: string | null;
   notes: string | null;
   created_at: string;
+  /** Commande B2B réelle créée à la validation par le revendeur — voir
+   * 0098_sourcing_validation_lifecycle.sql. Absent (undefined) tant que
+   * cette migration n'est pas encore appliquée sur cet environnement. */
+  order_id?: string | null;
   /** Visible dans le portail revendeur (pro.ozeparis.com) dès true — voir 0094. */
   is_published_to_reseller: boolean;
   published_at: string | null;
@@ -59,6 +63,10 @@ interface UseSourcingMissionsResult {
   setMissionStatus: (id: string, status: 'active' | 'completed' | 'cancelled') => Promise<{ success: boolean; error?: string }>;
   /** Bascule la visibilité côté portail revendeur (reseller_sourcing_missions/items, voir 0094). */
   setMissionPublished: (id: string, published: boolean) => Promise<{ success: boolean; error?: string }>;
+  /** Annule la validation faite par le revendeur (RPC transactionnelle,
+   * voir 0098) : commande annulée, produits repassés en brouillon, mission
+   * réactivée. Réservé aux admins (vérifié côté RPC). */
+  cancelValidation: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 /** Missions de sourcing sur mesure (voir 0089/0090/0091_b2b_sourcing_missions*.sql) —
@@ -181,6 +189,13 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     return { success: true };
   };
 
+  const cancelValidation = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: rpcError } = await supabase.rpc('admin_cancel_sourcing_validation', { p_mission_id: id });
+    if (rpcError) return { success: false, error: rpcError.message };
+    await fetchMissions();
+    return { success: true };
+  };
+
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
@@ -189,5 +204,5 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     fetchMissions();
   }, [isAdmin, fetchMissions]);
 
-  return { missions, loading, error, refresh: fetchMissions, createMission, updateMission, setMissionStatus, setMissionPublished };
+  return { missions, loading, error, refresh: fetchMissions, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation };
 };

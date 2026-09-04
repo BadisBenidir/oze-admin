@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil, Trash2, Eye, EyeOff } from 'lucide-react';
+import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil, Trash2, Eye, EyeOff, Link2, Undo2 } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
+import { Toast } from '../../ui/Toast';
 import { SourcingMission, SourcingMissionInput } from '../../../hooks/useSourcingMissions';
 import { useSourcingItems, SourcingItem } from '../../../hooks/useSourcingItems';
 import { AddSourcingItemModal } from './AddSourcingItemModal';
 import { CreateSourcingMissionModal } from './CreateSourcingMissionModal';
+import { LinkSourcingProductModal } from './LinkSourcingProductModal';
 
 interface SourcingMissionDetailModalProps {
   mission: SourcingMission | null;
@@ -12,6 +14,8 @@ interface SourcingMissionDetailModalProps {
   onStatusChange: (status: 'active' | 'completed' | 'cancelled') => Promise<{ success: boolean; error?: string }>;
   onUpdateMission: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
   onPublishChange: (published: boolean) => Promise<{ success: boolean; error?: string }>;
+  /** Annule la validation revendeur (RPC transactionnelle, voir 0098) : commande annulée, produits repassés en brouillon, mission réactivée. */
+  onCancelValidation: () => Promise<{ success: boolean; error?: string }>;
   /** Rafraîchit la liste des missions (montants consommés) après ajout d'une pièce. */
   onItemsChanged: () => void;
 }
@@ -32,14 +36,18 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
 /** Détail d'une mission de sourcing : cartouche avance/budget/marge, pièces
  * affectées à l'enveloppe d'achat, ajout d'une pièce, édition et clôture —
  * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
-export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onItemsChanged }) => {
-  const { items, loading, error, addItem, addItems, setItemStatus, removeItem } = useSourcingItems(mission?.id || null);
+export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onCancelValidation, onItemsChanged }) => {
+  const { items, loading, error, addItem, addItems, setItemStatus, removeItem, linkProduct } = useSourcingItems(mission?.id || null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [linkingItemId, setLinkingItemId] = useState<string | null>(null);
   const [statusError, setStatusError] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [publishError, setPublishError] = useState('');
   const [publishing, setPublishing] = useState(false);
+  const [cancellingValidation, setCancellingValidation] = useState(false);
+  const [showCancelValidationConfirm, setShowCancelValidationConfirm] = useState(false);
+  const [successToast, setSuccessToast] = useState('');
 
   useEffect(() => {
     setStatusError('');
@@ -91,6 +99,20 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     const result = await onStatusChange('completed');
     setUpdatingStatus(false);
     if (!result.success) setStatusError(result.error || 'Erreur lors de la clôture');
+  };
+
+  const handleConfirmCancelValidation = async () => {
+    setCancellingValidation(true);
+    setStatusError('');
+    const result = await onCancelValidation();
+    setCancellingValidation(false);
+    setShowCancelValidationConfirm(false);
+    if (!result.success) {
+      setStatusError(result.error || "Erreur lors de l'annulation de la validation");
+      return;
+    }
+    onItemsChanged();
+    setSuccessToast('Validation annulée : les pièces sont repassées en brouillon.');
   };
 
   return (
@@ -257,6 +279,17 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
                                   {item.brand && <p className="text-xs text-gray-500">{item.brand}</p>}
+                                  {!item.product_id && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setLinkingItemId(item.id)}
+                                      className="flex items-center gap-1 text-xs text-amber-700 hover:text-amber-900 mt-0.5"
+                                      title="Pièce à la volée : lier une fiche produit pour permettre la validation par le revendeur"
+                                    >
+                                      <Link2 className="h-3 w-3" />
+                                      Lier une fiche produit
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             </td>
@@ -310,6 +343,16 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 {updatingStatus ? 'Clôture...' : 'Clôturer la mission'}
               </button>
             )}
+            {mission.status === 'completed' && mission.order_id && (
+              <button
+                onClick={() => setShowCancelValidationConfirm(true)}
+                disabled={cancellingValidation}
+                className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50 text-sm font-medium"
+              >
+                <Undo2 className="h-4 w-4" />
+                {cancellingValidation ? 'Annulation...' : 'Annuler la validation du sourcing'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -328,6 +371,51 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
         onSubmit={onUpdateMission}
         editingMission={mission}
       />
+
+      <LinkSourcingProductModal
+        isOpen={linkingItemId !== null}
+        onClose={() => setLinkingItemId(null)}
+        onLink={async (productId) => {
+          if (!linkingItemId) return { success: false, error: 'Pièce inconnue' };
+          const result = await linkProduct(linkingItemId, productId);
+          if (result.success) onItemsChanged();
+          return result;
+        }}
+      />
+
+      {showCancelValidationConfirm && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto">
+          <div className="fixed inset-0 bg-black bg-opacity-40" onClick={() => !cancellingValidation && setShowCancelValidationConfirm(false)} />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-base font-semibold text-gray-900">Annuler la validation du sourcing ?</h3>
+              <p className="text-sm text-gray-600 mt-2">
+                La commande B2B générée sera annulée, les pièces repasseront immédiatement en brouillon (elles redeviendront sélectionnables pour une autre mission), et la mission redeviendra "active" — visible côté revendeur comme en cours de sélection.
+              </p>
+              <div className="flex justify-end space-x-3 mt-5">
+                <button
+                  type="button"
+                  onClick={() => setShowCancelValidationConfirm(false)}
+                  disabled={cancellingValidation}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-sm disabled:opacity-50"
+                >
+                  Retour
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmCancelValidation}
+                  disabled={cancellingValidation}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  {cancellingValidation ? 'Annulation...' : 'Oui, annuler la validation'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {successToast && <Toast message={successToast} onDismiss={() => setSuccessToast('')} />}
     </div>
   );
 };

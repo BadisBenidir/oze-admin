@@ -36,6 +36,12 @@ interface UseSourcingItemsResult {
   setItemStatus: (id: string, status: SourcingItem['status']) => Promise<{ success: boolean; error?: string }>;
   /** Détache/supprime définitivement une pièce de la mission. */
   removeItem: (id: string) => Promise<{ success: boolean; error?: string }>;
+  /** Lie une pièce "à la volée" (product_id null) à une vraie fiche produit
+   * existante — étape requise avant que le revendeur puisse valider la
+   * mission (voir 0098_sourcing_validation_lifecycle.sql : la RPC de
+   * validation bloque tant qu'un product_id manque, ce repo ne créant
+   * jamais lui-même de marque/catégorie). */
+  linkProduct: (itemId: string, productId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 /** Pièces sourcées pour UNE mission (voir 0089_b2b_sourcing_missions.sql). */
@@ -118,9 +124,16 @@ export const useSourcingItems = (missionId: string | null): UseSourcingItemsResu
     return { success: true };
   };
 
+  const linkProduct = async (itemId: string, productId: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: updateError } = await supabase.from('b2b_sourcing_items').update({ product_id: productId }).eq('id', itemId);
+    if (updateError) return { success: false, error: updateError.message };
+    await fetchItems();
+    return { success: true };
+  };
+
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
 
-  return { items, loading, error, refresh: fetchItems, addItem, addItems, setItemStatus, removeItem };
+  return { items, loading, error, refresh: fetchItems, addItem, addItems, setItemStatus, removeItem, linkProduct };
 };

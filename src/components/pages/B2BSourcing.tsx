@@ -30,7 +30,7 @@ const requesterLabel = (mission: SourcingMission): string => {
  * 0091_b2b_sourcing_mission_budget_split.sql pour le modèle avance/enveloppe. */
 export const B2BSourcing: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished } = useSourcingMissions(undefined, isAdmin);
+  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation } = useSourcingMissions(undefined, isAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<SourcingMission | null>(null);
   const [resellerFilter, setResellerFilter] = useState('all');
@@ -271,6 +271,10 @@ export const B2BSourcing: React.FC = () => {
         onPublishChange={async (published) => {
           if (!viewingMission) return { success: false, error: 'Mission inconnue' };
           return setMissionPublished(viewingMission.id, published);
+        }}
+        onCancelValidation={async () => {
+          if (!viewingMission) return { success: false, error: 'Mission inconnue' };
+          return cancelValidation(viewingMission.id);
         }}
         onItemsChanged={refresh}
       />

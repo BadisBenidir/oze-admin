@@ -151,5 +151,20 @@ export const useResellerSourcing = (isAuthenticated: boolean = false) => {
     fetchMissions();
   }, [isAuthenticated, fetchMissions]);
 
-  return { missions, loading, error, refresh: fetchMissions };
+  /**
+   * Valide la sélection finale (RPC transactionnelle, voir
+   * 0098_sourcing_validation_lifecycle.sql) : crée une vraie commande B2B
+   * (le total réparti au prorata du coût de chaque pièce, égal à l'avance
+   * déjà versée), bascule les produits liés en vendu, et clôture la
+   * mission. Bloque côté RPC si une pièce n'a pas encore de fiche produit
+   * liée — l'erreur renvoyée en explique la raison au revendeur.
+   */
+  const validateMission = async (missionId: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: rpcError } = await supabase.rpc('reseller_validate_sourcing_mission', { p_mission_id: missionId });
+    if (rpcError) return { success: false, error: rpcError.message };
+    await fetchMissions();
+    return { success: true };
+  };
+
+  return { missions, loading, error, refresh: fetchMissions, validateMission };
 };
