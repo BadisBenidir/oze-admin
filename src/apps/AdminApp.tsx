@@ -66,7 +66,7 @@ function AdminApp() {
       case 'customers':
         return <Customers activeSubTab={activeSubTab} />;
       case 'accounting':
-        return <Accounting activeSubTab={activeSubTab} />;
+        return <Accounting />;
       case 'b2b':
         return <B2B activeSubTab={activeSubTab} />;
       default:

@@ -14,11 +14,8 @@ import {
   TrendingUp,
   PieChart,
   Calculator,
-  CreditCard,
   Receipt,
   Banknote,
-  FileText,
-  TrendingDown,
   Globe,
   Tag,
   Ticket,
@@ -89,13 +86,13 @@ export const navigationItems: MenuItem[] = [
     label: 'Comptabilité & Finances',
     icon: Calculator,
     path: '/accounting',
+    // Page unique désormais entièrement pilotée par ses propres onglets
+    // internes (Dashboard Global / B2C / B2B / Lives) et sa barre d'outils
+    // de période — voir Accounting.tsx. Un seul sous-item requis pour rester
+    // compatible avec le mécanisme de sélection de la barre latérale
+    // (AdminApp.tsx attend toujours au moins un subItems[0]).
     subItems: [
-      { id: 'dashboard', label: 'Dashboard', path: '/accounting/dashboard', icon: BarChart3 },
-      { id: 'ventes-ligne', label: 'Ventes en ligne', path: '/accounting/ventes-ligne', icon: TrendingUp },
-      { id: 'depenses', label: 'Dépenses', path: '/accounting/depenses', icon: TrendingDown },
-      { id: 'factures', label: 'Factures', path: '/accounting/factures', icon: FileText },
-      { id: 'paiements', label: 'Paiements', path: '/accounting/paiements', icon: CreditCard },
-      { id: 'rapports-financiers', label: 'Rapports financiers', path: '/accounting/rapports-financiers', icon: PieChart },
+      { id: 'overview', label: 'Comptabilité & Finances', path: '/accounting/overview', icon: BarChart3 },
     ]
   },
   {
