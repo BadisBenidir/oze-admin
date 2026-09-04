@@ -39,7 +39,8 @@ interface B2BOrderRow {
 }
 
 interface SourcingMissionRow {
-  reference: string;
+  reference: string | null;
+  title: string;
   advance_amount: number;
   paid_at: string;
   reseller: { company_name: string } | null;
@@ -132,17 +133,37 @@ export const useSalesJournalExport = () => {
       }
 
       if (scope === 'all' || scope === 'sourcing') {
-        const { data, error } = await supabase
+        const primary = await supabase
           .from('b2b_sourcing_missions')
-          .select('reference, advance_amount, paid_at, status, reseller:resellers(company_name), requester:profiles!user_id(first_name, last_name, email)')
+          .select('reference, title, advance_amount, paid_at, status, reseller:resellers(company_name), requester:profiles!user_id(first_name, last_name, email)')
           .not('paid_at', 'is', null)
           .neq('status', 'cancelled')
           .gte('paid_at', startIso)
           .lte('paid_at', endIso);
-        if (error) throw new Error(error.message);
-        for (const m of (data || []) as unknown as SourcingMissionRow[]) {
+
+        let sourcingData = primary.data;
+        let sourcingError = primary.error;
+
+        // Repli si la migration 0096 (colonne reference) n'est pas encore
+        // appliquée sur cet environnement — le titre libre de la mission
+        // sert alors de "N° Commande / Facture", comme avant 0096, plutôt
+        // que de faire échouer tout l'export.
+        if (sourcingError?.message?.includes('reference')) {
+          const fallback = await supabase
+            .from('b2b_sourcing_missions')
+            .select('title, advance_amount, paid_at, status, reseller:resellers(company_name), requester:profiles!user_id(first_name, last_name, email)')
+            .not('paid_at', 'is', null)
+            .neq('status', 'cancelled')
+            .gte('paid_at', startIso)
+            .lte('paid_at', endIso);
+          sourcingData = (fallback.data || []).map((m) => ({ ...m, reference: null })) as typeof sourcingData;
+          sourcingError = fallback.error;
+        }
+
+        if (sourcingError) throw new Error(sourcingError.message);
+        for (const m of (sourcingData || []) as unknown as SourcingMissionRow[]) {
           const client = profileDisplayName(m.requester) || m.reseller?.company_name || 'Revendeur';
-          rows.push({ date: new Date(m.paid_at), reference: m.reference, client, amountTTC: Number(m.advance_amount) || 0 });
+          rows.push({ date: new Date(m.paid_at), reference: m.reference || m.title, client, amountTTC: Number(m.advance_amount) || 0 });
         }
       }
 

@@ -213,7 +213,7 @@ export const B2BSourcing: React.FC = () => {
                         >
                           <td className="py-3 px-4 md:px-6 text-sm font-medium text-gray-900">
                             {mission.title}
-                            <span className="block text-xs font-mono font-normal text-gray-400">{mission.reference}</span>
+                            {mission.reference && <span className="block text-xs font-mono font-normal text-gray-400">{mission.reference}</span>}
                           </td>
                           <td className="py-3 px-4 md:px-6 text-sm text-gray-600">{mission.company_name}</td>
                           <td className="py-3 px-4 md:px-6 hidden lg:table-cell text-sm text-gray-600">

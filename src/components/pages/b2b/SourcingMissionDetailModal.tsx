@@ -101,7 +101,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
           <div className="flex items-center justify-between p-5 border-b border-gray-100 flex-shrink-0">
             <div className="min-w-0">
               <h3 className="text-base font-semibold text-gray-900 truncate">{mission.title}</h3>
-              <p className="text-xs text-gray-400 font-mono mt-0.5">Réf. {mission.reference}</p>
+              {mission.reference && <p className="text-xs text-gray-400 font-mono mt-0.5">Réf. {mission.reference}</p>}
               {mission.notes && <p className="text-xs text-gray-500 mt-0.5">{mission.notes}</p>}
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">

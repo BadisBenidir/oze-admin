@@ -15,8 +15,11 @@ export interface ResellerSourcingItem {
 export interface ResellerSourcingMission {
   id: string;
   title: string;
-  /** Numéro de référence généré automatiquement — voir 0096. */
-  reference: string;
+  /** Numéro de référence généré automatiquement — voir 0096. Nullable ici
+   * uniquement en repli tant que cette migration n'est pas encore
+   * appliquée sur l'environnement courant (voir fetchMissions) — toujours
+   * renseigné une fois la migration passée. */
+  reference: string | null;
   advance_amount: number;
   paid_at: string | null;
   status: 'active' | 'completed' | 'cancelled';
@@ -54,10 +57,29 @@ export const useResellerSourcing = (isAuthenticated: boolean = false) => {
       setLoading(true);
       setError(null);
 
-      const { data: missionRows, error: missionsError } = await supabase
+      let { data: missionRows, error: missionsError } = await supabase
         .from('reseller_sourcing_missions')
         .select('id, title, reference, advance_amount, paid_at, status, is_published_to_reseller, published_at, created_at')
         .order('created_at', { ascending: false });
+
+      // Repli : la migration 0096 (colonne reference + vue mise à jour)
+      // n'a pas encore été appliquée sur cet environnement — Postgres
+      // rejette alors la colonne inconnue avec une erreur 400 explicite
+      // ("column ... reference does not exist"), qui ferait planter toute
+      // la page pour un simple numéro d'affichage, pas une donnée
+      // essentielle. On retente sans la colonne plutôt que de casser tout
+      // l'écran ; le titre sert d'identifiant tant que la migration n'est
+      // pas passée (voir missionStatusBadge/rendu : mission.reference ||
+      // mission.title).
+      if (missionsError?.message?.includes('reference')) {
+        const fallback = await supabase
+          .from('reseller_sourcing_missions')
+          .select('id, title, advance_amount, paid_at, status, is_published_to_reseller, published_at, created_at')
+          .order('created_at', { ascending: false });
+        missionRows = (fallback.data || []).map((m) => ({ ...m, reference: null })) as typeof missionRows;
+        missionsError = fallback.error;
+      }
+
       if (missionsError) throw new Error(missionsError.message);
 
       const missionIds = (missionRows || []).map((m) => m.id);
