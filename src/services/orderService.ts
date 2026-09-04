@@ -75,19 +75,25 @@ class OrderService {
   }
 
   async getOrdersBySource(source: 'web' | 'external'): Promise<OrderWithItems[]> {
-    // Pour l'instant, toutes les commandes de la BDD sont des commandes web
-    // car elles viennent du checkout Stripe. Les commandes externes 
-    // seront ajoutées manuellement plus tard
+    // Commandes externes (Vinted, eBay...) : jamais alimentées, voir
+    // Orders.tsx (section retirée) — aucune donnée à retourner ici.
     if (source === 'external') {
       return [];
     }
 
+    // 'web' = strictement B2C site web : orders.order_channel distingue
+    // 'web' de 'b2b' (voir 0001/0011_b2b_schema.sql) — cette table est
+    // partagée entre les deux canaux, donc sans ce filtre "Commandes site
+    // web" affichait aussi les commandes B2B revendeurs. Les ventes Live
+    // n'ont jamais de ligne `orders` (voir products.status='sold-auction'),
+    // donc rien à exclure de plus ici pour elles.
     const { data: orders, error } = await supabase
       .from('orders')
       .select(`
         *,
         order_items (*)
       `)
+      .eq('order_channel', 'web')
       .order('created_at', { ascending: false });
 
     if (error) {

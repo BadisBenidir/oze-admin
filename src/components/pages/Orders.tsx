@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
-import { useOrders, useOrderStats } from '../../hooks/useOrders';
+import { useOrders } from '../../hooks/useOrders';
 import { OrderDetail } from './OrderDetail';
 import { B2BOrders } from './B2BOrders';
 import { ReceptionView } from './b2b/ReceptionView';
@@ -23,7 +23,6 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
   const [shipmentFilter, setShipmentFilter] = useState<ShipmentStatus>('all');
   const source = activeSubTab === 'web-orders' ? 'web' : undefined;
   const { orders, loading, error, updateOrderStatus } = useOrders(source);
-  const { stats, loading: statsLoading } = useOrderStats();
 
   // Compteurs par statut d'expédition (sur l'ensemble des commandes chargées)
   const shipmentCounts = orders.reduce(
@@ -120,6 +119,17 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
   }
 
   if (activeSubTab === 'web-orders') {
+    // Calculées à partir de `orders` (déjà filtré order_channel='web' côté
+    // service, voir orderService.getOrdersBySource) plutôt que de `stats`
+    // (orderService.getOrderStats() reste volontairement tous canaux
+    // confondus — utilisé tel quel par le Dashboard général) : garantit que
+    // ces cartouches correspondent exactement aux lignes du tableau
+    // ci-dessous, jamais gonflées par des commandes B2B ou Live (les ventes
+    // Live n'ont de toute façon jamais de ligne `orders`).
+    const webOrdersCount = orders.length;
+    const webRevenue = orders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+    const webAverageBasket = webOrdersCount > 0 ? webRevenue / webOrdersCount : 0;
+
     return (
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
@@ -145,7 +155,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Commandes Web</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {statsLoading ? '-' : stats.web_orders}
+                    {loading ? '-' : webOrdersCount}
                   </p>
                   <div className="flex items-center mt-2">
                     <Globe className="h-4 w-4 text-blue-500 mr-1" />
@@ -162,7 +172,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Chiffre d'Affaires</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {statsLoading ? '-' : `€${stats.web_revenue.toFixed(2)}`}
+                    {loading ? '-' : `€${webRevenue.toFixed(2)}`}
                   </p>
                   <div className="flex items-center mt-2">
                     <span className="text-sm text-green-600">Revenus web</span>
@@ -178,7 +188,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Panier Moyen</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {statsLoading ? '-' : `€${stats.average_order_value.toFixed(2)}`}
+                    {loading ? '-' : `€${webAverageBasket.toFixed(2)}`}
                   </p>
                   <div className="flex items-center mt-2">
                     <span className="text-sm text-gray-600">Moyenne web</span>
