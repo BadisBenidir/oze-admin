@@ -457,6 +457,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                       </optgroup>
                       <optgroup label="✅ Vendu">
                         <option value="sold-online">Vendu en ligne</option>
+                        <option value="sold-b2b">Vendu (B2B)</option>
                         <option value="sold-other-platform">Vendu sur autre plateforme</option>
                         <option value="sold-display">Vendu - Affiché sur le site</option>
                       </optgroup>
