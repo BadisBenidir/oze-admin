@@ -79,15 +79,22 @@ export interface MonthlyChannelRow {
   margin: number;
 }
 
+/** Premier mois d'activité réelle de la société — les mois antérieurs sont
+ * exclus de la série mensuelle (jamais affichés, pas juste masqués à
+ * zéro) : rien à comparer avant que l'entreprise n'existe. */
+export const COMPANY_ACTIVITY_START_MONTH = '2026-05';
+
 /** Série mensuelle CA par canal + coût/marge, sur `months` mois glissants
- * (le plus récent en dernier) — alimente le graphique d'évolution et le
- * tableau comparatif du Dashboard Global. */
+ * (le plus récent en dernier), jamais avant COMPANY_ACTIVITY_START_MONTH —
+ * alimente le graphique d'évolution et le tableau comparatif du Dashboard
+ * Global. */
 export const computeMonthlySeries = (data: AccountingRawData, months: number): MonthlyChannelRow[] => {
   const now = new Date();
   const keys: string[] = [];
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (key >= COMPANY_ACTIVITY_START_MONTH) keys.push(key);
   }
 
   const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, total: 0, cogs: 0, margin: 0 }]));
