@@ -9,6 +9,25 @@ interface SourcingItemDetailModalProps {
   onClose: () => void;
 }
 
+// Même mapping que ProductDetail.tsx/Products.tsx (admin) — condition
+// couvre deux vocabulaires distincts sur products.condition : des grades
+// lettrés (S/A/AB/B/BC/C/D, voir isGrade) ET des libellés texte
+// (neuf/excellent/very-good/good/fair). Les deux doivent être affichés,
+// pas seulement les grades — cas réel qui masquait l'état pour toute pièce
+// dont la fiche produit liée utilisait ce second vocabulaire.
+const formatCondition = (condition: string): string => {
+  switch (condition) {
+    case 'neuf': return 'Neuf';
+    case 'excellent': return 'Excellent';
+    case 'very-good': return 'Très bon';
+    case 'good': return 'Bon';
+    case 'fair': return 'Correct';
+    case 'S': case 'A': case 'AB': case 'B': case 'BC': case 'C': case 'D':
+      return `Grade ${condition}`;
+    default: return condition;
+  }
+};
+
 const itemStatusBadge = (status: ResellerSourcingItem['status']) => {
   switch (status) {
     case 'validated':
@@ -152,24 +171,33 @@ export const SourcingItemDetailModal: React.FC<SourcingItemDetailModalProps> = (
               <h2 className="text-xl font-semibold text-gray-900 mt-0.5">{item.title}</h2>
 
               <div className="flex items-center flex-wrap gap-2 mt-3">
-                {item.condition && isGrade(item.condition) && (
-                  <Badge variant={GRADE_VARIANTS[item.condition]}>Grade {item.condition}</Badge>
+                {item.condition && (
+                  <Badge variant={isGrade(item.condition) ? GRADE_VARIANTS[item.condition] : 'default'}>
+                    État : {formatCondition(item.condition)}
+                  </Badge>
                 )}
                 {item.category_name && <Badge variant="default">{item.category_name}</Badge>}
                 {itemStatusBadge(item.status)}
               </div>
 
-              {(item.material || (item.colors && item.colors.length > 0)) && (
-                <div className="flex flex-wrap gap-2 mt-3 text-xs text-gray-500">
-                  {item.material && <span className="capitalize">{item.material}</span>}
-                  {item.colors?.map((c) => (
-                    <span key={c} className="capitalize">· {c}</span>
-                  ))}
+              {(item.material || (item.colors && item.colors.length > 0) || item.serial_number) && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {item.material && (
+                    <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1 capitalize">
+                      <span className="text-gray-400">Matière :</span> {item.material}
+                    </span>
+                  )}
+                  {item.colors && item.colors.length > 0 && (
+                    <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1 capitalize">
+                      <span className="text-gray-400">Couleur :</span> {item.colors.join(', ')}
+                    </span>
+                  )}
+                  {item.serial_number && (
+                    <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1 font-mono">
+                      <span className="text-gray-400 font-sans">N° série :</span> {item.serial_number}
+                    </span>
+                  )}
                 </div>
-              )}
-
-              {item.serial_number && (
-                <p className="text-xs text-gray-400 font-mono mt-2">N° série / date code : {item.serial_number}</p>
               )}
 
               {item.description && (
