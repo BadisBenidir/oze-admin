@@ -26,10 +26,10 @@ import {
   Clock,
   Gavel,
   Handshake,
-  LayoutGrid,
   Rocket,
   PackageCheck,
-  PackageSearch
+  PackageSearch,
+  Gift
 } from 'lucide-react';
 import { MenuItem } from '../types';
 
@@ -110,7 +110,7 @@ export const navigationItems: MenuItem[] = [
       { id: 'sourcing', label: 'Sourcing sur mesure', path: '/b2b/sourcing', icon: PackageSearch },
       { id: 'promo-codes', label: 'Codes Promos', path: '/b2b/promo-codes', icon: Ticket },
       { id: 'commissions', label: 'Chiffre d\'affaires B2B', path: '/b2b/commissions', icon: Banknote },
-      { id: 'portal', label: 'Portail B2B', path: '/b2b/portal', icon: LayoutGrid },
+      { id: 'gift-rewards', label: 'Portefeuilles offerts', path: '/b2b/gift-rewards', icon: Gift },
     ]
   },
 ];

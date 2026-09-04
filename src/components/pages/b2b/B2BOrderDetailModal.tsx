@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban, BadgeCheck, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban, BadgeCheck, RefreshCw, Gift } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { B2BOrder, B2BOrderItem, B2BOrderComputedStatus, getRequesterDisplayName } from '../../../hooks/useB2BOrders';
 import { cancelOrderItem, cancelOrder } from '../../../hooks/useCancelOrderItem';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
+import { supabase } from '../../../lib/supabase';
 
 // `orders.shipping_address` est stocké dans la forme assemblée par
 // b2b-checkout (address/postcode/city/country/pickup_point_*/delivery_type/
@@ -382,6 +383,38 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const { sync: syncSendcloud } = useSendcloudSync();
   const [syncingShipmentId, setSyncingShipmentId] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [pendingGiftQuantity, setPendingGiftQuantity] = useState(0);
+
+  // Rappel visuel "n'oublie pas le portefeuille offert" — voir
+  // 0101_b2b_gift_rewards.sql. Compte les portefeuilles pas encore
+  // expédiés de ce revendeur : soit pas encore assignés à une commande du
+  // tout (status='pending', peuvent atterrir dans n'importe quelle
+  // commande en préparation), soit déjà assignés spécifiquement à CETTE
+  // commande (status='assigned' + assigned_order_id=order.id) — jamais
+  // ceux assignés à une AUTRE commande du même revendeur, pour éviter de
+  // rappeler le même cadeau sur deux commandes à la fois.
+  useEffect(() => {
+    if (!order) {
+      setPendingGiftQuantity(0);
+      return;
+    }
+    let mounted = true;
+    supabase
+      .from('b2b_gift_rewards')
+      .select('quantity, status, assigned_order_id')
+      .eq('reseller_id', order.reseller_id)
+      .neq('status', 'shipped')
+      .then(({ data, error: fetchError }) => {
+        if (!mounted || fetchError) return;
+        const total = (data || [])
+          .filter((g) => g.status === 'pending' || g.assigned_order_id === order.id)
+          .reduce((sum, g) => sum + (g.quantity || 0), 0);
+        setPendingGiftQuantity(total);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [order]);
 
   if (!order) return null;
 
@@ -620,6 +653,27 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                           </tr>
                         );
                       })}
+                      {pendingGiftQuantity > 0 && !['shipped', 'delivered', 'cancelled'].includes(order.computedStatus) && (
+                        <tr className="bg-amber-50/60">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <Gift className="h-5 w-5 text-amber-600" />
+                              </div>
+                              <div>
+                                <Badge variant="warning">🎁 Portefeuille offert (Rechargement ≥ 500 €)</Badge>
+                                <p className="text-xs font-medium text-amber-700 mt-1">
+                                  Ne pas oublier d'insérer le{pendingGiftQuantity > 1 ? 's' : ''} portefeuille{pendingGiftQuantity > 1 ? 's' : ''} offert{pendingGiftQuantity > 1 ? 's' : ''} dans le colis !
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-right text-sm font-semibold text-amber-700">
+                            x{pendingGiftQuantity} · 0,00 € (OFFERT)
+                          </td>
+                          <td className="py-3 px-4" />
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

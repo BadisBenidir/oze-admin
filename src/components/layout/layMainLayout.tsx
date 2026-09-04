@@ -106,7 +106,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                                 `}
                               >
                                 {SubIconComponent && <SubIconComponent className="h-4 w-4" />}
-                                <span>{subItem.label}</span>
+                                <span className="flex-1">{subItem.label}</span>
+                                {!!subItem.badgeCount && (
+                                  <span className="flex-shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-600 text-white text-xs font-semibold flex items-center justify-center">
+                                    {subItem.badgeCount}
+                                  </span>
+                                )}
                               </button>
                             );
                           })}

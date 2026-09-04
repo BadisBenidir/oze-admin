@@ -75,4 +75,6 @@ export interface SubMenuItem {
   label: string;
   path: string;
   icon?: React.ComponentType;
+  /** Nombre affiché en badge rouge à côté du libellé (ex: portefeuilles offerts en attente). Absent ou 0 : pas de badge. */
+  badgeCount?: number;
 }
