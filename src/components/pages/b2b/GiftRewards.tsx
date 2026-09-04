@@ -131,7 +131,8 @@ const MarkShippedModal: React.FC<MarkShippedModalProps> = ({ gift, onClose, onCo
  * remplace l'ancien menu "Portail B2B" dans la nav Revendeurs. */
 export const GiftRewards: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { rewards, loading, error, assignToOrder, markShipped } = useGiftRewards(isAdmin);
+  const { rewards, loading, error, assignToOrder, markShipped, deferToNextShipment } = useGiftRewards(isAdmin);
+  const [deferringId, setDeferringId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [assigningGift, setAssigningGift] = useState<GiftReward | null>(null);
   const [shippingGift, setShippingGift] = useState<GiftReward | null>(null);
@@ -289,6 +290,20 @@ export const GiftRewards: React.FC = () => {
                                 className="text-xs font-medium text-gray-600 hover:text-gray-900 underline"
                               >
                                 Assigner à une commande
+                              </button>
+                            )}
+                            {gift.status === 'assigned' && (
+                              <button
+                                onClick={async () => {
+                                  setDeferringId(gift.id);
+                                  await deferToNextShipment(gift.id);
+                                  setDeferringId(null);
+                                }}
+                                disabled={deferringId === gift.id}
+                                title="Retard d'acheminement : détache ce portefeuille de cette commande, il attendra la prochaine"
+                                className="text-xs font-medium text-amber-700 hover:text-amber-900 underline disabled:opacity-50"
+                              >
+                                {deferringId === gift.id ? 'Report...' : 'Renvoyer à la prochaine livraison'}
                               </button>
                             )}
                             {gift.status !== 'shipped' && (

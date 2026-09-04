@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban, BadgeCheck, RefreshCw, Gift } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { B2BOrder, B2BOrderItem, B2BOrderComputedStatus, getRequesterDisplayName } from '../../../hooks/useB2BOrders';
@@ -383,38 +383,42 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const { sync: syncSendcloud } = useSendcloudSync();
   const [syncingShipmentId, setSyncingShipmentId] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [pendingGiftQuantity, setPendingGiftQuantity] = useState(0);
+  const [pendingGifts, setPendingGifts] = useState<{ id: string; quantity: number }[]>([]);
+  const [deferringGiftId, setDeferringGiftId] = useState<string | null>(null);
+  const pendingGiftQuantity = pendingGifts.reduce((sum, g) => sum + g.quantity, 0);
 
   // Rappel visuel "n'oublie pas le portefeuille offert" — voir
-  // 0101_b2b_gift_rewards.sql. Compte les portefeuilles pas encore
-  // expédiés de ce revendeur : soit pas encore assignés à une commande du
-  // tout (status='pending', peuvent atterrir dans n'importe quelle
-  // commande en préparation), soit déjà assignés spécifiquement à CETTE
-  // commande (status='assigned' + assigned_order_id=order.id) — jamais
-  // ceux assignés à une AUTRE commande du même revendeur, pour éviter de
-  // rappeler le même cadeau sur deux commandes à la fois.
-  useEffect(() => {
+  // 0101_b2b_gift_rewards.sql. Uniquement les cadeaux RÉELLEMENT assignés à
+  // CETTE commande (assign_pending_gift_rewards, 0102) — jamais un cadeau
+  // encore 'pending' du même revendeur, qui n'a pas forcément vocation à
+  // partir dans cette commande précise (il attend son tour sur une
+  // commande éligible future).
+  const fetchPendingGifts = useCallback(() => {
     if (!order) {
-      setPendingGiftQuantity(0);
+      setPendingGifts([]);
       return;
     }
-    let mounted = true;
     supabase
       .from('b2b_gift_rewards')
-      .select('quantity, status, assigned_order_id')
-      .eq('reseller_id', order.reseller_id)
+      .select('id, quantity')
+      .eq('assigned_order_id', order.id)
       .neq('status', 'shipped')
       .then(({ data, error: fetchError }) => {
-        if (!mounted || fetchError) return;
-        const total = (data || [])
-          .filter((g) => g.status === 'pending' || g.assigned_order_id === order.id)
-          .reduce((sum, g) => sum + (g.quantity || 0), 0);
-        setPendingGiftQuantity(total);
+        if (fetchError) return;
+        setPendingGifts(data || []);
       });
-    return () => {
-      mounted = false;
-    };
   }, [order]);
+
+  useEffect(() => {
+    fetchPendingGifts();
+  }, [fetchPendingGifts]);
+
+  const handleDeferGift = async (giftId: string) => {
+    setDeferringGiftId(giftId);
+    await supabase.rpc('defer_gift_reward_to_next_shipment', { p_gift_id: giftId });
+    setDeferringGiftId(null);
+    fetchPendingGifts();
+  };
 
   if (!order) return null;
 
@@ -671,7 +675,20 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                           <td className="py-3 px-4 text-right text-sm font-semibold text-amber-700">
                             x{pendingGiftQuantity} · 0,00 € (OFFERT)
                           </td>
-                          <td className="py-3 px-4" />
+                          <td className="py-3 px-4 text-right">
+                            {pendingGifts.map((g) => (
+                              <button
+                                key={g.id}
+                                type="button"
+                                onClick={() => handleDeferGift(g.id)}
+                                disabled={deferringGiftId === g.id}
+                                title="Retard d'acheminement : détache ce portefeuille de cette commande, il attendra la prochaine"
+                                className="block ml-auto text-xs font-medium text-amber-700 hover:text-amber-900 underline disabled:opacity-50"
+                              >
+                                {deferringGiftId === g.id ? 'Report...' : 'Renvoyer à la prochaine livraison'}
+                              </button>
+                            ))}
+                          </td>
                         </tr>
                       )}
                     </tbody>

@@ -132,7 +132,19 @@ export const useGiftRewards = (isAdmin: boolean = false) => {
     return { success: true };
   };
 
-  return { rewards, loading, error, refresh: fetchRewards, assignToOrder, markShipped };
+  /** Détache ce cadeau de sa commande actuelle sans tenter de le
+   * réassigner tout de suite (voir 0103) — pour un retard d'acheminement
+   * physique du portefeuille, pas pour une commande annulée (ce cas-là est
+   * géré automatiquement côté DB). Il attend la prochaine commande
+   * éligible de ce profil, ou une réassignation manuelle explicite. */
+  const deferToNextShipment = async (giftId: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: rpcError } = await supabase.rpc('defer_gift_reward_to_next_shipment', { p_gift_id: giftId });
+    if (rpcError) return { success: false, error: rpcError.message };
+    await fetchRewards();
+    return { success: true };
+  };
+
+  return { rewards, loading, error, refresh: fetchRewards, assignToOrder, markShipped, deferToNextShipment };
 };
 
 /** Compteur léger pour le badge de la barre latérale — total de
