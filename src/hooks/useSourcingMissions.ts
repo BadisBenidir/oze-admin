@@ -12,6 +12,8 @@ export interface SourcingMission {
   reseller_id: string;
   user_id: string | null;
   title: string;
+  /** Généré automatiquement à la création (trigger, voir 0096) — sert de numéro de facture dans l'export comptable. Jamais saisi manuellement. */
+  reference: string;
   /** Avance versée par le client — alimente le CA B2B encaissé (voir useB2BRevenue.ts). */
   advance_amount: number;
   /** Enveloppe allouée aux achats sur le terrain — jamais confondue avec advance_amount. */

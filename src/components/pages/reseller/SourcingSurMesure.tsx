@@ -71,6 +71,7 @@ export const SourcingSurMesure: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <p className="text-base font-semibold text-gray-900">{mission.title}</p>
+                    <p className="text-xs text-gray-400 font-mono">{mission.reference}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       Avance versée / Budget confié : <span className="font-medium text-gray-700">{mission.advance_amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
                       {mission.paid_at && <> · le {new Date(mission.paid_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</>}

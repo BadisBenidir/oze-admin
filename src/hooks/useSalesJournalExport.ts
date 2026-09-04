@@ -39,7 +39,7 @@ interface B2BOrderRow {
 }
 
 interface SourcingMissionRow {
-  title: string;
+  reference: string;
   advance_amount: number;
   paid_at: string;
   reseller: { company_name: string } | null;
@@ -134,7 +134,7 @@ export const useSalesJournalExport = () => {
       if (scope === 'all' || scope === 'sourcing') {
         const { data, error } = await supabase
           .from('b2b_sourcing_missions')
-          .select('title, advance_amount, paid_at, status, reseller:resellers(company_name), requester:profiles!user_id(first_name, last_name, email)')
+          .select('reference, advance_amount, paid_at, status, reseller:resellers(company_name), requester:profiles!user_id(first_name, last_name, email)')
           .not('paid_at', 'is', null)
           .neq('status', 'cancelled')
           .gte('paid_at', startIso)
@@ -142,7 +142,7 @@ export const useSalesJournalExport = () => {
         if (error) throw new Error(error.message);
         for (const m of (data || []) as unknown as SourcingMissionRow[]) {
           const client = profileDisplayName(m.requester) || m.reseller?.company_name || 'Revendeur';
-          rows.push({ date: new Date(m.paid_at), reference: m.title, client, amountTTC: Number(m.advance_amount) || 0 });
+          rows.push({ date: new Date(m.paid_at), reference: m.reference, client, amountTTC: Number(m.advance_amount) || 0 });
         }
       }
 

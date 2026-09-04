@@ -15,6 +15,8 @@ export interface ResellerSourcingItem {
 export interface ResellerSourcingMission {
   id: string;
   title: string;
+  /** Numéro de référence généré automatiquement — voir 0096. */
+  reference: string;
   advance_amount: number;
   paid_at: string | null;
   status: 'active' | 'completed' | 'cancelled';
@@ -54,7 +56,7 @@ export const useResellerSourcing = (isAuthenticated: boolean = false) => {
 
       const { data: missionRows, error: missionsError } = await supabase
         .from('reseller_sourcing_missions')
-        .select('id, title, advance_amount, paid_at, status, is_published_to_reseller, published_at, created_at')
+        .select('id, title, reference, advance_amount, paid_at, status, is_published_to_reseller, published_at, created_at')
         .order('created_at', { ascending: false });
       if (missionsError) throw new Error(missionsError.message);
 

@@ -86,6 +86,7 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{mission.title}</p>
+                      <p className="text-xs text-gray-400 font-mono">{mission.reference}</p>
                       <p className="text-xs text-gray-500">
                         Avance {mission.advance_amount.toFixed(2)} € · {mission.items_count} pièce{mission.items_count > 1 ? 's' : ''} sourcée{mission.items_count > 1 ? 's' : ''}
                         {mission.paid_at && <> · Payée le {new Date(mission.paid_at).toLocaleDateString('fr-FR')}</>}
