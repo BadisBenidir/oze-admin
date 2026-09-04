@@ -18,10 +18,15 @@ import { Team } from '../components/pages/reseller/Team';
 import { WalletPage } from '../components/pages/reseller/WalletPage';
 import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
 import { CartBlockingModal } from '../components/pages/reseller/CartBlockingModal';
-import { ShoppingCart, Wallet, X } from 'lucide-react';
+import { Auctions } from '../components/pages/reseller/Auctions';
+import { AuctionAccessModal } from '../components/pages/reseller/AuctionAccessModal';
+import { useAuctionAccess } from '../hooks/useAuctionAccess';
+import { ShoppingCart, Wallet, X, Lock } from 'lucide-react';
 
-// Deux routes "réelles" (URL adressables) de l'app revendeur : la fiche
-// produit du catalogue B2B et le panier. Tout le reste continue de
+// Trois routes "réelles" (URL adressables) de l'app revendeur : la fiche
+// produit du catalogue B2B, le panier, et /auctions (mode sous-marin des
+// enchères — jamais dans la nav, seulement accessible via le cadenas
+// discret + code d'accès, voir useAuctionAccess). Tout le reste continue de
 // fonctionner par état d'onglet (voir useNavigation), sans dépendance à
 // react-router.
 const parseProductId = (pathname: string): string | null => {
@@ -49,8 +54,10 @@ function ResellerApp() {
   const { profile } = useResellerAuth();
   const cart = useB2BCart(profile?.id);
   const wallet = useWallet(profile?.id);
+  const auctionAccess = useAuctionAccess(profile?.id);
   const currentTab = activeTab || 'catalog';
 
+  const [showAuctionAccessModal, setShowAuctionAccessModal] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'cancel' | null>(null);
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
   const [checkoutOrderId, setCheckoutOrderId] = useState<string | null>(null);
@@ -100,6 +107,24 @@ function ResellerApp() {
 
   const productId = parseProductId(pathname);
   const isCartRoute = pathname === '/panier' || pathname === '/panier/';
+  const isAuctionRoute = pathname === '/auctions' || pathname === '/auctions/';
+
+  // Mode sous-marin : un accès direct à /auctions sans déverrouillage
+  // préalable (voir useAuctionAccess) est renvoyé vers le catalogue — la
+  // vraie barrière reste la RLS Supabase (0104_auction_system.sql), ceci
+  // n'est qu'un filtre de confort côté client.
+  useEffect(() => {
+    if (isAuctionRoute && !auctionAccess.unlocked) {
+      navigatePath('/');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuctionRoute, auctionAccess.unlocked]);
+
+  const handleAuctionAccessCode = (code: string): boolean => {
+    const success = auctionAccess.tryUnlock(code);
+    if (success) navigatePath('/auctions');
+    return success;
+  };
 
   // Retour depuis Stripe : lu une seule fois au montage, puis l'URL est
   // nettoyée pour ne pas re-déclencher au rafraîchissement de la page.
@@ -180,6 +205,12 @@ function ResellerApp() {
       return <CartPage cart={cart} onBack={closeToRoot} wallet={wallet} onWalletPaymentSuccess={handleWalletCheckoutSuccess} />;
     }
 
+    if (isAuctionRoute) {
+      // Non déverrouillé : rien à afficher, l'effet ci-dessus renvoie vers
+      // '/' au prochain tick — évite un flash de contenu avant redirection.
+      return auctionAccess.unlocked ? <Auctions /> : null;
+    }
+
     switch (currentTab) {
       case 'my-orders':
         return <MyOrders onOpenProduct={openProduct} onWalletChanged={wallet.refresh} />;
@@ -228,6 +259,16 @@ function ResellerApp() {
             {cartBadgeCount}
           </span>
         )}
+      </button>
+      {/* Cadenas discret — mode sous-marin des enchères, jamais dans la nav
+          visible. Pas de title (éviterait un tooltip qui le trahirait au
+          survol) : aria-label seul pour rester accessible aux lecteurs d'écran. */}
+      <button
+        onClick={() => setShowAuctionAccessModal(true)}
+        className="p-2 text-gray-500 hover:text-gray-300 transition-colors"
+        aria-label="Accès enchères"
+      >
+        <Lock className="h-4 w-4" />
       </button>
     </div>
   );
@@ -338,6 +379,11 @@ function ResellerApp() {
         {renderContent()}
       </MainLayout>
       <CartBlockingModal blockingError={cart.blockingError} onClose={cart.dismissBlockingError} />
+      <AuctionAccessModal
+        isOpen={showAuctionAccessModal}
+        onClose={() => setShowAuctionAccessModal(false)}
+        onSubmitCode={handleAuctionAccessCode}
+      />
     </ResellerProtectedRoute>
   );
 }
