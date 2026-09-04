@@ -21,13 +21,16 @@ interface RequestDeliveryResult {
 }
 
 /**
- * Articles B2B au statut ready_to_ship visibles par le profil connecté :
- * ses propres commandes toujours, et — s'il est le contact principal de son
- * entreprise — celles de toute l'entreprise (même règle que la policy RLS
- * order_items_reseller_select_own, reproduite ici explicitement en défense
- * en profondeur : ne pas dépendre uniquement de RLS pour ce filtrage,
- * surtout après la fuite corrigée en 0075 où RLS était resté désactivé sur
- * orders/order_items).
+ * Articles B2B au statut ready_to_ship visibles par le profil connecté —
+ * STRICTEMENT les siens (placed_by_profile_id = profile.id), y compris pour
+ * le contact principal de l'entreprise. Décision produit explicite : cette
+ * liste sert à demander SA PROPRE livraison, pas à superviser celle de
+ * l'équipe (contrairement à Suivi livraisons / Team.tsx, qui gardent
+ * l'élargissement "contact principal voit toute l'entreprise" autorisé par
+ * la policy RLS order_items_reseller_select_own — cette policy RLS n'est
+ * volontairement PAS resserrée ici : elle reste le plafond de ce qui est
+ * légalement accessible, cette requête choisit délibérément de demander
+ * moins que ce plafond pour cet écran précis).
  */
 export const useReadyToShipItems = (isAuthenticated: boolean = false) => {
   const { profile } = useResellerAuth();
@@ -45,18 +48,15 @@ export const useReadyToShipItems = (isAuthenticated: boolean = false) => {
       setLoading(true);
       setError(null);
 
-      let query = supabase
+      const query = supabase
         .from('order_items')
         .select(
           'id, line_total, product_id, product_snapshot, product:products(shipping_points), order:orders!inner(order_number, order_channel, reseller_id, placed_by_profile_id)'
         )
         .eq('status', 'active')
         .eq('fulfillment_status', 'ready_to_ship')
-        .eq('order.order_channel', 'b2b');
-
-      query = profile.is_primary
-        ? query.eq('order.reseller_id', profile.reseller_id)
-        : query.eq('order.placed_by_profile_id', profile.id);
+        .eq('order.order_channel', 'b2b')
+        .eq('order.placed_by_profile_id', profile.id);
 
       const { data, error: fetchError } = await query.order('ready_to_ship_at', { ascending: true });
 
