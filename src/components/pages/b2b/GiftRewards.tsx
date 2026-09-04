@@ -228,8 +228,8 @@ export const GiftRewards: React.FC = () => {
                           {gift.recharge_date ? new Date(gift.recharge_date).toLocaleDateString('fr-FR') : '—'}
                         </td>
                         <td className="py-3 px-4 text-sm text-gray-900">
-                          <p className="font-medium">{gift.company_name}</p>
-                          <p className="text-xs text-gray-500">{gift.requester_name}</p>
+                          <p className="font-semibold">{gift.requester_name}</p>
+                          <p className="text-xs text-gray-500">{gift.company_name}</p>
                         </td>
                         <td className="py-3 px-4 text-right text-sm text-gray-900 tabular-nums">{gift.recharge_amount.toFixed(2)} €</td>
                         <td className="py-3 px-4 text-right text-sm font-semibold text-gray-900 tabular-nums">{gift.quantity}</td>
