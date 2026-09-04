@@ -36,6 +36,10 @@ export interface DatabaseOrder {
   // valeur des articles uniquement — jamais livraison ni assurance).
   discount_rate?: number;
   discount_amount?: number;
+  // Revendeur/sous-compte à l'origine d'une commande B2B — absents/null sur
+  // toute commande B2C, voir formatOrders (détection du canal réel).
+  reseller_id?: string | null;
+  placed_by_profile_id?: string | null;
 }
 
 export interface DatabaseOrderItem {
@@ -47,23 +51,40 @@ export interface DatabaseOrderItem {
   line_total: number;
   product_snapshot: any;
   created_at: string;
+  // Statut d'expédition granulaire (pipeline B2B — voir 0062/0086) : jamais
+  // mis à jour pour une commande web, qui reste pilotée par orders.status.
+  status?: 'active' | 'cancelled';
+  fulfillment_status?: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'label_created' | 'shipped' | 'delivered';
 }
 
 export interface OrderWithItems extends DatabaseOrder {
   order_items: DatabaseOrderItem[];
   customer_name?: string;
   items_count: number;
-  source: 'web' | 'external';
+  // Canal réel de la commande — 'live' n'existe structurellement jamais ici
+  // (une vente Live ne crée aucune ligne `orders`, voir products.status=
+  // 'sold-auction') : conservé dans le type pour cohérence avec le sélecteur
+  // de canal de Orders.tsx, mais jamais produit par formatOrders.
+  source: 'web' | 'b2b' | 'live' | 'external';
 }
+
+// Embed revendeur/sous-compte : nécessaire pour résoudre un nom client
+// correct sur une commande B2B, dont shipping_address n'a jamais de
+// firstName/lastName (forme différente de celle des commandes web, voir
+// B2BOrderDetailModal.tsx::formatShippingAddress) — sans ce join, toute
+// commande B2B retombe sur "Client inconnu".
+const ORDERS_SELECT_WITH_RESELLER = `
+  *,
+  order_items (*),
+  reseller:resellers(company_name),
+  placed_by:profiles!placed_by_profile_id(first_name, last_name, email)
+`;
 
 class OrderService {
   async getAllOrders(): Promise<OrderWithItems[]> {
     const { data: orders, error } = await supabase
       .from('orders')
-      .select(`
-        *,
-        order_items (*)
-      `)
+      .select(ORDERS_SELECT_WITH_RESELLER)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -89,10 +110,7 @@ class OrderService {
     // donc rien à exclure de plus ici pour elles.
     const { data: orders, error } = await supabase
       .from('orders')
-      .select(`
-        *,
-        order_items (*)
-      `)
+      .select(ORDERS_SELECT_WITH_RESELLER)
       .eq('order_channel', 'web')
       .order('created_at', { ascending: false });
 
@@ -197,15 +215,36 @@ class OrderService {
 
   private formatOrders(orders: any[]): OrderWithItems[] {
     return orders.map(order => {
-      // Extraire le nom du client depuis l'adresse de livraison
+      // Canal réel : order_channel fait foi (voir 0001/0011_b2b_schema.sql) ;
+      // reseller_id et le préfixe de order_number ne servent que de filet de
+      // sécurité si order_channel manquait sur une ligne ancienne.
+      const isB2B =
+        order.order_channel === 'b2b' ||
+        Boolean(order.reseller_id) ||
+        /^(B2B-|SRC-)/.test(order.order_number || '');
+
+      // Site web : nom extrait de l'adresse de livraison (firstName/lastName).
       const shippingAddress = order.shipping_address || {};
-      const customerName = `${shippingAddress.firstName || ''} ${shippingAddress.lastName || ''}`.trim() || 'Client inconnu';
+      const webName = `${shippingAddress.firstName || ''} ${shippingAddress.lastName || ''}`.trim();
+
+      // B2B : shipping_address n'a jamais firstName/lastName (forme
+      // différente, voir B2BOrderDetailModal.tsx::formatShippingAddress) —
+      // sans ceci la commande retombait toujours sur "Client inconnu". Le
+      // sous-compte demandeur (placed_by) prime sur le nom de l'entreprise,
+      // qui reste le repli si le sous-compte est inconnu (commandes
+      // antérieures à placed_by_profile_id, voir migration 0017).
+      let customerName = webName;
+      if (isB2B) {
+        const requester = order.placed_by;
+        const requesterName = requester ? `${requester.first_name || ''} ${requester.last_name || ''}`.trim() : '';
+        customerName = requesterName || order.reseller?.company_name || webName;
+      }
 
       return {
         ...order,
-        customer_name: customerName,
+        customer_name: customerName || 'Client inconnu',
         items_count: order.order_items?.reduce((sum: number, item: DatabaseOrderItem) => sum + item.quantity, 0) || 0,
-        source: 'web' as const // Pour l'instant toutes les commandes BDD sont web
+        source: (isB2B ? 'b2b' : 'web') as OrderWithItems['source'],
       };
     });
   }

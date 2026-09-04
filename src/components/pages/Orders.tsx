@@ -12,33 +12,74 @@ import {
   getShipmentStatus,
   type ShipmentStatus,
 } from '../orders/ShipmentStatusFilter';
-import { Eye, Download, Truck, Globe, Archive, Loader2 } from 'lucide-react';
+import { Eye, Download, Truck, Globe, Handshake, Gavel, Loader2 } from 'lucide-react';
 
 interface OrdersProps {
   activeSubTab: string;
 }
 
+type ChannelFilter = 'all' | 'web' | 'b2b' | 'live';
+
+/** Badge de canal pour la colonne Source — voir OrderWithItems.source
+ * (orderService.ts::formatOrders) pour la détection réelle du canal.
+ * 'live' n'apparaît structurellement jamais aujourd'hui (aucune vente Live
+ * ne crée de ligne `orders`), le badge reste prêt pour le jour où ce serait
+ * unifié dans cette table. */
+const sourceBadge = (source: 'web' | 'b2b' | 'live' | 'external') => {
+  if (source === 'b2b') {
+    return (
+      <Badge variant="purple">
+        <Handshake className="h-3 w-3 mr-1" />
+        B2B
+      </Badge>
+    );
+  }
+  if (source === 'live') {
+    return (
+      <Badge variant="warning">
+        <Gavel className="h-3 w-3 mr-1" />
+        Live
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="info">
+      <Globe className="h-3 w-3 mr-1" />
+      Site web
+    </Badge>
+  );
+};
+
 export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [shipmentFilter, setShipmentFilter] = useState<ShipmentStatus>('all');
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>('all');
   const source = activeSubTab === 'web-orders' ? 'web' : undefined;
   const { orders, loading, error, updateOrderStatus } = useOrders(source);
 
-  // Compteurs par statut d'expédition (sur l'ensemble des commandes chargées)
-  const shipmentCounts = orders.reduce(
+  // Canal choisi dans le sélecteur rapide, appliqué AVANT le filtre de
+  // statut d'expédition — les pastilles de comptage reflètent donc bien le
+  // canal actuellement sélectionné, pas l'ensemble tous canaux confondus.
+  // 'live' ne matchera jamais aujourd'hui (une vente Live ne crée aucune
+  // ligne `orders`, voir products.status='sold-auction') — conservé pour
+  // le jour où ces ventes seraient unifiées dans cette table.
+  const channelFilteredOrders = channelFilter === 'all' ? orders : orders.filter((order) => order.source === channelFilter);
+
+  // Compteurs par statut d'expédition (sur les commandes du canal sélectionné)
+  const shipmentCounts = channelFilteredOrders.reduce(
     (acc, order) => {
       acc.all += 1;
       acc[getShipmentStatus(order)] += 1;
       return acc;
     },
-    { all: 0, to_ship: 0, label_created: 0, shipped: 0, delivered: 0 } as Record<ShipmentStatus, number>
+    { all: 0, to_ship: 0, label_created: 0, shipped: 0, delivered: 0, other: 0 } as Record<ShipmentStatus, number>
   );
 
   // Liste filtrée pour la vue globale
   const filteredOrders =
     shipmentFilter === 'all'
-      ? orders
-      : orders.filter((order) => getShipmentStatus(order) === shipmentFilter);
+      ? channelFilteredOrders
+      : channelFilteredOrders.filter((order) => getShipmentStatus(order) === shipmentFilter);
 
   // Commandes B2B : composant et hook (useB2BOrders) entièrement séparés des
   // commandes B2C ci-dessous — simplement affiché sous cet onglet de
@@ -289,7 +330,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
           </h3>
           <p className="text-sm text-gray-500">
             {filteredOrders.length} commande{filteredOrders.length > 1 ? 's' : ''} affichée{filteredOrders.length > 1 ? 's' : ''}
-            {shipmentFilter !== 'all' && ` sur ${orders.length}`}
+            {(shipmentFilter !== 'all' || channelFilter !== 'all') && ` sur ${channelFilteredOrders.length}`}
           </p>
         </div>
 
@@ -301,13 +342,23 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
         </div>
       </div>
 
-      {/* Filtre par statut d'expédition */}
-      <div className="mb-6">
+      {/* Filtres : statut d'expédition + canal */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <ShipmentStatusFilter
           value={shipmentFilter}
           onChange={setShipmentFilter}
           counts={shipmentCounts}
         />
+        <select
+          value={channelFilter}
+          onChange={(e) => setChannelFilter(e.target.value as ChannelFilter)}
+          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400 bg-white"
+        >
+          <option value="all">Tous les canaux</option>
+          <option value="web">Site web (B2C)</option>
+          <option value="b2b">B2B Partenaires</option>
+          <option value="live">Lives</option>
+        </select>
       </div>
 
       <Card>
@@ -341,7 +392,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                         <p className="text-sm">
                           {orders.length === 0
                             ? 'Les commandes apparaîtront ici dès qu\'elles seront passées'
-                            : 'Essayez un autre statut d\'expédition'}
+                            : 'Essayez un autre statut d\'expédition ou un autre canal'}
                         </p>
                       </div>
                     </td>
@@ -370,17 +421,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                         <span className="font-medium text-gray-900 text-sm md:text-base">€{order.total_amount.toFixed(2)}</span>
                       </td>
                       <td className="py-3 md:py-4 px-4 md:px-6 hidden md:table-cell">
-                        {order.source === 'web' ? (
-                          <Badge variant="info">
-                            <Globe className="h-3 w-3 mr-1" />
-                            Site web
-                          </Badge>
-                        ) : (
-                          <Badge variant="warning">
-                            <Archive className="h-3 w-3 mr-1" />
-                            {order.platform || 'Externe'}
-                          </Badge>
-                        )}
+                        {sourceBadge(order.source)}
                       </td>
                       <td className="py-3 md:py-4 px-4 md:px-6">
                         <Badge variant={getStatusVariant(order.status)}>

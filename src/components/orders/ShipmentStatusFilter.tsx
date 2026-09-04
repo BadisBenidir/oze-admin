@@ -1,23 +1,64 @@
 import React from 'react';
 import type { OrderWithItems } from '../../services/orderService';
+import { FULFILLMENT_RANK } from '../../hooks/useB2BOrders';
 
-/** Statuts d'expédition dérivés de l'état d'une commande. */
-export type ShipmentStatus = 'all' | 'to_ship' | 'label_created' | 'shipped' | 'delivered';
+/** Statuts d'expédition dérivés de l'état d'une commande. 'other' regroupe
+ * tout ce qui n'exige aucune action logistique immédiate (en attente de
+ * paiement, annulée, achetée B2B mais pas encore demandée en livraison...) —
+ * jamais compté dans "à expédier", visible seulement sous "Toutes". */
+export type ShipmentStatus = 'all' | 'to_ship' | 'label_created' | 'shipped' | 'delivered' | 'other';
 
 /**
- * Dérive le statut d'expédition d'une commande à partir de son `status`
- * et de la présence d'une étiquette Sendcloud.
+ * Dérive le statut d'expédition d'une commande — deux logiques bien
+ * distinctes selon le canal, jamais mélangées :
  *
- *  - to_ship       : payée/confirmée, pas encore d'étiquette
- *  - label_created : étiquette générée mais colis pas encore marqué expédié
- *  - shipped       : expédiée
- *  - delivered     : livrée
+ *  - Web/Live (order.status peut suivre pending/confirmed/paid/shipped/
+ *    delivered/cancelled — jamais mis à jour finement par article) :
+ *      to_ship       : status 'confirmed' ou 'paid', pas encore d'étiquette
+ *      label_created : étiquette générée, pas encore marquée expédiée
+ *      shipped/delivered : d'après order.status
+ *
+ *  - B2B (orders.status reste figé à 'confirmed' dès le paiement — voir
+ *    computeB2BOrderStatus, useB2BOrders.ts — le vrai statut vit dans
+ *    order_items.fulfillment_status, par article) :
+ *      to_ship : au moins un article actif a atteint 'delivery_requested'
+ *                (le revendeur a validé sa demande de livraison) — un achat
+ *                B2B simplement conservé en stockage (fulfillment_status
+ *                'ordered'/'received'/'ready_to_ship', jamais demandé)
+ *                N'EST PAS "à expédier" pour l'admin : rien à emballer tant
+ *                que le revendeur n'a pas demandé sa livraison.
+ *      label_created/shipped/delivered : mêmes rangs que
+ *      computeB2BOrderStatus, jamais une logique différente.
+ *
+ * Toute commande annulée (quel que soit le canal) retombe dans 'other',
+ * jamais dans 'to_ship'.
  */
 export const getShipmentStatus = (order: OrderWithItems): Exclude<ShipmentStatus, 'all'> => {
+  if (['cancelled', 'canceled', 'refunded'].includes(order.status)) return 'other';
+
+  if (order.order_channel === 'b2b') {
+    const activeItems = (order.order_items || []).filter((i) => i.status !== 'cancelled');
+    if (activeItems.length === 0) return 'other';
+
+    const ranks = activeItems.map((i) => FULFILLMENT_RANK[i.fulfillment_status || 'ordered'] ?? 0);
+    const minRank = Math.min(...ranks);
+    const maxRank = Math.max(...ranks);
+
+    if (minRank === FULFILLMENT_RANK.delivered) return 'delivered';
+    if (maxRank >= FULFILLMENT_RANK.shipped) return 'shipped';
+    if (maxRank >= FULFILLMENT_RANK.label_created) return 'label_created';
+    if (maxRank >= FULFILLMENT_RANK.delivery_requested) return 'to_ship';
+    return 'other';
+  }
+
+  // Web / Live — une vente Live ne crée aujourd'hui jamais de ligne
+  // `orders` (voir products.status='sold-auction'), donc cette branche ne
+  // traite en pratique que le web.
   if (order.status === 'delivered') return 'delivered';
   if (order.status === 'shipped') return 'shipped';
   if (order.label_url) return 'label_created';
-  return 'to_ship';
+  if (order.status === 'confirmed' || order.status === 'paid') return 'to_ship';
+  return 'other';
 };
 
 const FILTERS: { value: ShipmentStatus; label: string }[] = [

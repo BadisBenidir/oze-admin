@@ -89,7 +89,7 @@ export type B2BOrderComputedStatus = 'cancelled' | 'delivered' | 'shipped' | 'pr
 // statut global d'une commande retient le PLUS AVANCÉ atteint par au moins un
 // article actif (sauf "Livrée", qui exige que TOUS les articles actifs y
 // soient — livrer une partie du colis ne rend pas la commande "livrée").
-const FULFILLMENT_RANK: Record<B2BOrderItem['fulfillment_status'], number> = {
+export const FULFILLMENT_RANK: Record<B2BOrderItem['fulfillment_status'], number> = {
   ordered: 0,
   received: 1,
   ready_to_ship: 2,
