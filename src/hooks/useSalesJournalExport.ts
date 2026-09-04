@@ -11,20 +11,61 @@ interface SalesJournalRow {
   amountTTC: number;
 }
 
-interface RawOrderRow {
+interface WebOrderRow {
   order_number: string;
   status: string;
   payment_status: string;
   total_amount: number;
   created_at: string;
-  shipping_address?: { firstName?: string; lastName?: string } | null;
-  reseller?: { company_name: string } | null;
+  email: string | null;
+  shipping_address?: { name?: string; firstName?: string; lastName?: string } | null;
+  billing_address?: { name?: string; firstName?: string; lastName?: string } | null;
+}
+
+interface ProfileRef {
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+}
+
+interface B2BOrderRow {
+  order_number: string;
+  status: string;
+  payment_status: string;
+  total_amount: number;
+  created_at: string;
+  reseller: { company_name: string } | null;
+  placed_by: ProfileRef | null;
+}
+
+interface SourcingMissionRow {
+  title: string;
+  advance_amount: number;
+  paid_at: string;
+  reseller: { company_name: string } | null;
+  requester: ProfileRef | null;
 }
 
 // Même règle "encaissée" que Accounting.tsx (paymentPaid) — une seule
 // définition ici pour ne pas la dupliquer/dévier entre les deux écrans.
 const isOrderPaid = (o: { payment_status: string; status: string }): boolean =>
   ['paid', 'succeeded'].includes(o.payment_status) || ['confirmed', 'shipped', 'delivered'].includes(o.status);
+
+// Nom complet d'un sous-compte, avec repli sur l'email si le nom est vide —
+// jamais le nom de l'entreprise ici, qui reste un dernier recours à part
+// (voir sites d'appel ci-dessous) : la facture est émise au nom de la
+// personne physique qui a passé la commande / demandé la mission, pas de
+// l'entreprise dans son ensemble.
+const profileDisplayName = (profile: ProfileRef | null | undefined): string => {
+  if (!profile) return '';
+  const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+  return fullName || profile.email || '';
+};
+
+const addressDisplayName = (addr: { name?: string; firstName?: string; lastName?: string } | null | undefined): string => {
+  if (!addr) return '';
+  return addr.name || `${addr.firstName || ''} ${addr.lastName || ''}`.trim();
+};
 
 export interface SalesJournalResult {
   success: boolean;
@@ -56,15 +97,17 @@ export const useSalesJournalExport = () => {
       if (scope === 'all' || scope === 'web') {
         const { data, error } = await supabase
           .from('orders')
-          .select('order_number, status, payment_status, total_amount, created_at, shipping_address')
+          .select('order_number, status, payment_status, total_amount, created_at, email, shipping_address, billing_address')
           .eq('order_channel', 'web')
           .gte('created_at', startIso)
           .lte('created_at', endIso);
         if (error) throw new Error(error.message);
-        for (const o of (data || []) as RawOrderRow[]) {
+        for (const o of (data || []) as WebOrderRow[]) {
           if (!isOrderPaid(o)) continue;
-          const addr = o.shipping_address || {};
-          const client = `${addr.firstName || ''} ${addr.lastName || ''}`.trim() || 'Client inconnu';
+          // Priorité : adresse de livraison, puis de facturation, puis
+          // email (toujours présent sur une commande) — 'Client inconnu'
+          // n'est plus qu'un tout dernier repli, en pratique inatteignable.
+          const client = addressDisplayName(o.shipping_address) || addressDisplayName(o.billing_address) || o.email || 'Client inconnu';
           rows.push({ date: new Date(o.created_at), reference: o.order_number, client, amountTTC: Number(o.total_amount) || 0 });
         }
       }
@@ -72,28 +115,34 @@ export const useSalesJournalExport = () => {
       if (scope === 'all' || scope === 'b2b') {
         const { data, error } = await supabase
           .from('orders')
-          .select('order_number, status, payment_status, total_amount, created_at, reseller:resellers(company_name)')
+          .select('order_number, status, payment_status, total_amount, created_at, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email)')
           .eq('order_channel', 'b2b')
           .gte('created_at', startIso)
           .lte('created_at', endIso);
         if (error) throw new Error(error.message);
-        for (const o of (data || []) as unknown as RawOrderRow[]) {
+        for (const o of (data || []) as unknown as B2BOrderRow[]) {
           if (!isOrderPaid(o)) continue;
-          rows.push({ date: new Date(o.created_at), reference: o.order_number, client: o.reseller?.company_name || 'Revendeur', amountTTC: Number(o.total_amount) || 0 });
+          // La facture porte le nom du sous-compte qui a passé la commande,
+          // pas celui de l'entreprise — le nom de l'entreprise ne sert que
+          // de tout dernier repli (commandes antérieures à
+          // placed_by_profile_id, voir useB2BOrders.ts).
+          const client = profileDisplayName(o.placed_by) || o.reseller?.company_name || 'Revendeur';
+          rows.push({ date: new Date(o.created_at), reference: o.order_number, client, amountTTC: Number(o.total_amount) || 0 });
         }
       }
 
       if (scope === 'all' || scope === 'sourcing') {
         const { data, error } = await supabase
           .from('b2b_sourcing_missions')
-          .select('title, advance_amount, paid_at, status, reseller:resellers(company_name)')
+          .select('title, advance_amount, paid_at, status, reseller:resellers(company_name), requester:profiles!user_id(first_name, last_name, email)')
           .not('paid_at', 'is', null)
           .neq('status', 'cancelled')
           .gte('paid_at', startIso)
           .lte('paid_at', endIso);
         if (error) throw new Error(error.message);
-        for (const m of (data || []) as unknown as Array<{ title: string; advance_amount: number; paid_at: string; reseller: { company_name: string } | null }>) {
-          rows.push({ date: new Date(m.paid_at), reference: m.title, client: m.reseller?.company_name || 'Revendeur', amountTTC: Number(m.advance_amount) || 0 });
+        for (const m of (data || []) as unknown as SourcingMissionRow[]) {
+          const client = profileDisplayName(m.requester) || m.reseller?.company_name || 'Revendeur';
+          rows.push({ date: new Date(m.paid_at), reference: m.title, client, amountTTC: Number(m.advance_amount) || 0 });
         }
       }
 
