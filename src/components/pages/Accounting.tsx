@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { ExpenseModal } from '../ui/ExpenseModal';
+import { SalesJournalExport } from './accounting/SalesJournalExport';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useAccountingStats } from '../../hooks/useAccountingStats';
 import { useExpenses, Expense, EXPENSE_CATEGORY_LABELS } from '../../hooks/useExpenses';
@@ -346,6 +347,9 @@ export const Accounting: React.FC<AccountingProps> = ({ activeSubTab }) => {
           <p className="text-sm text-gray-500">Évolution mensuelle : chiffre d'affaires, dépenses et résultat</p>
         </div>
         {statsError && <ErrorBox msg={statsError} />}
+
+        <SalesJournalExport />
+
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
