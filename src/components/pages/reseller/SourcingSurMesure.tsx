@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useResellerSourcing, ResellerSourcingItem, ResellerSourcingMission } from '../../../hooks/useResellerSourcing';
+import { SourcingItemDetailModal } from './SourcingItemDetailModal';
 import { AlertCircle, PackageSearch, ImageOff, Sparkles } from 'lucide-react';
 
 const missionStatusBadge = (status: ResellerSourcingMission['status']) => {
@@ -17,7 +18,7 @@ const itemStatusBadge = (status: ResellerSourcingItem['status']) => {
     case 'shipped':
       return <Badge variant="success">Expédiée</Badge>;
     default:
-      return <Badge variant="default">Sélectionnée</Badge>;
+      return <Badge variant="default">Sourcé / Prévu dans votre lot</Badge>;
   }
 };
 
@@ -35,6 +36,7 @@ export const SourcingSurMesure: React.FC = () => {
   // profondeur (même principe que useMyShipments.ts).
   const { missions: allMissions, loading, error } = useResellerSourcing(isReseller);
   const missions = allMissions.filter((m) => m.status !== 'cancelled');
+  const [viewingItem, setViewingItem] = useState<ResellerSourcingItem | null>(null);
 
   return (
     <div className="p-4 md:p-6">
@@ -96,7 +98,12 @@ export const SourcingSurMesure: React.FC = () => {
                 {mission.items.map((item) => {
                   const photo = item.photos?.[0];
                   return (
-                    <Card key={item.id} className="overflow-hidden flex flex-col">
+                    <Card
+                      key={item.id}
+                      hover
+                      onClick={() => setViewingItem(item)}
+                      className="overflow-hidden flex flex-col cursor-pointer"
+                    >
                       <div className="relative h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
                         {photo ? (
                           <img src={photo} alt={item.title} className="w-full h-full object-cover" />
@@ -117,6 +124,8 @@ export const SourcingSurMesure: React.FC = () => {
           </div>
         ))}
       </div>
+
+      <SourcingItemDetailModal item={viewingItem} onClose={() => setViewingItem(null)} />
     </div>
   );
 };

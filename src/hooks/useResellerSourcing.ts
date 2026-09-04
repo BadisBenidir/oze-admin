@@ -10,6 +10,18 @@ export interface ResellerSourcingItem {
   photos: string[];
   status: 'sourced' | 'validated' | 'shipped' | 'cancelled';
   created_at: string;
+  /** Champs descriptifs de la fiche produit liée (voir 0097) — absents
+   * (undefined) pour une pièce créée à la volée (pas de product_id), ou
+   * tant que la migration 0097 n'est pas encore appliquée sur cet
+   * environnement (repli, voir fetchMissions). Jamais de prix ici. */
+  description?: string | null;
+  condition?: string | null;
+  material?: string | null;
+  colors?: string[] | null;
+  serial_number?: string | null;
+  defects?: string | null;
+  defect_images?: string[] | null;
+  category_name?: string | null;
 }
 
 export interface ResellerSourcingMission {
@@ -88,11 +100,26 @@ export const useResellerSourcing = (isAuthenticated: boolean = false) => {
         return;
       }
 
-      const { data: itemRows, error: itemsError } = await supabase
+      const itemColumns = 'id, mission_id, title, brand, photos, status, created_at, description, condition, material, colors, serial_number, defects, defect_images, category_name';
+      let { data: itemRows, error: itemsError } = await supabase
         .from('reseller_sourcing_items')
-        .select('id, mission_id, title, brand, photos, status, created_at')
+        .select(itemColumns)
         .in('mission_id', missionIds)
         .order('created_at', { ascending: false });
+
+      // Même repli que pour les missions : la migration 0097 (colonnes
+      // descriptives) n'est peut-être pas encore appliquée — on retombe sur
+      // les colonnes de base plutôt que de casser toute la page pour des
+      // champs de confort (description, état...).
+      if (itemsError) {
+        const fallback = await supabase
+          .from('reseller_sourcing_items')
+          .select('id, mission_id, title, brand, photos, status, created_at')
+          .in('mission_id', missionIds)
+          .order('created_at', { ascending: false });
+        itemRows = fallback.data as typeof itemRows;
+        itemsError = fallback.error;
+      }
       if (itemsError) throw new Error(itemsError.message);
 
       const itemsByMission = new Map<string, ResellerSourcingItem[]>();
