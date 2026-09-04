@@ -17,10 +17,11 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onMenuToggle }) => {
       orders: 'Gestion des Commandes',
       customers: 'Gestion des Clients',
       accounting: 'Comptabilité & Finances',
+      b2b: 'Espace B2B',
       analytics: 'Analytics & Rapports',
       settings: 'Paramètres',
     };
-    return titles[tab as keyof typeof titles] || 'Admin Panel';
+    return titles[tab as keyof typeof titles] || 'Espace de Gestion';
   };
 
   return (
