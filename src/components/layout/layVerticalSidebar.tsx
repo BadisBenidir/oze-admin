@@ -34,7 +34,7 @@ export const VerticalSidebar: React.FC<VerticalSidebarProps> = ({
         <div className="flex items-center space-x-2 mb-6">
           <currentTab.icon className="h-5 w-5 text-gray-700" />
           <h2 className="text-lg font-semibold text-gray-900">
-            {currentTab.label}
+            {currentTab.sidebarLabel || currentTab.label}
           </h2>
         </div>
 

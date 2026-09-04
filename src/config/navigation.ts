@@ -97,11 +97,12 @@ export const navigationItems: MenuItem[] = [
   },
   {
     id: 'b2b',
-    label: 'Revendeurs',
+    label: 'Espace B2B',
+    sidebarLabel: 'Gestion B2B',
     icon: Handshake,
     path: '/b2b',
     subItems: [
-      { id: 'resellers', label: 'Revendeurs', path: '/b2b/resellers', icon: Users },
+      { id: 'resellers', label: 'Partenaires', path: '/b2b/resellers', icon: Users },
       { id: 'b2b-products', label: 'Produits B2B', path: '/b2b/products', icon: Package },
       { id: 'drops', label: 'Drops B2B', path: '/b2b/drops', icon: Rocket },
       { id: 'sourcing', label: 'Sourcing sur mesure', path: '/b2b/sourcing', icon: PackageSearch },

@@ -95,7 +95,7 @@ export const Resellers: React.FC = () => {
   const handleDelete = async (reseller: Reseller) => {
     if (
       window.confirm(
-        `Supprimer le revendeur "${reseller.company_name}" ?\n\nCe revendeur disparaîtra de la liste et tous ses contacts perdront l'accès à pro.ozeparis.com. Ses commandes, son portefeuille et son historique restent conservés pour la comptabilité.`
+        `Supprimer le compte partenaire "${reseller.company_name}" ?\n\nCe compte disparaîtra de la liste et tous ses contacts perdront l'accès à pro.ozeparis.com. Ses commandes, son portefeuille et son historique restent conservés pour la comptabilité.`
       )
     ) {
       const result = await deleteReseller(reseller.id);
@@ -219,9 +219,9 @@ export const Resellers: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Revendeurs</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Partenaires professionnels</h3>
           <p className="text-sm text-gray-500">
-            {loading ? 'Chargement...' : `${filteredResellers.length} revendeur${filteredResellers.length > 1 ? 's' : ''}`}
+            {loading ? 'Chargement...' : `${filteredResellers.length} compte${filteredResellers.length > 1 ? 's' : ''} partenaire${filteredResellers.length > 1 ? 's' : ''} enregistré${filteredResellers.length > 1 ? 's' : ''}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -243,7 +243,7 @@ export const Resellers: React.FC = () => {
             className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
           >
             <Plus className="h-4 w-4" />
-            <span>Nouveau revendeur</span>
+            <span>Nouveau compte pro</span>
           </button>
         </div>
       </div>
@@ -254,7 +254,7 @@ export const Resellers: React.FC = () => {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Rechercher par entreprise ou email..."
+            placeholder="Rechercher par société ou email..."
             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -282,14 +282,14 @@ export const Resellers: React.FC = () => {
       {!loading && !error && filteredResellers.length === 0 && (
         <div className="text-center py-12">
           <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun revendeur</h3>
-          <p className="text-gray-500 mb-6">Ajoutez votre premier revendeur externe</p>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun compte partenaire</h3>
+          <p className="text-gray-500 mb-6">Ajoutez votre premier compte partenaire</p>
           <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
           >
             <Plus className="h-4 w-4" />
-            <span>Créer un revendeur</span>
+            <span>Créer un compte pro</span>
           </button>
         </div>
       )}
@@ -424,7 +424,7 @@ export const Resellers: React.FC = () => {
               ))}
             </div>
           ) : contacts.length === 0 ? (
-            <p className="text-sm text-gray-500">Aucun contact pour ce revendeur pour l'instant.</p>
+            <p className="text-sm text-gray-500">Aucun contact pour ce compte partenaire pour l'instant.</p>
           ) : (
             <ul className="space-y-2">
               {contacts.map((c) => (
@@ -452,7 +452,7 @@ export const Resellers: React.FC = () => {
 
           {createdCredentials && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
-              <p className="text-sm font-medium text-green-800">Compte créé — communique ces identifiants au revendeur (ils ne seront plus affichés) :</p>
+              <p className="text-sm font-medium text-green-800">Compte créé — communique ces identifiants au partenaire (ils ne seront plus affichés) :</p>
               <div className="bg-white rounded-lg border border-green-200 p-2 space-y-1">
                 <p className="text-xs text-gray-500">Email</p>
                 <p className="text-sm font-mono text-gray-900">{createdCredentials.email}</p>
@@ -551,7 +551,7 @@ export const Resellers: React.FC = () => {
             )}
 
             {inviteMode === 'password' && (
-              <p className="text-xs text-gray-500">Aucun email n'est envoyé dans ce mode — communique ces identifiants toi-même au revendeur.</p>
+              <p className="text-xs text-gray-500">Aucun email n'est envoyé dans ce mode — communique ces identifiants toi-même au partenaire.</p>
             )}
 
             <button

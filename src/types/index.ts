@@ -68,6 +68,10 @@ export interface MenuItem {
   icon: React.ComponentType;
   path: string;
   subItems?: SubMenuItem[];
+  /** Libellé affiché en titre de la barre latérale, si différent de `label`
+   * (qui reste celui de la barre de navigation horizontale). Absent : la
+   * barre latérale retombe sur `label`. */
+  sidebarLabel?: string;
 }
 
 export interface SubMenuItem {
