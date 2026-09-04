@@ -134,9 +134,10 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               <button
-                onClick={() => setShowEditModal(true)}
-                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Modifier la mission"
+                onClick={() => !isCompleted && setShowEditModal(true)}
+                disabled={isCompleted}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                title={isCompleted ? 'Mission clôturée — annulez la validation pour modifier ses paramètres' : 'Modifier la mission'}
               >
                 <Pencil className="h-4 w-4" />
               </button>
@@ -227,8 +228,10 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-gray-900">Pièces sourcées ({items.length})</p>
               <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-xs font-medium"
+                onClick={() => !isCompleted && setShowAddModal(true)}
+                disabled={isCompleted}
+                title={isCompleted ? 'Mission clôturée — annulez la validation pour ajouter des pièces' : undefined}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-900"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Ajouter une pièce
@@ -306,7 +309,9 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                               <select
                                 value={item.status}
                                 onChange={(e) => setItemStatus(item.id, e.target.value as SourcingItem['status']).then(onItemsChanged)}
-                                className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-gray-400"
+                                disabled={isCompleted}
+                                title={isCompleted ? 'Mission clôturée — annulez la validation pour modifier le statut' : undefined}
+                                className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
                               >
                                 <option value="sourced">Sourcée</option>
                                 <option value="validated">Validée</option>
@@ -318,9 +323,10 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                             <td className="py-2.5 px-3 text-right">
                               <button
                                 type="button"
-                                onClick={() => removeItem(item.id).then(onItemsChanged)}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Retirer cette pièce de la mission"
+                                onClick={() => !isCompleted && removeItem(item.id).then(onItemsChanged)}
+                                disabled={isCompleted}
+                                title={isCompleted ? 'Mission clôturée — annulez la validation pour retirer une pièce' : 'Retirer cette pièce de la mission'}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
