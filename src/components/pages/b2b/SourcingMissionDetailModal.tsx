@@ -16,6 +16,10 @@ interface SourcingMissionDetailModalProps {
   onPublishChange: (published: boolean) => Promise<{ success: boolean; error?: string }>;
   /** Annule la validation revendeur (RPC transactionnelle, voir 0098) : commande annulée, produits repassés en brouillon, mission réactivée. */
   onCancelValidation: () => Promise<{ success: boolean; error?: string }>;
+  /** Supprime définitivement la mission (RPC transactionnelle, voir 0100).
+   * En cas de succès, le parent doit vider `mission` (ce qui démonte cette
+   * modale) et afficher son propre toast de confirmation. */
+  onDelete: () => Promise<{ success: boolean; error?: string }>;
   /** Rafraîchit la liste des missions (montants consommés) après ajout d'une pièce. */
   onItemsChanged: () => void;
 }
@@ -36,7 +40,7 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
 /** Détail d'une mission de sourcing : cartouche avance/budget/marge, pièces
  * affectées à l'enveloppe d'achat, ajout d'une pièce, édition et clôture —
  * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
-export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onCancelValidation, onItemsChanged }) => {
+export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onCancelValidation, onDelete, onItemsChanged }) => {
   const { items, loading, error, addItem, addItems, setItemStatus, removeItem, linkProduct } = useSourcingItems(mission?.id || null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -47,6 +51,9 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   const [publishing, setPublishing] = useState(false);
   const [cancellingValidation, setCancellingValidation] = useState(false);
   const [showCancelValidationConfirm, setShowCancelValidationConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [successToast, setSuccessToast] = useState('');
 
   useEffect(() => {
@@ -121,6 +128,18 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     setSuccessToast('Validation annulée : les pièces sont repassées en brouillon.');
   };
 
+  const handleConfirmDelete = async () => {
+    setDeleting(true);
+    setDeleteError('');
+    const result = await onDelete();
+    setDeleting(false);
+    if (!result.success) {
+      setDeleteError(result.error || 'Erreur lors de la suppression');
+      return;
+    }
+    setShowDeleteConfirm(false);
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="fixed inset-0 bg-black bg-opacity-25" onClick={onClose} />
@@ -140,6 +159,13 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 title={isCompleted ? 'Mission clôturée — annulez la validation pour modifier ses paramètres' : 'Modifier la mission'}
               >
                 <Pencil className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Supprimer la mission"
+              >
+                <Trash2 className="h-4 w-4" />
               </button>
               <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
                 <X className="h-5 w-5" />
@@ -420,6 +446,44 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50"
                 >
                   {cancellingValidation ? 'Annulation...' : 'Oui, annuler la validation'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto">
+          <div className="fixed inset-0 bg-black bg-opacity-40" onClick={() => !deleting && setShowDeleteConfirm(false)} />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-base font-semibold text-gray-900">Supprimer cette mission de sourcing ?</h3>
+              <p className="text-sm text-gray-600 mt-2">
+                Cette action est irréversible. Les éventuels articles associés seront automatiquement détachés et remis en statut "Brouillon".
+              </p>
+              {deleteError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2 mt-3">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-700">{deleteError}</p>
+                </div>
+              )}
+              <div className="flex justify-end space-x-3 mt-5">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-sm disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={deleting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  {deleting ? 'Suppression...' : 'Confirmer la suppression'}
                 </button>
               </div>
             </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Briefcase, AlertCircle, Eye } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
+import { Toast } from '../../ui/Toast';
 import { useSourcingMissions, SourcingMission, getSourcingMissionMetrics } from '../../../hooks/useSourcingMissions';
 import { CreateSourcingMissionModal } from './CreateSourcingMissionModal';
 import { SourcingMissionDetailModal } from './SourcingMissionDetailModal';
@@ -28,9 +29,10 @@ const missionStatusBadge = (status: SourcingMission['status']) => {
  * revendeur, servant d'enveloppe budgétaire pour des pièces sourcées à la
  * demande (voir SourcingMissionDetailModal pour le détail des pièces). */
 export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resellerId, resellerName, isAdmin }) => {
-  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation } = useSourcingMissions(resellerId, isAdmin);
+  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation, deleteMission } = useSourcingMissions(resellerId, isAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<SourcingMission | null>(null);
+  const [successToast, setSuccessToast] = useState('');
 
   // Garde la mission ouverte synchronisée avec la liste (statut, ajout de
   // pièce, ou édition changent tous les montants affichés dans le détail).
@@ -144,8 +146,19 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
           if (!viewingMission) return { success: false, error: 'Mission inconnue' };
           return cancelValidation(viewingMission.id);
         }}
+        onDelete={async () => {
+          if (!viewingMission) return { success: false, error: 'Mission inconnue' };
+          const result = await deleteMission(viewingMission.id);
+          if (result.success) {
+            setViewingMission(null);
+            setSuccessToast('Mission supprimée avec succès');
+          }
+          return result;
+        }}
         onItemsChanged={refresh}
       />
+
+      {successToast && <Toast message={successToast} onDismiss={() => setSuccessToast('')} />}
     </div>
   );
 };

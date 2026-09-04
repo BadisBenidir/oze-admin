@@ -87,6 +87,10 @@ interface UseSourcingMissionsResult {
    * voir 0098) : commande annulée, produits repassés en brouillon, mission
    * réactivée. Réservé aux admins (vérifié côté RPC). */
   cancelValidation: (id: string) => Promise<{ success: boolean; error?: string }>;
+  /** Supprime définitivement une mission (RPC transactionnelle, voir 0100) —
+   * annule d'abord sa commande éventuelle et rend ses produits au brouillon,
+   * puis supprime les pièces et la mission. Irréversible. */
+  deleteMission: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 /** Missions de sourcing sur mesure (voir 0089/0090/0091_b2b_sourcing_missions*.sql) —
@@ -216,6 +220,13 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     return { success: true };
   };
 
+  const deleteMission = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: rpcError } = await supabase.rpc('admin_delete_sourcing_mission', { p_mission_id: id });
+    if (rpcError) return { success: false, error: rpcError.message };
+    await fetchMissions();
+    return { success: true };
+  };
+
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
@@ -224,5 +235,5 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     fetchMissions();
   }, [isAdmin, fetchMissions]);
 
-  return { missions, loading, error, refresh: fetchMissions, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation };
+  return { missions, loading, error, refresh: fetchMissions, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation, deleteMission };
 };

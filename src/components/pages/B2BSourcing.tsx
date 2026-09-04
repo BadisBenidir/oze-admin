@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Briefcase, AlertCircle, Banknote, PieChart, Wallet, TrendingUp, Eye } from 'lucide-react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
+import { Toast } from '../ui/Toast';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useSourcingMissions, SourcingMission, getSourcingMissionMetrics } from '../../hooks/useSourcingMissions';
 import { CreateSourcingMissionModal } from './b2b/CreateSourcingMissionModal';
@@ -30,9 +31,10 @@ const requesterLabel = (mission: SourcingMission): string => {
  * 0091_b2b_sourcing_mission_budget_split.sql pour le modèle avance/enveloppe. */
 export const B2BSourcing: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation } = useSourcingMissions(undefined, isAdmin);
+  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation, deleteMission } = useSourcingMissions(undefined, isAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<SourcingMission | null>(null);
+  const [successToast, setSuccessToast] = useState('');
   const [resellerFilter, setResellerFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | SourcingMission['status']>('all');
 
@@ -283,8 +285,19 @@ export const B2BSourcing: React.FC = () => {
           if (!viewingMission) return { success: false, error: 'Mission inconnue' };
           return cancelValidation(viewingMission.id);
         }}
+        onDelete={async () => {
+          if (!viewingMission) return { success: false, error: 'Mission inconnue' };
+          const result = await deleteMission(viewingMission.id);
+          if (result.success) {
+            setViewingMission(null);
+            setSuccessToast('Mission supprimée avec succès');
+          }
+          return result;
+        }}
         onItemsChanged={refresh}
       />
+
+      {successToast && <Toast message={successToast} onDismiss={() => setSuccessToast('')} />}
     </div>
   );
 };
