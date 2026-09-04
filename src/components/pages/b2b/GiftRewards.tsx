@@ -2,20 +2,42 @@ import React, { useMemo, useState } from 'react';
 import { Gift, AlertCircle, PackageCheck, PackageX, Send, X } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
+import { supabase } from '../../../lib/supabase';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { useGiftRewards, GiftReward } from '../../../hooks/useGiftRewards';
+import { B2BOrder, computeB2BOrderStatus } from '../../../hooks/useB2BOrders';
 import { AssignGiftToOrderModal } from './AssignGiftToOrderModal';
+import { B2BOrderDetailModal } from './B2BOrderDetailModal';
+
+// Même select que useB2BOrders.ts — ici pour UNE commande précise (ouverte
+// depuis son numéro dans le tableau des portefeuilles offerts), pas la
+// liste complète : évite de charger tout useB2BOrders juste pour afficher
+// une seule fiche depuis un lien.
+const fetchOrderById = async (orderId: string): Promise<B2BOrder | null> => {
+  const { data, error } = await supabase
+    .from('orders')
+    .select(
+      'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), ' +
+      'placed_by:profiles!placed_by_profile_id(first_name, last_name, email), ' +
+      'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg))'
+    )
+    .eq('id', orderId)
+    .single();
+  if (error || !data) return null;
+  const order = data as unknown as B2BOrder;
+  return { ...order, placed_by_is_primary: true, computedStatus: computeB2BOrderStatus(order) };
+};
 
 type StatusFilter = 'all' | 'due' | 'shipped';
 
 const statusBadge = (status: GiftReward['status']) => {
   switch (status) {
     case 'assigned':
-      return <Badge variant="info">Inclus dans une commande</Badge>;
+      return <Badge variant="info">Inclus dans la commande</Badge>;
     case 'shipped':
       return <Badge variant="success">Envoyé</Badge>;
     default:
-      return <Badge variant="warning">À envoyer</Badge>;
+      return <Badge variant="warning">En attente de commande</Badge>;
   }
 };
 
@@ -113,6 +135,15 @@ export const GiftRewards: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [assigningGift, setAssigningGift] = useState<GiftReward | null>(null);
   const [shippingGift, setShippingGift] = useState<GiftReward | null>(null);
+  const [viewingOrder, setViewingOrder] = useState<B2BOrder | null>(null);
+  const [loadingOrderId, setLoadingOrderId] = useState<string | null>(null);
+
+  const handleViewOrder = async (orderId: string) => {
+    setLoadingOrderId(orderId);
+    const order = await fetchOrderById(orderId);
+    setLoadingOrderId(null);
+    if (order) setViewingOrder(order);
+  };
 
   const filteredRewards = useMemo(() => {
     if (statusFilter === 'due') return rewards.filter((r) => r.status !== 'shipped');
@@ -234,8 +265,18 @@ export const GiftRewards: React.FC = () => {
                         <td className="py-3 px-4 text-right text-sm text-gray-900 tabular-nums">{gift.recharge_amount.toFixed(2)} €</td>
                         <td className="py-3 px-4 text-right text-sm font-semibold text-gray-900 tabular-nums">{gift.quantity}</td>
                         <td className="py-3 px-4">{statusBadge(gift.status)}</td>
-                        <td className="py-3 px-4 text-sm text-gray-600">
-                          {gift.assigned_order_number ? `#${gift.assigned_order_number}` : '—'}
+                        <td className="py-3 px-4 text-sm">
+                          {gift.assigned_order_number && gift.assigned_order_id ? (
+                            <button
+                              onClick={() => handleViewOrder(gift.assigned_order_id!)}
+                              disabled={loadingOrderId === gift.assigned_order_id}
+                              className="text-blue-600 hover:text-blue-800 underline disabled:opacity-50"
+                            >
+                              {loadingOrderId === gift.assigned_order_id ? 'Chargement...' : `#${gift.assigned_order_number}`}
+                            </button>
+                          ) : (
+                            <span className="text-gray-600">—</span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-sm text-gray-600">
                           {gift.shipped_at ? new Date(gift.shipped_at).toLocaleDateString('fr-FR') : '—'}
@@ -289,6 +330,10 @@ export const GiftRewards: React.FC = () => {
           return markShipped(shippingGift.id, { note });
         }}
       />
+
+      {viewingOrder && (
+        <B2BOrderDetailModal order={viewingOrder} onClose={() => setViewingOrder(null)} onOrderUpdated={() => {}} />
+      )}
     </div>
   );
 };
