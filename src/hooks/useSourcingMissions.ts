@@ -42,6 +42,26 @@ export interface SourcingMission {
   requester: SourcingMissionRequester | null;
 }
 
+/**
+ * Reste à dépenser / marge affichés pour une mission — deux formules selon
+ * le statut : tant qu'une mission est 'active', ce sont des projections
+ * théoriques sur l'enveloppe allouée (remaining_cost_budget/gross_margin,
+ * déjà calculés ci-dessus) ; une fois 'completed', l'enveloppe n'a plus de
+ * sens (rien ne reste "à engager" sur une mission close) et la marge doit
+ * refléter la dépense RÉELLE (consumed_cost_amount), pas le budget alloué au
+ * départ. Utilisé par la vue d'ensemble (B2BSourcing.tsx), l'onglet fiche
+ * revendeur (SourcingMissionsTab.tsx) et la modale de détail.
+ */
+export const getSourcingMissionMetrics = (mission: SourcingMission) => {
+  const isCompleted = mission.status === 'completed';
+  return {
+    isCompleted,
+    remaining: isCompleted ? 0 : mission.remaining_cost_budget,
+    margin: isCompleted ? mission.advance_amount - mission.consumed_cost_amount : mission.gross_margin,
+    overBudget: !isCompleted && mission.remaining_cost_budget < 0,
+  };
+};
+
 export interface SourcingMissionInput {
   reseller_id: string;
   user_id?: string;

@@ -3,7 +3,7 @@ import { Plus, Briefcase, AlertCircle, Banknote, PieChart, Wallet, TrendingUp, E
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-import { useSourcingMissions, SourcingMission } from '../../hooks/useSourcingMissions';
+import { useSourcingMissions, SourcingMission, getSourcingMissionMetrics } from '../../hooks/useSourcingMissions';
 import { CreateSourcingMissionModal } from './b2b/CreateSourcingMissionModal';
 import { SourcingMissionDetailModal } from './b2b/SourcingMissionDetailModal';
 
@@ -63,8 +63,15 @@ export const B2BSourcing: React.FC = () => {
   const totalAdvance = activeMissions.reduce((sum, m) => sum + m.advance_amount, 0);
   const totalCostBudget = activeMissions.reduce((sum, m) => sum + m.allocated_cost_budget, 0);
   const totalConsumed = activeMissions.reduce((sum, m) => sum + m.consumed_cost_amount, 0);
-  const totalRemaining = activeMissions.reduce((sum, m) => sum + m.remaining_cost_budget, 0);
-  const totalMargin = totalAdvance - totalCostBudget;
+  // Une mission terminée n'a plus d'enveloppe "restante" à engager — seules
+  // les missions encore actives comptent pour ce total (voir
+  // getSourcingMissionMetrics).
+  const totalRemaining = activeMissions
+    .filter((m) => m.status === 'active')
+    .reduce((sum, m) => sum + m.remaining_cost_budget, 0);
+  // Marge réelle pour les missions terminées (avance - dépense réelle),
+  // marge théorique pour les missions encore actives (avance - enveloppe).
+  const totalMargin = activeMissions.reduce((sum, m) => sum + getSourcingMissionMetrics(m).margin, 0);
 
   return (
     <div className="p-4 md:p-6">
@@ -204,7 +211,7 @@ export const B2BSourcing: React.FC = () => {
                     </tr>
                   ) : (
                     filteredMissions.map((mission) => {
-                      const overBudget = mission.remaining_cost_budget < 0;
+                      const { remaining, margin, overBudget } = getSourcingMissionMetrics(mission);
                       return (
                         <tr
                           key={mission.id}
@@ -228,10 +235,10 @@ export const B2BSourcing: React.FC = () => {
                           <td className="py-3 px-4 md:px-6 hidden md:table-cell text-right text-sm text-gray-600 tabular-nums">{mission.allocated_cost_budget.toFixed(2)} €</td>
                           <td className="py-3 px-4 md:px-6 hidden md:table-cell text-right text-sm text-gray-600 tabular-nums">{mission.consumed_cost_amount.toFixed(2)} €</td>
                           <td className={`py-3 px-4 md:px-6 text-right text-sm font-semibold tabular-nums ${overBudget ? 'text-red-600' : 'text-gray-900'}`}>
-                            {mission.remaining_cost_budget.toFixed(2)} €
+                            {remaining.toFixed(2)} €
                           </td>
-                          <td className={`py-3 px-4 md:px-6 text-right text-sm font-semibold tabular-nums ${mission.gross_margin < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {mission.gross_margin.toFixed(2)} €
+                          <td className={`py-3 px-4 md:px-6 text-right text-sm font-semibold tabular-nums ${margin < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {margin.toFixed(2)} €
                           </td>
                           <td className="py-3 px-4 md:px-6">
                             <div className="flex items-center gap-1.5">

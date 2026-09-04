@@ -63,10 +63,16 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   // achetées, donc exclues comme partout ailleurs dans ce module.
   const activeItems = items.filter((i) => i.status !== 'cancelled');
   const totalSpent = activeItems.reduce((sum, item) => sum + (Number(item.cost_price) || 0), 0);
-  const remainingAfter = mission.allocated_cost_budget - totalSpent;
-  const marginReal = mission.advance_amount - totalSpent;
+  // Une mission 'completed' est close : plus rien à engager sur son
+  // enveloppe (Reste affiché à 0), et la marge doit refléter la dépense
+  // RÉELLE plutôt que l'enveloppe allouée au départ — voir
+  // getSourcingMissionMetrics (même règle que les vues d'ensemble).
+  const isCompleted = mission.status === 'completed';
+  const remainingAfter = isCompleted ? 0 : mission.allocated_cost_budget - totalSpent;
+  const marginReal = isCompleted ? mission.advance_amount - totalSpent : mission.advance_amount - mission.allocated_cost_budget;
+  const marginLabel = isCompleted ? 'Marge réelle' : 'Marge prévisionnelle';
   const consumedRatio = mission.allocated_cost_budget > 0 ? Math.min(totalSpent / mission.allocated_cost_budget, 1) : 0;
-  const overBudget = remainingAfter < 0;
+  const overBudget = !isCompleted && remainingAfter < 0;
   const marginPercent = mission.advance_amount > 0 ? (marginReal / mission.advance_amount) * 100 : null;
 
   const handleAddItem = async (input: Parameters<typeof addItem>[0]) => {
@@ -194,7 +200,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                   <p className={`text-sm font-semibold ${overBudget ? 'text-red-600' : 'text-gray-900'}`}>{remainingAfter.toFixed(2)} €</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Marge réelle</p>
+                  <p className="text-xs text-gray-500">{marginLabel}</p>
                   <p className={`text-sm font-semibold ${marginReal < 0 ? 'text-red-600' : 'text-green-600'}`}>
                     {marginReal.toFixed(2)} €{marginPercent !== null && ` (${marginPercent.toFixed(0)}%)`}
                   </p>
