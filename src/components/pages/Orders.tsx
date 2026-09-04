@@ -12,7 +12,7 @@ import {
   getShipmentStatus,
   type ShipmentStatus,
 } from '../orders/ShipmentStatusFilter';
-import { Eye, Download, Truck, Globe, Archive, Plus, Loader2 } from 'lucide-react';
+import { Eye, Download, Truck, Globe, Archive, Loader2 } from 'lucide-react';
 
 interface OrdersProps {
   activeSubTab: string;
@@ -21,7 +21,7 @@ interface OrdersProps {
 export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [shipmentFilter, setShipmentFilter] = useState<ShipmentStatus>('all');
-  const source = activeSubTab === 'web-orders' ? 'web' : activeSubTab === 'external-orders' ? 'external' : undefined;
+  const source = activeSubTab === 'web-orders' ? 'web' : undefined;
   const { orders, loading, error, updateOrderStatus } = useOrders(source);
   const { stats, loading: statsLoading } = useOrderStats();
 
@@ -261,183 +261,6 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (activeSubTab === 'external-orders') {
-    return (
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Commandes Plateformes Externes</h3>
-            <p className="text-sm text-gray-500">
-              Commandes provenant de Vinted, eBay, Amazon et autres plateformes
-            </p>
-          </div>
-          
-          <div className="flex items-center space-x-3">
-            <button className="flex items-center space-x-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-              <Download className="h-4 w-4" />
-              <span>Exporter</span>
-            </button>
-            <button className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
-              <Plus className="h-4 w-4" />
-              <span>Ajouter Commande</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Commandes Externes</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {statsLoading ? '-' : stats.external_orders}
-                  </p>
-                  <div className="flex items-center mt-2">
-                    <Archive className="h-4 w-4 text-purple-500 mr-1" />
-                    <span className="text-sm text-purple-600">Plateformes</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Vinted</p>
-                  <p className="text-2xl font-bold text-gray-900">0</p>
-                  <div className="flex items-center mt-2">
-                    <span className="text-sm text-green-600">€0.00</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">eBay</p>
-                  <p className="text-2xl font-bold text-gray-900">0</p>
-                  <div className="flex items-center mt-2">
-                    <span className="text-sm text-gray-600">€0.00</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Amazon</p>
-                  <p className="text-2xl font-bold text-gray-900">0</p>
-                  <div className="flex items-center mt-2">
-                    <span className="text-sm text-gray-600">€0.00</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left py-4 px-6 font-medium text-gray-900">Commande</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-900">Client</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-900">Date</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-900">Articles</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-900">Total</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-900">Plateforme</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-900">Statut</th>
-                    <th className="text-left py-4 px-6 font-medium text-gray-900">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-8 text-center">
-                        <div className="text-gray-500">
-                          <Archive className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                          <p>Aucune commande externe pour le moment</p>
-                          <p className="text-sm">Les commandes Vinted, eBay et autres plateformes apparaîtront ici</p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    orders.map((order) => (
-                      <tr key={order.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                        <td className="py-4 px-6">
-                          <span className="font-mono text-sm font-medium text-gray-900">{order.order_number}</span>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div>
-                            <p className="font-medium text-gray-900">{order.customer_name}</p>
-                            <p className="text-sm text-gray-500">{order.email}</p>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <span className="text-sm text-gray-600">
-                            {new Date(order.created_at).toLocaleDateString('fr-FR')}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6">
-                          <span className="text-sm text-gray-900">{order.items_count} article{order.items_count > 1 ? 's' : ''}</span>
-                        </td>
-                        <td className="py-4 px-6">
-                          <span className="font-medium text-gray-900">€{order.total_amount.toFixed(2)}</span>
-                        </td>
-                        <td className="py-4 px-6">
-                          <Badge variant="warning">
-                            <Archive className="h-3 w-3 mr-1" />
-                            {order.platform || 'Externe'}
-                          </Badge>
-                        </td>
-                        <td className="py-4 px-6">
-                          <Badge variant={getStatusVariant(order.status)}>
-                            {getStatusLabel(order.status)}
-                          </Badge>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="flex items-center space-x-2">
-                            <button 
-                              className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                              onClick={() => setSelectedOrderId(order.id)}
-                              title="Voir les détails"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                            {order.status === 'confirmed' && (
-                              <button 
-                                className="p-1 text-gray-400 hover:text-green-600 transition-colors"
-                                onClick={() => updateOrderStatus(order.id, 'shipped')}
-                                title="Marquer comme expédiée"
-                              >
-                                <Truck className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
                 </tbody>
               </table>
             </div>

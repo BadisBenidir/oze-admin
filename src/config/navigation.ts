@@ -53,7 +53,6 @@ export const navigationItems: MenuItem[] = [
       { id: 'b2b-orders', label: 'Commandes B2B', path: '/orders/b2b', icon: Handshake },
       { id: 'reception', label: 'Vue Réception', path: '/orders/reception', icon: PackageCheck },
       { id: 'shipment-requests', label: 'Demandes de livraison', path: '/orders/shipment-requests', icon: Truck },
-      { id: 'external-orders', label: 'Commandes externes', path: '/orders/external', icon: Archive },
     ]
   },
   {
