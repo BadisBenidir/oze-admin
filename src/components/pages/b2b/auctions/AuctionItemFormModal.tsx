@@ -162,27 +162,27 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
                         className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400"
                       />
                     </div>
-                    {productSearch && (
-                      <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto divide-y divide-gray-100">
-                        {filteredProducts.length === 0 ? (
-                          <div className="p-3 text-center text-xs text-gray-500">Aucun résultat</div>
-                        ) : (
-                          filteredProducts.map((p) => (
-                            <button
-                              type="button"
-                              key={p.id}
-                              onClick={() => handleSelectProduct(p)}
-                              className="w-full flex items-center gap-2 p-2 text-left hover:bg-gray-50"
-                            >
-                              <div className="h-8 w-8 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
-                                {p.images?.[0] ? <img src={p.images[0]} alt="" className="h-full w-full object-cover" /> : <Package className="h-3.5 w-3.5 text-gray-400" />}
-                              </div>
-                              <span className="text-xs text-gray-800 truncate">{p.name}</span>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
+                    <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto divide-y divide-gray-100">
+                      {filteredProducts.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-gray-500">
+                          {draftProducts.length === 0 ? 'Aucun article en brouillon.' : 'Aucun résultat pour cette recherche.'}
+                        </div>
+                      ) : (
+                        filteredProducts.map((p) => (
+                          <button
+                            type="button"
+                            key={p.id}
+                            onClick={() => handleSelectProduct(p)}
+                            className="w-full flex items-center gap-2 p-2 text-left hover:bg-gray-50"
+                          >
+                            <div className="h-8 w-8 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
+                              {p.images?.[0] ? <img src={p.images[0]} alt="" className="h-full w-full object-cover" /> : <Package className="h-3.5 w-3.5 text-gray-400" />}
+                            </div>
+                            <span className="text-xs text-gray-800 truncate">{p.name}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
                   </>
                 )}
                 <p className="text-xs text-gray-400 mt-1">Nécessaire pour pouvoir générer une commande une fois le lot adjugé — peut être lié plus tard.</p>
