@@ -246,30 +246,32 @@ function ResellerApp() {
   );
 
   const desktopCartButton = (
-    <div className="flex items-center space-x-2 md:space-x-3">
+    <div className="flex items-center gap-2 md:gap-3">
       {walletBadge}
-      <button
-        onClick={openCart}
-        className="relative flex items-center space-x-2 px-3 md:px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
-      >
-        <ShoppingCart className="h-4 w-4" />
-        <span className="hidden sm:inline">Panier</span>
-        {cartBadgeCount > 0 && (
-          <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
-            {cartBadgeCount}
-          </span>
-        )}
-      </button>
-      {/* Cadenas discret — mode sous-marin des enchères, jamais dans la nav
-          visible. Pas de title (éviterait un tooltip qui le trahirait au
-          survol) : aria-label seul pour rester accessible aux lecteurs d'écran. */}
-      <button
-        onClick={() => setShowAuctionAccessModal(true)}
-        className="p-2 text-gray-500 hover:text-gray-300 transition-colors"
-        aria-label="Accès enchères"
-      >
-        <Lock className="h-4 w-4" />
-      </button>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={openCart}
+          className="relative flex items-center space-x-2 px-3 md:px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+        >
+          <ShoppingCart className="h-4 w-4" />
+          <span className="hidden sm:inline">Panier</span>
+          {cartBadgeCount > 0 && (
+            <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
+              {cartBadgeCount}
+            </span>
+          )}
+        </button>
+        {/* Cadenas discret — mode sous-marin des enchères, jamais dans la nav
+            visible. Pas de title (éviterait un tooltip qui le trahirait au
+            survol) : aria-label seul pour rester accessible aux lecteurs d'écran. */}
+        <button
+          onClick={() => setShowAuctionAccessModal(true)}
+          className="text-gray-400 opacity-40 hover:opacity-100 transition-opacity cursor-pointer"
+          aria-label="Accès enchères"
+        >
+          <Lock className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 

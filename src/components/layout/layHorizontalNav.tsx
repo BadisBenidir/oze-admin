@@ -16,10 +16,10 @@ export const HorizontalNav: React.FC<HorizontalNavProps> = ({
   rightContent
 }) => {
   return (
-    <nav className="bg-gray-900 border-b border-gray-800">
+    <nav className="bg-gray-900 border-b border-gray-800 overflow-hidden">
       <div className="px-4 md:px-6">
-        <div className="flex items-center justify-between">
-          <div className="flex space-x-4 md:space-x-8 overflow-x-auto">
+        <div className="flex items-center justify-between overflow-hidden">
+          <div className="flex items-center gap-1 md:gap-4 min-w-0">
             {navigationItems.map((item) => {
               const IconComponent = item.icon as any;
               const isActive = activeTab === item.id;
@@ -29,7 +29,7 @@ export const HorizontalNav: React.FC<HorizontalNavProps> = ({
                   key={item.id}
                   onClick={() => onTabChange(item.id)}
                   className={`
-                    flex items-center space-x-2 px-3 md:px-4 py-4 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap
+                    flex flex-shrink-0 items-center space-x-2 px-2 md:px-4 py-4 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap
                     ${isActive
                       ? 'border-white text-white bg-gray-800'
                       : 'border-transparent text-gray-300 hover:text-white hover:border-gray-600'
@@ -42,7 +42,7 @@ export const HorizontalNav: React.FC<HorizontalNavProps> = ({
               );
             })}
           </div>
-          {rightContent && <div className="flex items-center ml-auto pl-4">{rightContent}</div>}
+          {rightContent && <div className="flex items-center flex-shrink-0 ml-auto pl-4">{rightContent}</div>}
         </div>
       </div>
     </nav>
