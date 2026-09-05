@@ -6,6 +6,7 @@ import { B2BDrops } from './B2BDrops';
 import { B2BPromoCodes } from './B2BPromoCodes';
 import { B2BSourcing } from './B2BSourcing';
 import { GiftRewards } from './b2b/GiftRewards';
+import { AuctionsAdmin } from './b2b/AuctionsAdmin';
 
 interface B2BProps {
   activeSubTab: string;
@@ -19,6 +20,8 @@ export const B2B: React.FC<B2BProps> = ({ activeSubTab }) => {
       return <B2BDrops />;
     case 'sourcing':
       return <B2BSourcing />;
+    case 'auctions':
+      return <AuctionsAdmin />;
     case 'promo-codes':
       return <B2BPromoCodes />;
     case 'commissions':

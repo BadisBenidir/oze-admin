@@ -105,6 +105,7 @@ export const navigationItems: MenuItem[] = [
       { id: 'b2b-products', label: 'Produits B2B', path: '/b2b/products', icon: Package },
       { id: 'drops', label: 'Drops B2B', path: '/b2b/drops', icon: Rocket },
       { id: 'sourcing', label: 'Sourcing sur mesure', path: '/b2b/sourcing', icon: PackageSearch },
+      { id: 'auctions', label: 'Enchères B2B', path: '/b2b/auctions', icon: Gavel },
       { id: 'promo-codes', label: 'Codes Promos', path: '/b2b/promo-codes', icon: Ticket },
       { id: 'commissions', label: 'Chiffre d\'affaires B2B', path: '/b2b/commissions', icon: Banknote },
       { id: 'gift-rewards', label: 'Portefeuilles offerts', path: '/b2b/gift-rewards', icon: Gift },
