@@ -11,7 +11,6 @@ import { Catalog } from '../components/pages/reseller/Catalog';
 import { ProductPage } from '../components/pages/reseller/ProductPage';
 import { CartPage } from '../components/pages/reseller/CartPage';
 import { MyOrders } from '../components/pages/reseller/MyOrders';
-import { MyShipments } from '../components/pages/reseller/MyShipments';
 import { SourcingSurMesure } from '../components/pages/reseller/SourcingSurMesure';
 import { ResellerProfile } from '../components/pages/reseller/ResellerProfile';
 import { Team } from '../components/pages/reseller/Team';
@@ -41,7 +40,6 @@ const parseProductId = (pathname: string): string | null => {
 const TAB_TITLES: Record<string, string> = {
   catalog: 'Catalogue B2B | OZË Paris',
   'my-orders': 'Mes Commandes | OZË Paris',
-  shipments: 'Suivi livraisons | OZË Paris',
   sourcing: 'Sourcing sur mesure | OZË Paris',
   wallet: 'Mon Portefeuille | OZË Paris',
   profile: 'Mon Profil | OZË Paris',
@@ -213,9 +211,12 @@ function ResellerApp() {
 
     switch (currentTab) {
       case 'my-orders':
-        return <MyOrders onOpenProduct={openProduct} onWalletChanged={wallet.refresh} />;
+      // Ex-onglet "Suivi livraisons" (voir resellerNavigation.ts) : le statut
+      // d'expédition et le tracking sont désormais intégrés à "Mes
+      // commandes" — tout appel résiduel à cet id retombe ici plutôt que de
+      // faire planter le switch ou retomber silencieusement sur le catalogue.
       case 'shipments':
-        return <MyShipments />;
+        return <MyOrders onOpenProduct={openProduct} onWalletChanged={wallet.refresh} />;
       case 'sourcing':
         return <SourcingSurMesure />;
       case 'profile':

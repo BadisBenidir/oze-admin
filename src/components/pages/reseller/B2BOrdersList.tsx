@@ -3,8 +3,70 @@ import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { MyB2BOrder, MyB2BOrderItem } from '../../../hooks/useMyB2BOrders';
 import { useEntrupyCertificate } from '../../../hooks/useEntrupyCertificate';
+import { FULFILLMENT_RANK } from '../../../hooks/useB2BOrders';
 import { ShoppingBag, ImageOff, AlertCircle, Eye, X, Package, MapPin, Truck, FileDown, Ban, BadgeCheck } from 'lucide-react';
 import { CancelMyOrderModal } from './CancelMyOrderModal';
+
+interface ShipmentSummary {
+  status: 'cancelled' | 'unpaid' | 'delivered' | 'shipped' | 'preparing' | 'in_stock' | 'confirmed';
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+}
+
+/** Statut de livraison réel d'une commande B2B, déduit de
+ * order_items.fulfillment_status (même règle que computeB2BOrderStatus,
+ * useB2BOrders.ts — jamais orders.status, qui reste figé à 'confirmed' dès
+ * le paiement et ne bouge plus jamais ensuite). Fusionne ici ce qu'affichait
+ * l'ex-onglet "Suivi livraisons" (statut + tracking) directement dans "Mes
+ * commandes", au lieu d'un onglet séparé. */
+const computeShipmentSummary = (order: MyB2BOrder): ShipmentSummary => {
+  if (order.status === 'cancelled') return { status: 'cancelled', trackingNumber: null, trackingUrl: null };
+  if (order.payment_status !== 'paid') return { status: 'unpaid', trackingNumber: null, trackingUrl: null };
+
+  const activeItems = order.order_items.filter((i) => i.status === 'active');
+  if (activeItems.length === 0) return { status: 'cancelled', trackingNumber: null, trackingUrl: null };
+
+  const ranks = activeItems.map((i) => FULFILLMENT_RANK[i.fulfillment_status] ?? 0);
+  const minRank = Math.min(...ranks);
+  const maxRank = Math.max(...ranks);
+
+  // Numéro de suivi du colis le plus avancé parmi les articles actifs —
+  // repli sur orders.tracking_number/tracking_url (ancien flux mono-colis)
+  // si aucun order_items.shipment_parcel n'en porte.
+  const mostAdvanced = [...activeItems].sort(
+    (a, b) => (FULFILLMENT_RANK[b.fulfillment_status] ?? 0) - (FULFILLMENT_RANK[a.fulfillment_status] ?? 0)
+  );
+  const withTracking = mostAdvanced.find((i) => i.shipment_parcel?.tracking_number);
+  const trackingNumber = withTracking?.shipment_parcel?.tracking_number || order.tracking_number || null;
+  const trackingUrl = withTracking?.shipment_parcel?.tracking_url || order.tracking_url || null;
+
+  let status: ShipmentSummary['status'] = 'confirmed';
+  if (minRank === FULFILLMENT_RANK.delivered) status = 'delivered';
+  else if (maxRank >= FULFILLMENT_RANK.shipped) status = 'shipped';
+  else if (maxRank >= FULFILLMENT_RANK.delivery_requested) status = 'preparing';
+  else if (maxRank >= FULFILLMENT_RANK.received) status = 'in_stock';
+
+  return { status, trackingNumber, trackingUrl };
+};
+
+const shipmentStatusBadge = (status: ShipmentSummary['status']) => {
+  switch (status) {
+    case 'cancelled':
+      return <Badge variant="danger">Annulée</Badge>;
+    case 'unpaid':
+      return <Badge variant="warning">En attente de paiement</Badge>;
+    case 'delivered':
+      return <Badge variant="success">Livrée</Badge>;
+    case 'shipped':
+      return <Badge variant="info">Expédiée</Badge>;
+    case 'preparing':
+      return <Badge variant="warning">En préparation</Badge>;
+    case 'in_stock':
+      return <Badge variant="default">Reçue en entrepôt</Badge>;
+    default:
+      return <Badge variant="info">Confirmée</Badge>;
+  }
+};
 
 /** Un certificat ne peut plus être ajouté dès que la livraison de l'article a
  * été demandée — au-delà, le colis est déjà en préparation/parti et l'ajout
@@ -12,14 +74,6 @@ import { CancelMyOrderModal } from './CancelMyOrderModal';
 const canRequestEntrupy = (item: MyB2BOrderItem) =>
   item.status === 'active' && !item.entrupy_requested &&
   !['delivery_requested', 'label_created', 'shipped', 'delivered'].includes(item.fulfillment_status);
-
-const statusBadge = (order: MyB2BOrder) => {
-  if (order.status === 'cancelled') return <Badge variant="danger">Annulée</Badge>;
-  if (order.status === 'delivered') return <Badge variant="success">Livrée</Badge>;
-  if (order.status === 'shipped') return <Badge variant="info">Expédiée</Badge>;
-  if (order.payment_status !== 'paid') return <Badge variant="warning">En attente de paiement</Badge>;
-  return <Badge variant="info">En préparation</Badge>;
-};
 
 // `orders.shipping_address` est stocké dans la forme assemblée par
 // b2b-checkout (address/postcode/city/country/pickup_point_*/delivery_type,
@@ -120,7 +174,9 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                 </CardContent>
               </Card>
             ))
-          : orders.map((order) => (
+          : orders.map((order) => {
+              const shipment = computeShipmentSummary(order);
+              return (
               <Card key={order.id}>
                 <CardContent className="p-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
@@ -129,7 +185,7 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                       <p className="text-xs text-gray-500">{new Date(order.created_at).toLocaleDateString('fr-FR')}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {statusBadge(order)}
+                      {shipmentStatusBadge(shipment.status)}
                       <span className="text-base font-semibold text-gray-900">{order.total_amount.toFixed(0)} €</span>
                       <button
                         onClick={() => setViewingOrder(order)}
@@ -140,6 +196,18 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                       </button>
                     </div>
                   </div>
+
+                  {shipment.trackingNumber && (
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
+                      <Truck className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>Suivi : {shipment.trackingNumber}</span>
+                      {shipment.trackingUrl && (
+                        <a href={shipment.trackingUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                          suivre le colis
+                        </a>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap gap-2">
                     {order.order_items.map((item) => {
@@ -165,11 +233,16 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
       </div>
 
       {/* Modal détail de commande */}
-      {viewingOrder && (
+      {viewingOrder && (() => {
+        const viewingShipment = computeShipmentSummary(viewingOrder);
+        const hasPerItemTracking = viewingOrder.order_items.some((i) => i.shipment_parcel?.tracking_number);
+        const showOrderLevelTracking = !hasPerItemTracking && ['shipped', 'delivered'].includes(viewingShipment.status) && viewingShipment.trackingNumber;
+        return (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             <div className="fixed inset-0 bg-black bg-opacity-25" onClick={() => setViewingOrder(null)}></div>
@@ -183,7 +256,7 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {statusBadge(viewingOrder)}
+                  {shipmentStatusBadge(viewingShipment.status)}
                   <button
                     onClick={() => setViewingOrder(null)}
                     className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
@@ -194,14 +267,14 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
               </div>
 
               <div className="p-6 space-y-6">
-                {!viewingOrder.order_items.some((i) => i.shipment_parcel?.tracking_number) && viewingOrder.status === 'shipped' && viewingOrder.tracking_number && (
+                {showOrderLevelTracking && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
                     <Truck className="h-5 w-5 text-blue-600 flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-blue-900">Numéro de suivi : {viewingOrder.tracking_number}</p>
-                      {viewingOrder.tracking_url && (
+                      <p className="text-sm font-medium text-blue-900">Numéro de suivi : {viewingShipment.trackingNumber}</p>
+                      {viewingShipment.trackingUrl && (
                         <a
-                          href={viewingOrder.tracking_url}
+                          href={viewingShipment.trackingUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-blue-700 underline"
@@ -396,7 +469,8 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {cancellingOrder && (
         <CancelMyOrderModal
