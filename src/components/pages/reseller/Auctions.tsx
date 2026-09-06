@@ -175,10 +175,15 @@ export const Auctions: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => <div key={i} className="h-96 bg-gray-100 rounded-lg animate-pulse" />)}
         </div>
-      ) : !session || items.length === 0 ? (
+      ) : !session ? (
         <div className="text-center py-16 border border-dashed border-gray-200 rounded-lg">
           <Gavel className="h-10 w-10 text-gray-300 mx-auto mb-3" />
           <p className="text-sm text-gray-500">Aucune session d'enchères active pour le moment.</p>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="text-center py-16 border border-dashed border-gray-200 rounded-lg">
+          <Gavel className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Aucune pièce n'a encore été ajoutée à cette session.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

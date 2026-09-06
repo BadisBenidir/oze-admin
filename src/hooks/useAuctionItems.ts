@@ -43,14 +43,31 @@ export const useAuctionItems = (enabled: boolean, profileId?: string | null) => 
   const fetchAll = useCallback(async () => {
     try {
       setError(null);
-      const { data: sessionData, error: sessionError } = await supabase
+      // Une session 'live' prime toujours sur une 'upcoming', même si
+      // celle-ci a une date de début plus proche/passée (ex: plusieurs
+      // sessions de test en parallèle) — sinon un simple tri par starts_at
+      // pouvait renvoyer une session encore "à venir" et vide au lieu de
+      // celle réellement lancée en direct par l'admin.
+      let { data: sessionData, error: sessionError } = await supabase
         .from('auction_sessions')
         .select('*')
-        .in('status', ['live', 'upcoming'])
+        .eq('status', 'live')
         .order('starts_at', { ascending: true })
         .limit(1)
         .maybeSingle();
       if (sessionError) throw new Error(sessionError.message);
+
+      if (!sessionData) {
+        const upcoming = await supabase
+          .from('auction_sessions')
+          .select('*')
+          .eq('status', 'upcoming')
+          .order('starts_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (upcoming.error) throw new Error(upcoming.error.message);
+        sessionData = upcoming.data;
+      }
       setSession(sessionData);
 
       if (!sessionData) {
