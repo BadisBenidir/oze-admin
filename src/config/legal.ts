@@ -17,7 +17,5 @@ export const COMPANY_RCS = 'RCS Paris 105 405 211';
 export const COMPANY_JURISDICTION_CITY = 'Paris';
 export const COMPANY_ADDRESS = '6 rue d\'Armaille, 75017 Paris';
 export const COMPANY_VAT_NUMBER = 'FR10 105 405 211';
-// Non déductible d'un registre public : à choisir et déclarer par OZË Paris
-// (ex: CNPM, FEVAD, médiateur sectoriel...) avant publication des CGV.
-export const MEDIATOR_NAME = '[Nom du médiateur de la consommation désigné]';
-export const MEDIATOR_URL = '[URL de la plateforme du médiateur]';
+export const MEDIATOR_NAME = 'CM2C — Centre de la Médiation de la Consommation de Conciliateurs de Justice (14 rue Saint Jean, 75017 Paris, cm2c@cm2c.net)';
+export const MEDIATOR_URL = 'https://www.cm2c.net';
