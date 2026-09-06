@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, ImageOff, AlertCircle, Trophy, TrendingDown } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, ImageOff, AlertCircle, Trophy, TrendingDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AuctionItem, QUICK_BID_INCREMENTS } from '../../../hooks/useAuctionItems';
 import { AuctionCountdown } from './AuctionCountdown';
@@ -56,6 +56,13 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
     }
     if (result.warning) setWarning(result.warning);
     setCustomAmount('');
+  };
+
+  const adjustAmount = (delta: number) => {
+    const current = customAmount === '' ? nextMinBid - item.min_increment : Number(customAmount);
+    const base = Number.isFinite(current) ? current : nextMinBid - item.min_increment;
+    const next = Math.max(nextMinBid, base + delta);
+    setCustomAmount(String(Number(next.toFixed(2))));
   };
 
   const handleCustomSubmit = (e: React.FormEvent) => {
@@ -201,15 +208,35 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                     ))}
                   </div>
                   <form onSubmit={handleCustomSubmit} className="flex gap-2">
-                    <input
-                      type="number"
-                      step={item.min_increment}
-                      min={nextMinBid}
-                      value={customAmount}
-                      onChange={(e) => setCustomAmount(e.target.value)}
-                      placeholder="Votre offre max (ex: 100 €)"
-                      className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400"
-                    />
+                    <div className="flex-1 min-w-0 flex items-stretch border border-gray-200 rounded-lg overflow-hidden focus-within:border-gray-400">
+                      <input
+                        type="number"
+                        step={item.min_increment}
+                        min={nextMinBid}
+                        value={customAmount}
+                        onChange={(e) => setCustomAmount(e.target.value)}
+                        placeholder="Votre offre max (ex: 100 €)"
+                        className="flex-1 min-w-0 px-3 py-2 text-sm focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      <div className="flex flex-col border-l border-gray-200">
+                        <button
+                          type="button"
+                          onClick={() => adjustAmount(item.min_increment)}
+                          className="flex-1 px-2.5 flex items-center justify-center hover:bg-gray-100 border-b border-gray-200"
+                          aria-label="Augmenter"
+                        >
+                          <ChevronUp className="h-4 w-4 text-gray-600" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => adjustAmount(-item.min_increment)}
+                          className="flex-1 px-2.5 flex items-center justify-center hover:bg-gray-100"
+                          aria-label="Diminuer"
+                        >
+                          <ChevronDown className="h-4 w-4 text-gray-600" />
+                        </button>
+                      </div>
+                    </div>
                     <button
                       type="submit"
                       disabled={submitting || !customAmount}
