@@ -14,12 +14,42 @@ interface ItemCardProps {
   isWinning: boolean;
   isOutbid: boolean;
   onOpen: () => void;
+  onBid: (amount: number) => Promise<{ success: boolean; error?: string }>;
 }
 
-/** Aperçu cliquable — la fiche détail (galerie + enchère) s'ouvre dans
- * AuctionItemDetailModal, voir onOpen. */
-const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen }) => {
+/** Carte cliquable (ouvre la fiche détail, voir onOpen) qui permet AUSSI
+ * d'enchérir directement sans l'ouvrir — les contrôles d'enchère stoppent
+ * la propagation du clic pour ne pas déclencher onOpen en même temps. */
+const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen, onBid }) => {
+  const [customAmount, setCustomAmount] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
   const ended = new Date(item.ends_at).getTime() <= Date.now() || item.status !== 'active';
+  const nextMinBid = item.current_price + item.min_increment;
+
+  const submitBid = async (amount: number) => {
+    if (submitting || ended) return;
+    setSubmitting(true);
+    setError('');
+    const result = await onBid(amount);
+    setSubmitting(false);
+    if (!result.success) {
+      setError(result.error || "Erreur lors de l'enchère");
+      return;
+    }
+    setCustomAmount('');
+  };
+
+  const handleCustomSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const parsed = Number(customAmount);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setError('Montant invalide');
+      return;
+    }
+    submitBid(parsed);
+  };
 
   return (
     <Card hover onClick={onOpen} className="overflow-hidden flex flex-col cursor-pointer">
@@ -62,17 +92,57 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen }
           </div>
         )}
 
-        <div className="mt-auto pt-3">
-          {item.status !== 'active' ? (
+        {item.status !== 'active' ? (
+          <div className="mt-auto pt-3">
             <Badge variant={item.status === 'sold' ? 'success' : 'default'}>
               {item.status === 'sold' ? 'Vendu' : 'Invendu'}
             </Badge>
-          ) : ended ? (
+          </div>
+        ) : ended ? (
+          <div className="mt-auto pt-3">
             <Badge variant="default">Enchère terminée</Badge>
-          ) : (
-            <span className="text-xs font-medium text-gray-500 underline">Voir la pièce & enchérir</span>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-auto pt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => submitBid(nextMinBid)}
+              disabled={submitting}
+              className="w-full px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm font-medium"
+            >
+              +{EUR(item.min_increment)} — Enchérir à {EUR(nextMinBid)}
+            </button>
+            <form onSubmit={handleCustomSubmit} className="flex gap-2">
+              <input
+                type="number"
+                step="0.01"
+                min={nextMinBid}
+                value={customAmount}
+                onChange={(e) => setCustomAmount(e.target.value)}
+                placeholder={`Min. ${EUR(nextMinBid)}`}
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400"
+              />
+              <button
+                type="submit"
+                disabled={submitting || !customAmount}
+                className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 text-sm font-medium flex-shrink-0"
+              >
+                Enchérir
+              </button>
+            </form>
+            {error && (
+              <div className="flex items-center gap-1.5 text-red-600 text-xs">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+            <button
+              onClick={onOpen}
+              className="w-full text-center text-xs font-medium text-gray-500 hover:text-gray-900 underline"
+            >
+              Voir la pièce en détail
+            </button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -138,6 +208,7 @@ export const Auctions: React.FC = () => {
               isWinning={Boolean(profile?.id) && item.current_winner_id === profile?.id}
               isOutbid={myBidItemIds.has(item.id) && item.current_winner_id !== profile?.id}
               onOpen={() => setViewingItemId(item.id)}
+              onBid={(amount) => placeBid(item.id, amount)}
             />
           ))}
         </div>
