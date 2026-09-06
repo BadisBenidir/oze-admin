@@ -126,7 +126,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, o
             <form onSubmit={handleCustomSubmit} className="flex gap-2">
               <input
                 type="number"
-                step="0.01"
+                step={item.min_increment}
                 min={nextMinBid}
                 value={customAmount}
                 onChange={(e) => setCustomAmount(e.target.value)}
