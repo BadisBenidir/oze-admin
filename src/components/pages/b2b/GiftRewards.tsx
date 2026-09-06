@@ -126,9 +126,10 @@ const MarkShippedModal: React.FC<MarkShippedModalProps> = ({ gift, onClose, onCo
   );
 };
 
-/** Suivi logistique des portefeuilles offerts (1 par tranche de 500 €
- * rechargée, générés automatiquement — voir 0101_b2b_gift_rewards.sql) :
- * remplace l'ancien menu "Portail B2B" dans la nav Revendeurs. */
+/** Suivi logistique des portefeuilles offerts (1 par tranche de 1 000 €
+ * rechargée depuis 0111, générés automatiquement — voir
+ * 0101_b2b_gift_rewards.sql / 0111_wallet_bonus_update.sql) : remplace
+ * l'ancien menu "Portail B2B" dans la nav Revendeurs. */
 export const GiftRewards: React.FC = () => {
   const { isAdmin } = useAdminAuth();
   const { rewards, loading, error, assignToOrder, markShipped, deferToNextShipment } = useGiftRewards(isAdmin);
@@ -161,7 +162,7 @@ export const GiftRewards: React.FC = () => {
       <div className="mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Portefeuilles offerts</h3>
         <p className="text-sm text-gray-500">
-          1 portefeuille offert par tranche de 500 € rechargés — généré automatiquement à chaque recharge éligible.
+          1 portefeuille offert par tranche de 1 000 € rechargés — généré automatiquement à chaque recharge éligible.
         </p>
       </div>
 

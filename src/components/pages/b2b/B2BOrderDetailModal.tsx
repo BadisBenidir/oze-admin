@@ -665,7 +665,7 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                 <Gift className="h-5 w-5 text-amber-600" />
                               </div>
                               <div>
-                                <Badge variant="warning">🎁 Portefeuille offert (Rechargement ≥ 500 €)</Badge>
+                                <Badge variant="warning">🎁 Portefeuille offert (Rechargement ≥ 1 000 €)</Badge>
                                 <p className="text-xs font-medium text-amber-700 mt-1">
                                   Ne pas oublier d'insérer le{pendingGiftQuantity > 1 ? 's' : ''} portefeuille{pendingGiftQuantity > 1 ? 's' : ''} offert{pendingGiftQuantity > 1 ? 's' : ''} dans le colis !
                                 </p>

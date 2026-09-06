@@ -5,10 +5,10 @@ import { Wallet, PlusCircle, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings
 
 const PRESET_AMOUNTS = [100, 500];
 
-// +10€ offerts par tranche COMPLÈTE de 100€ rechargés — aperçu client
+// +5€ offerts par tranche COMPLÈTE de 100€ rechargés — aperçu client
 // uniquement (le montant réellement crédité est recalculé côté serveur dans
 // credit_wallet_topup, jamais accepté tel quel d'ici).
-const computeBonus = (amount: number): number => Math.floor(amount / 100) * 10;
+const computeBonus = (amount: number): number => Math.floor(amount / 100) * 5;
 
 const TYPE_LABEL: Record<string, string> = {
   rechargement: 'Recharge',
@@ -113,7 +113,7 @@ export const WalletPage: React.FC = () => {
       <div className="rounded-xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 px-4 py-3 flex items-center gap-3">
         <span className="text-2xl flex-shrink-0">🎁</span>
         <p className="text-sm text-amber-900 font-medium">
-          Offre Bonus B2B : recevez <span className="font-semibold">10 € offerts</span> pour chaque tranche de 100 € rechargés !
+          Offre Bonus B2B : recevez <span className="font-semibold">5 € offerts</span> pour chaque tranche de 100 € rechargés !
         </p>
       </div>
 
@@ -147,7 +147,7 @@ export const WalletPage: React.FC = () => {
             <h4 className="text-sm font-medium text-gray-900">Programme fidélité</h4>
           </div>
           <p className="text-xs text-gray-500 mb-2">
-            Débloquez 1 portefeuille de luxe offert (Louis Vuitton, Gucci, Céline...) tous les 500 € rechargés.
+            Débloquez 1 portefeuille de luxe offert (Louis Vuitton, Gucci, Céline...) tous les 1 000 € rechargés.
           </p>
           <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
             <div

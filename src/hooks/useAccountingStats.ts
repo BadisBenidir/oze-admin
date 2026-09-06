@@ -100,7 +100,7 @@ export const useAccountingStats = (isAuthenticated: boolean = false): UseAccount
 
       const expensesTotal = expenses.reduce((s: number, e: any) => s + Number(e.amount || 0), 0)
 
-      // Bonus de rechargement (10€ offerts par 100€ payés, voir credit_wallet_topup) :
+      // Bonus de rechargement (5€ offerts par 100€ payés depuis 0111, voir credit_wallet_topup) :
       // `amount` = total crédité au portefeuille, `paid_amount` = ce qui a réellement
       // été payé sur Stripe — l'écart est le bonus, compté comme charge commerciale.
       const bonusExpense = walletTopups.reduce(
