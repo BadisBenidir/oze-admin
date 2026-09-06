@@ -141,12 +141,6 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen, 
                 <span>{error}</span>
               </div>
             )}
-            <button
-              onClick={onOpen}
-              className="w-full text-center text-xs font-medium text-gray-500 hover:text-gray-900 underline"
-            >
-              Voir la pièce en détail
-            </button>
           </div>
         )}
       </CardContent>
