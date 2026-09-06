@@ -46,7 +46,10 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Accès refusé : réservé aux administrateurs' }, 403);
     }
 
-    const { profile_id, first_name, last_name, phone, address, city, postal_code, country } = await req.json();
+    const {
+      profile_id, first_name, last_name, phone, address, city, postal_code, country,
+      legal_status, legal_entity_name, siret, vat_number, legal_form, legal_address, legal_city, legal_postal_code, legal_country,
+    } = await req.json();
     if (!profile_id) return json({ error: 'profile_id est requis' }, 400);
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -68,6 +71,20 @@ Deno.serve(async (req: Request) => {
     if (city !== undefined) payload.city = String(city).trim() || null;
     if (postal_code !== undefined) payload.postal_code = String(postal_code).trim() || null;
     if (country !== undefined) payload.country = String(country).trim() || null;
+    // Statut juridique (0109) : PAS de verrou "une fois choisi" ici — cette
+    // fonction tourne en service-role à l'initiative d'un admin OZË,
+    // justement le canal prévu pour corriger un choix erroné une fois que
+    // set_reseller_legal_info (RPC self-service du revendeur) a refusé un
+    // second appel.
+    if (legal_status !== undefined) payload.legal_status = String(legal_status).trim() || null;
+    if (legal_entity_name !== undefined) payload.legal_entity_name = String(legal_entity_name).trim() || null;
+    if (siret !== undefined) payload.siret = String(siret).trim() || null;
+    if (vat_number !== undefined) payload.vat_number = String(vat_number).trim() || null;
+    if (legal_form !== undefined) payload.legal_form = String(legal_form).trim() || null;
+    if (legal_address !== undefined) payload.legal_address = String(legal_address).trim() || null;
+    if (legal_city !== undefined) payload.legal_city = String(legal_city).trim() || null;
+    if (legal_postal_code !== undefined) payload.legal_postal_code = String(legal_postal_code).trim() || null;
+    if (legal_country !== undefined) payload.legal_country = String(legal_country).trim() || null;
 
     const { error: updateError } = await adminClient
       .from('profiles')

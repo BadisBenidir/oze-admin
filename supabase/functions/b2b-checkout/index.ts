@@ -66,9 +66,9 @@ Deno.serve(async (req: Request) => {
     // Statut juridique obligatoire (0109) : conditionne le droit de
     // rétractation applicable et les mentions légales de la facture — un
     // blocage côté React seul (CartPage.tsx) resterait contournable en
-    // appelant cette fonction directement. resellers_reseller_select_own
-    // (0002) autorise déjà le caller à lire sa propre ligne.
-    const { data: legalCheck } = await callerClient.from('resellers').select('legal_status').eq('id', resellerId).single();
+    // appelant cette fonction directement. Indépendant par sous-compte
+    // (profiles.legal_status, pas resellers) : chaque login déclare le sien.
+    const { data: legalCheck } = await callerClient.from('profiles').select('legal_status').eq('id', user.id).single();
     if (!legalCheck?.legal_status) {
       return new Response(JSON.stringify({ error: 'Merci de compléter votre statut juridique dans votre profil avant de passer commande' }), {
         status: 403,

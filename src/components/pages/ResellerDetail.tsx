@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Modal } from '../ui/Modal';
-import { useResellers, Reseller, ResellerContact, ResellerFormData } from '../../hooks/useResellers';
+import { useResellers, Reseller, ResellerContact, ResellerFormData, ContactProfileUpdate } from '../../hooks/useResellers';
 import { useB2BOrders, getRequesterDisplayName } from '../../hooks/useB2BOrders';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useAdminWallet } from '../../hooks/useAdminWallet';
@@ -42,7 +42,10 @@ const resellerStatusBadge = (status: Reseller['status']) => {
   }
 };
 
-const legalStatusBadge = (legalStatus: Reseller['legal_status']) => {
+// Indépendant par sous-compte (0109, voir ResellerContact.legal_status) —
+// pas un badge d'entreprise : affiché sur chaque ligne de "Sous-comptes",
+// jamais dans l'en-tête (un même reseller_id peut mélanger plusieurs statuts).
+const legalStatusBadge = (legalStatus: ResellerContact['legal_status']) => {
   switch (legalStatus) {
     case 'individual':
       return <Badge variant="default">Particulier</Badge>;
@@ -51,7 +54,7 @@ const legalStatusBadge = (legalStatus: Reseller['legal_status']) => {
     case 'company':
       return <Badge variant="purple">Société</Badge>;
     default:
-      return <Badge variant="warning">Statut juridique manquant</Badge>;
+      return <Badge variant="warning">Statut manquant</Badge>;
   }
 };
 
@@ -136,7 +139,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
 
   const handleSaveContact = async (
     profileId: string,
-    profileData: { first_name: string; last_name: string; phone: string; address: string; city: string; postal_code: string; country: string },
+    profileData: ContactProfileUpdate,
     newEmail: string | null
   ) => {
     const result = await updateContactProfile(profileId, profileData);
@@ -190,7 +193,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   }, [currentReseller.id]);
 
   const handleResellerSaved = (_id: string, data: ResellerFormData) => {
-    const updated: Reseller = { ...currentReseller, ...data, legal_status: data.legal_status || null };
+    const updated: Reseller = { ...currentReseller, ...data };
     setCurrentReseller(updated);
     onResellerUpdated?.(updated);
   };
@@ -255,7 +258,6 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
           )}
         </div>
         <div className="flex items-center gap-3">
-          {legalStatusBadge(currentReseller.legal_status)}
           {resellerStatusBadge(currentReseller.status)}
           <button
             onClick={() => setShowEditModal(true)}
@@ -417,7 +419,10 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                         </td>
                         <td className="py-3 px-4 md:px-6 text-sm text-gray-600">{c.email}</td>
                         <td className="py-3 px-4 md:px-6">
-                          <Badge variant={c.is_primary ? 'info' : 'default'}>{c.is_primary ? 'Principal' : 'Membre'}</Badge>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge variant={c.is_primary ? 'info' : 'default'}>{c.is_primary ? 'Principal' : 'Membre'}</Badge>
+                            {legalStatusBadge(c.legal_status)}
+                          </div>
                         </td>
                         <td className="py-3 px-4 md:px-6">
                           <Badge variant="success">Actif</Badge>

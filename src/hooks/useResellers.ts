@@ -8,14 +8,6 @@ export interface Reseller {
   id: string;
   company_name: string;
   legal_id: string | null;
-  /** Statut juridique (0109) — distingue Particulier/EI/Société, conditionne
-   * le droit de rétractation et les mentions légales des factures. Null tant
-   * que ni l'admin ni le revendeur ne l'ont renseigné (bloque commande/enchère
-   * côté revendeur, voir CartPage.tsx / Auctions.tsx). */
-  legal_status: LegalStatus | null;
-  siret: string | null;
-  vat_number: string | null;
-  legal_form: string | null;
   status: 'pending' | 'active' | 'suspended' | 'deleted';
   contact_email: string | null;
   contact_phone: string | null;
@@ -33,10 +25,6 @@ export interface Reseller {
 export interface ResellerFormData {
   company_name: string;
   legal_id: string;
-  legal_status: LegalStatus | '';
-  siret: string;
-  vat_number: string;
-  legal_form: string;
   contact_email: string;
   contact_phone: string;
   notes: string;
@@ -49,10 +37,6 @@ export interface ResellerFormData {
 export const emptyResellerForm: ResellerFormData = {
   company_name: '',
   legal_id: '',
-  legal_status: '',
-  siret: '',
-  vat_number: '',
-  legal_form: '',
   contact_email: '',
   contact_phone: '',
   notes: '',
@@ -78,6 +62,19 @@ export interface ResellerContact {
   country: string | null;
   /** Solde individuel de CE sous-compte (profiles.wallet_balance) — jamais partagé entre contacts d'une même société. */
   wallet_balance: number;
+  /** Statut juridique (0109) — indépendant PAR SOUS-COMPTE, jamais partagé
+   * entre contacts d'un même reseller_id (chaque login déclare le sien).
+   * Null tant que ni l'admin ni le revendeur ne l'ont renseigné (bloque
+   * commande/enchère côté revendeur, voir CartPage.tsx / Auctions.tsx). */
+  legal_status: LegalStatus | null;
+  legal_entity_name: string | null;
+  siret: string | null;
+  vat_number: string | null;
+  legal_form: string | null;
+  legal_address: string | null;
+  legal_city: string | null;
+  legal_postal_code: string | null;
+  legal_country: string | null;
 }
 
 export interface ContactProfileUpdate {
@@ -88,6 +85,15 @@ export interface ContactProfileUpdate {
   city: string;
   postal_code: string;
   country: string;
+  legal_status: LegalStatus | '';
+  legal_entity_name: string;
+  siret: string;
+  vat_number: string;
+  legal_form: string;
+  legal_address: string;
+  legal_city: string;
+  legal_postal_code: string;
+  legal_country: string;
 }
 
 interface UseResellersResult {
@@ -152,10 +158,6 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
         .insert([{
           company_name: data.company_name.trim(),
           legal_id: data.legal_id || null,
-          legal_status: data.legal_status || null,
-          siret: data.siret.trim() || null,
-          vat_number: data.vat_number.trim() || null,
-          legal_form: data.legal_form || null,
           contact_email: data.contact_email || null,
           contact_phone: data.contact_phone || null,
           notes: data.notes || null,
@@ -183,10 +185,6 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     try {
       const payload: Record<string, unknown> = { ...data };
       if (data.legal_id !== undefined) payload.legal_id = data.legal_id || null;
-      if (data.legal_status !== undefined) payload.legal_status = data.legal_status || null;
-      if (data.siret !== undefined) payload.siret = data.siret.trim() || null;
-      if (data.vat_number !== undefined) payload.vat_number = data.vat_number.trim() || null;
-      if (data.legal_form !== undefined) payload.legal_form = data.legal_form || null;
       if (data.contact_email !== undefined) payload.contact_email = data.contact_email || null;
       if (data.contact_phone !== undefined) payload.contact_phone = data.contact_phone || null;
       if (data.notes !== undefined) payload.notes = data.notes || null;
@@ -250,7 +248,13 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
   const fetchContacts = async (resellerId: string): Promise<ResellerContact[]> => {
     const { data, error: fetchError } = await supabase
       .from('reseller_contacts')
-      .select('id, reseller_id, profile_id, is_primary, created_at, profiles!inner(first_name, last_name, email, phone, address, city, postal_code, country, wallet_balance)')
+      .select(`
+        id, reseller_id, profile_id, is_primary, created_at,
+        profiles!inner(
+          first_name, last_name, email, phone, address, city, postal_code, country, wallet_balance,
+          legal_status, legal_entity_name, siret, vat_number, legal_form, legal_address, legal_city, legal_postal_code, legal_country
+        )
+      `)
       .eq('reseller_id', resellerId)
       .order('created_at', { ascending: true });
 
@@ -267,6 +271,8 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       profiles: {
         first_name: string; last_name: string; email: string; wallet_balance: number;
         phone: string | null; address: string | null; city: string | null; postal_code: string | null; country: string | null;
+        legal_status: LegalStatus | null; legal_entity_name: string | null; siret: string | null; vat_number: string | null; legal_form: string | null;
+        legal_address: string | null; legal_city: string | null; legal_postal_code: string | null; legal_country: string | null;
       };
     };
 
@@ -285,6 +291,15 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       postal_code: c.profiles.postal_code,
       country: c.profiles.country,
       wallet_balance: Number(c.profiles.wallet_balance ?? 0),
+      legal_status: c.profiles.legal_status,
+      legal_entity_name: c.profiles.legal_entity_name,
+      siret: c.profiles.siret,
+      vat_number: c.profiles.vat_number,
+      legal_form: c.profiles.legal_form,
+      legal_address: c.profiles.legal_address,
+      legal_city: c.profiles.legal_city,
+      legal_postal_code: c.profiles.legal_postal_code,
+      legal_country: c.profiles.legal_country,
     }));
   };
 

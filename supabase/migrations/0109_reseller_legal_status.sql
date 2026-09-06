@@ -2,40 +2,59 @@
 -- Statut juridique obligatoire du revendeur (Particulier / Entreprise
 -- Individuelle / Société) — conditionne le droit de rétractation applicable
 -- (B2C 14 jours vs B2B) et les mentions légales à faire figurer sur les
--- factures. Vit sur `resellers` (l'entité "compte", pas le contact
--- individuel) : company_name/legal_id y existent déjà (0011), et un statut
--- juridique est une caractéristique de l'ENTITÉ facturée, pas de la personne
--- qui se connecte — cohérent même quand ce compte ne représente en réalité
--- qu'un particulier (company_name sert alors juste de nom d'affichage).
+-- factures.
 --
--- `legal_id` (existant, libre : "SIRET / n° TVA intracommunautaire" en un
--- seul champ texte) reste inchangé pour ne pas perdre les données déjà
--- saisies ; siret/vat_number ci-dessous sont les nouveaux champs structurés
--- que le formulaire (admin ET revendeur) doit désormais utiliser.
+-- Vit sur `profiles`, PAS sur `resellers` : indépendant pour chaque
+-- sous-compte d'une même entreprise (un login = un statut, jamais partagé
+-- entre collègues d'un même `reseller_id`) — même logique déjà établie pour
+-- l'adresse individuelle du contact (0023 : distincte de l'adresse de
+-- l'entreprise sur `resellers`). `legal_entity_name`/siret/vat_number/
+-- legal_form/adresse légale ci-dessous appartiennent donc à CE profil, pas
+-- à `resellers.company_name` qui reste le nom d'affichage partagé de
+-- l'entreprise dans la nav.
 -- ============================================================================
 
-alter table public.resellers
+alter table public.profiles
   add column if not exists legal_status text check (legal_status in ('individual', 'sole_proprietorship', 'company')),
+  add column if not exists legal_entity_name text,
   add column if not exists siret text,
   add column if not exists vat_number text,
-  add column if not exists legal_form text;
+  add column if not exists legal_form text,
+  add column if not exists legal_address text,
+  add column if not exists legal_city text,
+  add column if not exists legal_postal_code text,
+  add column if not exists legal_country text default 'France';
 
-comment on column public.resellers.legal_status is
-  'individual = particulier (droit de rétractation 14 jours) ; sole_proprietorship = EI/auto-entrepreneur ; company = société (SAS, SARL...).';
-comment on column public.resellers.siret is 'SIRET (14 chiffres) — obligatoire hors "individual". Distinct de legal_id (ancien champ libre, conservé).';
-comment on column public.resellers.legal_form is 'Forme juridique (SAS, SARL, EURL...) — uniquement pour legal_status = ''company''.';
+comment on column public.profiles.legal_status is
+  'individual = particulier (droit de rétractation 14 jours) ; sole_proprietorship = EI/auto-entrepreneur ; company = société (SAS, SARL...). Indépendant par sous-compte.';
+comment on column public.profiles.legal_entity_name is 'Nom officiel de l''EI ou dénomination sociale — vide pour "individual" (nom/prénom du profil suffisent déjà).';
+comment on column public.profiles.siret is 'SIRET (14 chiffres) — obligatoire hors "individual".';
+comment on column public.profiles.legal_form is 'Forme juridique (SAS, SARL, EURL...) — uniquement pour legal_status = ''company''.';
+comment on column public.profiles.legal_address is 'Adresse de facturation pro / siège social — distincte de profiles.address (adresse de livraison personnelle, 0023).';
+
+-- Design précédent (jamais déployé) : ces colonnes avaient été ajoutées par
+-- erreur sur `resellers` (partagées par toute l'entreprise) avant ce
+-- correctif — supprimées si présentes pour ne garder qu'une seule source de
+-- vérité.
+alter table public.resellers
+  drop column if exists legal_status,
+  drop column if exists siret,
+  drop column if exists vat_number,
+  drop column if exists legal_form;
 
 -- ----------------------------------------------------------------------------
--- Écriture par le revendeur lui-même : `resellers` n'a aucune policy RLS
--- d'UPDATE pour le rôle revendeur (voir 0002_b2b_rls.sql — seul is_admin()
--- peut écrire directement) et ce n'est pas ici qu'on l'ouvre en grand. Même
--- convention que cart_add_item/place_auto_bid : une RPC SECURITY DEFINER
--- étroite, gardée par current_reseller_id(), qui ne touche que les colonnes
--- concernées.
+-- Écriture par le revendeur lui-même, sur SON PROPRE profil uniquement
+-- (auth.uid()) — définitif une fois choisi : un revendeur ne peut plus le
+-- changer après la première validation (empêche "je me déclare Particulier
+-- pour éviter telle contrainte, puis je repasse en Société plus tard"). Un
+-- admin OZË garde la main pour corriger une erreur de saisie, via
+-- admin-update-contact-profile (service role, jamais concerné par ce
+-- verrou). SECURITY DEFINER car `profiles` n'a pas de policy RLS d'update
+-- pour ces colonnes suivant la convention dashboard existante.
 -- ----------------------------------------------------------------------------
 create or replace function public.set_reseller_legal_info(
   p_legal_status text,
-  p_company_name text,
+  p_legal_entity_name text,
   p_siret text,
   p_vat_number text,
   p_legal_form text,
@@ -50,14 +69,20 @@ security definer
 set search_path = public
 as $$
 declare
-  v_reseller_id uuid := public.current_reseller_id();
+  v_user_id uuid := auth.uid();
+  v_current_status text;
   v_siret text := nullif(trim(coalesce(p_siret, '')), '');
   v_vat text := nullif(trim(coalesce(p_vat_number, '')), '');
   v_legal_form text := nullif(trim(coalesce(p_legal_form, '')), '');
-  v_company_name text := nullif(trim(coalesce(p_company_name, '')), '');
+  v_entity_name text := nullif(trim(coalesce(p_legal_entity_name, '')), '');
 begin
-  if v_reseller_id is null then
+  if v_user_id is null or public.current_reseller_id() is null then
     raise exception 'Aucun compte revendeur actif associé à cet utilisateur';
+  end if;
+
+  select legal_status into v_current_status from public.profiles where id = v_user_id;
+  if v_current_status is not null then
+    raise exception 'Le statut juridique a déjà été défini et ne peut plus être modifié. Contactez votre administrateur OZË Paris pour le corriger.';
   end if;
 
   if p_legal_status not in ('individual', 'sole_proprietorship', 'company') then
@@ -65,7 +90,7 @@ begin
   end if;
 
   if p_legal_status in ('sole_proprietorship', 'company') then
-    if v_company_name is null then
+    if v_entity_name is null then
       raise exception 'La dénomination est obligatoire pour ce statut';
     end if;
     if v_siret is null or v_siret !~ '^[0-9]{14}$' then
@@ -77,17 +102,17 @@ begin
     raise exception 'La forme juridique est obligatoire pour une société';
   end if;
 
-  update public.resellers
+  update public.profiles
   set legal_status = p_legal_status,
-      company_name = coalesce(v_company_name, company_name),
+      legal_entity_name = case when p_legal_status = 'individual' then null else v_entity_name end,
       siret = case when p_legal_status = 'individual' then null else v_siret end,
       vat_number = case when p_legal_status = 'individual' then null else v_vat end,
       legal_form = case when p_legal_status = 'company' then v_legal_form else null end,
-      address = coalesce(nullif(trim(coalesce(p_address, '')), ''), address),
-      city = coalesce(nullif(trim(coalesce(p_city, '')), ''), city),
-      postal_code = coalesce(nullif(trim(coalesce(p_postal_code, '')), ''), postal_code),
-      country = coalesce(nullif(trim(coalesce(p_country, '')), ''), country)
-  where id = v_reseller_id;
+      legal_address = case when p_legal_status = 'individual' then null else nullif(trim(coalesce(p_address, '')), '') end,
+      legal_city = case when p_legal_status = 'individual' then null else nullif(trim(coalesce(p_city, '')), '') end,
+      legal_postal_code = case when p_legal_status = 'individual' then null else nullif(trim(coalesce(p_postal_code, '')), '') end,
+      legal_country = case when p_legal_status = 'individual' then null else coalesce(nullif(trim(coalesce(p_country, '')), ''), 'France') end
+  where id = v_user_id;
 
   return jsonb_build_object('success', true);
 end;
@@ -96,12 +121,11 @@ $$;
 grant execute on function public.set_reseller_legal_info(text, text, text, text, text, text, text, text, text) to authenticated;
 
 -- ----------------------------------------------------------------------------
--- Blocage serveur des enchères tant que le statut juridique n'est pas
--- renseigné (défense en profondeur : le blocage côté React, contournable,
--- ne suffit pas — même principe déjà appliqué partout ailleurs dans ce
--- schéma, ex. les prix jamais acceptés tels quels du client dans
--- b2b-checkout). Reprend intégralement place_auto_bid (0108), seule la
--- garde ajoutée juste après la vérification d'identité change.
+-- Blocage serveur des enchères tant que CE profil n'a pas renseigné son
+-- statut juridique (défense en profondeur : le blocage côté React seul,
+-- contournable, ne suffit pas). Reprend intégralement place_auto_bid
+-- (0108), seule la garde ajoutée juste après la vérification d'identité
+-- change — et interroge désormais profiles, pas resellers.
 -- ----------------------------------------------------------------------------
 create or replace function public.place_auto_bid(p_item_id uuid, p_max_amount numeric)
 returns table (
@@ -117,7 +141,6 @@ set search_path = public
 as $$
 declare
   v_user_id uuid := auth.uid();
-  v_reseller_id uuid;
   v_legal_status text;
   v_item record;
   v_new_price numeric;
@@ -126,14 +149,12 @@ declare
   v_bid_amount numeric;
   v_outbid boolean := false;
 begin
-  v_reseller_id := public.current_reseller_id();
-
-  if v_user_id is null or v_reseller_id is null then
+  if v_user_id is null or public.current_reseller_id() is null then
     return query select false, 'Non autorisé'::text, null::numeric, false, null::numeric;
     return;
   end if;
 
-  select legal_status into v_legal_status from public.resellers where id = v_reseller_id;
+  select legal_status into v_legal_status from public.profiles where id = v_user_id;
   if v_legal_status is null then
     return query select false, 'Merci de renseigner votre statut juridique dans votre profil avant d''enchérir'::text, null::numeric, false, null::numeric;
     return;

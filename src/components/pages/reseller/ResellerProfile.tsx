@@ -394,28 +394,28 @@ interface LegalStatusSectionProps {
 
 const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, updateLegalInfo }) => {
   const [legalStatus, setLegalStatus] = useState<LegalStatus | null>(profile.legal_status);
-  const [companyName, setCompanyName] = useState(profile.company_name || '');
+  const [legalEntityName, setLegalEntityName] = useState(profile.legal_entity_name || '');
   const [siret, setSiret] = useState(profile.siret || '');
   const [vatNumber, setVatNumber] = useState(profile.vat_number || '');
   const [legalForm, setLegalForm] = useState(profile.legal_form || '');
-  const [address, setAddress] = useState(profile.reseller_address || '');
-  const [city, setCity] = useState(profile.reseller_city || '');
-  const [postalCode, setPostalCode] = useState(profile.reseller_postal_code || '');
-  const [country, setCountry] = useState(profile.reseller_country || 'France');
+  const [address, setAddress] = useState(profile.legal_address || '');
+  const [city, setCity] = useState(profile.legal_city || '');
+  const [postalCode, setPostalCode] = useState(profile.legal_postal_code || '');
+  const [country, setCountry] = useState(profile.legal_country || 'France');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     setLegalStatus(profile.legal_status);
-    setCompanyName(profile.company_name || '');
+    setLegalEntityName(profile.legal_entity_name || '');
     setSiret(profile.siret || '');
     setVatNumber(profile.vat_number || '');
     setLegalForm(profile.legal_form || '');
-    setAddress(profile.reseller_address || '');
-    setCity(profile.reseller_city || '');
-    setPostalCode(profile.reseller_postal_code || '');
-    setCountry(profile.reseller_country || 'France');
+    setAddress(profile.legal_address || '');
+    setCity(profile.legal_city || '');
+    setPostalCode(profile.legal_postal_code || '');
+    setCountry(profile.legal_country || 'France');
   }, [profile]);
 
   const isPro = legalStatus === 'sole_proprietorship' || legalStatus === 'company';
@@ -430,7 +430,7 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
       return;
     }
     if (isPro) {
-      if (!companyName.trim()) {
+      if (!legalEntityName.trim()) {
         setError('La dénomination est obligatoire pour ce statut');
         return;
       }
@@ -445,7 +445,7 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
     }
 
     setSaving(true);
-    const result = await updateLegalInfo({ legalStatus, companyName, siret, vatNumber, legalForm, address, city, postalCode, country });
+    const result = await updateLegalInfo({ legalStatus, legalEntityName, siret, vatNumber, legalForm, address, city, postalCode, country });
     setSaving(false);
 
     if (!result.success) {
@@ -482,18 +482,18 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
                 <div className="text-xs text-gray-600 space-y-0.5">
                   <p>
                     {profile.legal_status === 'company' ? 'Dénomination sociale' : "Nom officiel de l'EI"} :{' '}
-                    <span className="text-gray-900">{profile.company_name}</span>
+                    <span className="text-gray-900">{profile.legal_entity_name}</span>
                   </p>
                   {profile.legal_form && (
                     <p>Forme juridique : <span className="text-gray-900">{profile.legal_form}</span></p>
                   )}
                   {profile.siret && <p>SIRET : <span className="text-gray-900 font-mono">{profile.siret}</span></p>}
                   {profile.vat_number && <p>N° TVA : <span className="text-gray-900 font-mono">{profile.vat_number}</span></p>}
-                  {profile.reseller_address && (
+                  {profile.legal_address && (
                     <p>
                       Adresse :{' '}
                       <span className="text-gray-900">
-                        {profile.reseller_address}, {profile.reseller_postal_code} {profile.reseller_city}, {profile.reseller_country}
+                        {profile.legal_address}, {profile.legal_postal_code} {profile.legal_city}, {profile.legal_country}
                       </span>
                     </p>
                   )}
@@ -557,8 +557,8 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
                 </label>
                 <input
                   type="text"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
+                  value={legalEntityName}
+                  onChange={(e) => setLegalEntityName(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                   placeholder={legalStatus === 'sole_proprietorship' ? 'Ex: Jean Dupont EI' : 'Ex: Maison Dubois SARL'}
                 />

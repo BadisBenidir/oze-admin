@@ -32,26 +32,30 @@ export interface ResellerProfile {
   /** Mode de livraison présélectionné au checkout si renseigné. */
   default_delivery_type: 'domicile' | 'point_relais' | null
   /**
-   * Statut juridique de l'ENTITÉ facturée (voir 0109) — null tant que le
-   * revendeur ne l'a pas renseigné, ce qui bloque commande et enchère
-   * (CartPage.tsx / Auctions.tsx). Conditionne le droit de rétractation
-   * (14 jours en 'individual') et les mentions légales à facturer.
+   * Statut juridique de CE sous-compte (voir 0109) — indépendant par
+   * profil, jamais partagé avec les collègues du même reseller_id (chaque
+   * login déclare le sien). Null tant qu'il n'est pas renseigné, ce qui
+   * bloque commande et enchère (CartPage.tsx / Auctions.tsx). Conditionne le
+   * droit de rétractation (14 jours en 'individual') et les mentions
+   * légales à facturer.
    */
   legal_status: 'individual' | 'sole_proprietorship' | 'company' | null
+  /** Nom officiel de l'EI ou dénomination sociale — vide pour 'individual'. */
+  legal_entity_name: string | null
   siret: string | null
   vat_number: string | null
   legal_form: string | null
-  /** Adresse de l'ENTREPRISE (siège / facturation pro), distincte de
-   * address/city/... ci-dessus qui restent l'adresse personnelle du contact. */
-  reseller_address: string | null
-  reseller_city: string | null
-  reseller_postal_code: string | null
-  reseller_country: string | null
+  /** Adresse de facturation pro / siège social de CE sous-compte, distincte
+   * de address/city/... ci-dessus (adresse de livraison personnelle). */
+  legal_address: string | null
+  legal_city: string | null
+  legal_postal_code: string | null
+  legal_country: string | null
 }
 
 export interface LegalInfoInput {
   legalStatus: 'individual' | 'sole_proprietorship' | 'company'
-  companyName: string
+  legalEntityName: string
   siret: string
   vatNumber: string
   legalForm: string
@@ -92,9 +96,11 @@ export const useResellerAuth = () => {
         .select(`
           id, email, first_name, last_name, role, phone, address, postal_code, city, country,
           delivery_instructions, default_relay_point, default_delivery_type,
+          legal_status, legal_entity_name, siret, vat_number, legal_form,
+          legal_address, legal_city, legal_postal_code, legal_country,
           reseller_contacts!inner(
             reseller_id, is_primary,
-            resellers!inner(company_name, status, legal_status, siret, vat_number, legal_form, address, city, postal_code, country)
+            resellers!inner(company_name, status)
           )
         `)
         .eq('id', userId)
@@ -141,14 +147,15 @@ export const useResellerAuth = () => {
           delivery_instructions: data.delivery_instructions || null,
           default_relay_point: data.default_relay_point || null,
           default_delivery_type: data.default_delivery_type || null,
-          legal_status: reseller.legal_status || null,
-          siret: reseller.siret || null,
-          vat_number: reseller.vat_number || null,
-          legal_form: reseller.legal_form || null,
-          reseller_address: reseller.address || null,
-          reseller_city: reseller.city || null,
-          reseller_postal_code: reseller.postal_code || null,
-          reseller_country: reseller.country || null,
+          legal_status: data.legal_status || null,
+          legal_entity_name: data.legal_entity_name || null,
+          siret: data.siret || null,
+          vat_number: data.vat_number || null,
+          legal_form: data.legal_form || null,
+          legal_address: data.legal_address || null,
+          legal_city: data.legal_city || null,
+          legal_postal_code: data.legal_postal_code || null,
+          legal_country: data.legal_country || null,
         },
         pendingReason: null,
       }
@@ -179,7 +186,7 @@ export const useResellerAuth = () => {
   const updateLegalInfo = async (input: LegalInfoInput): Promise<{ success: boolean; error?: string }> => {
     const { error } = await supabase.rpc('set_reseller_legal_info', {
       p_legal_status: input.legalStatus,
-      p_company_name: input.companyName,
+      p_legal_entity_name: input.legalEntityName,
       p_siret: input.siret,
       p_vat_number: input.vatNumber,
       p_legal_form: input.legalForm,
