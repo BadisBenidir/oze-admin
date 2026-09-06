@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, AlertCircle, Plus, Trash2, Search, Package } from 'lucide-react';
+import { X, AlertCircle, Plus, Trash2, Search, Package, ImageOff } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
 import { AuctionItemInput } from '../../../../hooks/useAdminAuctionItems';
 
@@ -11,7 +11,25 @@ interface DraftProduct {
   product_code: string;
   images: string[];
   main_image_index: number;
+  condition: string | null;
+  brand: { name: string } | null;
 }
+
+/** Le grade à 3 paliers des enchères est plus grossier que le vocabulaire
+ * complet de products.condition (grades lettrés S/A/AB/B/BC/C/D + libellés
+ * texte neuf/excellent/very-good/good/fair, voir productGrade.ts) — mappage
+ * de repli raisonnable, jamais montré à l'admin comme un choix à valider
+ * puisque la fiche liée porte déjà sa vraie description/état complets. */
+const conditionToAuctionGrade = (condition: string | null): string => {
+  switch (condition) {
+    case 'S': case 'A': case 'neuf': case 'excellent':
+      return 'Grade A';
+    case 'BC': case 'C': case 'D': case 'fair':
+      return 'Grade C';
+    default:
+      return 'Grade B';
+  }
+};
 
 interface AuctionItemFormModalProps {
   isOpen: boolean;
@@ -45,10 +63,10 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
     if (!isOpen) return;
     supabase
       .from('products')
-      .select('id, name, product_code, images, main_image_index')
+      .select('id, name, product_code, images, main_image_index, condition, brand:brands(name)')
       .eq('status', 'draft')
       .order('created_at', { ascending: false })
-      .then(({ data }) => setDraftProducts((data || []) as DraftProduct[]));
+      .then(({ data }) => setDraftProducts((data || []) as unknown as DraftProduct[]));
   }, [isOpen]);
 
   const filteredProducts = useMemo(() => {
@@ -85,10 +103,23 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
     setImageUrl('');
   };
 
+  // La fiche liée porte déjà titre/marque/état/photos — on les reprend tels
+  // quels (jamais ressaisis) plutôt que de dupliquer une description déjà
+  // faite ailleurs, voir demande explicite.
   const handleSelectProduct = (p: DraftProduct) => {
     setLinkedProduct(p);
-    if (!title.trim()) setTitle(p.name);
-    if (images.length === 0 && p.images?.length > 0) setImages([p.images[p.main_image_index] || p.images[0]]);
+    setTitle(p.name);
+    setBrand(p.brand?.name || '');
+    setGrade(conditionToAuctionGrade(p.condition));
+    setImages(p.images?.length > 0 ? [p.images[p.main_image_index] || p.images[0], ...p.images.filter((_, i) => i !== p.main_image_index)] : []);
+  };
+
+  const handleUnlinkProduct = () => {
+    setLinkedProduct(null);
+    setTitle('');
+    setBrand('');
+    setGrade(GRADES[1]);
+    setImages([]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -144,9 +175,15 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Fiche produit existante (optionnel)</label>
                 {linkedProduct ? (
-                  <div className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
-                    <span className="text-sm text-gray-900 truncate">{linkedProduct.name}</span>
-                    <button type="button" onClick={() => setLinkedProduct(null)} className="text-gray-400 hover:text-red-600 flex-shrink-0">
+                  <div className="flex items-center gap-3 px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+                    <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {linkedProduct.images?.[0] ? <img src={linkedProduct.images[0]} alt="" className="h-full w-full object-cover" /> : <ImageOff className="h-4 w-4 text-gray-400" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{linkedProduct.name}</p>
+                      <p className="text-xs text-gray-500">{linkedProduct.brand?.name} · {conditionToAuctionGrade(linkedProduct.condition)}</p>
+                    </div>
+                    <button type="button" onClick={handleUnlinkProduct} className="text-gray-400 hover:text-red-600 flex-shrink-0" title="Délier cette fiche produit">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
@@ -188,70 +225,74 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
                 <p className="text-xs text-gray-400 mt-1">Nécessaire pour pouvoir générer une commande une fois le lot adjugé — peut être lié plus tard.</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Titre</label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Ex : Louis Vuitton Speedy 30 Monogram"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Marque</label>
-                  <input
-                    type="text"
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
-                    placeholder="Ex : Louis Vuitton"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">État / Grade</label>
-                  <select
-                    value={grade}
-                    onChange={(e) => setGrade(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
-                  >
-                    {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Photos (URLs)</label>
-                <div className="flex gap-2 mb-2">
-                  <input
-                    type="text"
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                  />
-                  <button type="button" onClick={addImageUrl} className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm flex-shrink-0">
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-                {images.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {images.map((url, i) => (
-                      <div key={i} className="relative h-14 w-14 rounded-lg overflow-hidden border border-gray-200 group">
-                        <img src={url} alt="" className="h-full w-full object-cover" onError={(e) => (e.currentTarget.style.opacity = '0.3')} />
-                        <button
-                          type="button"
-                          onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
-                          className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-                        >
-                          <Trash2 className="h-4 w-4 text-white" />
-                        </button>
-                      </div>
-                    ))}
+              {!linkedProduct && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Titre</label>
+                      <input
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="Ex : Louis Vuitton Speedy 30 Monogram"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Marque</label>
+                      <input
+                        type="text"
+                        value={brand}
+                        onChange={(e) => setBrand(e.target.value)}
+                        placeholder="Ex : Louis Vuitton"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">État / Grade</label>
+                      <select
+                        value={grade}
+                        onChange={(e) => setGrade(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
+                      >
+                        {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Photos (URLs)</label>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
+                        placeholder="https://..."
+                        className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      />
+                      <button type="button" onClick={addImageUrl} className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm flex-shrink-0">
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {images.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {images.map((url, i) => (
+                          <div key={i} className="relative h-14 w-14 rounded-lg overflow-hidden border border-gray-200 group">
+                            <img src={url} alt="" className="h-full w-full object-cover" onError={(e) => (e.currentTarget.style.opacity = '0.3')} />
+                            <button
+                              type="button"
+                              onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
+                              className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                            >
+                              <Trash2 className="h-4 w-4 text-white" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
