@@ -13,6 +13,7 @@ interface CartPageProps {
   onBack: () => void;
   /** Paiement 100% solde : pas de redirection Stripe, la commande existe déjà. */
   onWalletPaymentSuccess: (orderId: string) => void;
+  onOpenTerms: () => void;
 }
 
 const formatCountdown = (ms: number): string => {
@@ -22,13 +23,14 @@ const formatCountdown = (ms: number): string => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWalletPaymentSuccess }) => {
+export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWalletPaymentSuccess, onOpenTerms }) => {
   const { profile } = useResellerAuth();
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
   const [useWalletPayment, setUseWalletPayment] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   // Force le recalcul du chrono de chaque article à l'affichage (added_at
   // ne change pas, seul "maintenant" avance) — le retrait effectif d'un
   // article expiré est lui géré par useB2BCart, pas ici.
@@ -51,11 +53,11 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
   const legalStatusMissing = Boolean(profile) && !profile?.legal_status;
 
   const handlePay = async () => {
-    if (!profile || legalStatusMissing) return;
+    if (!profile || legalStatusMissing || !termsAccepted) return;
     setError(null);
     setSubmitting(true);
     const paymentMethod = useWalletPayment ? (wallet.balance >= total ? 'wallet' : 'mixed') : 'card';
-    const result = await cart.startCheckout(appliedPromo?.code || null, paymentMethod);
+    const result = await cart.startCheckout(appliedPromo?.code || null, paymentMethod, termsAccepted);
     // En cas de succès par carte/mixte, startCheckout redirige immédiatement
     // vers Stripe — on ne repasse jamais ici. Un paiement 100% solde renvoie
     // directement l'orderId (pas de Stripe du tout, voir onWalletPaymentSuccess).
@@ -277,9 +279,25 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
             </div>
           )}
 
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(e) => setTermsAccepted(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0"
+            />
+            <span className="text-xs text-gray-600">
+              J'accepte les{' '}
+              <button type="button" onClick={onOpenTerms} className="underline hover:text-gray-900">
+                Conditions Générales de Vente
+              </button>{' '}
+              applicables à mon statut ({profile?.legal_status === 'individual' ? 'Particulier' : 'Professionnel'}).
+            </span>
+          </label>
+
           <button
             onClick={handlePay}
-            disabled={submitting || legalStatusMissing}
+            disabled={submitting || legalStatusMissing || !termsAccepted}
             className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {submitting ? (

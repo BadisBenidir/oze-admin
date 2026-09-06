@@ -20,6 +20,7 @@ import { CartBlockingModal } from '../components/pages/reseller/CartBlockingModa
 import { Auctions } from '../components/pages/reseller/Auctions';
 import { AuctionAccessModal } from '../components/pages/reseller/AuctionAccessModal';
 import { useAuctionAccess } from '../hooks/useAuctionAccess';
+import { Terms } from '../components/pages/reseller/Terms';
 import { ShoppingCart, Wallet, X, Lock } from 'lucide-react';
 
 // Trois routes "réelles" (URL adressables) de l'app revendeur : la fiche
@@ -101,11 +102,13 @@ function ResellerApp() {
 
   const openProduct = (productId: string) => navigatePath(`/catalogue/${productId}`);
   const openCart = () => navigatePath('/panier');
+  const openTerms = () => navigatePath('/cgv');
   const closeToRoot = () => navigatePath('/');
 
   const productId = parseProductId(pathname);
   const isCartRoute = pathname === '/panier' || pathname === '/panier/';
   const isAuctionRoute = pathname === '/auctions' || pathname === '/auctions/';
+  const isTermsRoute = pathname === '/cgv' || pathname === '/cgv/';
 
   // Mode sous-marin : un accès direct à /auctions sans déverrouillage
   // préalable (voir useAuctionAccess) est renvoyé vers le catalogue — la
@@ -200,7 +203,11 @@ function ResellerApp() {
     }
 
     if (isCartRoute) {
-      return <CartPage cart={cart} onBack={closeToRoot} wallet={wallet} onWalletPaymentSuccess={handleWalletCheckoutSuccess} />;
+      return <CartPage cart={cart} onBack={closeToRoot} wallet={wallet} onWalletPaymentSuccess={handleWalletCheckoutSuccess} onOpenTerms={openTerms} />;
+    }
+
+    if (isTermsRoute) {
+      return <Terms />;
     }
 
     if (isAuctionRoute) {
@@ -380,6 +387,12 @@ function ResellerApp() {
           </div>
         )}
         {renderContent()}
+
+        <footer className="px-4 md:px-6 py-4 mt-6 border-t border-gray-100 text-center">
+          <button onClick={openTerms} className="text-xs text-gray-400 hover:text-gray-600 underline">
+            Conditions Générales de Vente et d'Utilisation
+          </button>
+        </footer>
       </MainLayout>
       <CartBlockingModal blockingError={cart.blockingError} onClose={cart.dismissBlockingError} />
       <AuctionAccessModal

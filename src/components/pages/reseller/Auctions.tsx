@@ -122,7 +122,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
         ) : !canBid ? (
           <div className="mt-auto pt-3" onClick={(e) => e.stopPropagation()}>
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
-              Statut juridique requis pour enchérir — complétez "Mon profil".
+              Complétez les conditions ci-dessus (statut juridique et CGV) pour enchérir.
             </p>
           </div>
         ) : (
@@ -205,11 +205,22 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
  * jamais listée dans le menu. Charte graphique alignée sur le reste du
  * portail (Card/Badge partagés, boutons sombres). */
 export const Auctions: React.FC = () => {
-  const { profile } = useResellerAuth();
+  const { profile, acceptTerms } = useResellerAuth();
   const { session, items, myBidItemIds, myMaxAmounts, loading, error, placeAutoBid } = useAuctionItems(true, profile?.id);
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
   const viewingItem = items.find((i) => i.id === viewingItemId) || null;
-  const canBid = Boolean(profile?.legal_status);
+  const [termsCheckbox, setTermsCheckbox] = useState(false);
+  const [acceptingTerms, setAcceptingTerms] = useState(false);
+  const legalStatusMissing = !profile?.legal_status;
+  const termsMissing = !legalStatusMissing && !profile?.terms_accepted_at;
+  const canBid = Boolean(profile?.legal_status) && Boolean(profile?.terms_accepted_at);
+
+  const handleAcceptTerms = async () => {
+    if (!termsCheckbox || acceptingTerms) return;
+    setAcceptingTerms(true);
+    await acceptTerms();
+    setAcceptingTerms(false);
+  };
 
   return (
     <div className="p-4 md:p-6">
@@ -238,12 +249,38 @@ export const Auctions: React.FC = () => {
         </div>
       )}
 
-      {!canBid && (
+      {legalStatusMissing && (
         <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
           <p className="text-sm text-amber-800">
             Veuillez compléter votre statut juridique dans votre profil ("Mon profil") pour pouvoir enchérir.
           </p>
+        </div>
+      )}
+
+      {termsMissing && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+          <p className="text-sm text-amber-800">
+            Acceptez les Conditions Générales de Vente applicables aux enchères pour pouvoir participer.
+          </p>
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={termsCheckbox}
+              onChange={(e) => setTermsCheckbox(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-amber-300 text-gray-900 focus:ring-amber-400 flex-shrink-0"
+            />
+            <span className="text-xs text-amber-800">
+              J'accepte les Conditions Générales de Vente applicables aux enchères en ligne.
+            </span>
+          </label>
+          <button
+            onClick={handleAcceptTerms}
+            disabled={!termsCheckbox || acceptingTerms}
+            className="px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            {acceptingTerms ? 'Enregistrement...' : 'Valider'}
+          </button>
         </div>
       )}
 

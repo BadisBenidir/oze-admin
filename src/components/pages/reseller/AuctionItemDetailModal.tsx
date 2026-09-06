@@ -198,7 +198,7 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                 </div>
               ) : !canBid ? (
                 <p className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
-                  Statut juridique requis pour enchérir — complétez "Mon profil" pour poursuivre.
+                  Complétez les conditions requises (statut juridique et CGV, voir la page Enchères) pour enchérir.
                 </p>
               ) : (
                 <div className="mt-4 space-y-2">

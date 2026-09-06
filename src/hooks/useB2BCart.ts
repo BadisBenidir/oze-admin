@@ -314,7 +314,8 @@ export const useB2BCart = (profileId: string | undefined) => {
    */
   const startCheckout = async (
     promoCode?: string | null,
-    paymentMethod: 'card' | 'wallet' | 'mixed' = 'card'
+    paymentMethod: 'card' | 'wallet' | 'mixed' = 'card',
+    termsAccepted: boolean = false
   ): Promise<CheckoutResult> => {
     if (items.length === 0) {
       return { success: false, error: 'Le panier est vide' };
@@ -326,6 +327,10 @@ export const useB2BCart = (profileId: string | undefined) => {
       entrupy_product_ids: items.filter((i) => i.entrupyRequested).map((i) => i.id),
       promo_code: promoCode || null,
       payment_method: paymentMethod,
+      // CGV (0110) : la case à cocher est vérifiée à nouveau côté serveur —
+      // ce booléen n'a de valeur que si CartPage.tsx a réellement bloqué le
+      // bouton "Payer" jusqu'à ce qu'elle soit cochée.
+      terms_accepted: termsAccepted,
     });
 
     if (error) {

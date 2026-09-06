@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { CGV_VERSION } from '../config/legal'
 
 export interface ResellerProfile {
   id: string
@@ -51,6 +52,11 @@ export interface ResellerProfile {
   legal_city: string | null
   legal_postal_code: string | null
   legal_country: string | null
+  /** Premier consentement explicite aux CGV (voir Terms.tsx, 0110) — condition
+   * bloquante pour enchérir (place_auto_bid), reconfirmé par case à cocher à
+   * chaque commande (CartPage.tsx) sans re-timestamper ce champ. */
+  terms_accepted_at: string | null
+  terms_version: string | null
 }
 
 export interface LegalInfoInput {
@@ -98,6 +104,7 @@ export const useResellerAuth = () => {
           delivery_instructions, default_relay_point, default_delivery_type,
           legal_status, legal_entity_name, siret, vat_number, legal_form,
           legal_address, legal_city, legal_postal_code, legal_country,
+          terms_accepted_at, terms_version,
           reseller_contacts!inner(
             reseller_id, is_primary,
             resellers!inner(company_name, status)
@@ -156,6 +163,8 @@ export const useResellerAuth = () => {
           legal_city: data.legal_city || null,
           legal_postal_code: data.legal_postal_code || null,
           legal_country: data.legal_country || null,
+          terms_accepted_at: data.terms_accepted_at || null,
+          terms_version: data.terms_version || null,
         },
         pendingReason: null,
       }
@@ -195,6 +204,25 @@ export const useResellerAuth = () => {
       p_postal_code: input.postalCode,
       p_country: input.country,
     })
+    if (error) return { success: false, error: error.message }
+    await refreshProfile()
+    return { success: true }
+  }
+
+  /**
+   * Consentement CGV pour l'accès aux enchères (0110) — contrairement au
+   * checkout (une case à cocher requise à chaque commande, voir
+   * CartPage.tsx / b2b-checkout), ici c'est un geste ponctuel qui débloque
+   * durablement la mise (Auctions.tsx) : pas de règle métier conditionnelle
+   * à valider comme pour le statut juridique, un simple update direct
+   * suffit (même policy RLS d'auto-édition que phone/adresse).
+   */
+  const acceptTerms = async (): Promise<{ success: boolean; error?: string }> => {
+    if (!authState.user) return { success: false, error: 'Non authentifié' }
+    const { error } = await supabase
+      .from('profiles')
+      .update({ terms_accepted_at: new Date().toISOString(), terms_version: CGV_VERSION })
+      .eq('id', authState.user.id)
     if (error) return { success: false, error: error.message }
     await refreshProfile()
     return { success: true }
@@ -247,5 +275,6 @@ export const useResellerAuth = () => {
     signOut,
     refreshProfile,
     updateLegalInfo,
+    acceptTerms,
   }
 }

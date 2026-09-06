@@ -63,12 +63,20 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const { product_ids, insured_product_ids, entrupy_product_ids, promo_code, payment_method, terms_accepted } = await req.json();
+    if (!Array.isArray(product_ids) || product_ids.length === 0) {
+      return new Response(JSON.stringify({ error: 'Le panier est vide' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Statut juridique obligatoire (0109) : conditionne le droit de
     // rétractation applicable et les mentions légales de la facture — un
     // blocage côté React seul (CartPage.tsx) resterait contournable en
     // appelant cette fonction directement. Indépendant par sous-compte
     // (profiles.legal_status, pas resellers) : chaque login déclare le sien.
-    const { data: legalCheck } = await callerClient.from('profiles').select('legal_status').eq('id', user.id).single();
+    const { data: legalCheck } = await callerClient.from('profiles').select('legal_status, terms_accepted_at').eq('id', user.id).single();
     if (!legalCheck?.legal_status) {
       return new Response(JSON.stringify({ error: 'Merci de compléter votre statut juridique dans votre profil avant de passer commande' }), {
         status: 403,
@@ -76,12 +84,25 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { product_ids, insured_product_ids, entrupy_product_ids, promo_code, payment_method } = await req.json();
-    if (!Array.isArray(product_ids) || product_ids.length === 0) {
-      return new Response(JSON.stringify({ error: 'Le panier est vide' }), {
+    // CGV (0110) : case à cocher obligatoire à CHAQUE commande côté client
+    // (Terms.tsx / CartPage.tsx) — `terms_accepted` doit être explicitement
+    // vrai dans cette requête précise, jamais déduit d'une acceptation
+    // passée. On n'horodate le premier consentement (terms_accepted_at) que
+    // s'il n'existait pas déjà, pour ne jamais écraser sa date réelle.
+    if (terms_accepted !== true) {
+      return new Response(JSON.stringify({ error: 'Vous devez accepter les Conditions Générales de Vente pour passer commande' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+    if (!legalCheck.terms_accepted_at) {
+      // Doit rester alignée avec CGV_VERSION dans src/config/legal.ts (pas
+      // partagée entre le front et cette fonction, deux runtimes distincts).
+      const CGV_VERSION = '2026-09-07';
+      await callerClient
+        .from('profiles')
+        .update({ terms_accepted_at: new Date().toISOString(), terms_version: CGV_VERSION })
+        .eq('id', user.id);
     }
 
     // Le mode/l'adresse de livraison ne sont plus choisis au checkout : ils le
