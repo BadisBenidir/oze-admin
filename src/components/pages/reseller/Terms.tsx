@@ -90,9 +90,12 @@ export const Terms: React.FC = () => {
                   grade annoncé ne constitue pas un défaut de conformité.
                 </p>
                 <p>
-                  Conformément à l'article 297 A du Code Général des Impôts, les ventes de biens d'occasion sont
-                  susceptibles d'être soumises au régime de la TVA sur la marge : la TVA n'est alors ni mentionnée sur la
-                  facture ni récupérable par l'acheteur assujetti.
+                  {COMPANY_LEGAL_NAME} relève du régime de la franchise en base de TVA (article 293 B du Code Général
+                  des Impôts) : la TVA n'est pas facturée sur les ventes, conformément à la mention légale "TVA non
+                  applicable, art. 293 B du CGI" figurant sur les factures. Les articles proposés provenant notamment
+                  d'importations hors Union Européenne, le régime de la TVA sur la marge (article 297 A du CGI,
+                  applicable aux biens d'occasion achetés sans TVA récupérable au sein de l'UE) ne s'applique pas aux
+                  ventes réalisées sur ce portail.
                 </p>
               </Section>
               <Section title="2. Commande et prix">
