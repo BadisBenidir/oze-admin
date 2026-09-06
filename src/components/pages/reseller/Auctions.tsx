@@ -13,30 +13,36 @@ interface ItemCardProps {
   item: AuctionItem;
   isWinning: boolean;
   isOutbid: boolean;
+  myMax?: number;
   onOpen: () => void;
-  onBid: (amount: number) => Promise<{ success: boolean; error?: string }>;
+  onBid: (maxAmount: number) => Promise<{ success: boolean; error?: string; warning?: string }>;
 }
 
 /** Carte cliquable (ouvre la fiche détail, voir onOpen) qui permet AUSSI
  * d'enchérir directement sans l'ouvrir — les contrôles d'enchère stoppent
- * la propagation du clic pour ne pas déclencher onOpen en même temps. */
-const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen, onBid }) => {
+ * la propagation du clic pour ne pas déclencher onOpen en même temps.
+ * Enchère automatique (proxy bidding, 0108) : le champ libre fixe un
+ * plafond, pas une mise ponctuelle — le système surenchérit seul jusque-là. */
+const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, onOpen, onBid }) => {
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [warning, setWarning] = useState('');
   const ended = new Date(item.ends_at).getTime() <= Date.now() || item.status !== 'active';
   const nextMinBid = item.current_price + item.min_increment;
 
-  const submitBid = async (amount: number) => {
+  const submitBid = async (maxAmount: number) => {
     if (submitting || ended) return;
     setSubmitting(true);
     setError('');
-    const result = await onBid(amount);
+    setWarning('');
+    const result = await onBid(maxAmount);
     setSubmitting(false);
     if (!result.success) {
       setError(result.error || "Erreur lors de l'enchère");
       return;
     }
+    if (result.warning) setWarning(result.warning);
     setCustomAmount('');
   };
 
@@ -81,14 +87,14 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen, 
 
         {isWinning && (
           <div className="flex items-center gap-1.5 mt-2 text-green-700 bg-green-50 border border-green-100 rounded-lg px-2.5 py-1.5 text-xs font-medium">
-            <Trophy className="h-3.5 w-3.5" />
-            Vous menez l'enchère
+            <Trophy className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>Vous menez l'enchère{myMax ? ` (votre plafond : ${EUR(myMax)})` : ''}</span>
           </div>
         )}
         {!isWinning && isOutbid && (
           <div className="flex items-center gap-1.5 mt-2 text-red-700 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 text-xs font-medium">
-            <TrendingDown className="h-3.5 w-3.5" />
-            Surenchéri
+            <TrendingDown className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>Surenchéri{myMax ? ` (votre plafond : ${EUR(myMax)})` : ''}</span>
           </div>
         )}
 
@@ -124,7 +130,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen, 
                 min={nextMinBid}
                 value={customAmount}
                 onChange={(e) => setCustomAmount(e.target.value)}
-                placeholder={`Min. ${EUR(nextMinBid)}`}
+                placeholder="Votre offre max (ex: 100 €)"
                 className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400"
               />
               <button
@@ -132,13 +138,22 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen, 
                 disabled={submitting || !customAmount}
                 className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 text-sm font-medium flex-shrink-0"
               >
-                Enchérir
+                Définir max
               </button>
             </form>
+            <p className="text-[11px] text-gray-400 leading-snug">
+              Enchère automatique : nous surenchérirons du pas minimal requis uniquement si nécessaire, jusqu'à votre plafond.
+            </p>
             {error && (
               <div className="flex items-center gap-1.5 text-red-600 text-xs">
                 <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
                 <span>{error}</span>
+              </div>
+            )}
+            {!error && warning && (
+              <div className="flex items-center gap-1.5 text-amber-600 text-xs">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                <span>{warning}</span>
               </div>
             )}
           </div>
@@ -154,7 +169,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen, 
  * portail (Card/Badge partagés, boutons sombres). */
 export const Auctions: React.FC = () => {
   const { profile } = useResellerAuth();
-  const { session, items, myBidItemIds, loading, error, placeBid } = useAuctionItems(true, profile?.id);
+  const { session, items, myBidItemIds, myMaxAmounts, loading, error, placeAutoBid } = useAuctionItems(true, profile?.id);
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
   const viewingItem = items.find((i) => i.id === viewingItemId) || null;
 
@@ -207,8 +222,9 @@ export const Auctions: React.FC = () => {
               item={item}
               isWinning={Boolean(profile?.id) && item.current_winner_id === profile?.id}
               isOutbid={myBidItemIds.has(item.id) && item.current_winner_id !== profile?.id}
+              myMax={myMaxAmounts.get(item.id)}
               onOpen={() => setViewingItemId(item.id)}
-              onBid={(amount) => placeBid(item.id, amount)}
+              onBid={(maxAmount) => placeAutoBid(item.id, maxAmount)}
             />
           ))}
         </div>
@@ -218,8 +234,9 @@ export const Auctions: React.FC = () => {
         item={viewingItem}
         isWinning={Boolean(profile?.id) && viewingItem?.current_winner_id === profile?.id}
         isOutbid={Boolean(viewingItem) && myBidItemIds.has(viewingItem!.id) && viewingItem?.current_winner_id !== profile?.id}
+        myMax={viewingItem ? myMaxAmounts.get(viewingItem.id) : undefined}
         onClose={() => setViewingItemId(null)}
-        onBid={(amount) => (viewingItem ? placeBid(viewingItem.id, amount) : Promise.resolve({ success: false, error: 'Pièce inconnue' }))}
+        onBid={(maxAmount) => (viewingItem ? placeAutoBid(viewingItem.id, maxAmount) : Promise.resolve({ success: false, error: 'Pièce inconnue' }))}
       />
     </div>
   );

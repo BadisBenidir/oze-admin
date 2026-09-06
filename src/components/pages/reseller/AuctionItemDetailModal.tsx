@@ -10,24 +10,28 @@ interface AuctionItemDetailModalProps {
   item: AuctionItem | null;
   isWinning: boolean;
   isOutbid: boolean;
+  myMax?: number;
   onClose: () => void;
-  onBid: (amount: number) => Promise<{ success: boolean; error?: string }>;
+  onBid: (maxAmount: number) => Promise<{ success: boolean; error?: string; warning?: string }>;
 }
 
 /** Fiche détail d'un lot d'enchère — galerie photo façon fiche produit du
  * catalogue (voir SourcingItemDetailModal.tsx pour le même motif de
  * carrousel), avec l'enchère directement disponible ici plutôt que sur la
- * carte de la grille. */
-export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ item, isWinning, isOutbid, onClose, onBid }) => {
+ * carte de la grille. Enchère automatique (proxy bidding, 0108) : le champ
+ * libre fixe un plafond, pas une mise ponctuelle. */
+export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ item, isWinning, isOutbid, myMax, onClose, onBid }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [warning, setWarning] = useState('');
 
   useEffect(() => {
     setActiveIndex(0);
     setCustomAmount('');
     setError('');
+    setWarning('');
   }, [item?.id]);
 
   if (!item) return null;
@@ -39,16 +43,18 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
   const goPrev = () => setActiveIndex((i) => (i - 1 + images.length) % images.length);
   const goNext = () => setActiveIndex((i) => (i + 1) % images.length);
 
-  const submitBid = async (amount: number) => {
+  const submitBid = async (maxAmount: number) => {
     if (submitting || ended) return;
     setSubmitting(true);
     setError('');
-    const result = await onBid(amount);
+    setWarning('');
+    const result = await onBid(maxAmount);
     setSubmitting(false);
     if (!result.success) {
       setError(result.error || "Erreur lors de l'enchère");
       return;
     }
+    if (result.warning) setWarning(result.warning);
     setCustomAmount('');
   };
 
@@ -158,14 +164,14 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
 
               {isWinning && (
                 <div className="flex items-center gap-1.5 mt-3 text-green-700 bg-green-50 border border-green-100 rounded-lg px-2.5 py-1.5 text-sm font-medium">
-                  <Trophy className="h-4 w-4" />
-                  Vous menez l'enchère
+                  <Trophy className="h-4 w-4 flex-shrink-0" />
+                  <span>Vous menez l'enchère{myMax ? ` (votre plafond : ${EUR(myMax)})` : ''}</span>
                 </div>
               )}
               {!isWinning && isOutbid && (
                 <div className="flex items-center gap-1.5 mt-3 text-red-700 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 text-sm font-medium">
-                  <TrendingDown className="h-4 w-4" />
-                  Surenchéri
+                  <TrendingDown className="h-4 w-4 flex-shrink-0" />
+                  <span>Surenchéri{myMax ? ` (votre plafond : ${EUR(myMax)})` : ''}</span>
                 </div>
               )}
 
@@ -201,7 +207,7 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                       min={nextMinBid}
                       value={customAmount}
                       onChange={(e) => setCustomAmount(e.target.value)}
-                      placeholder={`Min. ${EUR(nextMinBid)}`}
+                      placeholder="Votre offre max (ex: 100 €)"
                       className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400"
                     />
                     <button
@@ -209,13 +215,22 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                       disabled={submitting || !customAmount}
                       className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 text-sm font-medium flex-shrink-0"
                     >
-                      Enchérir
+                      Définir max
                     </button>
                   </form>
+                  <p className="text-[11px] text-gray-400 leading-snug">
+                    Enchère automatique : nous surenchérirons du pas minimal requis uniquement si nécessaire, jusqu'à votre plafond.
+                  </p>
                   {error && (
                     <div className="flex items-center gap-1.5 text-red-600 text-xs">
                       <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
                       <span>{error}</span>
+                    </div>
+                  )}
+                  {!error && warning && (
+                    <div className="flex items-center gap-1.5 text-amber-600 text-xs">
+                      <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>{warning}</span>
                     </div>
                   )}
                 </div>
