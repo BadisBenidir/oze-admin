@@ -7,6 +7,7 @@ import {
   COMPANY_RCS,
   COMPANY_JURISDICTION_CITY,
   COMPANY_ADDRESS,
+  COMPANY_VAT_NUMBER,
   MEDIATOR_NAME,
   MEDIATOR_URL,
   CGV_VERSION,
@@ -198,7 +199,7 @@ export const Terms: React.FC = () => {
       </Card>
 
       <p className="text-xs text-gray-400 mt-6">
-        {COMPANY_LEGAL_NAME} — SIRET {COMPANY_SIRET} — {COMPANY_RCS} — {COMPANY_ADDRESS}
+        {COMPANY_LEGAL_NAME} — SIRET {COMPANY_SIRET} — {COMPANY_RCS} — TVA intracommunautaire {COMPANY_VAT_NUMBER} — {COMPANY_ADDRESS}
       </p>
     </div>
   );
