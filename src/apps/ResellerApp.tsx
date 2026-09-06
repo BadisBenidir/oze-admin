@@ -321,7 +321,7 @@ function ResellerApp() {
         activeSubTab={activeSubTab}
         onTabChange={(tab) => {
           setCheckoutStatus(null);
-          if (productId || isCartRoute) closeToRoot();
+          if (productId || isCartRoute || isTermsRoute || isAuctionRoute) closeToRoot();
           navigateTo(tab, '');
         }}
         onSubTabChange={() => {}}
