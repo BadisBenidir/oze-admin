@@ -52,7 +52,14 @@ alter table public.resellers
 -- verrou). SECURITY DEFINER car `profiles` n'a pas de policy RLS d'update
 -- pour ces colonnes suivant la convention dashboard existante.
 -- ----------------------------------------------------------------------------
-create or replace function public.set_reseller_legal_info(
+-- Une exécution partielle antérieure de cette migration a pu créer la
+-- fonction avec l'ancien nom de paramètre p_company_name (avant le passage
+-- à p_legal_entity_name) — `create or replace` refuse de renommer un
+-- paramètre d'entrée, il faut donc explicitement supprimer l'ancienne
+-- signature avant de recréer.
+drop function if exists public.set_reseller_legal_info(text, text, text, text, text, text, text, text, text);
+
+create function public.set_reseller_legal_info(
   p_legal_status text,
   p_legal_entity_name text,
   p_siret text,
