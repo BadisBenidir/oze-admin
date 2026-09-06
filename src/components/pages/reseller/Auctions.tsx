@@ -5,6 +5,7 @@ import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useAuctionItems, AuctionItem } from '../../../hooks/useAuctionItems';
 import { AuctionCountdown } from './AuctionCountdown';
+import { AuctionItemDetailModal } from './AuctionItemDetailModal';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
@@ -12,41 +13,16 @@ interface ItemCardProps {
   item: AuctionItem;
   isWinning: boolean;
   isOutbid: boolean;
-  onBid: (amount: number) => Promise<{ success: boolean; error?: string }>;
+  onOpen: () => void;
 }
 
-const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onBid }) => {
-  const [customAmount, setCustomAmount] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+/** Aperçu cliquable — la fiche détail (galerie + enchère) s'ouvre dans
+ * AuctionItemDetailModal, voir onOpen. */
+const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen }) => {
   const ended = new Date(item.ends_at).getTime() <= Date.now() || item.status !== 'active';
-  const nextMinBid = item.current_price + item.min_increment;
-
-  const submitBid = async (amount: number) => {
-    if (submitting || ended) return;
-    setSubmitting(true);
-    setError('');
-    const result = await onBid(amount);
-    setSubmitting(false);
-    if (!result.success) {
-      setError(result.error || "Erreur lors de l'enchère");
-      return;
-    }
-    setCustomAmount('');
-  };
-
-  const handleCustomSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsed = Number(customAmount);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      setError('Montant invalide');
-      return;
-    }
-    submitBid(parsed);
-  };
 
   return (
-    <Card className="overflow-hidden flex flex-col">
+    <Card hover onClick={onOpen} className="overflow-hidden flex flex-col cursor-pointer">
       <div className="relative h-56 bg-gray-100 flex items-center justify-center overflow-hidden">
         {item.images?.[0] ? (
           <img src={item.images[0]} alt={item.title} className="w-full h-full object-cover" />
@@ -86,51 +62,17 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onBid })
           </div>
         )}
 
-        {item.status !== 'active' ? (
-          <div className="mt-auto pt-3">
+        <div className="mt-auto pt-3">
+          {item.status !== 'active' ? (
             <Badge variant={item.status === 'sold' ? 'success' : 'default'}>
               {item.status === 'sold' ? 'Vendu' : 'Invendu'}
             </Badge>
-          </div>
-        ) : ended ? (
-          <div className="mt-auto pt-3">
+          ) : ended ? (
             <Badge variant="default">Enchère terminée</Badge>
-          </div>
-        ) : (
-          <div className="mt-auto pt-3 space-y-2">
-            <button
-              onClick={() => submitBid(nextMinBid)}
-              disabled={submitting}
-              className="w-full px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm font-medium"
-            >
-              +{EUR(item.min_increment)} — Enchérir à {EUR(nextMinBid)}
-            </button>
-            <form onSubmit={handleCustomSubmit} className="flex gap-2">
-              <input
-                type="number"
-                step="0.01"
-                min={nextMinBid}
-                value={customAmount}
-                onChange={(e) => setCustomAmount(e.target.value)}
-                placeholder={`Min. ${EUR(nextMinBid)}`}
-                className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400"
-              />
-              <button
-                type="submit"
-                disabled={submitting || !customAmount}
-                className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 text-sm font-medium flex-shrink-0"
-              >
-                Enchérir
-              </button>
-            </form>
-            {error && (
-              <div className="flex items-center gap-1.5 text-red-600 text-xs">
-                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-          </div>
-        )}
+          ) : (
+            <span className="text-xs font-medium text-gray-500 underline">Voir la pièce & enchérir</span>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -143,6 +85,8 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onBid })
 export const Auctions: React.FC = () => {
   const { profile } = useResellerAuth();
   const { session, items, myBidItemIds, loading, error, placeBid } = useAuctionItems(true, profile?.id);
+  const [viewingItemId, setViewingItemId] = useState<string | null>(null);
+  const viewingItem = items.find((i) => i.id === viewingItemId) || null;
 
   return (
     <div className="p-4 md:p-6">
@@ -193,11 +137,19 @@ export const Auctions: React.FC = () => {
               item={item}
               isWinning={Boolean(profile?.id) && item.current_winner_id === profile?.id}
               isOutbid={myBidItemIds.has(item.id) && item.current_winner_id !== profile?.id}
-              onBid={(amount) => placeBid(item.id, amount)}
+              onOpen={() => setViewingItemId(item.id)}
             />
           ))}
         </div>
       )}
+
+      <AuctionItemDetailModal
+        item={viewingItem}
+        isWinning={Boolean(profile?.id) && viewingItem?.current_winner_id === profile?.id}
+        isOutbid={Boolean(viewingItem) && myBidItemIds.has(viewingItem!.id) && viewingItem?.current_winner_id !== profile?.id}
+        onClose={() => setViewingItemId(null)}
+        onBid={(amount) => (viewingItem ? placeBid(viewingItem.id, amount) : Promise.resolve({ success: false, error: 'Pièce inconnue' }))}
+      />
     </div>
   );
 };
