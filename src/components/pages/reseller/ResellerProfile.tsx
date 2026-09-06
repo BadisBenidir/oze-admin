@@ -471,7 +471,7 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
         {!profile.legal_status && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
             <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-800">Ce statut doit être renseigné avant de pouvoir passer commande ou enchérir.</p>
+            <p className="text-xs text-amber-800">Ce statut doit être renseigné avant de pouvoir passer commande.</p>
           </div>
         )}
 
