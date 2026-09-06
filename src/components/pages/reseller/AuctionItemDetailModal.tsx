@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, ChevronLeft, ChevronRight, ImageOff, AlertCircle, Trophy, TrendingDown } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
-import { AuctionItem } from '../../../hooks/useAuctionItems';
+import { AuctionItem, QUICK_BID_INCREMENTS } from '../../../hooks/useAuctionItems';
 import { AuctionCountdown } from './AuctionCountdown';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -181,13 +181,19 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                 </div>
               ) : (
                 <div className="mt-4 space-y-2">
-                  <button
-                    onClick={() => submitBid(nextMinBid)}
-                    disabled={submitting}
-                    className="w-full px-4 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm font-medium"
-                  >
-                    +{EUR(item.min_increment)} — Enchérir à {EUR(nextMinBid)}
-                  </button>
+                  <div className="grid grid-cols-3 gap-2">
+                    {QUICK_BID_INCREMENTS.map((inc) => (
+                      <button
+                        key={inc}
+                        onClick={() => submitBid(item.current_price + inc)}
+                        disabled={submitting || inc < item.min_increment}
+                        title={inc < item.min_increment ? `Pas minimal : ${EUR(item.min_increment)}` : undefined}
+                        className="px-3 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+                      >
+                        +{inc} €
+                      </button>
+                    ))}
+                  </div>
                   <form onSubmit={handleCustomSubmit} className="flex gap-2">
                     <input
                       type="number"

@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
+/** Boutons d'enchère rapide proposés côté revendeur (carte + fiche détail).
+ * Un montant reste désactivé si inférieur à item.min_increment — le
+ * serveur (handle_new_bid, 0104) rejetterait de toute façon l'enchère. */
+export const QUICK_BID_INCREMENTS = [5, 10, 20];
+
 export interface AuctionSession {
   id: string;
   title: string;

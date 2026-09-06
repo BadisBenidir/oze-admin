@@ -3,7 +3,7 @@ import { AlertCircle, ImageOff, Gavel, Trophy, TrendingDown } from 'lucide-react
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
-import { useAuctionItems, AuctionItem } from '../../../hooks/useAuctionItems';
+import { useAuctionItems, AuctionItem, QUICK_BID_INCREMENTS } from '../../../hooks/useAuctionItems';
 import { AuctionCountdown } from './AuctionCountdown';
 import { AuctionItemDetailModal } from './AuctionItemDetailModal';
 
@@ -104,13 +104,19 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, onOpen, 
           </div>
         ) : (
           <div className="mt-auto pt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => submitBid(nextMinBid)}
-              disabled={submitting}
-              className="w-full px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm font-medium"
-            >
-              +{EUR(item.min_increment)} — Enchérir à {EUR(nextMinBid)}
-            </button>
+            <div className="grid grid-cols-3 gap-1.5">
+              {QUICK_BID_INCREMENTS.map((inc) => (
+                <button
+                  key={inc}
+                  onClick={() => submitBid(item.current_price + inc)}
+                  disabled={submitting || inc < item.min_increment}
+                  title={inc < item.min_increment ? `Pas minimal : ${EUR(item.min_increment)}` : undefined}
+                  className="px-2 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  +{inc} €
+                </button>
+              ))}
+            </div>
             <form onSubmit={handleCustomSubmit} className="flex gap-2">
               <input
                 type="number"
