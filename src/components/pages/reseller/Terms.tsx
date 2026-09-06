@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Scale, FileText, User, Briefcase, Building2 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import {
@@ -39,6 +39,16 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
  */
 export const Terms: React.FC = () => {
   const [tab, setTab] = useState<TermsTab>('common');
+
+  // Le lien "CGV" vit dans le pied de page, donc tout en bas de la zone
+  // défilable (voir ResellerApp.tsx) — sans ça, la page s'affiche mais reste
+  // scrollée là où l'utilisateur a cliqué, donnant l'impression d'arriver
+  // "en bas" de la page des CGV. `<main>` défile lui-même (md:overflow-auto,
+  // layMainLayout.tsx) : window.scrollTo seul ne suffit pas sur desktop.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    document.querySelector('main')?.scrollTo(0, 0);
+  }, []);
 
   return (
     <div className="max-w-4xl mx-auto w-full px-4 py-8">
