@@ -30,7 +30,7 @@ interface TopUpResult {
   error?: string;
 }
 
-const LOYALTY_TIER_AMOUNT = 500;
+const LOYALTY_TIER_AMOUNT = 1000;
 
 /**
  * Solde et historique du portefeuille B2B, scopés par PROFIL INDIVIDUEL
