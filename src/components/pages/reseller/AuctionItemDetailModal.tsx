@@ -118,6 +118,33 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                 <Badge variant="info">{item.grade}</Badge>
               </div>
 
+              {(item.material || (item.colors && item.colors.length > 0) || item.serial_number) && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {item.material && (
+                    <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1 capitalize">
+                      <span className="text-gray-400">Matière :</span> {item.material}
+                    </span>
+                  )}
+                  {item.colors && item.colors.length > 0 && (
+                    <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1 capitalize">
+                      <span className="text-gray-400">Couleur :</span> {item.colors.join(', ')}
+                    </span>
+                  )}
+                  {item.serial_number && (
+                    <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1 font-mono">
+                      <span className="text-gray-400 font-sans">N° série :</span> {item.serial_number}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {item.description && (
+                <div className="mt-3">
+                  <p className="text-sm font-medium text-gray-700 mb-1">Description</p>
+                  <p className="text-sm text-gray-600 whitespace-pre-line">{item.description}</p>
+                </div>
+              )}
+
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                 <div>
                   <p className="text-xs text-gray-400">Prix actuel</p>

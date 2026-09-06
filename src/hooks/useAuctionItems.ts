@@ -19,10 +19,17 @@ export interface AuctionItem {
   start_price: number;
   current_price: number;
   min_increment: number;
-  reserve_price: number | null;
   current_winner_id: string | null;
   ends_at: string;
   status: 'active' | 'sold' | 'unsold';
+  /** Repris de la fiche produit liée (product_id, voir 0105), quand elle
+   * existe — absents pour un lot "à la volée" sans fiche liée. Jamais de
+   * prix ici : voir reseller_auction_items (0107), qui exclut aussi
+   * reserve_price de auction_items (invisible pour un revendeur). */
+  description?: string | null;
+  material?: string | null;
+  colors?: string[] | null;
+  serial_number?: string | null;
 }
 
 /**
@@ -76,8 +83,12 @@ export const useAuctionItems = (enabled: boolean, profileId?: string | null) => 
         return;
       }
 
+      // reseller_auction_items (0107), pas auction_items directement : cette
+      // vue résout la description/matière/etc. de la fiche produit liée
+      // même quand elle est encore 'draft' (RLS produits sinon bloquante,
+      // voir commentaire de la migration), et exclut reserve_price.
       const { data: itemsData, error: itemsError } = await supabase
-        .from('auction_items')
+        .from('reseller_auction_items')
         .select('*')
         .eq('session_id', sessionData.id)
         .order('created_at', { ascending: true });
