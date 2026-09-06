@@ -73,5 +73,14 @@ export const useAdminAuctionSessions = (isAdmin: boolean = false) => {
     return { success: true };
   };
 
-  return { sessions, loading, error, refresh: fetchSessions, createSession, setSessionStatus };
+  const deleteSession = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    // on delete cascade sur auction_items.session_id / auction_bids.item_id
+    // (0104) : supprime aussi ses lots et leurs enchères.
+    const { error: deleteError } = await supabase.from('auction_sessions').delete().eq('id', id);
+    if (deleteError) return { success: false, error: deleteError.message };
+    await fetchSessions();
+    return { success: true };
+  };
+
+  return { sessions, loading, error, refresh: fetchSessions, createSession, setSessionStatus, deleteSession };
 };

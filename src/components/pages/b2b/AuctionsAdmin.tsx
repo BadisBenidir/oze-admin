@@ -46,11 +46,12 @@ export const AuctionsAdmin: React.FC = () => {
   const [section, setSection] = useState<AdminAuctionSection>('sessions');
   const [successToast, setSuccessToast] = useState('');
 
-  const { sessions, loading: sessionsLoading, error: sessionsError, createSession, setSessionStatus } = useAdminAuctionSessions(isAdmin);
+  const { sessions, loading: sessionsLoading, error: sessionsError, createSession, setSessionStatus, deleteSession } = useAdminAuctionSessions(isAdmin);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [showItemModal, setShowItemModal] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
   const { items, loading: itemsLoading, error: itemsError, addItem, removeItem, generateOrder } = useAdminAuctionItems(selectedSessionId);
   const { grants, loading: grantsLoading, error: grantsError, grantAccess } = useAdminAuctionAccess(isAdmin);
@@ -68,6 +69,19 @@ export const AuctionsAdmin: React.FC = () => {
     const result = await setSessionStatus(id, status);
     setStatusUpdatingId(null);
     if (result.success) setSuccessToast(status === 'live' ? 'Session lancée en direct.' : 'Session clôturée — lots classés.');
+  };
+
+  const handleDeleteSession = async (session: AuctionSession) => {
+    if (!window.confirm(`Supprimer la session "${session.title}" ? Ses lots et enchères seront supprimés définitivement.`)) return;
+    setDeletingSessionId(session.id);
+    const result = await deleteSession(session.id);
+    setDeletingSessionId(null);
+    if (!result.success) {
+      alert(result.error || 'Erreur lors de la suppression');
+      return;
+    }
+    if (selectedSessionId === session.id) setSelectedSessionId(null);
+    setSuccessToast('Session supprimée.');
   };
 
   const handleGenerateOrder = async (itemId: string) => {
@@ -181,6 +195,14 @@ export const AuctionsAdmin: React.FC = () => {
                           Clôturer
                         </button>
                       )}
+                      <button
+                        onClick={() => handleDeleteSession(s)}
+                        disabled={deletingSessionId === s.id}
+                        title="Supprimer cette session (et ses lots)"
+                        className="flex items-center gap-1 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 ml-auto"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </CardContent>
                 </Card>
