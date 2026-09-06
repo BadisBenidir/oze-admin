@@ -2,10 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 
+export type LegalStatus = 'individual' | 'sole_proprietorship' | 'company';
+
 export interface Reseller {
   id: string;
   company_name: string;
   legal_id: string | null;
+  /** Statut juridique (0109) — distingue Particulier/EI/Société, conditionne
+   * le droit de rétractation et les mentions légales des factures. Null tant
+   * que ni l'admin ni le revendeur ne l'ont renseigné (bloque commande/enchère
+   * côté revendeur, voir CartPage.tsx / Auctions.tsx). */
+  legal_status: LegalStatus | null;
+  siret: string | null;
+  vat_number: string | null;
+  legal_form: string | null;
   status: 'pending' | 'active' | 'suspended' | 'deleted';
   contact_email: string | null;
   contact_phone: string | null;
@@ -23,6 +33,10 @@ export interface Reseller {
 export interface ResellerFormData {
   company_name: string;
   legal_id: string;
+  legal_status: LegalStatus | '';
+  siret: string;
+  vat_number: string;
+  legal_form: string;
   contact_email: string;
   contact_phone: string;
   notes: string;
@@ -35,6 +49,10 @@ export interface ResellerFormData {
 export const emptyResellerForm: ResellerFormData = {
   company_name: '',
   legal_id: '',
+  legal_status: '',
+  siret: '',
+  vat_number: '',
+  legal_form: '',
   contact_email: '',
   contact_phone: '',
   notes: '',
@@ -134,6 +152,10 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
         .insert([{
           company_name: data.company_name.trim(),
           legal_id: data.legal_id || null,
+          legal_status: data.legal_status || null,
+          siret: data.siret.trim() || null,
+          vat_number: data.vat_number.trim() || null,
+          legal_form: data.legal_form || null,
           contact_email: data.contact_email || null,
           contact_phone: data.contact_phone || null,
           notes: data.notes || null,
@@ -161,6 +183,10 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     try {
       const payload: Record<string, unknown> = { ...data };
       if (data.legal_id !== undefined) payload.legal_id = data.legal_id || null;
+      if (data.legal_status !== undefined) payload.legal_status = data.legal_status || null;
+      if (data.siret !== undefined) payload.siret = data.siret.trim() || null;
+      if (data.vat_number !== undefined) payload.vat_number = data.vat_number.trim() || null;
+      if (data.legal_form !== undefined) payload.legal_form = data.legal_form || null;
       if (data.contact_email !== undefined) payload.contact_email = data.contact_email || null;
       if (data.contact_phone !== undefined) payload.contact_phone = data.contact_phone || null;
       if (data.notes !== undefined) payload.notes = data.notes || null;

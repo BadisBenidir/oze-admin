@@ -14,6 +14,10 @@ interface ItemCardProps {
   isWinning: boolean;
   isOutbid: boolean;
   myMax?: number;
+  /** false tant que le statut juridique du revendeur n'est pas renseigné
+   * (voir Auctions.tsx) — place_auto_bid (0109) le refuserait de toute
+   * façon côté serveur, ce n'est qu'un confort d'affichage ici. */
+  canBid: boolean;
   onOpen: () => void;
   onBid: (maxAmount: number) => Promise<{ success: boolean; error?: string; warning?: string }>;
 }
@@ -23,7 +27,7 @@ interface ItemCardProps {
  * la propagation du clic pour ne pas déclencher onOpen en même temps.
  * Enchère automatique (proxy bidding, 0108) : le champ libre fixe un
  * plafond, pas une mise ponctuelle — le système surenchérit seul jusque-là. */
-const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, onOpen, onBid }) => {
+const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, canBid, onOpen, onBid }) => {
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -115,6 +119,12 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, o
           <div className="mt-auto pt-3">
             <Badge variant="default">Enchère terminée</Badge>
           </div>
+        ) : !canBid ? (
+          <div className="mt-auto pt-3" onClick={(e) => e.stopPropagation()}>
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+              Statut juridique requis pour enchérir — complétez "Mon profil".
+            </p>
+          </div>
         ) : (
           <div className="mt-auto pt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
             <div className="grid grid-cols-3 gap-1.5">
@@ -199,6 +209,7 @@ export const Auctions: React.FC = () => {
   const { session, items, myBidItemIds, myMaxAmounts, loading, error, placeAutoBid } = useAuctionItems(true, profile?.id);
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
   const viewingItem = items.find((i) => i.id === viewingItemId) || null;
+  const canBid = Boolean(profile?.legal_status);
 
   return (
     <div className="p-4 md:p-6">
@@ -227,6 +238,15 @@ export const Auctions: React.FC = () => {
         </div>
       )}
 
+      {!canBid && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+          <p className="text-sm text-amber-800">
+            Veuillez compléter votre statut juridique dans votre profil ("Mon profil") pour pouvoir enchérir.
+          </p>
+        </div>
+      )}
+
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => <div key={i} className="h-96 bg-gray-100 rounded-lg animate-pulse" />)}
@@ -250,6 +270,7 @@ export const Auctions: React.FC = () => {
               isWinning={Boolean(profile?.id) && item.current_winner_id === profile?.id}
               isOutbid={myBidItemIds.has(item.id) && item.current_winner_id !== profile?.id}
               myMax={myMaxAmounts.get(item.id)}
+              canBid={canBid}
               onOpen={() => setViewingItemId(item.id)}
               onBid={(maxAmount) => placeAutoBid(item.id, maxAmount)}
             />
@@ -262,6 +283,7 @@ export const Auctions: React.FC = () => {
         isWinning={Boolean(profile?.id) && viewingItem?.current_winner_id === profile?.id}
         isOutbid={Boolean(viewingItem) && myBidItemIds.has(viewingItem!.id) && viewingItem?.current_winner_id !== profile?.id}
         myMax={viewingItem ? myMaxAmounts.get(viewingItem.id) : undefined}
+        canBid={canBid}
         onClose={() => setViewingItemId(null)}
         onBid={(maxAmount) => (viewingItem ? placeAutoBid(viewingItem.id, maxAmount) : Promise.resolve({ success: false, error: 'Pièce inconnue' }))}
       />

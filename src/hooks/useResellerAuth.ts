@@ -31,6 +31,34 @@ export interface ResellerProfile {
   default_relay_point: Record<string, unknown> | null
   /** Mode de livraison présélectionné au checkout si renseigné. */
   default_delivery_type: 'domicile' | 'point_relais' | null
+  /**
+   * Statut juridique de l'ENTITÉ facturée (voir 0109) — null tant que le
+   * revendeur ne l'a pas renseigné, ce qui bloque commande et enchère
+   * (CartPage.tsx / Auctions.tsx). Conditionne le droit de rétractation
+   * (14 jours en 'individual') et les mentions légales à facturer.
+   */
+  legal_status: 'individual' | 'sole_proprietorship' | 'company' | null
+  siret: string | null
+  vat_number: string | null
+  legal_form: string | null
+  /** Adresse de l'ENTREPRISE (siège / facturation pro), distincte de
+   * address/city/... ci-dessus qui restent l'adresse personnelle du contact. */
+  reseller_address: string | null
+  reseller_city: string | null
+  reseller_postal_code: string | null
+  reseller_country: string | null
+}
+
+export interface LegalInfoInput {
+  legalStatus: 'individual' | 'sole_proprietorship' | 'company'
+  companyName: string
+  siret: string
+  vatNumber: string
+  legalForm: string
+  address: string
+  city: string
+  postalCode: string
+  country: string
 }
 
 interface ResellerAuthState {
@@ -66,7 +94,7 @@ export const useResellerAuth = () => {
           delivery_instructions, default_relay_point, default_delivery_type,
           reseller_contacts!inner(
             reseller_id, is_primary,
-            resellers!inner(company_name, status)
+            resellers!inner(company_name, status, legal_status, siret, vat_number, legal_form, address, city, postal_code, country)
           )
         `)
         .eq('id', userId)
@@ -113,6 +141,14 @@ export const useResellerAuth = () => {
           delivery_instructions: data.delivery_instructions || null,
           default_relay_point: data.default_relay_point || null,
           default_delivery_type: data.default_delivery_type || null,
+          legal_status: reseller.legal_status || null,
+          siret: reseller.siret || null,
+          vat_number: reseller.vat_number || null,
+          legal_form: reseller.legal_form || null,
+          reseller_address: reseller.address || null,
+          reseller_city: reseller.city || null,
+          reseller_postal_code: reseller.postal_code || null,
+          reseller_country: reseller.country || null,
         },
         pendingReason: null,
       }
@@ -130,6 +166,31 @@ export const useResellerAuth = () => {
     } finally {
       setAuthState({ user: null, profile: null, session: null, loading: false, isReseller: false, pendingReason: null })
     }
+  }
+
+  /** Recharge le profil sans repasser par un changement de session — utilisé
+   * après un update direct sur `profiles` ou une RPC comme set_reseller_legal_info. */
+  const refreshProfile = async () => {
+    if (!authState.user) return
+    const { profile, pendingReason } = await fetchResellerProfile(authState.user.id)
+    setAuthState((current) => ({ ...current, profile, isReseller: Boolean(profile), pendingReason }))
+  }
+
+  const updateLegalInfo = async (input: LegalInfoInput): Promise<{ success: boolean; error?: string }> => {
+    const { error } = await supabase.rpc('set_reseller_legal_info', {
+      p_legal_status: input.legalStatus,
+      p_company_name: input.companyName,
+      p_siret: input.siret,
+      p_vat_number: input.vatNumber,
+      p_legal_form: input.legalForm,
+      p_address: input.address,
+      p_city: input.city,
+      p_postal_code: input.postalCode,
+      p_country: input.country,
+    })
+    if (error) return { success: false, error: error.message }
+    await refreshProfile()
+    return { success: true }
   }
 
   useEffect(() => {
@@ -177,5 +238,7 @@ export const useResellerAuth = () => {
   return {
     ...authState,
     signOut,
+    refreshProfile,
+    updateLegalInfo,
   }
 }

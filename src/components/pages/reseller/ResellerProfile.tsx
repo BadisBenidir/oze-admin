@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '../../ui/Card';
-import { useResellerAuth } from '../../../hooks/useResellerAuth';
+import { useResellerAuth, ResellerProfile as ResellerProfileType, LegalInfoInput } from '../../../hooks/useResellerAuth';
 import { useGooglePlacesAutocomplete } from '../../../hooks/useGooglePlacesAutocomplete';
 import { supabase } from '../../../lib/supabase';
 import { openServicePointPicker } from '../../../services/sendcloudService';
 import { ChronopostPickupPoint } from '../../../services/chronopostService';
-import { Building2, CheckCircle2, AlertCircle, Lock, Eye, EyeOff, Check, Circle, Truck, Package, MapPin } from 'lucide-react';
+import { Building2, CheckCircle2, AlertCircle, Lock, Eye, EyeOff, Check, Circle, Truck, Package, MapPin, Scale } from 'lucide-react';
 import { isPlausiblePhone } from '../../../utils/phoneValidation';
 
 export const ResellerProfile: React.FC = () => {
-  const { profile } = useResellerAuth();
+  const { profile, updateLegalInfo } = useResellerAuth();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
@@ -131,6 +131,8 @@ export const ResellerProfile: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      <LegalStatusSection profile={profile} updateLegalInfo={updateLegalInfo} />
 
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
@@ -364,6 +366,264 @@ export const ResellerProfile: React.FC = () => {
 
       <SecuritySection email={profile.email} />
     </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Statut juridique — Particulier / Entreprise Individuelle / Société (0109).
+// Conditionne le droit de rétractation applicable et les mentions légales
+// des factures ; bloque commande et enchère tant qu'il n'est pas renseigné
+// (voir CartPage.tsx / Auctions.tsx).
+// ---------------------------------------------------------------------------
+
+type LegalStatus = 'individual' | 'sole_proprietorship' | 'company';
+
+const LEGAL_STATUS_OPTIONS: { value: LegalStatus; label: string; description: string }[] = [
+  { value: 'individual', label: 'Particulier', description: 'Achat à titre personnel' },
+  { value: 'sole_proprietorship', label: 'Entreprise Individuelle (EI)', description: 'Auto-entrepreneur / EI' },
+  { value: 'company', label: 'Société', description: 'SAS, SASU, SARL, etc.' },
+];
+
+const LEGAL_FORMS = ['SAS', 'SASU', 'SARL', 'EURL', 'SA', 'SNC', 'SCI', 'Autre'];
+const SIRET_REGEX = /^[0-9]{14}$/;
+
+interface LegalStatusSectionProps {
+  profile: ResellerProfileType;
+  updateLegalInfo: (input: LegalInfoInput) => Promise<{ success: boolean; error?: string }>;
+}
+
+const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, updateLegalInfo }) => {
+  const [legalStatus, setLegalStatus] = useState<LegalStatus | null>(profile.legal_status);
+  const [companyName, setCompanyName] = useState(profile.company_name || '');
+  const [siret, setSiret] = useState(profile.siret || '');
+  const [vatNumber, setVatNumber] = useState(profile.vat_number || '');
+  const [legalForm, setLegalForm] = useState(profile.legal_form || '');
+  const [address, setAddress] = useState(profile.reseller_address || '');
+  const [city, setCity] = useState(profile.reseller_city || '');
+  const [postalCode, setPostalCode] = useState(profile.reseller_postal_code || '');
+  const [country, setCountry] = useState(profile.reseller_country || 'France');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    setLegalStatus(profile.legal_status);
+    setCompanyName(profile.company_name || '');
+    setSiret(profile.siret || '');
+    setVatNumber(profile.vat_number || '');
+    setLegalForm(profile.legal_form || '');
+    setAddress(profile.reseller_address || '');
+    setCity(profile.reseller_city || '');
+    setPostalCode(profile.reseller_postal_code || '');
+    setCountry(profile.reseller_country || 'France');
+  }, [profile]);
+
+  const isPro = legalStatus === 'sole_proprietorship' || legalStatus === 'company';
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(false);
+
+    if (!legalStatus) {
+      setError('Veuillez sélectionner un statut');
+      return;
+    }
+    if (isPro) {
+      if (!companyName.trim()) {
+        setError('La dénomination est obligatoire pour ce statut');
+        return;
+      }
+      if (!SIRET_REGEX.test(siret.trim())) {
+        setError('Le numéro SIRET doit comporter exactement 14 chiffres');
+        return;
+      }
+      if (legalStatus === 'company' && !legalForm) {
+        setError('La forme juridique est obligatoire pour une société');
+        return;
+      }
+    }
+
+    setSaving(true);
+    const result = await updateLegalInfo({ legalStatus, companyName, siret, vatNumber, legalForm, address, city, postalCode, country });
+    setSaving(false);
+
+    if (!result.success) {
+      setError(result.error || 'Une erreur est survenue');
+      return;
+    }
+    setSuccess(true);
+  };
+
+  return (
+    <Card className="mb-6">
+      <CardContent className="p-5 space-y-4">
+        <div>
+          <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+            <Scale className="h-4 w-4 text-gray-400" />
+            Statut juridique
+          </h4>
+          <p className="text-xs text-gray-500 mt-1">
+            Obligatoire : conditionne le droit de rétractation applicable et les mentions légales de vos factures.
+          </p>
+        </div>
+
+        {!profile.legal_status && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800">Ce statut doit être renseigné avant de pouvoir passer commande ou enchérir.</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
+            <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+        {success && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center space-x-2">
+            <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+            <p className="text-sm text-green-700">Statut juridique mis à jour</p>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {LEGAL_STATUS_OPTIONS.map((opt) => (
+              <button
+                type="button"
+                key={opt.value}
+                onClick={() => setLegalStatus(opt.value)}
+                className={`text-left px-3 py-2.5 rounded-lg border-2 transition-colors ${
+                  legalStatus === opt.value ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <p className="text-sm font-medium text-gray-900">{opt.label}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{opt.description}</p>
+              </button>
+            ))}
+          </div>
+
+          {legalStatus === 'individual' && (
+            <p className="text-xs text-blue-800 bg-blue-50 border border-blue-100 rounded-lg p-3">
+              Statut particulier : bénéficie du droit légal de rétractation de 14 jours sur les ventes à distance applicables.
+            </p>
+          )}
+
+          {isPro && (
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {legalStatus === 'sole_proprietorship' ? "Nom officiel de l'EI" : 'Dénomination sociale'}
+                </label>
+                <input
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                  placeholder={legalStatus === 'sole_proprietorship' ? 'Ex: Jean Dupont EI' : 'Ex: Maison Dubois SARL'}
+                />
+              </div>
+
+              {legalStatus === 'company' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Forme juridique</label>
+                  <select
+                    value={legalForm}
+                    onChange={(e) => setLegalForm(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
+                  >
+                    <option value="">Sélectionner...</option>
+                    {LEGAL_FORMS.map((f) => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">SIRET</label>
+                  <input
+                    type="text"
+                    value={siret}
+                    onChange={(e) => setSiret(e.target.value.replace(/\D/g, '').slice(0, 14))}
+                    inputMode="numeric"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm font-mono"
+                    placeholder="14 chiffres"
+                  />
+                  {siret && !SIRET_REGEX.test(siret) && <p className="text-xs text-red-600 mt-1">{siret.length}/14 chiffres</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    N° TVA intracommunautaire <span className="text-gray-400 font-normal">(optionnel)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={vatNumber}
+                    onChange={(e) => setVatNumber(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm font-mono"
+                    placeholder="FR12345678901"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Laisser vide en cas de franchise en base de TVA.</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {legalStatus === 'company' ? 'Adresse du siège social' : 'Adresse de facturation professionnelle'}
+                </label>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                    placeholder="Numéro et rue"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={postalCode}
+                      onChange={(e) => setPostalCode(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      placeholder="Code postal"
+                    />
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                      placeholder="Ville"
+                    />
+                  </div>
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
+                  >
+                    <option value="France">France</option>
+                    <option value="Belgique">Belgique</option>
+                    <option value="Suisse">Suisse</option>
+                    <option value="Luxembourg">Luxembourg</option>
+                    <option value="Monaco">Monaco</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={saving || !legalStatus}
+            className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
+          >
+            {saving ? 'Enregistrement...' : 'Enregistrer le statut juridique'}
+          </button>
+        </form>
+      </CardContent>
+    </Card>
   );
 };
 

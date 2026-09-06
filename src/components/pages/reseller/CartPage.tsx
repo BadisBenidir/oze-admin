@@ -48,8 +48,10 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart.items.length]);
 
+  const legalStatusMissing = Boolean(profile) && !profile?.legal_status;
+
   const handlePay = async () => {
-    if (!profile) return;
+    if (!profile || legalStatusMissing) return;
     setError(null);
     setSubmitting(true);
     const paymentMethod = useWalletPayment ? (wallet.balance >= total ? 'wallet' : 'mixed') : 'card';
@@ -133,6 +135,15 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start space-x-2">
           <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {legalStatusMissing && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start space-x-2">
+          <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-800">
+            Veuillez compléter votre statut juridique dans votre profil ("Mon profil") pour poursuivre votre commande.
+          </p>
         </div>
       )}
 
@@ -268,7 +279,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
 
           <button
             onClick={handlePay}
-            disabled={submitting}
+            disabled={submitting || legalStatusMissing}
             className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {submitting ? (

@@ -11,6 +11,10 @@ interface AuctionItemDetailModalProps {
   isWinning: boolean;
   isOutbid: boolean;
   myMax?: number;
+  /** false tant que le statut juridique du revendeur n'est pas renseigné
+   * (voir Auctions.tsx) — place_auto_bid (0109) le refuserait de toute
+   * façon côté serveur, ce n'est qu'un confort d'affichage ici. */
+  canBid: boolean;
   onClose: () => void;
   onBid: (maxAmount: number) => Promise<{ success: boolean; error?: string; warning?: string }>;
 }
@@ -20,7 +24,7 @@ interface AuctionItemDetailModalProps {
  * carrousel), avec l'enchère directement disponible ici plutôt que sur la
  * carte de la grille. Enchère automatique (proxy bidding, 0108) : le champ
  * libre fixe un plafond, pas une mise ponctuelle. */
-export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ item, isWinning, isOutbid, myMax, onClose, onBid }) => {
+export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ item, isWinning, isOutbid, myMax, canBid, onClose, onBid }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -192,6 +196,10 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                 <div className="mt-4">
                   <Badge variant="default">Enchère terminée</Badge>
                 </div>
+              ) : !canBid ? (
+                <p className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                  Statut juridique requis pour enchérir — complétez "Mon profil" pour poursuivre.
+                </p>
               ) : (
                 <div className="mt-4 space-y-2">
                   <div className="grid grid-cols-3 gap-2">

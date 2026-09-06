@@ -42,6 +42,19 @@ const resellerStatusBadge = (status: Reseller['status']) => {
   }
 };
 
+const legalStatusBadge = (legalStatus: Reseller['legal_status']) => {
+  switch (legalStatus) {
+    case 'individual':
+      return <Badge variant="default">Particulier</Badge>;
+    case 'sole_proprietorship':
+      return <Badge variant="info">EI</Badge>;
+    case 'company':
+      return <Badge variant="purple">Société</Badge>;
+    default:
+      return <Badge variant="warning">Statut juridique manquant</Badge>;
+  }
+};
+
 const orderStatusLabel = (status: string): string => {
   switch (status) {
     case 'shipped':
@@ -177,7 +190,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   }, [currentReseller.id]);
 
   const handleResellerSaved = (_id: string, data: ResellerFormData) => {
-    const updated: Reseller = { ...currentReseller, ...data };
+    const updated: Reseller = { ...currentReseller, ...data, legal_status: data.legal_status || null };
     setCurrentReseller(updated);
     onResellerUpdated?.(updated);
   };
@@ -242,6 +255,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
           )}
         </div>
         <div className="flex items-center gap-3">
+          {legalStatusBadge(currentReseller.legal_status)}
           {resellerStatusBadge(currentReseller.status)}
           <button
             onClick={() => setShowEditModal(true)}

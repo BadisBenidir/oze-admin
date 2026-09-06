@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useResellers, Reseller, ResellerFormData, emptyResellerForm } from '../../hooks/useResellers';
+import { useResellers, Reseller, ResellerFormData, emptyResellerForm, LegalStatus } from '../../hooks/useResellers';
 import { useGooglePlacesAutocomplete } from '../../hooks/useGooglePlacesAutocomplete';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import { AlertCircle, X } from 'lucide-react';
@@ -51,6 +51,10 @@ export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, re
         ? {
             company_name: reseller.company_name,
             legal_id: reseller.legal_id || '',
+            legal_status: reseller.legal_status || '',
+            siret: reseller.siret || '',
+            vat_number: reseller.vat_number || '',
+            legal_form: reseller.legal_form || '',
             contact_email: reseller.contact_email || '',
             contact_phone: reseller.contact_phone || '',
             notes: reseller.notes || '',
@@ -75,6 +79,16 @@ export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, re
     if (!formData.company_name.trim()) {
       setFormError("Le nom de l'entreprise est obligatoire");
       return;
+    }
+    if (formData.legal_status && formData.legal_status !== 'individual') {
+      if (!/^[0-9]{14}$/.test(formData.siret.trim())) {
+        setFormError('Le numéro SIRET doit comporter exactement 14 chiffres');
+        return;
+      }
+      if (formData.legal_status === 'company' && !formData.legal_form) {
+        setFormError('La forme juridique est obligatoire pour une société');
+        return;
+      }
     }
 
     setSaving(true);
@@ -223,7 +237,7 @@ export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, re
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SIRET / TVA</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">SIRET / TVA (ancien champ libre)</label>
                 <input
                   type="text"
                   value={formData.legal_id}
@@ -231,6 +245,61 @@ export const ResellerFormModal: React.FC<ResellerFormModalProps> = ({ isOpen, re
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Statut juridique</label>
+                <select
+                  value={formData.legal_status}
+                  onChange={(e) => setFormData({ ...formData, legal_status: e.target.value as LegalStatus | '' })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
+                >
+                  <option value="">Non renseigné</option>
+                  <option value="individual">Particulier</option>
+                  <option value="sole_proprietorship">Entreprise Individuelle (EI)</option>
+                  <option value="company">Société</option>
+                </select>
+              </div>
+
+              {(formData.legal_status === 'sole_proprietorship' || formData.legal_status === 'company') && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">SIRET</label>
+                    <input
+                      type="text"
+                      value={formData.siret}
+                      onChange={(e) => setFormData({ ...formData, siret: e.target.value.replace(/\D/g, '').slice(0, 14) })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent font-mono"
+                      placeholder="14 chiffres"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">N° TVA intracom.</label>
+                    <input
+                      type="text"
+                      value={formData.vat_number}
+                      onChange={(e) => setFormData({ ...formData, vat_number: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent font-mono"
+                      placeholder="Optionnel"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.legal_status === 'company' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Forme juridique</label>
+                  <select
+                    value={formData.legal_form}
+                    onChange={(e) => setFormData({ ...formData, legal_form: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
+                  >
+                    <option value="">Sélectionner...</option>
+                    {['SAS', 'SASU', 'SARL', 'EURL', 'SA', 'SNC', 'SCI', 'Autre'].map((f) => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
