@@ -468,27 +468,65 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
           </p>
         </div>
 
-        {!profile.legal_status && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-800">Ce statut doit être renseigné avant de pouvoir passer commande.</p>
+        {profile.legal_status ? (
+          <div className="space-y-3">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
+              <p className="text-sm font-medium text-gray-900">
+                {LEGAL_STATUS_OPTIONS.find((o) => o.value === profile.legal_status)?.label}
+              </p>
+              {profile.legal_status === 'individual' ? (
+                <p className="text-xs text-gray-600">
+                  Bénéficie du droit légal de rétractation de 14 jours sur les ventes à distance applicables.
+                </p>
+              ) : (
+                <div className="text-xs text-gray-600 space-y-0.5">
+                  <p>
+                    {profile.legal_status === 'company' ? 'Dénomination sociale' : "Nom officiel de l'EI"} :{' '}
+                    <span className="text-gray-900">{profile.company_name}</span>
+                  </p>
+                  {profile.legal_form && (
+                    <p>Forme juridique : <span className="text-gray-900">{profile.legal_form}</span></p>
+                  )}
+                  {profile.siret && <p>SIRET : <span className="text-gray-900 font-mono">{profile.siret}</span></p>}
+                  {profile.vat_number && <p>N° TVA : <span className="text-gray-900 font-mono">{profile.vat_number}</span></p>}
+                  {profile.reseller_address && (
+                    <p>
+                      Adresse :{' '}
+                      <span className="text-gray-900">
+                        {profile.reseller_address}, {profile.reseller_postal_code} {profile.reseller_city}, {profile.reseller_country}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-gray-500">
+              💡 Ce statut est désormais définitif et ne peut plus être modifié ici. Pour le corriger, contactez directement votre administrateur OZË Paris.
+            </p>
           </div>
-        )}
+        ) : (
+          <>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-800">
+                Ce statut est obligatoire pour passer commande, et ne pourra plus être modifié une fois enregistré — choisissez-le avec soin.
+              </p>
+            </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
-            <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
-        {success && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center space-x-2">
-            <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
-            <p className="text-sm text-green-700">Statut juridique mis à jour</p>
-          </div>
-        )}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+            {success && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center space-x-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <p className="text-sm text-green-700">Statut juridique enregistré</p>
+              </div>
+            )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {LEGAL_STATUS_OPTIONS.map((opt) => (
               <button
@@ -614,14 +652,16 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={saving || !legalStatus}
-            className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
-          >
-            {saving ? 'Enregistrement...' : 'Enregistrer le statut juridique'}
-          </button>
-        </form>
+              <button
+                type="submit"
+                disabled={saving || !legalStatus}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
+              >
+                {saving ? 'Enregistrement...' : 'Enregistrer le statut juridique'}
+              </button>
+            </form>
+          </>
+        )}
       </CardContent>
     </Card>
   );
