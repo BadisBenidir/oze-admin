@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { RefreshCw, JapaneseYen } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -20,8 +20,15 @@ const formatDateLabel = (isoDate: string): string => {
  */
 export const JpyEurRateCard: React.FC = () => {
   const { history, latest, loading, error, refreshing, refreshNow } = useJpyEurRate();
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const chartData = history.map((h) => ({ ...h, label: formatDateLabel(h.rate_date) }));
+
+  const handleRefresh = async () => {
+    setRefreshError(null);
+    const result = await refreshNow();
+    if (!result.success) setRefreshError(result.error || 'Échec de la récupération du taux');
+  };
 
   return (
     <Card>
@@ -32,7 +39,7 @@ export const JpyEurRateCard: React.FC = () => {
             Taux de change JPY → EUR
           </h3>
           <button
-            onClick={refreshNow}
+            onClick={handleRefresh}
             disabled={refreshing}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
@@ -42,6 +49,11 @@ export const JpyEurRateCard: React.FC = () => {
         </div>
       </CardHeader>
       <CardContent>
+        {refreshError && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+            <p className="text-sm text-red-700">{refreshError}</p>
+          </div>
+        )}
         {loading ? (
           <div className="h-[220px] flex items-center justify-center text-sm text-gray-400">Chargement...</div>
         ) : error ? (
@@ -52,7 +64,7 @@ export const JpyEurRateCard: React.FC = () => {
               Aucun taux enregistré pour l'instant — le job automatique passe chaque jour à 6h (UTC).
             </p>
             <button
-              onClick={refreshNow}
+              onClick={handleRefresh}
               disabled={refreshing}
               className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
             >
