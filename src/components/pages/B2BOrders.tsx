@@ -221,10 +221,12 @@ export const B2BOrders: React.FC = () => {
                         <td className="py-4 px-4 md:px-6 text-sm">
                           {(() => {
                             const requesterName = getRequesterDisplayName(order);
-                            const showSubtitle = Boolean(requesterName) && !order.placed_by_is_primary;
-                            return showSubtitle ? (
+                            return requesterName ? (
                               <>
-                                <p className="font-medium text-gray-900">{requesterName}</p>
+                                <p className="font-medium text-gray-900">
+                                  {requesterName}
+                                  {order.placed_by_is_primary && <span className="text-xs text-gray-400 ml-1">(Principal)</span>}
+                                </p>
                                 <p className="text-xs text-gray-400">{order.reseller?.company_name || '—'}</p>
                               </>
                             ) : (

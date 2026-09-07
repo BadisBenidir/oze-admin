@@ -477,10 +477,10 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                 </p>
                 {(() => {
                   const requesterName = getRequesterDisplayName(order);
-                  const showSubtitle = Boolean(requesterName) && !order.placed_by_is_primary;
-                  return showSubtitle ? (
+                  return requesterName ? (
                     <p className="text-sm mt-1">
                       <span className="font-medium text-gray-900">{requesterName}</span>
+                      {order.placed_by_is_primary && <span className="text-xs text-gray-400 ml-1.5">(Principal)</span>}
                       <span className="text-xs text-gray-400 ml-1.5">{order.reseller?.company_name || '—'}</span>
                     </p>
                   ) : order.reseller?.company_name ? (
