@@ -121,7 +121,7 @@ interface RawCartItem {
   expires_at: string | null;
 }
 
-export const useB2BCart = (profileId: string | undefined) => {
+export const useB2BCart = (profileId: string | undefined, legalStatusComplete: boolean = true) => {
   const [items, setItems] = useState<B2BCartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [globalExpiresAt, setGlobalExpiresAt] = useState<number | null>(null);
@@ -230,6 +230,15 @@ export const useB2BCart = (profileId: string | undefined) => {
   }, [globalExpiresAt, refresh]);
 
   const addItem = async (product: B2BCatalogItem): Promise<AddItemResult> => {
+    // Blocage côté client (UX) : le verrou légal contraignant reste le
+    // paiement (CartPage.tsx) et la mise aux enchères (place_auto_bid,
+    // 0109), déjà appliqués côté serveur — cart_add_item existe uniquement
+    // en base (jamais capturé dans une migration suivie ici, voir la note
+    // "db push cassé"), impossible d'y ajouter ce même verrou sans risquer
+    // de casser sa logique de réservation actuelle sans en voir la source.
+    if (!legalStatusComplete) {
+      return { success: false, error: 'Complétez votre statut juridique dans "Mon profil" avant d\'ajouter un article au panier.' };
+    }
     if (itemsRef.current.some((i) => i.id === product.id)) return { success: true };
 
     const { data, error } = await supabase.rpc('cart_add_item', { p_product_id: product.id });

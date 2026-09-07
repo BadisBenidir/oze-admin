@@ -386,6 +386,21 @@ const LEGAL_STATUS_OPTIONS: { value: LegalStatus; label: string; description: st
 
 const LEGAL_FORMS = ['SAS', 'SASU', 'SARL', 'EURL', 'SA', 'SNC', 'SCI', 'Autre'];
 const SIRET_REGEX = /^[0-9]{14}$/;
+// Format d'un n° de TVA intracommunautaire français (FR + 11 caractères) —
+// exigé par Factur-X/PDP dès lors qu'il est renseigné (facultatif en
+// franchise en base, art. 293 B du CGI, voir config/legal.ts).
+const VAT_REGEX = /^FR[0-9A-Z]{11}$/;
+// Pays en ISO 3166-1 alpha-2 (exigé par Factur-X/PDP) plutôt qu'en toutes
+// lettres — n'affecte que la nouvelle saisie, voir country_name_to_iso
+// (0117) pour la normalisation des valeurs déjà enregistrées en toutes
+// lettres avant ce changement.
+const LEGAL_COUNTRIES = [
+  { code: 'FR', label: 'France' },
+  { code: 'BE', label: 'Belgique' },
+  { code: 'CH', label: 'Suisse' },
+  { code: 'LU', label: 'Luxembourg' },
+  { code: 'MC', label: 'Monaco' },
+];
 
 interface LegalStatusSectionProps {
   profile: ResellerProfileType;
@@ -401,7 +416,7 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
   const [address, setAddress] = useState(profile.legal_address || '');
   const [city, setCity] = useState(profile.legal_city || '');
   const [postalCode, setPostalCode] = useState(profile.legal_postal_code || '');
-  const [country, setCountry] = useState(profile.legal_country || 'France');
+  const [country, setCountry] = useState(profile.legal_country || 'FR');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -415,10 +430,14 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
     setAddress(profile.legal_address || '');
     setCity(profile.legal_city || '');
     setPostalCode(profile.legal_postal_code || '');
-    setCountry(profile.legal_country || 'France');
+    setCountry(profile.legal_country || 'FR');
   }, [profile]);
 
   const isPro = legalStatus === 'sole_proprietorship' || legalStatus === 'company';
+  // Dénomination de l'EI toujours dérivée de l'identité civile déjà connue
+  // du profil (jamais une saisie libre) — voir set_reseller_legal_info (0117)
+  // qui recalcule et impose la même valeur côté serveur.
+  const eiOfficialName = `${profile.first_name} ${profile.last_name} EI`.trim();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -430,8 +449,8 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
       return;
     }
     if (isPro) {
-      if (!legalEntityName.trim()) {
-        setError('La dénomination est obligatoire pour ce statut');
+      if (legalStatus === 'company' && !legalEntityName.trim()) {
+        setError('La dénomination sociale est obligatoire pour une société');
         return;
       }
       if (!SIRET_REGEX.test(siret.trim())) {
@@ -442,10 +461,19 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
         setError('La forme juridique est obligatoire pour une société');
         return;
       }
+      if (vatNumber.trim() && !VAT_REGEX.test(vatNumber.trim().toUpperCase())) {
+        setError('Le numéro de TVA intracommunautaire doit être au format FR suivi de 11 caractères (ex: FR12345678901)');
+        return;
+      }
+      if (!address.trim() || !postalCode.trim() || !city.trim()) {
+        setError("L'adresse complète (rue, code postal, ville) est obligatoire pour ce statut");
+        return;
+      }
     }
 
     setSaving(true);
-    const result = await updateLegalInfo({ legalStatus, legalEntityName, siret, vatNumber, legalForm, address, city, postalCode, country });
+    const entityNameToSend = legalStatus === 'sole_proprietorship' ? eiOfficialName : legalEntityName;
+    const result = await updateLegalInfo({ legalStatus, legalEntityName: entityNameToSend, siret, vatNumber, legalForm, address, city, postalCode, country });
     setSaving(false);
 
     if (!result.success) {
@@ -493,7 +521,7 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
                     <p>
                       Adresse :{' '}
                       <span className="text-gray-900">
-                        {profile.legal_address}, {profile.legal_postal_code} {profile.legal_city}, {profile.legal_country}
+                        {profile.legal_address}, {profile.legal_postal_code} {profile.legal_city}, {LEGAL_COUNTRIES.find((c) => c.code === profile.legal_country)?.label || profile.legal_country}
                       </span>
                     </p>
                   )}
@@ -551,18 +579,28 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
 
           {isPro && (
             <div className="space-y-3 pt-1">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {legalStatus === 'sole_proprietorship' ? "Nom officiel de l'EI" : 'Dénomination sociale'}
-                </label>
-                <input
-                  type="text"
-                  value={legalEntityName}
-                  onChange={(e) => setLegalEntityName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                  placeholder={legalStatus === 'sole_proprietorship' ? 'Ex: Jean Dupont EI' : 'Ex: Maison Dubois SARL'}
-                />
-              </div>
+              {legalStatus === 'sole_proprietorship' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nom officiel de l'EI</label>
+                  <div className="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm text-gray-700">
+                    {eiOfficialName}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Dérivé automatiquement de votre prénom et nom — c'est ce nom qui figurera sur vos factures.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Dénomination sociale</label>
+                  <input
+                    type="text"
+                    value={legalEntityName}
+                    onChange={(e) => setLegalEntityName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                    placeholder="Ex: Maison Dubois SARL"
+                  />
+                </div>
+              )}
 
               {legalStatus === 'company' && (
                 <div>
@@ -600,11 +638,15 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
                   <input
                     type="text"
                     value={vatNumber}
-                    onChange={(e) => setVatNumber(e.target.value)}
+                    onChange={(e) => setVatNumber(e.target.value.toUpperCase())}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm font-mono"
                     placeholder="FR12345678901"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Laisser vide en cas de franchise en base de TVA.</p>
+                  {vatNumber.trim() && !VAT_REGEX.test(vatNumber.trim()) ? (
+                    <p className="text-xs text-red-600 mt-1">Format attendu : FR suivi de 11 caractères</p>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-1">Laisser vide en cas de franchise en base de TVA.</p>
+                  )}
                 </div>
               </div>
 
@@ -641,11 +683,9 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
                     onChange={(e) => setCountry(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white"
                   >
-                    <option value="France">France</option>
-                    <option value="Belgique">Belgique</option>
-                    <option value="Suisse">Suisse</option>
-                    <option value="Luxembourg">Luxembourg</option>
-                    <option value="Monaco">Monaco</option>
+                    {LEGAL_COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

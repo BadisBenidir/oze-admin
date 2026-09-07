@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useOrders } from '../../hooks/useOrders';
-import { useInvoices } from '../../hooks/useInvoices';
+import { useInvoices, useOrderInvoiceBadges } from '../../hooks/useInvoices';
 import type { OrderWithItems } from '../../services/orderService';
 import { OrderDetail } from './OrderDetail';
 import { B2BOrders } from './B2BOrders';
@@ -105,6 +105,8 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
     shipmentFilter === 'all'
       ? channelFilteredOrders
       : channelFilteredOrders.filter((order) => getShipmentStatus(order) === shipmentFilter);
+
+  const invoiceBadges = useOrderInvoiceBadges(filteredOrders.map((o) => o.id));
 
   // Commandes B2B : composant et hook (useB2BOrders) entièrement séparés des
   // commandes B2C ci-dessous — simplement affiché sous cet onglet de
@@ -481,6 +483,11 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                               <FileDown className="h-3 w-3 md:h-4 md:w-4" />
                             )}
                           </button>
+                          {invoiceBadges[order.id] && (
+                            <Badge variant={invoiceBadges[order.id].invoiceType === 'b2b_facturx' ? 'purple' : 'info'}>
+                              {invoiceBadges[order.id].invoiceType === 'b2b_facturx' ? 'B2B · Factur-X' : 'B2C · Standard'}
+                            </Badge>
+                          )}
                           {order.status === 'confirmed' && (
                             <button
                               className="p-1 text-gray-400 hover:text-green-600 transition-colors"

@@ -1,6 +1,49 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { generateInvoicePdf, InvoiceLineItem, InvoiceBillingDetails } from '../utils/generateInvoicePdf';
+
+export interface OrderInvoiceBadge {
+  invoiceType: 'b2b_facturx' | 'b2c_retail';
+  transmissionStatus: 'not_applicable' | 'pending' | 'sent' | 'failed';
+}
+
+/**
+ * Badges admin [B2B - Factur-X] / [B2C - Standard] (Comptabilité, Toutes les
+ * commandes, Commandes B2B) — un seul appel groupé par jeu d'ids visibles,
+ * jamais une requête par ligne de tableau. N'affiche rien tant que la
+ * facture correspondante n'a pas encore été générée (pas d'entrée = pas de
+ * badge), ce qui est l'état normal avant le premier téléchargement.
+ */
+export const useOrderInvoiceBadges = (orderIds: string[]) => {
+  const [badges, setBadges] = useState<Record<string, OrderInvoiceBadge>>({});
+  const key = orderIds.slice().sort().join(',');
+
+  useEffect(() => {
+    if (!key) {
+      setBadges({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('invoices')
+        .select('order_id, invoice_type, transmission_status')
+        .in('order_id', key.split(','));
+      if (cancelled || !data) return;
+      const next: Record<string, OrderInvoiceBadge> = {};
+      data.forEach((row) => {
+        next[row.order_id] = { invoiceType: row.invoice_type, transmissionStatus: row.transmission_status };
+      });
+      setBadges(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return badges;
+};
 
 export interface InvoiceOrderInput {
   id: string;

@@ -51,7 +51,7 @@ const DEFAULT_DESCRIPTION = 'Espace professionnel exclusif OZË Paris - Maroquin
 function ResellerApp() {
   const { activeTab, activeSubTab, navigateTo } = useNavigation();
   const { profile } = useResellerAuth();
-  const cart = useB2BCart(profile?.id);
+  const cart = useB2BCart(profile?.id, Boolean(profile?.legal_status));
   const wallet = useWallet(profile?.id);
   const auctionAccess = useAuctionAccess(profile?.id);
   const currentTab = activeTab || 'catalog';

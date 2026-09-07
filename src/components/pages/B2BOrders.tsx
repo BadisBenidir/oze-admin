@@ -4,7 +4,7 @@ import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useB2BOrders, B2BOrder, B2BOrderComputedStatus, getRequesterDisplayName } from '../../hooks/useB2BOrders';
 import { useSendcloudSync } from '../../hooks/useSendcloudSync';
-import { useInvoices } from '../../hooks/useInvoices';
+import { useInvoices, useOrderInvoiceBadges } from '../../hooks/useInvoices';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck, Search, FileDown, Loader2 } from 'lucide-react';
 
@@ -78,6 +78,8 @@ export const B2BOrders: React.FC = () => {
       return normalizeSearch(haystack).includes(term);
     });
   }, [orders, search]);
+
+  const invoiceBadges = useOrderInvoiceBadges(filteredOrders.map((o) => o.id));
 
   const handleSyncSendcloud = async () => {
     setSyncNotice(null);
@@ -233,6 +235,11 @@ export const B2BOrders: React.FC = () => {
                             {order.order_items.some((i) => i.entrupy_requested) && (
                               <Badge variant="purple">
                                 <BadgeCheck className="h-3 w-3 mr-1" /> Entrupy
+                              </Badge>
+                            )}
+                            {invoiceBadges[order.id] && (
+                              <Badge variant={invoiceBadges[order.id].invoiceType === 'b2b_facturx' ? 'purple' : 'info'}>
+                                {invoiceBadges[order.id].invoiceType === 'b2b_facturx' ? 'B2B · Factur-X' : 'B2C · Standard'}
                               </Badge>
                             )}
                           </div>
