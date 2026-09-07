@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { extractFunctionErrorMessage } from '../utils/edgeFunctionError';
 
 export type ReconciliationStatus = 'unmatched' | 'matched' | 'ignored';
 export type MatchedType = 'order' | 'sourcing_mission' | 'expense' | 'stripe_payout' | 'other' | null;
@@ -101,7 +102,7 @@ export const useBankTransactions = (isAdmin: boolean, monthFilter?: string) => {
     setSyncing(true);
     const { data, error: invokeError } = await supabase.functions.invoke('qonto-sync', { body: {} });
     setSyncing(false);
-    if (invokeError) return { success: false, error: invokeError.message };
+    if (invokeError) return { success: false, error: await extractFunctionErrorMessage(invokeError) };
     if (data?.error) return { success: false, error: data.error };
     await fetchData();
     return { success: true, transactionsSynced: data?.transactions_synced, autoMatched: data?.auto_matched };
@@ -132,7 +133,7 @@ export const useBankTransactions = (isAdmin: boolean, monthFilter?: string) => {
     formData.append('bank_transaction_id', bankTransactionId);
     formData.append('file', file);
     const { data, error: invokeError } = await supabase.functions.invoke('qonto-attachment-upload', { body: formData });
-    if (invokeError) return { success: false, error: invokeError.message };
+    if (invokeError) return { success: false, error: await extractFunctionErrorMessage(invokeError) };
     if (data?.error) return { success: false, error: data.error };
     await fetchData();
     return { success: true };

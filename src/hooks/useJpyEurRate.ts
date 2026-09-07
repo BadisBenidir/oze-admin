@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { extractFunctionErrorMessage } from '../utils/edgeFunctionError';
 
 export interface JpyEurRatePoint {
   rate_date: string;
@@ -54,7 +55,7 @@ export const useJpyEurRate = (enabled: boolean = true) => {
     setRefreshing(true);
     const { error: invokeError } = await supabase.functions.invoke('fetch-jpy-eur-rate', { body: {} });
     setRefreshing(false);
-    if (invokeError) return { success: false, error: invokeError.message };
+    if (invokeError) return { success: false, error: await extractFunctionErrorMessage(invokeError) };
     await fetchHistory();
     return { success: true };
   };
@@ -68,7 +69,7 @@ export const useJpyEurRate = (enabled: boolean = true) => {
       body: { backfill_days: days },
     });
     setRefreshing(false);
-    if (invokeError) return { success: false, error: invokeError.message };
+    if (invokeError) return { success: false, error: await extractFunctionErrorMessage(invokeError) };
     await fetchHistory();
     return { success: true, imported: (data as { imported?: number } | null)?.imported };
   };
