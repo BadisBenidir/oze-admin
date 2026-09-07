@@ -7,6 +7,7 @@ import { useBankTransactions, BankTransaction, MatchedType } from '../../../hook
 import { useAccountingLedgerExport } from '../../../hooks/useAccountingLedgerExport';
 import { AccountingRawData, isOrderPaid } from '../../../hooks/useAccountingRawData';
 import { FRANCHISE_TVA_THRESHOLD, FRANCHISE_TVA_TOLERANCE_THRESHOLD } from '../../../config/accounting';
+import { COMPANY_CREATION_DATE } from '../../../config/legal';
 import { BankTransactionMatchModal } from './BankTransactionMatchModal';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -59,11 +60,16 @@ export const QontoTab: React.FC<QontoTabProps> = ({ data }) => {
     [transactions]
   );
 
-  // CA cumulé de l'année civile en cours, tous canaux confondus (web, B2B,
-  // avances de sourcing sur mesure encaissées) — même prédicat "encaissé"
+  // CA cumulé depuis le 1er janvier de l'année en cours, JAMAIS avant la
+  // création d'OZË PARIS SAS (COMPANY_CREATION_DATE) : l'activité tournait
+  // avant sous un statut différent (micro-entreprise), dont le CA n'entre
+  // pas dans le compteur de franchise de CETTE société. Les années
+  // suivantes repartiront normalement du 1er janvier. Tous canaux confondus
+  // (web, B2B, avances de sourcing encaissées) — même prédicat "encaissé"
   // que le reste du module (isOrderPaid, useAccountingRawData.ts).
   const yearToDateRevenue = useMemo(() => {
-    const yearStart = new Date(new Date().getFullYear(), 0, 1);
+    const calendarYearStart = new Date(new Date().getFullYear(), 0, 1);
+    const yearStart = new Date(Math.max(calendarYearStart.getTime(), new Date(COMPANY_CREATION_DATE).getTime()));
     const ordersRevenue = data.orders
       .filter((o) => isOrderPaid(o) && new Date(o.created_at) >= yearStart)
       .reduce((sum, o) => sum + Number(o.total_amount), 0);
@@ -76,6 +82,9 @@ export const QontoTab: React.FC<QontoTabProps> = ({ data }) => {
     return ordersRevenue + sourcingRevenue + liveRevenue;
   }, [data]);
 
+  const yearToDateStart = new Date(
+    Math.max(new Date(new Date().getFullYear(), 0, 1).getTime(), new Date(COMPANY_CREATION_DATE).getTime())
+  );
   const thresholdPercent = Math.min((yearToDateRevenue / FRANCHISE_TVA_THRESHOLD) * 100, 100);
   const overTolerance = yearToDateRevenue > FRANCHISE_TVA_TOLERANCE_THRESHOLD;
   const overThreshold = yearToDateRevenue > FRANCHISE_TVA_THRESHOLD;
@@ -173,7 +182,7 @@ export const QontoTab: React.FC<QontoTabProps> = ({ data }) => {
               />
             </div>
             <p className={`text-[11px] mt-1 ${overThreshold ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
-              CA {new Date().getFullYear()} : {EUR(yearToDateRevenue)} / {EUR(FRANCHISE_TVA_THRESHOLD)}
+              CA depuis le {yearToDateStart.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })} : {EUR(yearToDateRevenue)} / {EUR(FRANCHISE_TVA_THRESHOLD)}
               {overTolerance && ' — seuil majoré dépassé, sortie immédiate de la franchise'}
               {!overTolerance && overThreshold && ' — seuil dépassé (sortie si 2 années consécutives)'}
             </p>
