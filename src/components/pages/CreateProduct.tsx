@@ -1268,7 +1268,10 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
         </div>
       </div>
 
-      {/* Section Photos des défauts */}
+      {/* Section Photos des défauts — pas d'utilité côté B2B (les revendeurs
+          achètent en connaissance de l'état/grade, pas via des photos de
+          défauts pensées pour un acheteur final grand public). */}
+      {!isB2B && (
       <div className="border-t border-gray-200 pt-6 mt-6">
         <div className="mb-4">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -1379,6 +1382,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 
