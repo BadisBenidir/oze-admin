@@ -213,10 +213,10 @@ Deno.serve(async (req: Request) => {
       await adminClient.from('profiles').update({ qonto_client_id: qontoClientId }).eq('id', profile.id);
     }
 
-    // 3. IBAN de règlement — obligatoire côté Qonto (422 réel "IBAN is
-    // empty") : une organisation peut avoir plusieurs comptes bancaires, il
-    // faut préciser lequel encaisse. Même résolution que qonto-sync (compte
-    // ciblé par QONTO_IBAN si plusieurs existent, sinon le premier).
+    // 3. Compte bancaire de règlement — Qonto veut son ID interne
+    // (bank_account_id), jamais l'IBAN en clair. Même résolution que
+    // qonto-sync pour repérer LE bon compte si l'organisation en a
+    // plusieurs (QONTO_IBAN, comparé sur l'iban du compte, sinon le premier).
     const orgRes = await fetch(`${QONTO_BASE_URL}/organizations/${orgSlug}`, { headers: qontoHeaders });
     if (!orgRes.ok) {
       const body = await orgRes.text();
@@ -226,31 +226,37 @@ Deno.serve(async (req: Request) => {
     const bankAccounts = orgData?.organization?.bank_accounts || [];
     const targetIban = Deno.env.get('QONTO_IBAN');
     const settlementAccount = (targetIban && bankAccounts.find((a: { iban?: string }) => a.iban === targetIban)) || bankAccounts[0];
-    if (!settlementAccount?.iban) {
+    const bankAccountId: string | undefined = settlementAccount?.id || settlementAccount?.slug;
+    if (!bankAccountId) {
       return json({ error: 'Aucun compte bancaire Qonto trouvé pour cette organisation' }, 502);
     }
 
     // 4. Émission de la facture officielle, finalisée (numéro officiel +
-    // routage PDP automatique côté Qonto pour un client pro).
+    // routage PDP automatique côté Qonto pour un client pro). Structure
+    // exacte confirmée par la doc Qonto : le corps est { client_invoice,
+    // finalize } — `finalize` est un FRÈRE de client_invoice, pas un champ
+    // à l'intérieur ; quantity/vat_rate/unit_price sont des nombres bruts,
+    // pas des chaînes ni des objets {value, currency} (contrairement à ce
+    // qu'un précédent 422 mal interprété laissait penser).
     const today = new Date().toISOString().slice(0, 10);
     const invoicePayload = {
-      client_id: qontoClientId,
-      iban: settlementAccount.iban,
-      currency: 'EUR',
-      issue_date: today,
-      due_date: today,
-      // quantity attendu en STRING par Qonto (422 réel : "cannot unmarshal
-      // number into ... quantity of type string") — même remarque que
-      // unit_price.value, déjà envoyé en chaîne. vat_rate à "0" (obligatoire,
-      // 422 réel "vat rate cannot be empty") : OZË Paris est en franchise en
-      // base de TVA (art. 293 B du CGI), aucune TVA n'est jamais facturée.
-      items: activeItems.map((item) => ({
-        title: [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article',
-        quantity: String(item.quantity),
-        unit_price: { value: item.unit_price.toFixed(2), currency: 'EUR' },
-        vat_rate: '0',
-      })),
-      note: VAT_NOTE,
+      client_invoice: {
+        client_id: qontoClientId,
+        bank_account_id: bankAccountId,
+        currency: 'EUR',
+        issue_date: today,
+        due_date: today,
+        payment_method: 'transfer',
+        items: activeItems.map((item) => ({
+          title: [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article',
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          // OZË Paris est en franchise en base de TVA (art. 293 B du CGI) :
+          // jamais de TVA facturée.
+          vat_rate: 0,
+        })),
+        note: VAT_NOTE,
+      },
       finalize: true,
     };
 
