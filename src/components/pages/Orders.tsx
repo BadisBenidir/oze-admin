@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useOrders } from '../../hooks/useOrders';
+import { useInvoices } from '../../hooks/useInvoices';
+import type { OrderWithItems } from '../../services/orderService';
 import { OrderDetail } from './OrderDetail';
 import { B2BOrders } from './B2BOrders';
 import { ReceptionView } from './b2b/ReceptionView';
@@ -12,7 +14,7 @@ import {
   getShipmentStatus,
   type ShipmentStatus,
 } from '../orders/ShipmentStatusFilter';
-import { Eye, Download, Truck, Globe, Handshake, Gavel, Loader2 } from 'lucide-react';
+import { Eye, Download, Truck, Globe, Handshake, Gavel, Loader2, FileDown } from 'lucide-react';
 
 interface OrdersProps {
   activeSubTab: string;
@@ -56,6 +58,29 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>('all');
   const source = activeSubTab === 'web-orders' ? 'web' : undefined;
   const { orders, loading, error, updateOrderStatus } = useOrders(source);
+  const { downloadInvoice, downloadingOrderId } = useInvoices();
+
+  const handleDownloadInvoice = async (order: OrderWithItems) => {
+    const items = order.order_items
+      .filter((i) => i.status !== 'cancelled')
+      .map((i) => ({
+        description: i.product_snapshot?.name || 'Article',
+        unitPrice: i.unit_price,
+        quantity: i.quantity,
+        lineTotal: i.line_total,
+      }));
+    const result = await downloadInvoice(
+      {
+        id: order.id,
+        order_number: order.order_number,
+        created_at: order.created_at,
+        total_amount: order.total_amount,
+        paymentMethod: order.stripe_payment_intent_id ? 'Carte bancaire (Stripe)' : 'Solde revendeur (wallet)',
+      },
+      items
+    );
+    if (!result.success) alert(result.error);
+  };
 
   // Canal choisi dans le sélecteur rapide, appliqué AVANT le filtre de
   // statut d'expédition — les pastilles de comptage reflètent donc bien le
@@ -444,8 +469,20 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                           >
                             <Eye className="h-3 w-3 md:h-4 md:w-4" />
                           </button>
+                          <button
+                            className="p-1 text-gray-400 hover:text-purple-600 transition-colors disabled:opacity-40"
+                            onClick={() => handleDownloadInvoice(order)}
+                            disabled={downloadingOrderId === order.id}
+                            title="Télécharger la facture"
+                          >
+                            {downloadingOrderId === order.id ? (
+                              <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />
+                            ) : (
+                              <FileDown className="h-3 w-3 md:h-4 md:w-4" />
+                            )}
+                          </button>
                           {order.status === 'confirmed' && (
-                            <button 
+                            <button
                               className="p-1 text-gray-400 hover:text-green-600 transition-colors"
                               onClick={() => updateOrderStatus(order.id, 'shipped')}
                               title="Marquer comme expédiée"

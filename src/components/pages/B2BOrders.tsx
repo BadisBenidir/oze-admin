@@ -4,8 +4,9 @@ import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useB2BOrders, B2BOrder, B2BOrderComputedStatus, getRequesterDisplayName } from '../../hooks/useB2BOrders';
 import { useSendcloudSync } from '../../hooks/useSendcloudSync';
+import { useInvoices } from '../../hooks/useInvoices';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
-import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck, Search } from 'lucide-react';
+import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck, Search, FileDown, Loader2 } from 'lucide-react';
 
 // Insensible aux accents et à la casse — même pattern que ResellerDetail.tsx.
 const DIACRITICS_REGEX = new RegExp('[\\u0300-\\u036f]', 'g');
@@ -36,6 +37,29 @@ export const B2BOrders: React.FC = () => {
   const { orders, loading, error, refresh } = useB2BOrders(isAdmin);
   const [viewingOrder, setViewingOrder] = useState<B2BOrder | null>(null);
   const { sync: syncSendcloud } = useSendcloudSync();
+  const { downloadInvoice, downloadingOrderId } = useInvoices();
+
+  const handleDownloadInvoice = async (order: B2BOrder) => {
+    const items = order.order_items
+      .filter((i) => i.status !== 'cancelled')
+      .map((i) => ({
+        description: i.product_snapshot?.name || 'Article',
+        unitPrice: i.unit_price,
+        quantity: i.quantity,
+        lineTotal: i.line_total,
+      }));
+    const result = await downloadInvoice(
+      {
+        id: order.id,
+        order_number: order.order_number,
+        created_at: order.created_at,
+        total_amount: order.total_amount,
+        paymentMethod: order.stripe_payment_intent_id ? 'Carte bancaire (Stripe)' : 'Solde revendeur (wallet)',
+      },
+      items
+    );
+    if (!result.success) alert(result.error);
+  };
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ checked: number; updated: number } | null>(null);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
@@ -214,13 +238,27 @@ export const B2BOrders: React.FC = () => {
                           </div>
                         </td>
                         <td className="py-4 px-4 md:px-6">
-                          <button
-                            onClick={() => setViewingOrder(order)}
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Voir les détails de la commande"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setViewingOrder(order)}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Voir les détails de la commande"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDownloadInvoice(order)}
+                              disabled={downloadingOrderId === order.id}
+                              className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-40"
+                              title="Télécharger la facture"
+                            >
+                              {downloadingOrderId === order.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <FileDown className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))

@@ -5,6 +5,7 @@ import { useAccountingRawData } from '../../hooks/useAccountingRawData';
 import { buildAccountingPeriod, PeriodPreset } from '../../utils/accountingPeriods';
 import { AccountingToolbar } from './accounting/AccountingToolbar';
 import { SalesJournalExport } from './accounting/SalesJournalExport';
+import { InvoicesBulkExport } from './accounting/InvoicesBulkExport';
 import { DashboardGlobalTab } from './accounting/DashboardGlobalTab';
 import { B2CTab } from './accounting/B2CTab';
 import { B2BTab } from './accounting/B2BTab';
@@ -74,6 +75,8 @@ export const Accounting: React.FC = () => {
       />
 
       {exportOpen && <SalesJournalExport />}
+
+      <InvoicesBulkExport period={period} />
 
       {error && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">

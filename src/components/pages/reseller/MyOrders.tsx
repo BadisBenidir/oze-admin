@@ -10,9 +10,11 @@ interface MyOrdersProps {
   onOpenProduct: (productId: string) => void;
   /** Rafraîchit le solde affiché dans l'en-tête après un remboursement (annulation). */
   onWalletChanged?: () => void;
+  /** Bascule vers l'onglet "Mon profil" depuis le badge "Compléter profil". */
+  onGoToProfile?: () => void;
 }
 
-export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct, onWalletChanged }) => {
+export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct, onWalletChanged, onGoToProfile }) => {
   const { isReseller, profile } = useResellerAuth();
   const { orders, loading, error, refresh } = useMyB2BOrders(isReseller, profile?.id);
   const { items: readyItems, requestDelivery } = useReadyToShipItems(isReseller);
@@ -112,6 +114,9 @@ export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct, onWalletChang
         onOpenProduct={onOpenProduct}
         canCancel
         onOrderCancelled={handleOrderCancelled}
+        showInvoiceActions
+        legalStatusComplete={Boolean(profile?.legal_status)}
+        onGoToProfile={onGoToProfile}
       />
 
       {showRequestModal && (

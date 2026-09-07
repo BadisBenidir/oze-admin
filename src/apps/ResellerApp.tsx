@@ -223,7 +223,7 @@ function ResellerApp() {
       // commandes" — tout appel résiduel à cet id retombe ici plutôt que de
       // faire planter le switch ou retomber silencieusement sur le catalogue.
       case 'shipments':
-        return <MyOrders onOpenProduct={openProduct} onWalletChanged={wallet.refresh} />;
+        return <MyOrders onOpenProduct={openProduct} onWalletChanged={wallet.refresh} onGoToProfile={() => navigateTo('profile')} />;
       case 'sourcing':
         return <SourcingSurMesure />;
       case 'profile':

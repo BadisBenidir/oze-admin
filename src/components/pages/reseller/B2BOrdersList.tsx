@@ -3,6 +3,7 @@ import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { MyB2BOrder, MyB2BOrderItem } from '../../../hooks/useMyB2BOrders';
 import { useEntrupyCertificate } from '../../../hooks/useEntrupyCertificate';
+import { useInvoices } from '../../../hooks/useInvoices';
 import { FULFILLMENT_RANK } from '../../../hooks/useB2BOrders';
 import { ShoppingBag, ImageOff, AlertCircle, Eye, X, Package, MapPin, Truck, FileDown, Ban, BadgeCheck } from 'lucide-react';
 import { CancelMyOrderModal } from './CancelMyOrderModal';
@@ -113,6 +114,18 @@ interface B2BOrdersListProps {
   canCancel?: boolean;
   /** Rafraîchit la liste du parent après une annulation réussie. */
   onOrderCancelled?: () => void;
+  /**
+   * N'affiche les actions facture que sur "Mes commandes" (MyOrders.tsx) —
+   * jamais depuis TeamMemberDetail.tsx : le statut juridique et les factures
+   * sont indépendants par sous-compte (voir 0109/0115), le contact principal
+   * consultant les commandes d'un coéquipier n'a de toute façon pas accès en
+   * lecture à ses factures (RLS invoices_owner_select : profile_id = auth.uid()).
+   */
+  showInvoiceActions?: boolean;
+  /** Statut juridique déjà complété sur CE profil (auth.uid()) — débloque le
+   * téléchargement direct, sinon un badge invite à compléter "Mon profil". */
+  legalStatusComplete?: boolean;
+  onGoToProfile?: () => void;
 }
 
 export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
@@ -124,15 +137,36 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
   onOpenProduct,
   canCancel = false,
   onOrderCancelled,
+  showInvoiceActions = false,
+  legalStatusComplete = false,
+  onGoToProfile,
 }) => {
   const [viewingOrder, setViewingOrder] = useState<MyB2BOrder | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState<MyB2BOrder | null>(null);
   const { requestCertificate } = useEntrupyCertificate();
   const [requestingItemId, setRequestingItemId] = useState<string | null>(null);
   const [certificateError, setCertificateError] = useState<string | null>(null);
+  const { downloadInvoice, downloadingOrderId, downloadError } = useInvoices();
 
-  const handleDownloadInvoice = () => {
-    alert("La facture PDF n'est pas encore disponible au téléchargement. Contacte OZË Paris si tu en as besoin dès maintenant.");
+  const handleDownloadInvoice = (order: MyB2BOrder) => {
+    const items = order.order_items
+      .filter((i) => i.status === 'active')
+      .map((i) => ({
+        description: i.product_snapshot?.name || 'Article',
+        unitPrice: i.unit_price,
+        quantity: i.quantity,
+        lineTotal: i.line_total,
+      }));
+    downloadInvoice(
+      {
+        id: order.id,
+        order_number: order.order_number,
+        created_at: order.created_at,
+        total_amount: order.total_amount,
+        paymentMethod: 'Carte bancaire (Stripe) / Solde revendeur',
+      },
+      items
+    );
   };
 
   const handleRequestCertificate = async (itemId: string) => {
@@ -186,6 +220,26 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                     </div>
                     <div className="flex items-center gap-2">
                       {shipmentStatusBadge(shipment.status)}
+                      {showInvoiceActions && shipment.status !== 'unpaid' && shipment.status !== 'cancelled' && (
+                        legalStatusComplete ? (
+                          <button
+                            onClick={() => handleDownloadInvoice(order)}
+                            disabled={downloadingOrderId === order.id}
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                            title="Télécharger la facture"
+                          >
+                            <FileDown className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={onGoToProfile}
+                            className="p-2 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                            title="Compléter profil pour débloquer la facture"
+                          >
+                            <AlertCircle className="h-4 w-4" />
+                          </button>
+                        )
+                      )}
                       <span className="text-base font-semibold text-gray-900">{order.total_amount.toFixed(0)} €</span>
                       <button
                         onClick={() => setViewingOrder(order)}
@@ -432,14 +486,30 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={handleDownloadInvoice}
-                      className="flex items-center justify-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
-                    >
-                      <FileDown className="h-4 w-4" />
-                      <span>Télécharger la facture</span>
-                    </button>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    {showInvoiceActions && viewingShipment.status !== 'unpaid' && viewingShipment.status !== 'cancelled' && (
+                      legalStatusComplete ? (
+                        <button
+                          onClick={() => handleDownloadInvoice(viewingOrder)}
+                          disabled={downloadingOrderId === viewingOrder.id}
+                          className="flex items-center justify-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm disabled:opacity-50"
+                        >
+                          <FileDown className="h-4 w-4" />
+                          <span>{downloadingOrderId === viewingOrder.id ? 'Génération...' : 'Télécharger la facture'}</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={onGoToProfile}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-medium hover:bg-amber-100 transition-colors"
+                        >
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          <span>Compléter profil pour débloquer la facture</span>
+                        </button>
+                      )
+                    )}
+                    {showInvoiceActions && downloadError && downloadingOrderId === null && (
+                      <span className="text-xs text-red-600">{downloadError}</span>
+                    )}
                     {canCancel && !['shipped', 'delivered', 'cancelled'].includes(viewingOrder.status) && viewingOrder.order_items.some((i) => i.status === 'active') && (
                       <button
                         onClick={() => setCancellingOrder(viewingOrder)}

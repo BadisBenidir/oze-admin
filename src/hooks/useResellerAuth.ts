@@ -206,6 +206,10 @@ export const useResellerAuth = () => {
     })
     if (error) return { success: false, error: error.message }
     await refreshProfile()
+    // Équivalent pratique du "trigger sur mise à jour du profil" : dès que le
+    // statut juridique est fixé (voir 0115_invoices.sql), on rattrape les
+    // factures de toutes les commandes déjà payées qui en manquaient.
+    await supabase.rpc('backfill_missing_invoices_for_profile')
     return { success: true }
   }
 
