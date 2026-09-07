@@ -20,7 +20,8 @@ import {
   Plus,
   Search,
   X,
-  Handshake
+  Handshake,
+  GripVertical
 } from 'lucide-react';
 
 interface CreateProductProps {
@@ -132,6 +133,8 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
   const [isLoading, setIsLoading] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [uploadingDefectImages, setUploadingDefectImages] = useState(false);
+  const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
+  const [dragOverImageIndex, setDragOverImageIndex] = useState<number | null>(null);
   const [loadingProduct, setLoadingProduct] = useState(isEditMode);
   const [showDirectSaleModal, setShowDirectSaleModal] = useState(false);
   
@@ -892,6 +895,27 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
     updateProductData({ mainImageIndex: index });
   };
 
+  // Réordonnancement par glisser-déposer des vignettes : mainImageIndex
+  // pointe une POSITION dans le tableau, pas une image — il faut donc le
+  // décaler pour continuer à désigner la même photo après un déplacement.
+  const reorderImages = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    const newImages = [...productData.images];
+    const [moved] = newImages.splice(fromIndex, 1);
+    newImages.splice(toIndex, 0, moved);
+
+    let newMainIndex = productData.mainImageIndex;
+    if (productData.mainImageIndex === fromIndex) {
+      newMainIndex = toIndex;
+    } else if (fromIndex < productData.mainImageIndex && toIndex >= productData.mainImageIndex) {
+      newMainIndex = productData.mainImageIndex - 1;
+    } else if (fromIndex > productData.mainImageIndex && toIndex <= productData.mainImageIndex) {
+      newMainIndex = productData.mainImageIndex + 1;
+    }
+
+    updateProductData({ images: newImages, mainImageIndex: newMainIndex });
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -957,17 +981,39 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
               Images uploadées ({productData.images.length})
             </h3>
             <p className="text-xs text-gray-500">
-              Cliquez sur une image pour la définir comme image principale
+              Cliquez pour définir l'image principale · Glissez-déposez pour réordonner
             </p>
           </div>
-          
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {productData.images.map((image, index) => (
-              <div key={index} className="relative group">
-                <div 
+              <div
+                key={image}
+                className={`relative group transition-opacity ${draggedImageIndex === index ? 'opacity-40' : ''}`}
+                draggable
+                onDragStart={() => setDraggedImageIndex(index)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (draggedImageIndex !== null && draggedImageIndex !== index) setDragOverImageIndex(index);
+                }}
+                onDragLeave={() => setDragOverImageIndex((prev) => (prev === index ? null : prev))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (draggedImageIndex !== null) reorderImages(draggedImageIndex, index);
+                  setDraggedImageIndex(null);
+                  setDragOverImageIndex(null);
+                }}
+                onDragEnd={() => {
+                  setDraggedImageIndex(null);
+                  setDragOverImageIndex(null);
+                }}
+              >
+                <div
                   className={`aspect-square rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${
-                    index === productData.mainImageIndex 
-                      ? 'border-blue-500 ring-2 ring-blue-200' 
+                    dragOverImageIndex === index
+                      ? 'border-blue-500 border-dashed ring-2 ring-blue-200'
+                      : index === productData.mainImageIndex
+                      ? 'border-blue-500 ring-2 ring-blue-200'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                   onClick={() => setMainImage(index)}
@@ -975,10 +1021,16 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
                   <img
                     src={image}
                     alt={`Produit ${index + 1}`}
+                    draggable={false}
                     className="w-full h-full object-cover"
                   />
                 </div>
-                
+
+                {/* Poignée de glisser-déposer */}
+                <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
+                  <GripVertical className="w-3.5 h-3.5" />
+                </div>
+
                 {/* Badge image principale */}
                 {index === productData.mainImageIndex && (
                   <div className="absolute -top-2 -left-2">
@@ -987,7 +1039,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
                     </Badge>
                   </div>
                 )}
-                
+
                 {/* Bouton suppression */}
                 <button
                   onClick={(e) => {
@@ -999,7 +1051,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
                 >
                   <X className="w-3 h-3" />
                 </button>
-                
+
                 {/* Numéro de l'image */}
                 <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
                   {index + 1}
