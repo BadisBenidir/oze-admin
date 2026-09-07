@@ -213,72 +213,41 @@ Deno.serve(async (req: Request) => {
       await adminClient.from('profiles').update({ qonto_client_id: qontoClientId }).eq('id', profile.id);
     }
 
-    // 3. Compte bancaire de règlement — Qonto veut son ID interne
-    // (bank_account_id), jamais l'IBAN en clair. Même résolution que
-    // qonto-sync pour repérer LE bon compte si l'organisation en a
-    // plusieurs (QONTO_IBAN, comparé sur l'iban du compte, sinon le premier).
-    const orgRes = await fetch(`${QONTO_BASE_URL}/organizations/${orgSlug}`, { headers: qontoHeaders });
-    if (!orgRes.ok) {
-      const body = await orgRes.text();
-      return json({ error: `Qonto /organizations a échoué (${orgRes.status}) : ${body}` }, 502);
-    }
-    const orgData = await orgRes.json();
-    const bankAccounts = orgData?.organization?.bank_accounts || [];
-    const targetIban = Deno.env.get('QONTO_IBAN');
-    const settlementAccount = (targetIban && bankAccounts.find((a: { iban?: string }) => a.iban === targetIban)) || bankAccounts[0];
-    const bankAccountId: string | undefined = settlementAccount?.id || settlementAccount?.slug;
-    if (!bankAccountId) {
-      return json({ error: 'Aucun compte bancaire Qonto trouvé pour cette organisation' }, 502);
-    }
-    // Qonto persiste à réclamer `iban` (422 "IBAN is empty") en plus de
-    // bank_account_id — vérifié et nettoyé AVANT tout appel, pour échouer
-    // avec un message explicite plutôt qu'un 422 Qonto opaque si le secret
-    // manque côté Supabase.
-    const qontoIban = Deno.env.get('QONTO_IBAN') || Deno.env.get('IBAN');
+    // 3. IBAN de règlement — vérifié et nettoyé AVANT tout appel, pour
+    // échouer avec un message explicite plutôt qu'un 422 Qonto opaque si le
+    // secret manque côté Supabase.
+    const qontoIban = (Deno.env.get('QONTO_IBAN') || '').replace(/\s+/g, '').toUpperCase();
     if (!qontoIban) {
-      return json({ error: "QONTO_IBAN (ou IBAN) manquant dans les secrets Supabase de l'edge function — impossible d'émettre une facture sans IBAN de règlement" }, 500);
+      return json({ error: 'Secret QONTO_IBAN manquant dans Supabase' }, 500);
     }
-    const cleanedIban = qontoIban.replace(/\s+/g, '').toUpperCase();
 
     // 4. Émission de la facture officielle, finalisée (numéro officiel +
     // routage PDP automatique côté Qonto pour un client pro). Structure
-    // exacte confirmée par la doc Qonto : le corps est { client_invoice,
-    // finalize } — `finalize` est un FRÈRE de client_invoice, pas un champ
-    // à l'intérieur ; quantity/vat_rate/unit_price sont des nombres bruts,
-    // pas des chaînes ni des objets {value, currency} (contrairement à ce
-    // qu'un précédent 422 mal interprété laissait penser).
+    // exacte confirmée par la doc Qonto : payload PLAT (pas d'enveloppe
+    // client_invoice), IBAN de règlement sous payment_methods.iban (ni à la
+    // racine, ni bank_account_id).
     const today = new Date().toISOString().slice(0, 10);
-    // `iban` placé à trois endroits (racine, client_invoice, settlement_account)
-    // tant que le champ exact lu par Qonto pour cet endpoint n'est pas
-    // confirmé avec certitude — un champ non reconnu par Qonto est ignoré
-    // sans erreur, donc sans risque à en envoyer plusieurs en attendant.
     const invoicePayload = {
-      iban: cleanedIban,
-      client_invoice: {
-        client_id: qontoClientId,
-        bank_account_id: bankAccountId,
-        iban: cleanedIban,
-        settlement_account: { iban: cleanedIban },
-        currency: 'EUR',
-        issue_date: today,
-        due_date: today,
-        payment_method: 'transfer',
-        items: activeItems.map((item) => ({
-          title: [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article',
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          // OZË Paris est en franchise en base de TVA (art. 293 B du CGI) :
-          // jamais de TVA facturée.
-          vat_rate: 0,
-        })),
-        note: VAT_NOTE,
+      client_id: qontoClientId,
+      currency: 'EUR',
+      issue_date: today,
+      due_date: today,
+      payment_methods: {
+        iban: qontoIban,
       },
+      items: activeItems.map((item) => ({
+        title: [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article',
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        // OZË Paris est en franchise en base de TVA (art. 293 B du CGI) :
+        // jamais de TVA facturée.
+        vat_rate: 0,
+      })),
+      note: VAT_NOTE,
       finalize: true,
     };
 
-    console.log('emit-qonto-invoice: payload keys (racine)', Object.keys(invoicePayload));
-    console.log('emit-qonto-invoice: payload keys (client_invoice)', Object.keys(invoicePayload.client_invoice));
-    console.log('emit-qonto-invoice: iban renseigné ?', Boolean(cleanedIban), 'longueur', cleanedIban.length);
+    console.log('emit-qonto-invoice: payload keys', Object.keys(invoicePayload));
 
     const invoiceRes = await fetch(`${QONTO_BASE_URL}/client_invoices`, {
       method: 'POST',
