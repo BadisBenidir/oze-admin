@@ -124,7 +124,7 @@ export const SourcingSurMesure: React.FC = () => {
             ) : mission.items.length === 0 ? (
               <p className="text-sm text-gray-400 italic px-1">Notre équipe est en train de sélectionner vos premières pièces.</p>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 {mission.items.map((item) => {
                   const photo = item.photos?.[0];
                   return (
@@ -134,7 +134,7 @@ export const SourcingSurMesure: React.FC = () => {
                       onClick={() => setViewingItem(item)}
                       className="overflow-hidden flex flex-col cursor-pointer"
                     >
-                      <div className="relative h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
+                      <div className="relative h-64 bg-gray-100 flex items-center justify-center overflow-hidden">
                         {photo ? (
                           <img src={photo} alt={item.title} className="w-full h-full object-cover" />
                         ) : (
