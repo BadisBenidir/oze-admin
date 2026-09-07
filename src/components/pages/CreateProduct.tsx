@@ -6,6 +6,7 @@ import { ErrorModal } from '../ui/ErrorModal';
 import { useCategories } from '../../hooks/useCategories';
 import { useBrands, Brand } from '../../hooks/useBrands';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
+import { useJpyEurRate } from '../../hooks/useJpyEurRate';
 import { DirectB2BSaleModal } from '../products/DirectB2BSaleModal';
 import {
   ArrowLeft,
@@ -138,9 +139,14 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
   const { isAdmin } = useAdminAuth();
   const { categories } = useCategories(isAdmin);
   const { brands, totalCount: totalBrands } = useBrands(isAdmin);
-  
+
   // Détection du mode
   const isEditMode = Boolean(productId);
+
+  // Taux JPY -> EUR du jour, alimenté côté serveur (voir useJpyEurRate) —
+  // uniquement nécessaire en création (jamais recalculé en édition).
+  const { latest: jpyRatePoint, loading: rateLoading, error: rateError, refreshing: rateRefreshing, refreshNow: refreshJpyRate } = useJpyEurRate(!isEditMode);
+  const jpyEurRate = jpyRatePoint?.rate ?? null;
   
   // Debug: afficher le nombre de marques chargées
   console.log('Marques chargées:', brands.length, 'Total marques:', totalBrands);
@@ -183,16 +189,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
   // en édition, purchasePrice reste directement modifiable comme avant, pour
   // ne jamais recalculer rétroactivement une fiche déjà créée.
   const [purchasePriceRaw, setPurchasePriceRaw] = useState('');
-  // Taux JPY -> EUR réel (BCE via frankfurter.app, pas de clé requise) —
-  // récupéré une fois à l'ouverture du formulaire de création. Le prix payé
-  // sur Aucnet/EcoRing est toujours en yens ; sans taux à jour, on préfère
-  // bloquer le calcul plutôt qu'utiliser une valeur figée dans le code qui
-  // fausserait silencieusement la comptabilité.
-  const [jpyEurRate, setJpyEurRate] = useState<number | null>(null);
-  const [rateLoading, setRateLoading] = useState(false);
-  const [rateError, setRateError] = useState<string | null>(null);
-  const [rateRetryToken, setRateRetryToken] = useState(0);
-  
+
   // États pour les modals
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -230,34 +227,6 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
   };
 
   const detectedSourcePlatform = detectSourcePlatform(productData.sourceReference);
-
-  // Taux JPY -> EUR réel, une fois par ouverture du formulaire de création.
-  useEffect(() => {
-    if (isEditMode) return;
-    let cancelled = false;
-    (async () => {
-      setRateLoading(true);
-      setRateError(null);
-      try {
-        const res = await fetch('https://api.frankfurter.app/latest?from=JPY&to=EUR');
-        const data = await res.json();
-        const rate = data?.rates?.EUR;
-        if (cancelled) return;
-        if (typeof rate === 'number' && rate > 0) {
-          setJpyEurRate(rate);
-        } else {
-          setRateError('Taux de change JPY → EUR indisponible');
-        }
-      } catch {
-        if (!cancelled) setRateError('Taux de change JPY → EUR indisponible (connexion)');
-      } finally {
-        if (!cancelled) setRateLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isEditMode, rateRetryToken]);
 
   // Calcule automatiquement le prix d'achat en euros à partir du prix brut
   // saisi EN YENS (toujours — Aucnet et EcoRing facturent en JPY), majoré des
@@ -843,17 +812,30 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
                   {rateError}
                   <button
                     type="button"
-                    onClick={() => setRateRetryToken((t) => t + 1)}
-                    className="underline text-red-700 hover:text-red-800"
+                    onClick={() => refreshJpyRate()}
+                    disabled={rateRefreshing}
+                    className="underline text-red-700 hover:text-red-800 disabled:opacity-50"
                   >
                     Réessayer
                   </button>
                 </p>
               ) : jpyEurRate ? (
                 <p className="mt-1 text-xs text-gray-500">
-                  Taux du jour : 1 ¥ = {jpyEurRate.toFixed(6)} € — ce montant est enregistré comme prix d'achat, modifiable.
+                  Taux du {jpyRatePoint?.rate_date} : 1 ¥ = {jpyEurRate.toFixed(6)} € — ce montant est enregistré comme prix d'achat, modifiable.
                 </p>
-              ) : null}
+              ) : (
+                <p className="mt-1 text-xs text-amber-600 flex items-center gap-2">
+                  Aucun taux du jour disponible.
+                  <button
+                    type="button"
+                    onClick={() => refreshJpyRate()}
+                    disabled={rateRefreshing}
+                    className="underline text-amber-700 hover:text-amber-800 disabled:opacity-50"
+                  >
+                    {rateRefreshing ? 'Récupération...' : 'Récupérer maintenant'}
+                  </button>
+                </p>
+              )}
             </div>
           </div>
         )}

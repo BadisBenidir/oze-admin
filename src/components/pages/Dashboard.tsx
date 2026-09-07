@@ -2,7 +2,8 @@ import React from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { TrendingUp, TrendingDown, Users, Package, ShoppingCart, DollarSign } from 'lucide-react';
 import { useState, useEffect } from 'react'; // Ajoute useState et useEffect
-import { orderService } from '../../services/orderService'; 
+import { orderService } from '../../services/orderService';
+import { JpyEurRateCard } from './JpyEurRateCard';
 
 interface DashboardProps {
   activeSubTab: string;
@@ -302,6 +303,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="mb-6 md:mb-8">
+        <JpyEurRateCard />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
