@@ -1,11 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useB2BOrders, B2BOrder, B2BOrderComputedStatus, getRequesterDisplayName } from '../../hooks/useB2BOrders';
 import { useSendcloudSync } from '../../hooks/useSendcloudSync';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
-import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck } from 'lucide-react';
+import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck, Search } from 'lucide-react';
+
+// Insensible aux accents et à la casse — même pattern que ResellerDetail.tsx.
+const DIACRITICS_REGEX = new RegExp('[\\u0300-\\u036f]', 'g');
+const normalizeSearch = (value: string): string =>
+  value.normalize('NFD').replace(DIACRITICS_REGEX, '').toLowerCase().trim();
 
 // Déduit de l'état réel des articles (computeB2BOrderStatus), pas de la
 // colonne statique orders.status figée à 'confirmed' depuis le paiement.
@@ -34,6 +39,21 @@ export const B2BOrders: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ checked: number; updated: number } | null>(null);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
+  // Recherche : numéro de commande, revendeur/demandeur, ou numéro de série
+  // d'un des articles (product_snapshot.serial_number, figé à la commande).
+  const filteredOrders = useMemo(() => {
+    const term = normalizeSearch(search);
+    if (!term) return orders;
+    return orders.filter((order) => {
+      const requesterName = getRequesterDisplayName(order) || '';
+      const companyName = order.reseller?.company_name || '';
+      const serials = order.order_items.map((i) => i.product_snapshot?.serial_number || '').join(' ');
+      const haystack = [order.order_number, requesterName, companyName, serials].join(' ');
+      return normalizeSearch(haystack).includes(term);
+    });
+  }, [orders, search]);
 
   const handleSyncSendcloud = async () => {
     setSyncNotice(null);
@@ -97,6 +117,17 @@ export const B2BOrders: React.FC = () => {
         </div>
       </div>
 
+      <div className="relative mb-4 max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher par revendeur, n° de commande ou n° de série..."
+          className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm"
+        />
+      </div>
+
       {syncNotice && (
         <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
           <p className="text-sm text-amber-800">{syncNotice}</p>
@@ -118,7 +149,14 @@ export const B2BOrders: React.FC = () => {
         </div>
       )}
 
-      {(orders.length > 0 || loading) && (
+      {!loading && !error && orders.length > 0 && filteredOrders.length === 0 && (
+        <div className="text-center py-12">
+          <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500">Aucune commande ne correspond à cette recherche.</p>
+        </div>
+      )}
+
+      {(filteredOrders.length > 0 || loading) && (
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -143,7 +181,7 @@ export const B2BOrders: React.FC = () => {
                       </tr>
                     ))
                   ) : (
-                    orders.map((order) => (
+                    filteredOrders.map((order) => (
                       <tr key={order.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="py-4 px-4 md:px-6">
                           <p className="font-medium text-gray-900 text-sm">{order.order_number}</p>

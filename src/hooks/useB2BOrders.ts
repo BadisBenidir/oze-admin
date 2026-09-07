@@ -19,7 +19,7 @@ export interface B2BOrderItem {
   insurance_cost: number;
   entrupy_requested: boolean;
   entrupy_cost: number;
-  product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string; reference?: string | null };
+  product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string; reference?: string | null; serial_number?: string | null };
   status: 'active' | 'cancelled';
   cancellation_reason: string | null;
   cancelled_at: string | null;
