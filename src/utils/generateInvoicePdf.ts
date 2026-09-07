@@ -197,7 +197,7 @@ export const generateInvoicePdf = async (data: InvoiceData): Promise<void> => {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   drawInvoicePage(doc, data);
-  doc.save(`${data.invoiceNumber}.pdf`);
+  doc.save(`OZE-Paris_Facture_${data.invoiceNumber}_${data.orderNumber}.pdf`);
 };
 
 /**
