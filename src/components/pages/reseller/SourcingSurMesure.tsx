@@ -23,6 +23,37 @@ const itemStatusBadge = (status: ResellerSourcingItem['status']) => {
   }
 };
 
+type SourcingBucket = 'Sacs' | 'Portefeuilles' | 'Autres';
+const BUCKET_ORDER: SourcingBucket[] = ['Sacs', 'Portefeuilles', 'Autres'];
+
+const WALLET_KEYWORDS = [
+  'portefeuille', 'wallet', 'porte-monnaie', 'porte monnaie', 'porte-cartes',
+  'porte cartes', 'card holder', 'card case', 'compact wallet',
+];
+const BAG_KEYWORDS = [
+  'sac', 'bag', 'tote', 'shoulder', 'clutch', 'cabas', 'besace', 'hobo',
+  'satchel', 'crossbody', 'backpack', 'pochette', 'minaudière', 'baguette',
+  'kelly', 'birkin', 'speedy',
+];
+
+/** Catégorise une pièce sourcée pour l'affichage en sections — priorité à la
+ * vraie catégorie du produit lié (category_name, voir reseller_sourcing_items
+ * / 0097), bien plus fiable que le titre (les noms de modèles omettent
+ * souvent tout mot générique, ex: "Lady Dior"). Repli sur le titre/la marque
+ * uniquement pour une pièce ad hoc sans fiche produit liée, ou tant que la
+ * migration 0097 n'a pas encore été appliquée (category_name alors null). */
+const classifySourcingItem = (item: ResellerSourcingItem): SourcingBucket => {
+  const categoryText = (item.category_name || '').toLowerCase();
+  if (categoryText) {
+    if (WALLET_KEYWORDS.some((k) => categoryText.includes(k))) return 'Portefeuilles';
+    if (BAG_KEYWORDS.some((k) => categoryText.includes(k))) return 'Sacs';
+  }
+  const titleText = `${item.title} ${item.brand || ''}`.toLowerCase();
+  if (WALLET_KEYWORDS.some((k) => titleText.includes(k))) return 'Portefeuilles';
+  if (BAG_KEYWORDS.some((k) => titleText.includes(k))) return 'Sacs';
+  return 'Autres';
+};
+
 /** Portail revendeur "Sourcing sur mesure". La mission (titre, avance,
  * statut) est toujours visible dès qu'elle existe pour l'entreprise/le
  * profil du revendeur connecté — seule la galerie de pièces reste
@@ -124,29 +155,42 @@ export const SourcingSurMesure: React.FC = () => {
             ) : mission.items.length === 0 ? (
               <p className="text-sm text-gray-400 italic px-1">Notre équipe est en train de sélectionner vos premières pièces.</p>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {mission.items.map((item) => {
-                  const photo = item.photos?.[0];
+              <div className="space-y-6">
+                {BUCKET_ORDER.map((bucket) => {
+                  const bucketItems = mission.items.filter((item) => classifySourcingItem(item) === bucket);
+                  if (bucketItems.length === 0) return null;
                   return (
-                    <Card
-                      key={item.id}
-                      hover
-                      onClick={() => setViewingItem(item)}
-                      className="overflow-hidden flex flex-col cursor-pointer"
-                    >
-                      <div className="relative h-64 bg-gray-100 flex items-center justify-center overflow-hidden">
-                        {photo ? (
-                          <img src={photo} alt={item.title} className="w-full h-full object-cover" />
-                        ) : (
-                          <ImageOff className="h-8 w-8 text-gray-300" />
-                        )}
+                    <div key={bucket}>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                        {bucket} <span className="text-gray-400 font-normal">({bucketItems.length})</span>
+                      </h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {bucketItems.map((item) => {
+                          const photo = item.photos?.[0];
+                          return (
+                            <Card
+                              key={item.id}
+                              hover
+                              onClick={() => setViewingItem(item)}
+                              className="overflow-hidden flex flex-col cursor-pointer"
+                            >
+                              <div className="relative h-64 bg-gray-100 flex items-center justify-center overflow-hidden">
+                                {photo ? (
+                                  <img src={photo} alt={item.title} className="w-full h-full object-cover" />
+                                ) : (
+                                  <ImageOff className="h-8 w-8 text-gray-300" />
+                                )}
+                              </div>
+                              <CardContent className="p-3 flex-1 flex flex-col">
+                                {item.brand && <p className="text-xs text-gray-500 mb-1">{item.brand}</p>}
+                                <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-2">{item.title}</p>
+                                <div className="mt-auto">{itemStatusBadge(item.status)}</div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
                       </div>
-                      <CardContent className="p-3 flex-1 flex flex-col">
-                        {item.brand && <p className="text-xs text-gray-500 mb-1">{item.brand}</p>}
-                        <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-2">{item.title}</p>
-                        <div className="mt-auto">{itemStatusBadge(item.status)}</div>
-                      </CardContent>
-                    </Card>
+                    </div>
                   );
                 })}
               </div>
