@@ -230,6 +230,14 @@ Deno.serve(async (req: Request) => {
     if (!bankAccountId) {
       return json({ error: 'Aucun compte bancaire Qonto trouvé pour cette organisation' }, 502);
     }
+    // Qonto persiste à réclamer `iban` (422 "IBAN is empty") en plus de
+    // bank_account_id — envoyé nettoyé (sans espaces) depuis QONTO_IBAN,
+    // avec repli sur l'IBAN du compte résolu ci-dessus si la variable
+    // d'environnement n'est pas définie.
+    const settlementIban = (Deno.env.get('QONTO_IBAN') || settlementAccount?.iban || '').replace(/\s+/g, '');
+    if (!settlementIban) {
+      return json({ error: 'QONTO_IBAN manquant dans les secrets Supabase et aucun IBAN trouvé sur le compte Qonto' }, 500);
+    }
 
     // 4. Émission de la facture officielle, finalisée (numéro officiel +
     // routage PDP automatique côté Qonto pour un client pro). Structure
@@ -243,6 +251,7 @@ Deno.serve(async (req: Request) => {
       client_invoice: {
         client_id: qontoClientId,
         bank_account_id: bankAccountId,
+        iban: settlementIban,
         currency: 'EUR',
         issue_date: today,
         due_date: today,
