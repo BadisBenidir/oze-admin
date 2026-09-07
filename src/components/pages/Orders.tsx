@@ -14,7 +14,7 @@ import {
   getShipmentStatus,
   type ShipmentStatus,
 } from '../orders/ShipmentStatusFilter';
-import { Eye, Download, Truck, Globe, Handshake, Gavel, Loader2, FileDown } from 'lucide-react';
+import { Eye, Download, Truck, Globe, Handshake, Gavel, Loader2, FileDown, Send } from 'lucide-react';
 
 interface OrdersProps {
   activeSubTab: string;
@@ -58,7 +58,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>('all');
   const source = activeSubTab === 'web-orders' ? 'web' : undefined;
   const { orders, loading, error, updateOrderStatus } = useOrders(source);
-  const { downloadInvoice, downloadingOrderId } = useInvoices();
+  const { downloadInvoice, emitQontoInvoice, downloadingOrderId } = useInvoices();
 
   const handleDownloadInvoice = async (order: OrderWithItems) => {
     const items = order.order_items
@@ -79,6 +79,11 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
       },
       items
     );
+    if (!result.success) alert(result.error);
+  };
+
+  const handleEmitQonto = async (orderId: string) => {
+    const result = await emitQontoInvoice(orderId);
     if (!result.success) alert(result.error);
   };
 
@@ -487,6 +492,16 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                             <Badge variant={invoiceBadges[order.id].invoiceType === 'b2b_facturx' ? 'purple' : 'info'}>
                               {invoiceBadges[order.id].invoiceType === 'b2b_facturx' ? 'B2B · Factur-X' : 'B2C · Standard'}
                             </Badge>
+                          )}
+                          {invoiceBadges[order.id] && !invoiceBadges[order.id].qontoEmitted && (
+                            <button
+                              className="p-1 text-gray-400 hover:text-emerald-600 transition-colors disabled:opacity-40"
+                              onClick={() => handleEmitQonto(order.id)}
+                              disabled={downloadingOrderId === order.id}
+                              title="Émettre la facture officielle sur Qonto"
+                            >
+                              <Send className="h-3 w-3 md:h-4 md:w-4" />
+                            </button>
                           )}
                           {order.status === 'confirmed' && (
                             <button

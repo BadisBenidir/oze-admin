@@ -6,7 +6,7 @@ import { useB2BOrders, B2BOrder, B2BOrderComputedStatus, getRequesterDisplayName
 import { useSendcloudSync } from '../../hooks/useSendcloudSync';
 import { useInvoices, useOrderInvoiceBadges } from '../../hooks/useInvoices';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
-import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck, Search, FileDown, Loader2 } from 'lucide-react';
+import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck, Search, FileDown, Loader2, Send } from 'lucide-react';
 
 // Insensible aux accents et à la casse — même pattern que ResellerDetail.tsx.
 const DIACRITICS_REGEX = new RegExp('[\\u0300-\\u036f]', 'g');
@@ -37,7 +37,7 @@ export const B2BOrders: React.FC = () => {
   const { orders, loading, error, refresh } = useB2BOrders(isAdmin);
   const [viewingOrder, setViewingOrder] = useState<B2BOrder | null>(null);
   const { sync: syncSendcloud } = useSendcloudSync();
-  const { downloadInvoice, downloadingOrderId } = useInvoices();
+  const { downloadInvoice, emitQontoInvoice, downloadingOrderId } = useInvoices();
 
   const handleDownloadInvoice = async (order: B2BOrder) => {
     const items = order.order_items
@@ -58,6 +58,11 @@ export const B2BOrders: React.FC = () => {
       },
       items
     );
+    if (!result.success) alert(result.error);
+  };
+
+  const handleEmitQonto = async (orderId: string) => {
+    const result = await emitQontoInvoice(orderId);
     if (!result.success) alert(result.error);
   };
   const [syncing, setSyncing] = useState(false);
@@ -265,6 +270,16 @@ export const B2BOrders: React.FC = () => {
                                 <FileDown className="h-4 w-4" />
                               )}
                             </button>
+                            {invoiceBadges[order.id] && !invoiceBadges[order.id].qontoEmitted && (
+                              <button
+                                onClick={() => handleEmitQonto(order.id)}
+                                disabled={downloadingOrderId === order.id}
+                                className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-40"
+                                title="Émettre la facture officielle sur Qonto"
+                              >
+                                <Send className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

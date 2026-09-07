@@ -48,9 +48,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const secretKey = Deno.env.get('QONTO_SECRET_KEY');
-    const orgSlug = Deno.env.get('QONTO_ORG_SLUG');
+    const orgSlug = Deno.env.get('QONTO_ORGANIZATION_SLUG');
     if (!secretKey || !orgSlug) {
-      return json({ error: 'QONTO_SECRET_KEY / QONTO_ORG_SLUG manquants dans les secrets Supabase' }, 500);
+      return json({ error: 'QONTO_SECRET_KEY / QONTO_ORGANIZATION_SLUG manquants dans les secrets Supabase' }, 500);
     }
 
     const formData = await req.formData();

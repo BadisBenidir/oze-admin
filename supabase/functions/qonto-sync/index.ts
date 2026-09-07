@@ -52,12 +52,12 @@ Deno.serve(async (req: Request) => {
 
   try {
     const secretKey = Deno.env.get('QONTO_SECRET_KEY');
-    const orgSlug = Deno.env.get('QONTO_ORG_SLUG');
+    const orgSlug = Deno.env.get('QONTO_ORGANIZATION_SLUG');
     const targetIban = Deno.env.get('QONTO_IBAN');
 
     if (!secretKey || !orgSlug) {
-      console.error('qonto-sync: QONTO_SECRET_KEY / QONTO_ORG_SLUG manquants');
-      return json({ error: 'QONTO_SECRET_KEY / QONTO_ORG_SLUG manquants dans les secrets Supabase' }, 500);
+      console.error('qonto-sync: QONTO_SECRET_KEY / QONTO_ORGANIZATION_SLUG manquants');
+      return json({ error: 'QONTO_SECRET_KEY / QONTO_ORGANIZATION_SLUG manquants dans les secrets Supabase' }, 500);
     }
 
     const qontoHeaders = {

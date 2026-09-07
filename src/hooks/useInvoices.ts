@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { generateInvoicePdf, InvoiceLineItem, InvoiceBillingDetails } from '../utils/generateInvoicePdf';
+import { extractFunctionErrorMessage } from '../utils/edgeFunctionError';
 
 export interface OrderInvoiceBadge {
   invoiceType: 'b2b_facturx' | 'b2c_retail';
-  transmissionStatus: 'not_applicable' | 'pending' | 'sent' | 'failed';
+  transmissionStatus: 'not_applicable' | 'pending' | 'sent' | 'failed' | 'direct_pdf';
+  qontoEmitted: boolean;
 }
 
 /**
@@ -27,12 +29,16 @@ export const useOrderInvoiceBadges = (orderIds: string[]) => {
     (async () => {
       const { data } = await supabase
         .from('invoices')
-        .select('order_id, invoice_type, transmission_status')
+        .select('order_id, invoice_type, transmission_status, qonto_invoice_id')
         .in('order_id', key.split(','));
       if (cancelled || !data) return;
       const next: Record<string, OrderInvoiceBadge> = {};
       data.forEach((row) => {
-        next[row.order_id] = { invoiceType: row.invoice_type, transmissionStatus: row.transmission_status };
+        next[row.order_id] = {
+          invoiceType: row.invoice_type,
+          transmissionStatus: row.transmission_status,
+          qontoEmitted: Boolean(row.qonto_invoice_id),
+        };
       });
       setBadges(next);
     })();
@@ -86,11 +92,19 @@ export const useInvoices = () => {
 
       const { data: invoice, error: fetchError } = await supabase
         .from('invoices')
-        .select('invoice_number, issued_at, total_amount, legal_status, billing_details')
+        .select('invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url')
         .eq('order_id', order.id)
         .single();
       if (fetchError || !invoice) {
         throw new Error(fetchError?.message || 'Facture introuvable après génération');
+      }
+
+      // Une fois la facture officielle émise sur Qonto (voir
+      // emit-qonto-invoice), son PDF certifié remplace le PDF jsPDF généré
+      // à la volée — jamais l'inverse.
+      if (invoice.pdf_url) {
+        window.open(invoice.pdf_url, '_blank', 'noopener,noreferrer');
+        return { success: true as const };
       }
 
       await generateInvoicePdf({
@@ -115,5 +129,24 @@ export const useInvoices = () => {
     }
   };
 
-  return { downloadInvoice, backfillMissingInvoices, downloadingOrderId, downloadError };
+  /** Émission réelle sur Qonto (admin uniquement, voir emit-qonto-invoice) —
+   * action explicite et volontairement distincte du téléchargement : une
+   * émission finalisée est irréversible côté Qonto. */
+  const emitQontoInvoice = async (orderId: string) => {
+    setDownloadingOrderId(orderId);
+    setDownloadError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('emit-qonto-invoice', { body: { order_id: orderId } });
+      if (error) throw new Error(await extractFunctionErrorMessage(error, "Échec de l'émission sur Qonto"));
+      return { success: true as const, ...(data as Record<string, unknown>) };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur lors de l'émission sur Qonto";
+      setDownloadError(message);
+      return { success: false as const, error: message };
+    } finally {
+      setDownloadingOrderId(null);
+    }
+  };
+
+  return { downloadInvoice, backfillMissingInvoices, emitQontoInvoice, downloadingOrderId, downloadError };
 };
