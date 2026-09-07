@@ -235,13 +235,18 @@ Deno.serve(async (req: Request) => {
       payment_methods: {
         iban: qontoIban,
       },
+      // Qonto attend quantity/unit_price/vat_rate en CHAÎNES, pas en nombres
+      // (422 réel : "cannot unmarshal number into ... quantity of type
+      // string") — confirmé ici pour de bon, contrairement à une tentative
+      // précédente qui attribuait à tort ce même message à l'absence
+      // d'enveloppe client_invoice.
       items: activeItems.map((item) => ({
         title: [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article',
-        quantity: item.quantity,
-        unit_price: item.unit_price,
+        quantity: String(item.quantity || '1'),
+        unit_price: String(item.unit_price),
         // OZË Paris est en franchise en base de TVA (art. 293 B du CGI) :
         // jamais de TVA facturée.
-        vat_rate: 0,
+        vat_rate: '0',
       })),
       note: VAT_NOTE,
       finalize: true,
