@@ -78,9 +78,14 @@ export interface SalesJournalResult {
  * Génère et télécharge le "Journal des Ventes" (.xlsx) : commandes web
  * (order_channel='web'), commandes B2B (order_channel='b2b') et avances de
  * sourcing sur mesure (b2b_sourcing_missions.advance_amount, paid_at dans
- * l'intervalle), triées chronologiquement. Colonnes Base HT / TVA Collectée
- * en formules Excel natives, régime standard 20% (confirmé — aucun régime
- * de marge fiscale n'existe ailleurs dans ce repo, ne pas en supposer un).
+ * l'intervalle), triées chronologiquement.
+ *
+ * OZË Paris est en franchise en base de TVA (article 293 B du CGI, voir
+ * config/legal.ts et Terms.tsx) : aucune TVA n'est facturée sur ces ventes,
+ * donc Base HT = Prix Encaissé TTC et TVA Collectée = 0 sur chaque ligne —
+ * corrige une version antérieure de cet export qui appliquait à tort un
+ * taux de 20% (confirmé depuis : pas de régime de marge NI de TVA standard
+ * tant que ce statut de franchise s'applique).
  */
 export const useSalesJournalExport = () => {
   const [exporting, setExporting] = useState(false);
@@ -174,22 +179,16 @@ export const useSalesJournalExport = () => {
       rows.sort((a, b) => a.date.getTime() - b.date.getTime());
 
       const dateStr = (d: Date) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      const header = ['Date', 'N° Commande / Facture', 'Client', 'Prix Encaissé TTC', 'Base HT', 'TVA Collectée'];
+      const header = ['Date', 'N° Commande / Facture', 'Client', 'Prix Encaissé TTC', 'Base HT', 'TVA Collectée', 'Régime'];
       const aoa: (string | number)[][] = [
         header,
-        ...rows.map((r) => [dateStr(r.date), r.reference, r.client, r.amountTTC, 0, 0]),
+        // Franchise en base : rien à extraire, la base HT est le montant
+        // encaissé lui-même et la TVA collectée est nulle sur chaque ligne.
+        ...rows.map((r) => [dateStr(r.date), r.reference, r.client, r.amountTTC, r.amountTTC, 0, 'Franchise en base (art. 293 B) — TVA non applicable']),
       ];
 
       const ws = XLSX.utils.aoa_to_sheet(aoa);
-      // Base HT / TVA Collectée en formules natives (régime standard 20%,
-      // confirmé par l'utilisateur) — éditables/vérifiables directement par
-      // le comptable dans Excel, pas juste des valeurs figées.
-      rows.forEach((_, i) => {
-        const rowNum = i + 2;
-        ws[`E${rowNum}`] = { t: 'n', f: `D${rowNum}/1.2` };
-        ws[`F${rowNum}`] = { t: 'n', f: `D${rowNum}-E${rowNum}` };
-      });
-      ws['!cols'] = [{ wch: 12 }, { wch: 26 }, { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 14 }];
+      ws['!cols'] = [{ wch: 12 }, { wch: 26 }, { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 42 }];
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Ventes');

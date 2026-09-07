@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { LayoutDashboard, Globe, Handshake, Gavel, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, Globe, Handshake, Gavel, AlertCircle, Landmark } from 'lucide-react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useAccountingRawData } from '../../hooks/useAccountingRawData';
 import { buildAccountingPeriod, PeriodPreset } from '../../utils/accountingPeriods';
@@ -9,14 +9,16 @@ import { DashboardGlobalTab } from './accounting/DashboardGlobalTab';
 import { B2CTab } from './accounting/B2CTab';
 import { B2BTab } from './accounting/B2BTab';
 import { LivesTab } from './accounting/LivesTab';
+import { QontoTab } from './accounting/QontoTab';
 
-type AccountingTab = 'global' | 'b2c' | 'b2b' | 'lives';
+type AccountingTab = 'global' | 'b2c' | 'b2b' | 'lives' | 'qonto';
 
 const TABS: { id: AccountingTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'global', label: 'Dashboard Global', icon: LayoutDashboard },
   { id: 'b2c', label: 'B2C (Site Web)', icon: Globe },
   { id: 'b2b', label: 'B2B (Revendeurs & Sourcing)', icon: Handshake },
   { id: 'lives', label: 'Lives', icon: Gavel },
+  { id: 'qonto', label: 'Trésorerie Qonto', icon: Landmark },
 ];
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -113,6 +115,7 @@ export const Accounting: React.FC = () => {
           {activeTab === 'b2c' && <B2CTab data={data} period={period} />}
           {activeTab === 'b2b' && <B2BTab data={data} period={period} />}
           {activeTab === 'lives' && <LivesTab data={data} period={period} />}
+          {activeTab === 'qonto' && <QontoTab data={data} />}
         </>
       )}
     </div>
