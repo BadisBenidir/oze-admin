@@ -213,11 +213,29 @@ Deno.serve(async (req: Request) => {
       await adminClient.from('profiles').update({ qonto_client_id: qontoClientId }).eq('id', profile.id);
     }
 
-    // 3. Émission de la facture officielle, finalisée (numéro officiel +
+    // 3. IBAN de règlement — obligatoire côté Qonto (422 réel "IBAN is
+    // empty") : une organisation peut avoir plusieurs comptes bancaires, il
+    // faut préciser lequel encaisse. Même résolution que qonto-sync (compte
+    // ciblé par QONTO_IBAN si plusieurs existent, sinon le premier).
+    const orgRes = await fetch(`${QONTO_BASE_URL}/organizations/${orgSlug}`, { headers: qontoHeaders });
+    if (!orgRes.ok) {
+      const body = await orgRes.text();
+      return json({ error: `Qonto /organizations a échoué (${orgRes.status}) : ${body}` }, 502);
+    }
+    const orgData = await orgRes.json();
+    const bankAccounts = orgData?.organization?.bank_accounts || [];
+    const targetIban = Deno.env.get('QONTO_IBAN');
+    const settlementAccount = (targetIban && bankAccounts.find((a: { iban?: string }) => a.iban === targetIban)) || bankAccounts[0];
+    if (!settlementAccount?.iban) {
+      return json({ error: 'Aucun compte bancaire Qonto trouvé pour cette organisation' }, 502);
+    }
+
+    // 4. Émission de la facture officielle, finalisée (numéro officiel +
     // routage PDP automatique côté Qonto pour un client pro).
     const today = new Date().toISOString().slice(0, 10);
     const invoicePayload = {
       client_id: qontoClientId,
+      iban: settlementAccount.iban,
       currency: 'EUR',
       issue_date: today,
       due_date: today,
