@@ -19,15 +19,28 @@ const formatDateLabel = (isoDate: string): string => {
  * CreateProduct.tsx pour convertir un prix d'achat payé en yens.
  */
 export const JpyEurRateCard: React.FC = () => {
-  const { history, latest, loading, error, refreshing, refreshNow } = useJpyEurRate();
+  const { history, latest, loading, error, refreshing, refreshNow, backfillHistory } = useJpyEurRate();
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
 
   const chartData = history.map((h) => ({ ...h, label: formatDateLabel(h.rate_date) }));
 
   const handleRefresh = async () => {
     setRefreshError(null);
+    setImportNotice(null);
     const result = await refreshNow();
     if (!result.success) setRefreshError(result.error || 'Échec de la récupération du taux');
+  };
+
+  const handleBackfill = async () => {
+    setRefreshError(null);
+    setImportNotice(null);
+    const result = await backfillHistory(90);
+    if (!result.success) {
+      setRefreshError(result.error || "Échec de l'import de l'historique");
+    } else {
+      setImportNotice(`${result.imported ?? 0} jours importés (BCE ne publie rien le week-end/jours fériés).`);
+    }
   };
 
   return (
@@ -38,20 +51,34 @@ export const JpyEurRateCard: React.FC = () => {
             <JapaneseYen className="h-4 w-4 text-gray-400" />
             Taux de change JPY → EUR
           </h3>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Rafraîchir
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBackfill}
+              disabled={refreshing}
+              className="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Importer l'historique (90 jours)
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              Rafraîchir
+            </button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
         {refreshError && (
           <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
             <p className="text-sm text-red-700">{refreshError}</p>
+          </div>
+        )}
+        {importNotice && (
+          <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
+            <p className="text-sm text-green-700">{importNotice}</p>
           </div>
         )}
         {loading ? (
