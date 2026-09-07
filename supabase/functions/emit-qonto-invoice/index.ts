@@ -222,36 +222,44 @@ Deno.serve(async (req: Request) => {
     }
 
     // 4. Émission de la facture officielle, finalisée (numéro officiel +
-    // routage PDP automatique côté Qonto pour un client pro). Structure
-    // exacte confirmée par la doc Qonto : payload PLAT (pas d'enveloppe
-    // client_invoice), IBAN de règlement sous payment_methods.iban (ni à la
-    // racine, ni bank_account_id).
+    // routage PDP automatique côté Qonto pour un client pro). Le 422 réel
+    // (pointers /data/attributes/... au format JSON:API) révèle une
+    // enveloppe { data: { attributes: {...} } }, jamais un payload plat, et
+    // des items imbriqués sous attributes.sections[].items[] — chaque item
+    // porte SA PROPRE currency (en plus de celle d'unit_price). customer_locale
+    // obligatoire également.
     const today = new Date().toISOString().slice(0, 10);
     const invoicePayload = {
-      client_id: qontoClientId,
-      currency: 'EUR',
-      issue_date: today,
-      due_date: today,
-      payment_methods: {
-        iban: qontoIban,
+      data: {
+        attributes: {
+          client_id: qontoClientId,
+          currency: 'EUR',
+          customer_locale: 'fr',
+          issue_date: today,
+          due_date: today,
+          payment_methods: {
+            iban: qontoIban,
+          },
+          sections: [
+            {
+              items: activeItems.map((item) => ({
+                title: [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article',
+                quantity: String(item.quantity || '1'),
+                currency: 'EUR',
+                unit_price: { value: item.unit_price.toFixed(2), currency: 'EUR' },
+                // OZË Paris est en franchise en base de TVA (art. 293 B du
+                // CGI) : jamais de TVA facturée.
+                vat_rate: '0',
+              })),
+            },
+          ],
+          note: VAT_NOTE,
+          finalize: true,
+        },
       },
-      // Qonto (types Go réels, confirmés par les 422 successifs) :
-      // quantity = string, unit_price = objet "Amount" {value, currency}
-      // (jamais un nombre NI une string brute — 422 réel : "cannot unmarshal
-      // string into ... unit_price of type app.Amount"), vat_rate = string.
-      items: activeItems.map((item) => ({
-        title: [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article',
-        quantity: String(item.quantity || '1'),
-        unit_price: { value: item.unit_price.toFixed(2), currency: 'EUR' },
-        // OZË Paris est en franchise en base de TVA (art. 293 B du CGI) :
-        // jamais de TVA facturée.
-        vat_rate: '0',
-      })),
-      note: VAT_NOTE,
-      finalize: true,
     };
 
-    console.log('emit-qonto-invoice: payload keys', Object.keys(invoicePayload));
+    console.log('emit-qonto-invoice: payload attributes keys', Object.keys(invoicePayload.data.attributes));
 
     const invoiceRes = await fetch(`${QONTO_BASE_URL}/client_invoices`, {
       method: 'POST',
@@ -263,8 +271,14 @@ Deno.serve(async (req: Request) => {
       return json({ error: `Qonto /client_invoices a échoué (${invoiceRes.status}) : ${body}` }, 502);
     }
     const invoiceData = await invoiceRes.json();
-    const qontoInvoice = invoiceData?.client_invoice || invoiceData?.invoice || invoiceData;
-    const qontoInvoiceId: string | undefined = qontoInvoice?.id;
+    // Réponse probablement au même format JSON:API que la requête
+    // (data.attributes) — on couvre aussi les formes plus plates au cas où
+    // la réponse ne suit pas exactement la même enveloppe que l'entrée.
+    const qontoInvoice =
+      invoiceData?.data?.attributes || invoiceData?.data || invoiceData?.client_invoice || invoiceData?.invoice || invoiceData;
+    // En JSON:API, `id` vit au niveau de la ressource (data.id), pas dans
+    // attributes — vérifié en priorité avant le repli sur qontoInvoice.id.
+    const qontoInvoiceId: string | undefined = invoiceData?.data?.id || qontoInvoice?.id;
     const qontoInvoiceNumber: string | undefined = qontoInvoice?.number || qontoInvoice?.invoice_number;
     const pdfUrl: string | undefined = qontoInvoice?.pdf_url || qontoInvoice?.document_url || qontoInvoice?.url;
     const rawStatus: string | undefined = qontoInvoice?.status || qontoInvoice?.transmission_status;
