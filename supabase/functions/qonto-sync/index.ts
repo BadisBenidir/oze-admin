@@ -56,6 +56,7 @@ Deno.serve(async (req: Request) => {
     const targetIban = Deno.env.get('QONTO_IBAN');
 
     if (!secretKey || !orgSlug) {
+      console.error('qonto-sync: QONTO_SECRET_KEY / QONTO_ORG_SLUG manquants');
       return json({ error: 'QONTO_SECRET_KEY / QONTO_ORG_SLUG manquants dans les secrets Supabase' }, 500);
     }
 
@@ -71,9 +72,11 @@ Deno.serve(async (req: Request) => {
     // 1. Solde live — /v2/organizations/{slug} renvoie tous les comptes
     // bancaires de l'organisation ; on cible celui dont l'IBAN correspond à
     // QONTO_IBAN si plusieurs comptes existent, sinon le premier.
+    console.log(`qonto-sync: appel /organizations/${orgSlug}`);
     const orgRes = await fetch(`${QONTO_BASE_URL}/organizations/${orgSlug}`, { headers: qontoHeaders });
     if (!orgRes.ok) {
       const body = await orgRes.text();
+      console.error(`qonto-sync: /organizations a échoué (${orgRes.status})`, body);
       throw new Error(`Qonto /organizations a échoué (${orgRes.status}) : ${body}`);
     }
     const orgData = await orgRes.json();
@@ -81,8 +84,10 @@ Deno.serve(async (req: Request) => {
     const account = (targetIban && bankAccounts.find((a: { iban?: string }) => a.iban === targetIban)) || bankAccounts[0];
 
     if (!account) {
+      console.error('qonto-sync: aucun compte bancaire trouvé', JSON.stringify(orgData));
       throw new Error('Aucun compte bancaire Qonto trouvé pour cette organisation');
     }
+    console.log(`qonto-sync: compte trouvé (iban=${account.iban}), solde=${account.balance}`);
 
     await adminClient.from('bank_account_snapshot').upsert({
       id: 'main',
@@ -111,6 +116,7 @@ Deno.serve(async (req: Request) => {
       const txRes = await fetch(url.toString(), { headers: qontoHeaders });
       if (!txRes.ok) {
         const body = await txRes.text();
+        console.error(`qonto-sync: /transactions a échoué (${txRes.status})`, body);
         throw new Error(`Qonto /transactions a échoué (${txRes.status}) : ${body}`);
       }
       const txData = await txRes.json();
@@ -221,6 +227,7 @@ Deno.serve(async (req: Request) => {
       auto_matched: totalMatched,
     });
   } catch (err) {
+    console.error('qonto-sync: erreur non gérée', err instanceof Error ? err.stack || err.message : err);
     return json({ error: err instanceof Error ? err.message : 'Erreur inconnue' }, 500);
   }
 });
