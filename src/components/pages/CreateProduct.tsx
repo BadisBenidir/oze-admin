@@ -183,6 +183,15 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
   // en édition, purchasePrice reste directement modifiable comme avant, pour
   // ne jamais recalculer rétroactivement une fiche déjà créée.
   const [purchasePriceRaw, setPurchasePriceRaw] = useState('');
+  // Taux JPY -> EUR réel (BCE via frankfurter.app, pas de clé requise) —
+  // récupéré une fois à l'ouverture du formulaire de création. Le prix payé
+  // sur Aucnet/EcoRing est toujours en yens ; sans taux à jour, on préfère
+  // bloquer le calcul plutôt qu'utiliser une valeur figée dans le code qui
+  // fausserait silencieusement la comptabilité.
+  const [jpyEurRate, setJpyEurRate] = useState<number | null>(null);
+  const [rateLoading, setRateLoading] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
+  const [rateRetryToken, setRateRetryToken] = useState(0);
   
   // États pour les modals
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -222,21 +231,51 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
 
   const detectedSourcePlatform = detectSourcePlatform(productData.sourceReference);
 
-  // Calcule automatiquement le prix d'achat "avec taxes" à partir du prix
-  // brut saisi + de la plateforme détectée via la référence. Uniquement en
-  // création (jamais en édition, voir le commentaire sur purchasePriceRaw) :
-  // rouvrir une fiche existante ne doit jamais recalculer son purchase_price.
+  // Taux JPY -> EUR réel, une fois par ouverture du formulaire de création.
   useEffect(() => {
     if (isEditMode) return;
-    const raw = parseAmount(purchasePriceRaw);
-    if (!raw) {
+    let cancelled = false;
+    (async () => {
+      setRateLoading(true);
+      setRateError(null);
+      try {
+        const res = await fetch('https://api.frankfurter.app/latest?from=JPY&to=EUR');
+        const data = await res.json();
+        const rate = data?.rates?.EUR;
+        if (cancelled) return;
+        if (typeof rate === 'number' && rate > 0) {
+          setJpyEurRate(rate);
+        } else {
+          setRateError('Taux de change JPY → EUR indisponible');
+        }
+      } catch {
+        if (!cancelled) setRateError('Taux de change JPY → EUR indisponible (connexion)');
+      } finally {
+        if (!cancelled) setRateLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEditMode, rateRetryToken]);
+
+  // Calcule automatiquement le prix d'achat en euros à partir du prix brut
+  // saisi EN YENS (toujours — Aucnet et EcoRing facturent en JPY), majoré des
+  // taxes selon la plateforme détectée, puis converti au taux réel du jour.
+  // Uniquement en création (jamais en édition, voir le commentaire sur
+  // purchasePriceRaw) : rouvrir une fiche existante ne doit jamais
+  // recalculer son purchase_price.
+  useEffect(() => {
+    if (isEditMode) return;
+    const rawYen = parseAmount(purchasePriceRaw);
+    if (!rawYen || !jpyEurRate) {
       updateProductData({ purchasePrice: '' });
       return;
     }
-    const taxed = computePurchasePriceWithTax(raw, detectedSourcePlatform);
-    updateProductData({ purchasePrice: taxed.toFixed(2) });
+    const taxedYen = computePurchasePriceWithTax(rawYen, detectedSourcePlatform);
+    updateProductData({ purchasePrice: (taxedYen * jpyEurRate).toFixed(2) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [purchasePriceRaw, detectedSourcePlatform, isEditMode]);
+  }, [purchasePriceRaw, detectedSourcePlatform, isEditMode, jpyEurRate]);
 
   // Suggère automatiquement le prix de revente pour un article créé côté
   // B2B, à partir du prix d'achat avec taxes ci-dessus — reste ensuite
@@ -762,25 +801,60 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
             />
           </div>
         ) : (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Prix d'achat payé (€)
-            </label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={purchasePriceRaw}
-              onChange={(e) => setPurchasePriceRaw(e.target.value.replace(/[^0-9.,]/g, ''))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="150,00"
-            />
-            {parseAmount(purchasePriceRaw) > 0 && (
-              <p className="mt-1 text-xs text-gray-500">
-                Avec taxes ({detectedSourcePlatform}) :{' '}
-                <span className="font-medium text-gray-700">{parseAmount(productData.purchasePrice).toFixed(2)} €</span>
-                {' '}— c'est ce montant qui sera enregistré comme prix d'achat.
-              </p>
-            )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Prix d'achat payé (¥)
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={purchasePriceRaw}
+                onChange={(e) => setPurchasePriceRaw(e.target.value.replace(/[^0-9.,]/g, ''))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Ex: 15000"
+              />
+              {parseAmount(purchasePriceRaw) > 0 && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Avec taxes ({detectedSourcePlatform}) :{' '}
+                  <span className="font-medium text-gray-700">
+                    {computePurchasePriceWithTax(parseAmount(purchasePriceRaw), detectedSourcePlatform).toFixed(0)} ¥
+                  </span>
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Prix d'achat converti (€)
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={productData.purchasePrice}
+                onChange={(e) => updateProductData({ purchasePrice: e.target.value.replace(/[^0-9.,]/g, '') })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Calculé automatiquement"
+              />
+              {rateLoading ? (
+                <p className="mt-1 text-xs text-gray-500">Récupération du taux JPY → EUR...</p>
+              ) : rateError ? (
+                <p className="mt-1 text-xs text-red-600 flex items-center gap-2">
+                  {rateError}
+                  <button
+                    type="button"
+                    onClick={() => setRateRetryToken((t) => t + 1)}
+                    className="underline text-red-700 hover:text-red-800"
+                  >
+                    Réessayer
+                  </button>
+                </p>
+              ) : jpyEurRate ? (
+                <p className="mt-1 text-xs text-gray-500">
+                  Taux du jour : 1 ¥ = {jpyEurRate.toFixed(6)} € — ce montant est enregistré comme prix d'achat, modifiable.
+                </p>
+              ) : null}
+            </div>
           </div>
         )}
 
