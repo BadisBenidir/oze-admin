@@ -220,6 +220,7 @@ Deno.serve(async (req: Request) => {
     if (!qontoIban) {
       return json({ error: 'Secret QONTO_IBAN manquant dans Supabase' }, 500);
     }
+    console.log('emit-qonto-invoice: QONTO_IBAN lu, longueur', qontoIban.length, 'préfixe', qontoIban.slice(0, 4));
 
     // 4. Émission de la facture officielle, finalisée (numéro officiel +
     // routage PDP automatique côté Qonto pour un client pro). Le 422 réel
@@ -237,6 +238,13 @@ Deno.serve(async (req: Request) => {
           customer_locale: 'fr',
           issue_date: today,
           due_date: today,
+          // "invalid_iban"/"IBAN is empty" a persisté identiquement à la
+          // racine du payload, sous bank_account_id ET sous payment_methods
+          // imbriqué — le champ exact reste incertain, donc envoyé ici à
+          // deux endroits plausibles (payment_methods.iban ET iban en
+          // attribut direct) : un champ non reconnu par Qonto est ignoré
+          // sans erreur, jamais de risque à en couvrir plusieurs.
+          iban: qontoIban,
           payment_methods: {
             iban: qontoIban,
           },
