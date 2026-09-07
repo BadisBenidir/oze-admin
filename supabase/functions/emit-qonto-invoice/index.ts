@@ -223,11 +223,14 @@ Deno.serve(async (req: Request) => {
       due_date: today,
       // quantity attendu en STRING par Qonto (422 réel : "cannot unmarshal
       // number into ... quantity of type string") — même remarque que
-      // unit_price.value, déjà envoyé en chaîne.
+      // unit_price.value, déjà envoyé en chaîne. vat_rate à "0" (obligatoire,
+      // 422 réel "vat rate cannot be empty") : OZË Paris est en franchise en
+      // base de TVA (art. 293 B du CGI), aucune TVA n'est jamais facturée.
       items: activeItems.map((item) => ({
         title: [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article',
         quantity: String(item.quantity),
         unit_price: { value: item.unit_price.toFixed(2), currency: 'EUR' },
+        vat_rate: '0',
       })),
       note: VAT_NOTE,
       finalize: true,
