@@ -221,9 +221,12 @@ Deno.serve(async (req: Request) => {
       currency: 'EUR',
       issue_date: today,
       due_date: today,
+      // quantity attendu en STRING par Qonto (422 réel : "cannot unmarshal
+      // number into ... quantity of type string") — même remarque que
+      // unit_price.value, déjà envoyé en chaîne.
       items: activeItems.map((item) => ({
         title: [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article',
-        quantity: item.quantity,
+        quantity: String(item.quantity),
         unit_price: { value: item.unit_price.toFixed(2), currency: 'EUR' },
       })),
       note: VAT_NOTE,
