@@ -23,13 +23,16 @@ interface AddSourcingItemModalProps {
   onSubmitBatch: (inputs: SourcingItemInput[]) => Promise<{ success: boolean; error?: string }>;
   /** Reste actuel de l'enveloppe d'achat, pour afficher le reste après validation. */
   remainingCostBudget: number;
+  /** product_id des pièces déjà sourcées (actives) sur CETTE mission — grisées
+   * et non sélectionnables dans "Depuis le stock" pour éviter un doublon. */
+  existingProductIds: Set<string>;
 }
 
 /** Ajout de pièce(s) sourcée(s) : soit une sélection multiple depuis le stock
  * existant (tous les brouillons chargés à l'ouverture, filtrés en mémoire à
  * la frappe — même pattern que CreateDropModal.tsx), soit une pièce créée à
  * la volée — voir 0089_b2b_sourcing_missions.sql. */
-export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOpen, onClose, onSubmit, onSubmitBatch, remainingCostBudget }) => {
+export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOpen, onClose, onSubmit, onSubmitBatch, remainingCostBudget, existingProductIds }) => {
   const [mode, setMode] = useState<'stock' | 'manual'>('stock');
   const [draftProducts, setDraftProducts] = useState<StockProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -104,6 +107,7 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
   }, [draftProducts, search]);
 
   const toggleProduct = (id: string) => {
+    if (existingProductIds.has(id)) return;
     setSelectedProductIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -112,14 +116,20 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
     });
   };
 
-  const allFilteredSelected = filteredProducts.length > 0 && filteredProducts.every((p) => selectedProductIds.has(p.id));
+  // Une pièce déjà sourcée sur cette mission ne compte ni pour "tout
+  // sélectionner" ni pour le "coché à la main" (grisée, voir le rendu ci-dessous).
+  const selectableFilteredProducts = useMemo(
+    () => filteredProducts.filter((p) => !existingProductIds.has(p.id)),
+    [filteredProducts, existingProductIds]
+  );
+  const allFilteredSelected = selectableFilteredProducts.length > 0 && selectableFilteredProducts.every((p) => selectedProductIds.has(p.id));
   const toggleSelectAll = () => {
     setSelectedProductIds((prev) => {
       const next = new Set(prev);
       if (allFilteredSelected) {
-        for (const p of filteredProducts) next.delete(p.id);
+        for (const p of selectableFilteredProducts) next.delete(p.id);
       } else {
-        for (const p of filteredProducts) next.add(p.id);
+        for (const p of selectableFilteredProducts) next.add(p.id);
       }
       return next;
     });
@@ -270,7 +280,7 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                     </div>
                   )}
 
-                  {!loadingProducts && filteredProducts.length > 0 && (
+                  {!loadingProducts && selectableFilteredProducts.length > 0 && (
                     <div className="flex items-center justify-between mb-2">
                       <button
                         type="button"
@@ -299,16 +309,24 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                     ) : (
                       filteredProducts.map((product) => {
                         const isSelected = selectedProductIds.has(product.id);
+                        const alreadyAdded = existingProductIds.has(product.id);
                         return (
                           <label
                             key={product.id}
-                            className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${isSelected ? 'bg-gray-900/5' : 'hover:bg-gray-50'}`}
+                            className={`flex items-center gap-3 p-3 transition-colors ${
+                              alreadyAdded
+                                ? 'opacity-50 cursor-not-allowed'
+                                : isSelected
+                                ? 'bg-gray-900/5 cursor-pointer'
+                                : 'hover:bg-gray-50 cursor-pointer'
+                            }`}
                           >
                             <input
                               type="checkbox"
                               checked={isSelected}
+                              disabled={alreadyAdded}
                               onChange={() => toggleProduct(product.id)}
-                              className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 flex-shrink-0"
+                              className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 flex-shrink-0 disabled:cursor-not-allowed"
                             />
                             <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                               {product.images?.length > 0 ? (
@@ -324,6 +342,9 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                                 {product.purchase_price != null && <> · Achat {product.purchase_price.toFixed(0)} €</>}
                               </p>
                             </div>
+                            {alreadyAdded && (
+                              <span className="text-xs text-gray-400 flex-shrink-0">Déjà ajoutée</span>
+                            )}
                           </label>
                         );
                       })

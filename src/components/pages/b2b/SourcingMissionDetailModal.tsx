@@ -401,6 +401,9 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
         onSubmit={handleAddItem}
         onSubmitBatch={handleAddItems}
         remainingCostBudget={mission.remaining_cost_budget}
+        existingProductIds={
+          new Set(activeItems.filter((i) => i.product_id).map((i) => i.product_id as string))
+        }
       />
 
       <CreateSourcingMissionModal
