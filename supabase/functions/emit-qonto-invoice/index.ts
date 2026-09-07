@@ -40,6 +40,25 @@ const QONTO_BASE_URL = 'https://thirdparty.qonto.com/v2';
 // régime réel de l'entreprise, pas celui indiqué dans une demande antérieure.
 const VAT_NOTE = 'TVA non applicable, article 293 B du Code Général des Impôts (franchise en base de TVA).';
 
+// Qonto exige un ISO 3166-1 alpha-2 STRICT (2 caractères) sur
+// billing_address.country_code — un 422 réel a confirmé qu'une valeur en
+// toutes lettres ("France") ou plus longue est rejetée. Filet de sécurité
+// en plus de country_name_to_iso (0117, appliqué à l'écriture du profil) :
+// couvre aussi profiles.country (adresse personnelle, jamais normalisée par
+// cette fonction SQL) et toute valeur déjà mal formée arrivant malgré tout.
+const COUNTRY_NAME_TO_ISO: Record<string, string> = {
+  france: 'FR', fr: 'FR',
+  belgique: 'BE', be: 'BE',
+  suisse: 'CH', ch: 'CH',
+  luxembourg: 'LU', lu: 'LU',
+  monaco: 'MC', mc: 'MC',
+};
+const toIsoCountryCode = (value: string | null | undefined): string => {
+  const normalized = (value || '').trim().toLowerCase();
+  const mapped = COUNTRY_NAME_TO_ISO[normalized] || value || 'FR';
+  return (mapped.trim().toUpperCase().slice(0, 2) || 'FR');
+};
+
 interface OrderItemRow {
   id: string;
   quantity: number;
@@ -144,26 +163,37 @@ Deno.serve(async (req: Request) => {
     let qontoClientId = profile.qonto_client_id as string | null;
     if (!qontoClientId) {
       const isPro = profile.legal_status !== 'individual';
+      // `kind` obligatoire (422 sans lui) : 'individual' pour un particulier,
+      // 'company' pour une EI comme pour une société (Qonto ne distingue pas
+      // ces deux dernières à ce niveau, seulement via identification_number/
+      // legal_form). L'adresse doit être imbriquée sous `billing_address`,
+      // country_code strictement en 2 lettres (voir toIsoCountryCode).
       const clientPayload: Record<string, unknown> = isPro
         ? {
+            kind: 'company',
             name: profile.legal_entity_name,
             email: profile.email,
             vat_number: profile.vat_number || undefined,
             legal_form: profile.legal_form || undefined,
-            address: profile.legal_address,
-            city: profile.legal_city,
-            zip_code: profile.legal_postal_code,
-            country_code: profile.legal_country || 'FR',
             identification_number: profile.siret,
+            billing_address: {
+              address: profile.legal_address,
+              city: profile.legal_city,
+              zip_code: profile.legal_postal_code,
+              country_code: toIsoCountryCode(profile.legal_country),
+            },
           }
         : {
+            kind: 'individual',
             first_name: profile.first_name,
             last_name: profile.last_name,
             email: profile.email,
-            address: profile.address,
-            city: profile.city,
-            zip_code: profile.postal_code,
-            country_code: profile.country || 'FR',
+            billing_address: {
+              address: profile.address,
+              city: profile.city,
+              zip_code: profile.postal_code,
+              country_code: toIsoCountryCode(profile.country),
+            },
           };
 
       const clientRes = await fetch(`${QONTO_BASE_URL}/clients`, {
