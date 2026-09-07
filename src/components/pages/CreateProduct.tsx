@@ -292,10 +292,29 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
     };
   }, []);
 
+  // Préfixe automatiquement le titre avec la marque en majuscules (ex: "HERMÈS
+  // Birkin 30") plutôt que de simplement stocker la marque à part — si un
+  // préfixe d'une marque précédente est déjà présent, on le remplace au lieu
+  // d'empiler les marques en cas de changement de sélection.
   const handleBrandSelect = (brand: Brand) => {
-    updateProductData({ 
-      brand: brand.id, 
-      brandName: brand.name 
+    const brandUpper = brand.name.toUpperCase();
+    const previousBrandUpper = productData.brandName.toUpperCase();
+    let newName = productData.name;
+
+    if (previousBrandUpper && newName.startsWith(previousBrandUpper + ' ')) {
+      newName = brandUpper + newName.slice(previousBrandUpper.length);
+    } else if (previousBrandUpper && newName === previousBrandUpper) {
+      newName = brandUpper;
+    } else if (!newName.trim()) {
+      newName = brandUpper + ' ';
+    } else if (!newName.toUpperCase().startsWith(brandUpper)) {
+      newName = `${brandUpper} ${newName}`;
+    }
+
+    updateProductData({
+      brand: brand.id,
+      brandName: brand.name,
+      name: newName,
     });
     setBrandSearchTerm(brand.name);
     setShowBrandDropdown(false);
