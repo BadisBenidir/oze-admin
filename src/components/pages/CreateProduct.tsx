@@ -43,6 +43,9 @@ interface ProductData {
   salePrice: string;
   originalPrice: string;
   weight: string;
+  /** Numéro de référence fournisseur (Aucnet/EcoRing/Autre, voir
+   * detectSourcePlatform) — remplace "Poids" dans le formulaire, voir 0112. */
+  sourceReference: string;
 
   // Étape 2: Photos
   images: string[];
@@ -95,6 +98,42 @@ const parseAmount = (value: string): number => {
   return isNaN(n) ? 0 : n;
 };
 
+type SourcePlatform = 'Aucnet' | 'EcoRing' | 'Autre';
+
+// Déduit la plateforme d'achat du FORMAT du numéro de référence collé :
+// Aucnet = deux groupes de chiffres séparés par un tiret (ex: "879-35749") ;
+// EcoRing = numérique pur, sans séparateur (ex: "2260006536516",
+// "267842042") ; tout le reste (vide compris) retombe sur "Autre" — pas de
+// majoration de taxes appliquée dans ce cas (voir computePurchasePriceWithTax).
+const detectSourcePlatform = (reference: string): SourcePlatform => {
+  const trimmed = reference.trim();
+  if (/^\d{2,4}-\d{3,7}$/.test(trimmed)) return 'Aucnet';
+  if (/^\d{6,}$/.test(trimmed)) return 'EcoRing';
+  return 'Autre';
+};
+
+// Prix d'achat réellement payé sur la plateforme -> prix d'achat "avec
+// taxes" (coût réel, celui qui sert de base au calcul du prix de revente
+// B2B ci-dessous) : formule fournie par OZË Paris, propre à chaque
+// plateforme d'import.
+const computePurchasePriceWithTax = (rawPrice: number, platform: SourcePlatform): number => {
+  if (rawPrice <= 0) return 0;
+  if (platform === 'EcoRing') {
+    const fee = rawPrice >= 10000 ? 1000 : 5000;
+    return (rawPrice + fee) * 1.1 * 1.02;
+  }
+  if (platform === 'Aucnet') {
+    return rawPrice * 1.1 * 1.02;
+  }
+  return rawPrice;
+};
+
+// Prix de revente B2B suggéré : coût réel (avec taxes) x 1.37, arrondi au
+// multiple de 5 inférieur (ex: 137,49 € -> 135 €, 142,34 € -> 140 €).
+const computeB2BResalePrice = (purchasePriceWithTax: number): number => {
+  return Math.floor(purchasePriceWithTax * 1.37 / 5) * 5;
+};
+
 export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId, defaultStatus }) => {
   const { isAdmin } = useAdminAuth();
   const { categories } = useCategories(isAdmin);
@@ -117,6 +156,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
     salePrice: '',
     originalPrice: '',
     weight: '',
+    sourceReference: '',
     images: [],
     mainImageIndex: 0,
     defectImages: [],
@@ -137,6 +177,12 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
   const [dragOverImageIndex, setDragOverImageIndex] = useState<number | null>(null);
   const [loadingProduct, setLoadingProduct] = useState(isEditMode);
   const [showDirectSaleModal, setShowDirectSaleModal] = useState(false);
+  // Prix brut tel que payé sur la plateforme (avant taxes) — champ purement
+  // local, jamais persisté : seul le montant CALCULÉ (productData.purchasePrice)
+  // l'est. N'existe/ne s'applique qu'en CRÉATION (voir les effets ci-dessous) :
+  // en édition, purchasePrice reste directement modifiable comme avant, pour
+  // ne jamais recalculer rétroactivement une fiche déjà créée.
+  const [purchasePriceRaw, setPurchasePriceRaw] = useState('');
   
   // États pour les modals
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -173,6 +219,37 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
     'reserved-b2b': 'Réservé (B2B)',
     'sold-b2b': 'Vendu (B2B)',
   };
+
+  const detectedSourcePlatform = detectSourcePlatform(productData.sourceReference);
+
+  // Calcule automatiquement le prix d'achat "avec taxes" à partir du prix
+  // brut saisi + de la plateforme détectée via la référence. Uniquement en
+  // création (jamais en édition, voir le commentaire sur purchasePriceRaw) :
+  // rouvrir une fiche existante ne doit jamais recalculer son purchase_price.
+  useEffect(() => {
+    if (isEditMode) return;
+    const raw = parseAmount(purchasePriceRaw);
+    if (!raw) {
+      updateProductData({ purchasePrice: '' });
+      return;
+    }
+    const taxed = computePurchasePriceWithTax(raw, detectedSourcePlatform);
+    updateProductData({ purchasePrice: taxed.toFixed(2) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [purchasePriceRaw, detectedSourcePlatform, isEditMode]);
+
+  // Suggère automatiquement le prix de revente pour un article créé côté
+  // B2B, à partir du prix d'achat avec taxes ci-dessus — reste ensuite
+  // modifiable à la main comme n'importe quel champ. Uniquement en création :
+  // ouvrir un article B2B existant pour le modifier ne touche jamais à son
+  // sale_price déjà fixé.
+  useEffect(() => {
+    if (isEditMode || !isB2B) return;
+    const taxed = parseAmount(productData.purchasePrice);
+    if (!taxed) return;
+    updateProductData({ salePrice: String(computeB2BResalePrice(taxed)) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productData.purchasePrice, isB2B, isEditMode]);
 
   // Effet pour charger toutes les marques au début
   useEffect(() => {
@@ -231,6 +308,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
           salePrice: data.sale_price != null ? String(data.sale_price) : '',
           originalPrice: data.original_price != null ? String(data.original_price) : '',
           weight: data.weight != null ? String(data.weight) : '',
+          sourceReference: data.source_reference || '',
           images: data.images || [],
           mainImageIndex: data.main_image_index,
           defectImages: data.defect_images || [],
@@ -397,6 +475,8 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
         sale_price: parseAmount(productData.salePrice),
         original_price: parseAmount(productData.originalPrice) || null,
         weight: parseAmount(productData.weight) || null,
+        source_reference: productData.sourceReference.trim() || null,
+        source_platform: productData.sourceReference.trim() ? detectSourcePlatform(productData.sourceReference) : null,
         images: productData.images,
         main_image_index: productData.mainImageIndex,
         defect_images: productData.defectImages,
@@ -650,31 +730,59 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Poids (g)
+            Numéro de référence
           </label>
           <input
             type="text"
-            inputMode="decimal"
-            value={productData.weight}
-            onChange={(e) => updateProductData({ weight: e.target.value.replace(/[^0-9.,]/g, '') })}
+            value={productData.sourceReference}
+            onChange={(e) => updateProductData({ sourceReference: e.target.value.trim() })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="500"
+            placeholder="Ex: 879-35749 (Aucnet) ou 2260006536516 (EcoRing)"
           />
+          {productData.sourceReference.trim() && (
+            <p className="mt-1 text-xs text-gray-500">
+              Plateforme détectée :{' '}
+              <span className="font-medium text-gray-700">{detectedSourcePlatform}</span>
+            </p>
+          )}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Prix d'achat (€)
-          </label>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={productData.purchasePrice}
-            onChange={(e) => updateProductData({ purchasePrice: e.target.value.replace(/[^0-9.,]/g, '') })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="150,00"
-          />
-        </div>
+        {isEditMode ? (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Prix d'achat (€)
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={productData.purchasePrice}
+              onChange={(e) => updateProductData({ purchasePrice: e.target.value.replace(/[^0-9.,]/g, '') })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="150,00"
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Prix d'achat payé (€)
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={purchasePriceRaw}
+              onChange={(e) => setPurchasePriceRaw(e.target.value.replace(/[^0-9.,]/g, ''))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="150,00"
+            />
+            {parseAmount(purchasePriceRaw) > 0 && (
+              <p className="mt-1 text-xs text-gray-500">
+                Avec taxes ({detectedSourcePlatform}) :{' '}
+                <span className="font-medium text-gray-700">{parseAmount(productData.purchasePrice).toFixed(2)} €</span>
+                {' '}— c'est ce montant qui sera enregistré comme prix d'achat.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           {/* PRIX D'ORIGINE (BARRÉ) */}
@@ -706,8 +814,9 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
               placeholder="Ex: 950"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Optionnel. À renseigner plus tard (ex. article Live enchères : prix saisi lors de la vente).
-              Un prix reste requis avant la mise en ligne d'un article sur le site.
+              {!isEditMode && isB2B
+                ? 'Suggéré automatiquement (prix d\'achat avec taxes × 1,37, arrondi au multiple de 5 inférieur) — modifiable.'
+                : "Optionnel. À renseigner plus tard (ex. article Live enchères : prix saisi lors de la vente). Un prix reste requis avant la mise en ligne d'un article sur le site."}
             </p>
           </div>
         </div>
