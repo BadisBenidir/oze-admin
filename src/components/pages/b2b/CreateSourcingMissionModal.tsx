@@ -16,11 +16,12 @@ interface CreateSourcingMissionModalProps {
 const toDateInputValue = (iso: string | null): string => (iso ? iso.slice(0, 10) : '');
 
 export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProps> = ({ isOpen, onClose, onSubmit, fixedReseller, editingMission }) => {
-  // Entreprise verrouillée en édition (celle de la mission) ou en mode
-  // contextuel (fixedReseller) — sinon liste complète chargée pour le choix.
-  const lockedReseller = editingMission
-    ? { id: editingMission.reseller_id, company_name: editingMission.company_name }
-    : fixedReseller;
+  // Entreprise verrouillée uniquement en mode contextuel (ouverture depuis la
+  // fiche d'un revendeur précis, fixedReseller) — changer de société n'aurait
+  // alors aucun sens puisqu'on est déjà dans SA fiche. En édition "libre"
+  // (liste globale des missions), l'entreprise reste modifiable comme les
+  // autres champs : liste complète chargée pour le choix.
+  const lockedReseller = fixedReseller;
   const { resellers, fetchContacts } = useResellers(isOpen && !lockedReseller);
   const [resellerId, setResellerId] = useState('');
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
@@ -38,7 +39,7 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
 
   useEffect(() => {
     if (!isOpen) return;
-    setResellerId(lockedReseller?.id || '');
+    setResellerId(lockedReseller?.id || editingMission?.reseller_id || '');
     setTitle(editingMission?.title || '');
     setAdvanceAmount(editingMission ? String(editingMission.advance_amount) : '');
     setAllocatedCostBudget(editingMission ? String(editingMission.allocated_cost_budget) : '');
@@ -62,7 +63,15 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
       .then((data) => {
         if (!mounted) return;
         setContacts(data);
-        setUserId(editingMission?.user_id || data.find((c) => c.is_primary)?.profile_id || '');
+        // Ne reprendre le demandeur d'origine que si l'entreprise n'a pas
+        // changé — sinon (admin qui corrige la société de la mission) c'est
+        // un profile_id d'une autre entreprise, invalide pour ce sélecteur.
+        const keepOriginalRequester = editingMission && resellerId === editingMission.reseller_id;
+        setUserId(
+          keepOriginalRequester
+            ? editingMission!.user_id || data.find((c) => c.is_primary)?.profile_id || ''
+            : data.find((c) => c.is_primary)?.profile_id || ''
+        );
       })
       .finally(() => {
         if (mounted) setLoadingContacts(false);

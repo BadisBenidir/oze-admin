@@ -182,6 +182,7 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
 
   const updateMission = async (id: string, input: SourcingMissionInput): Promise<{ success: boolean; error?: string }> => {
     const { error: updateError } = await supabase.from('b2b_sourcing_missions').update({
+      reseller_id: input.reseller_id,
       user_id: input.user_id || null,
       title: input.title.trim(),
       advance_amount: input.advance_amount,
