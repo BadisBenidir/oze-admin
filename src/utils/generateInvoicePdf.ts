@@ -197,7 +197,12 @@ export const generateInvoicePdf = async (data: InvoiceData): Promise<void> => {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   drawInvoicePage(doc, data);
-  doc.save(`OZE-Paris_Facture_${data.invoiceNumber}_${data.orderNumber}.pdf`);
+  // Le numéro séquentiel (obligatoire, art. 242 nonies A du CGI) reste
+  // affiché SUR le PDF, mais n'a pas à apparaître dans le nom du fichier :
+  // un client qui télécharge sa facture ne doit pas voir, rien qu'en
+  // regardant son dossier Téléchargements, combien de factures ont déjà été
+  // émises au total (référence à la commande uniquement, pas au rang global).
+  doc.save(`OZE-Paris_Facture_${data.orderNumber}.pdf`);
 };
 
 /**
