@@ -267,15 +267,25 @@ Deno.serve(async (req: Request) => {
           },
           sections: [
             {
-              items: activeItems.map((item) => ({
-                title: [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article',
-                quantity: String(item.quantity || '1'),
-                currency: 'EUR',
-                unit_price: { value: item.unit_price.toFixed(2), currency: 'EUR' },
-                // OZË Paris est en franchise en base de TVA (art. 293 B du
-                // CGI) : jamais de TVA facturée.
-                vat_rate: '0',
-              })),
+              items: activeItems.map((item) => {
+                const title = String(
+                  [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article'
+                );
+                const quantity = String(item.quantity || '1');
+                const unitPrice = String(Number(item.unit_price || 1).toFixed(2));
+                if (typeof quantity !== 'string' || typeof unitPrice !== 'string') {
+                  throw new Error('Type invalide sur un item Qonto (quantity/unit_price doivent être des chaînes)');
+                }
+                return {
+                  title,
+                  quantity,
+                  currency: 'EUR',
+                  unit_price: unitPrice,
+                  // OZË Paris est en franchise en base de TVA (art. 293 B du
+                  // CGI) : jamais de TVA facturée.
+                  vat_rate: '0',
+                };
+              }),
             },
           ],
           note: VAT_NOTE,
