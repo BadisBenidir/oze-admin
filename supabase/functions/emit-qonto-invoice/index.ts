@@ -222,6 +222,23 @@ Deno.serve(async (req: Request) => {
     }
     console.log('emit-qonto-invoice: QONTO_IBAN lu, longueur', qontoIban.length, 'préfixe', qontoIban.slice(0, 4));
 
+    // Le secret QONTO_IBAN est confirmé non-vide (log ci-dessus) et pourtant
+    // Qonto renvoie "invalid_iban"/"IBAN is empty" quel que soit l'endroit
+    // où `iban` est placé en ATTRIBUT — en JSON:API strict, le compte
+    // bancaire de règlement est plus probablement une RELATION
+    // (relationships.bank_account), pas un attribut. Résolution de son id
+    // via /v2/organizations, comme qonto-sync.
+    const orgRes = await fetch(`${QONTO_BASE_URL}/organizations/${orgSlug}`, { headers: qontoHeaders });
+    if (!orgRes.ok) {
+      const body = await orgRes.text();
+      return json({ error: `Qonto /organizations a échoué (${orgRes.status}) : ${body}` }, 502);
+    }
+    const orgData = await orgRes.json();
+    const bankAccounts = orgData?.organization?.bank_accounts || [];
+    const settlementAccount = bankAccounts.find((a: { iban?: string }) => a.iban === qontoIban) || bankAccounts[0];
+    const bankAccountId: string | undefined = settlementAccount?.id || settlementAccount?.slug;
+    console.log('emit-qonto-invoice: bank_account résolu ?', Boolean(bankAccountId), 'iban match ?', settlementAccount?.iban === qontoIban);
+
     // 4. Émission de la facture officielle, finalisée (numéro officiel +
     // routage PDP automatique côté Qonto pour un client pro). Le 422 réel
     // (pointers /data/attributes/... au format JSON:API) révèle une
@@ -264,6 +281,13 @@ Deno.serve(async (req: Request) => {
           note: VAT_NOTE,
           finalize: true,
         },
+        // Relation JSON:API vers le compte bancaire de règlement — couvre
+        // l'hypothèse que le compte s'exprime en `relationships`, pas en
+        // attribut plat, tant que ni `iban` ni `payment_methods.iban` en
+        // attribut n'ont fonctionné.
+        ...(bankAccountId
+          ? { relationships: { bank_account: { data: { type: 'bank_accounts', id: bankAccountId } } } }
+          : {}),
       },
     };
 
