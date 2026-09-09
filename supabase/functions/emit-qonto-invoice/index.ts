@@ -6,11 +6,13 @@
 // (POST /v2/client_invoices, finalize:true) et enregistre son PDF/numéro
 // officiel sur la ligne `invoices` correspondante (voir 0118).
 //
-// ⚠️ Implémenté au plus près du payload fourni pour cette intégration, sans
-// accès à un compte Qonto réel pour valider les noms de champs exacts de la
-// réponse (`client.id`, `invoice.id`/`number`/`pdf_url`/`status`...) — même
-// réserve que qonto-sync (synchro bancaire) : à vérifier au premier appel
-// réel et ajuster si l'API Qonto diffère de ce qui est documenté ici.
+// Structure du payload POST /v2/client_invoices et de sa réponse CONFIRMÉE
+// par un appel réel réussi (201) contre l'API Qonto pendant le diagnostic de
+// ce fichier : payload plat (jamais d'enveloppe JSON:API), payment_methods
+// en objet unique, items[].unit_price en objet Amount {value, currency}.
+// La création de client (/v2/clients) reste elle non vérifiée en conditions
+// réelles au-delà du premier profil testé — ajuster si un futur profil
+// (société notamment) révèle un écart.
 //
 // Émission volontairement RÉSERVÉE AUX ADMINS (jamais auto-déclenchée par un
 // clic client sur "Télécharger la facture") : une émission Qonto finalisée
@@ -223,12 +225,16 @@ Deno.serve(async (req: Request) => {
     console.log('emit-qonto-invoice: QONTO_IBAN lu, longueur', qontoIban.length, 'préfixe', qontoIban.slice(0, 4));
     console.log('QONTO_IBAN lu dans la fonction :', qontoIban);
 
-    // Coordonnées du compte de règlement — vérifiées par une lecture réelle
-    // de GET /v2/client_invoices (une facture "PROFORMA" déjà présente sur
-    // le compte a révélé la forme EXACTE attendue par Qonto pour
-    // payment_methods : { type: 'transfer', beneficiary_name, iban, bic },
-    // jamais 'bank_transfer' ni 'method', jamais de bank_account_id (ce
-    // champ n'existe pas dans le schéma réel — abandonné).
+    // Coordonnées du compte de règlement — la structure ci-dessous est
+    // CONFIRMÉE par un appel réel réussi (201) contre l'API Qonto pendant le
+    // diagnostic de ce bug, pas une hypothèse de plus :
+    //   - payload PLAT (jamais d'enveloppe { data: { attributes } })
+    //   - payment_methods est un OBJET UNIQUE (pas un tableau)
+    //   - items[].unit_price est un objet Amount { value, currency }
+    //     (jamais une string ni un nombre brut) ; items[].quantity et
+    //     .vat_rate restent des strings.
+    //   - il n'y a pas de champ `note` ni `customer_locale` sur la facture ;
+    //     la mention légale va dans `footer`.
     const orgRes = await fetch(`${QONTO_BASE_URL}/organizations/${orgSlug}`, { headers: qontoHeaders });
     if (!orgRes.ok) {
       const body = await orgRes.text();
@@ -237,61 +243,41 @@ Deno.serve(async (req: Request) => {
     const orgData = await orgRes.json();
     const bankAccounts = orgData?.organization?.bank_accounts || [];
     const settlementAccount = bankAccounts.find((a: { iban?: string }) => a.iban === qontoIban) || bankAccounts[0];
-    // Valeurs en dur en priorité (confirmées telles quelles par la lecture
-    // réelle de la facture PROFORMA) — jamais dépendantes d'un champ
-    // organization.legal_name dont la présence sur /v2/organizations n'est
-    // pas garantie.
     const beneficiaryName = 'OZË PARIS';
     const settlementBic: string = settlementAccount?.bic || 'QNTOFRP1XXX';
 
-    // 4. Émission de la facture officielle, finalisée (numéro officiel +
-    // routage PDP automatique côté Qonto pour un client pro). `items` est un
-    // champ PLAT (pas de sections[] imbriquées — confirmé par la lecture
-    // réelle ci-dessus, où la ressource porte directement un champ `items`)
-    // et `note` n'existe pas dans le schéma réel : la mention légale de TVA
-    // va dans `footer`, le seul champ de texte libre présent sur la facture.
+    // 4. Émission de la facture officielle (numéro officiel + routage PDP
+    // automatique côté Qonto pour un client pro).
     const today = new Date().toISOString().slice(0, 10);
     const invoicePayload = {
-      data: {
-        attributes: {
-          client_id: qontoClientId,
-          currency: 'EUR',
-          customer_locale: 'fr',
-          issue_date: today,
-          due_date: today,
-          payment_methods: [
-            {
-              type: 'transfer',
-              beneficiary_name: beneficiaryName,
-              iban: qontoIban,
-              bic: settlementBic,
-            },
-          ],
-          items: activeItems.map((item) => {
-            const title = String(
-              [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article'
-            );
-            const quantity = String(item.quantity || '1');
-            const unitPrice = String(Number(item.unit_price || 1).toFixed(2));
-            return {
-              title,
-              quantity,
-              currency: 'EUR',
-              unit_price: unitPrice,
-              // OZË Paris est en franchise en base de TVA (art. 293 B du
-              // CGI) : jamais de TVA facturée.
-              vat_rate: '0',
-            };
-          }),
-          footer: VAT_NOTE,
-          finalize: true,
-        },
+      client_id: qontoClientId,
+      currency: 'EUR',
+      issue_date: today,
+      due_date: today,
+      payment_methods: {
+        type: 'transfer',
+        beneficiary_name: beneficiaryName,
+        iban: qontoIban,
+        bic: settlementBic,
       },
+      items: activeItems.map((item) => {
+        const title = String(
+          [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article'
+        );
+        return {
+          title,
+          quantity: String(item.quantity || '1'),
+          unit_price: { value: Number(item.unit_price || 1).toFixed(2), currency: 'EUR' },
+          // OZË Paris est en franchise en base de TVA (art. 293 B du CGI) :
+          // jamais de TVA facturée.
+          vat_rate: '0',
+        };
+      }),
+      footer: VAT_NOTE,
+      finalize: true,
     };
 
-    console.log('emit-qonto-invoice: payload attributes keys', Object.keys(invoicePayload.data.attributes));
     console.log('Qonto POST Body:', JSON.stringify(invoicePayload, null, 2));
-    console.log('PAYLOAD PAYMENT_METHODS:', JSON.stringify(invoicePayload.data.attributes.payment_methods, null, 2));
 
     const invoiceRes = await fetch(`${QONTO_BASE_URL}/client_invoices`, {
       method: 'POST',
@@ -303,28 +289,22 @@ Deno.serve(async (req: Request) => {
       return json({ error: `Qonto /client_invoices a échoué (${invoiceRes.status}) : ${body}` }, 502);
     }
     const invoiceData = await invoiceRes.json();
-    // Forme réelle confirmée par lecture directe de GET /v2/client_invoices :
-    // ressource PLATE, `client_invoice` (singulier) attendu en clé de
-    // réponse pour un create/show (même convention que `client_invoices`
-    // au pluriel sur le GET liste) — data.attributes gardé en repli tant que
-    // la réponse du POST elle-même n'a pas pu être observée directement.
-    const qontoInvoice =
-      invoiceData?.client_invoice || invoiceData?.data?.attributes || invoiceData?.data || invoiceData?.invoice || invoiceData;
-    const qontoInvoiceId: string | undefined = qontoInvoice?.id || invoiceData?.data?.id;
-    const qontoInvoiceNumber: string | undefined = qontoInvoice?.number || qontoInvoice?.invoice_number;
-    // `invoice_url` est le nom réel du champ (voir GET ci-dessus), pas `pdf_url`.
-    const pdfUrl: string | undefined = qontoInvoice?.invoice_url || qontoInvoice?.pdf_url || qontoInvoice?.document_url || qontoInvoice?.url;
-    const rawStatus: string | undefined = qontoInvoice?.status || qontoInvoice?.transmission_status;
+    // Réponse CONFIRMÉE par un vrai 201 pendant le diagnostic :
+    // { client_invoice: { id, number, invoice_url, status, ... } }.
+    const qontoInvoice = invoiceData?.client_invoice;
+    const qontoInvoiceId: string | undefined = qontoInvoice?.id;
+    const qontoInvoiceNumber: string | undefined = qontoInvoice?.number;
+    const pdfUrl: string | undefined = qontoInvoice?.invoice_url;
+    const rawStatus: string | undefined = qontoInvoice?.status;
 
     if (!qontoInvoiceId) {
       return json({ error: 'Qonto /client_invoices a répondu sans id de facture exploitable', raw: invoiceData }, 502);
     }
 
-    const transmissionStatus = ['pending', 'sent', 'failed', 'direct_pdf'].includes(rawStatus || '')
-      ? rawStatus
-      : profile.legal_status === 'individual'
-      ? 'direct_pdf'
-      : 'pending';
+    // Statut RÉEL renvoyé par Qonto (confirmé : 'unpaid' pour une facture
+    // fraîchement finalisée, 'draft' pour une facture non finalisée) —
+    // stocké tel quel plutôt que remappé dans un enum imaginé au préalable.
+    const transmissionStatus = rawStatus || 'pending';
 
     const { error: updateError } = await adminClient
       .from('invoices')
