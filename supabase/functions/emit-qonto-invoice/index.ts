@@ -221,6 +221,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Secret QONTO_IBAN manquant dans Supabase' }, 500);
     }
     console.log('emit-qonto-invoice: QONTO_IBAN lu, longueur', qontoIban.length, 'préfixe', qontoIban.slice(0, 4));
+    console.log('QONTO_IBAN lu dans la fonction :', qontoIban);
 
     // Le secret QONTO_IBAN est confirmé non-vide (log ci-dessus) et pourtant
     // Qonto renvoie "invalid_iban"/"IBAN is empty" quel que soit l'endroit
@@ -302,6 +303,7 @@ Deno.serve(async (req: Request) => {
     };
 
     console.log('emit-qonto-invoice: payload attributes keys', Object.keys(invoicePayload.data.attributes));
+    console.log('PAYLOAD COMPLET ENVOYÉ A QONTO:', JSON.stringify(invoicePayload, null, 2));
 
     const invoiceRes = await fetch(`${QONTO_BASE_URL}/client_invoices`, {
       method: 'POST',
