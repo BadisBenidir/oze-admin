@@ -250,10 +250,11 @@ Deno.serve(async (req: Request) => {
     // porte SA PROPRE currency (en plus de celle d'unit_price). customer_locale
     // obligatoire également.
     const today = new Date().toISOString().slice(0, 10);
-    // JSON:API strict : AUCUN champ hors de `data` à la racine, jamais de
-    // iban/payment_methods en attribut libre — le compte de règlement est
-    // désigné par bank_account_id (résolu ci-dessus via /v2/organizations),
-    // Qonto lie alors automatiquement l'IBAN par défaut de ce compte.
+    // JSON:API strict : AUCUN champ hors de `data` à la racine. Le compte de
+    // règlement se désigne à la fois par bank_account_id (résolu ci-dessus
+    // via /v2/organizations) ET par payment_methods — un TABLEAU d'objets
+    // typés (jamais un objet nu ni une string) : bank_account_id seul ne
+    // suffisait pas, Qonto veut explicitement ce bloc pour émettre.
     const invoicePayload = {
       data: {
         attributes: {
@@ -263,6 +264,12 @@ Deno.serve(async (req: Request) => {
           customer_locale: 'fr',
           issue_date: today,
           due_date: today,
+          payment_methods: [
+            {
+              type: 'bank_transfer',
+              iban: qontoIban,
+            },
+          ],
           sections: [
             {
               items: activeItems.map((item) => {
@@ -271,9 +278,6 @@ Deno.serve(async (req: Request) => {
                 );
                 const quantity = String(item.quantity || '1');
                 const unitPrice = String(Number(item.unit_price || 1).toFixed(2));
-                if (typeof quantity !== 'string' || typeof unitPrice !== 'string') {
-                  throw new Error('Type invalide sur un item Qonto (quantity/unit_price doivent être des chaînes)');
-                }
                 return {
                   title,
                   quantity,
