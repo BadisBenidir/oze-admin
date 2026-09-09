@@ -223,11 +223,12 @@ Deno.serve(async (req: Request) => {
     console.log('emit-qonto-invoice: QONTO_IBAN lu, longueur', qontoIban.length, 'préfixe', qontoIban.slice(0, 4));
     console.log('QONTO_IBAN lu dans la fonction :', qontoIban);
 
-    // Qonto v2 en JSON:API strict : le compte de règlement se désigne par
-    // `bank_account_id` en attribut (Qonto lie alors automatiquement l'IBAN
-    // par défaut de ce compte) — jamais un `iban` ou `payment_methods` en
-    // attribut libre, ni une relation JSON:API séparée. Résolu via
-    // /v2/organizations, comme qonto-sync.
+    // Coordonnées du compte de règlement — vérifiées par une lecture réelle
+    // de GET /v2/client_invoices (une facture "PROFORMA" déjà présente sur
+    // le compte a révélé la forme EXACTE attendue par Qonto pour
+    // payment_methods : { type: 'transfer', beneficiary_name, iban, bic },
+    // jamais 'bank_transfer' ni 'method', jamais de bank_account_id (ce
+    // champ n'existe pas dans le schéma réel — abandonné).
     const orgRes = await fetch(`${QONTO_BASE_URL}/organizations/${orgSlug}`, { headers: qontoHeaders });
     if (!orgRes.ok) {
       const body = await orgRes.text();
@@ -236,25 +237,16 @@ Deno.serve(async (req: Request) => {
     const orgData = await orgRes.json();
     const bankAccounts = orgData?.organization?.bank_accounts || [];
     const settlementAccount = bankAccounts.find((a: { iban?: string }) => a.iban === qontoIban) || bankAccounts[0];
-    const bankAccountId: string | undefined = settlementAccount?.id || settlementAccount?.slug;
-    console.log('emit-qonto-invoice: bank_account résolu ?', Boolean(bankAccountId), 'iban match ?', settlementAccount?.iban === qontoIban);
-    if (!bankAccountId) {
-      return json({ error: "Impossible de résoudre l'id du compte bancaire Qonto (bank_account_id) — vérifier QONTO_IBAN et /v2/organizations" }, 502);
-    }
+    const beneficiaryName: string = orgData?.organization?.legal_name || 'OZË PARIS';
+    const settlementBic: string = settlementAccount?.bic || 'QNTOFRP1XXX';
 
     // 4. Émission de la facture officielle, finalisée (numéro officiel +
-    // routage PDP automatique côté Qonto pour un client pro). Le 422 réel
-    // (pointers /data/attributes/... au format JSON:API) révèle une
-    // enveloppe { data: { attributes: {...} } }, jamais un payload plat, et
-    // des items imbriqués sous attributes.sections[].items[] — chaque item
-    // porte SA PROPRE currency (en plus de celle d'unit_price). customer_locale
-    // obligatoire également.
+    // routage PDP automatique côté Qonto pour un client pro). `items` est un
+    // champ PLAT (pas de sections[] imbriquées — confirmé par la lecture
+    // réelle ci-dessus, où la ressource porte directement un champ `items`)
+    // et `note` n'existe pas dans le schéma réel : la mention légale de TVA
+    // va dans `footer`, le seul champ de texte libre présent sur la facture.
     const today = new Date().toISOString().slice(0, 10);
-    // JSON:API strict : AUCUN champ hors de `data` à la racine. bank_account_id
-    // ET payment_methods (avec `type`) envoyés ensemble ont échoué de façon
-    // identique — cette tentative retire bank_account_id et change la clé du
-    // tableau payment_methods en `method` (au lieu de `type`), sur indication
-    // explicite : les deux ne sont peut-être pas censés cohabiter.
     const invoicePayload = {
       data: {
         attributes: {
@@ -265,31 +257,29 @@ Deno.serve(async (req: Request) => {
           due_date: today,
           payment_methods: [
             {
-              method: 'transfer',
+              type: 'transfer',
+              beneficiary_name: beneficiaryName,
               iban: qontoIban,
+              bic: settlementBic,
             },
           ],
-          sections: [
-            {
-              items: activeItems.map((item) => {
-                const title = String(
-                  [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article'
-                );
-                const quantity = String(item.quantity || '1');
-                const unitPrice = String(Number(item.unit_price || 1).toFixed(2));
-                return {
-                  title,
-                  quantity,
-                  currency: 'EUR',
-                  unit_price: unitPrice,
-                  // OZË Paris est en franchise en base de TVA (art. 293 B du
-                  // CGI) : jamais de TVA facturée.
-                  vat_rate: '0',
-                };
-              }),
-            },
-          ],
-          note: VAT_NOTE,
+          items: activeItems.map((item) => {
+            const title = String(
+              [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article'
+            );
+            const quantity = String(item.quantity || '1');
+            const unitPrice = String(Number(item.unit_price || 1).toFixed(2));
+            return {
+              title,
+              quantity,
+              currency: 'EUR',
+              unit_price: unitPrice,
+              // OZË Paris est en franchise en base de TVA (art. 293 B du
+              // CGI) : jamais de TVA facturée.
+              vat_rate: '0',
+            };
+          }),
+          footer: VAT_NOTE,
           finalize: true,
         },
       },
@@ -308,16 +298,17 @@ Deno.serve(async (req: Request) => {
       return json({ error: `Qonto /client_invoices a échoué (${invoiceRes.status}) : ${body}` }, 502);
     }
     const invoiceData = await invoiceRes.json();
-    // Réponse probablement au même format JSON:API que la requête
-    // (data.attributes) — on couvre aussi les formes plus plates au cas où
-    // la réponse ne suit pas exactement la même enveloppe que l'entrée.
+    // Forme réelle confirmée par lecture directe de GET /v2/client_invoices :
+    // ressource PLATE, `client_invoice` (singulier) attendu en clé de
+    // réponse pour un create/show (même convention que `client_invoices`
+    // au pluriel sur le GET liste) — data.attributes gardé en repli tant que
+    // la réponse du POST elle-même n'a pas pu être observée directement.
     const qontoInvoice =
-      invoiceData?.data?.attributes || invoiceData?.data || invoiceData?.client_invoice || invoiceData?.invoice || invoiceData;
-    // En JSON:API, `id` vit au niveau de la ressource (data.id), pas dans
-    // attributes — vérifié en priorité avant le repli sur qontoInvoice.id.
-    const qontoInvoiceId: string | undefined = invoiceData?.data?.id || qontoInvoice?.id;
+      invoiceData?.client_invoice || invoiceData?.data?.attributes || invoiceData?.data || invoiceData?.invoice || invoiceData;
+    const qontoInvoiceId: string | undefined = qontoInvoice?.id || invoiceData?.data?.id;
     const qontoInvoiceNumber: string | undefined = qontoInvoice?.number || qontoInvoice?.invoice_number;
-    const pdfUrl: string | undefined = qontoInvoice?.pdf_url || qontoInvoice?.document_url || qontoInvoice?.url;
+    // `invoice_url` est le nom réel du champ (voir GET ci-dessus), pas `pdf_url`.
+    const pdfUrl: string | undefined = qontoInvoice?.invoice_url || qontoInvoice?.pdf_url || qontoInvoice?.document_url || qontoInvoice?.url;
     const rawStatus: string | undefined = qontoInvoice?.status || qontoInvoice?.transmission_status;
 
     if (!qontoInvoiceId) {
