@@ -461,6 +461,39 @@ class OrderService {
       .slice(0, limit);
   }
 
+  // Certificats Entrupy ajoutés APRÈS coup sur une commande déjà passée
+  // (entrupy_requested_at, voir 0119) — jamais ceux choisis dès le panier
+  // (entrupy_requested posé à la création, sans horodatage dédié, déjà
+  // couvert par l'activité "Nouvelle commande").
+  async getRecentEntrupyRequests(limit = 3) {
+    const { data, error } = await supabase
+      .from('order_items')
+      .select(
+        'id, entrupy_requested_at, entrupy_cost, product_snapshot, ' +
+          'orders!inner(order_number, reseller:resellers(company_name), placed_by:profiles!orders_placed_by_profile_id_fkey(first_name, last_name))'
+      )
+      .not('entrupy_requested_at', 'is', null)
+      .order('entrupy_requested_at', { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+
+    return (data as any[]).map((row) => {
+      const order = Array.isArray(row.orders) ? row.orders[0] : row.orders;
+      const reseller = Array.isArray(order?.reseller) ? order.reseller[0] : order?.reseller;
+      const placedBy = Array.isArray(order?.placed_by) ? order.placed_by[0] : order?.placed_by;
+      const contactName = placedBy ? `${placedBy.first_name || ''} ${placedBy.last_name || ''}`.trim() : '';
+      const who = contactName || reseller?.company_name || 'Revendeur';
+      return {
+        id: `entrupy-${row.id}`,
+        productName: row.product_snapshot?.name || 'Produit',
+        cost: Number(row.entrupy_cost),
+        who,
+        created_at: row.entrupy_requested_at as string,
+      };
+    });
+  }
+
   // `limit` porte sur CHAQUE source (commandes/clients/recharges), pas sur le
   // total renvoyé : "Voir plus" l'augmente de 10 à chaque clic pour élargir
   // le vivier avant de retrier et de retronquer au même nombre.
@@ -484,6 +517,9 @@ class OrderService {
 
     // 4. Récupérer les dernières annulations (commande entière ou article)
     const cancellations = await this.getRecentCancellations(limit);
+
+    // 5. Récupérer les derniers certificats Entrupy ajoutés après coup
+    const entrupyRequests = await this.getRecentEntrupyRequests(limit);
 
     const activities = [];
 
@@ -523,6 +559,14 @@ class OrderService {
         ? `🔴 Commande de ${c.amount.toFixed(2)} € annulée par ${c.who}`
         : `🔴 Article ${c.productName} (${c.amount.toFixed(2)} €) annulé par ${c.who}`,
       date: new Date(c.created_at)
+    }));
+
+    // Transformer les demandes de certificat Entrupy en format "Activité"
+    entrupyRequests.forEach(e => activities.push({
+      id: e.id,
+      type: 'entrupy',
+      text: `🛡️ Certificat Entrupy (${e.cost.toFixed(2)} €) ajouté sur ${e.productName} par ${e.who}`,
+      date: new Date(e.created_at)
     }));
 
     // Trier le tout du plus récent au plus ancien
