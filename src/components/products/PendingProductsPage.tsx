@@ -81,6 +81,8 @@ export const PendingProductsPage: React.FC<PendingProductsPageProps> = ({ onEdit
       setScanMsg({ ok: false, text: `${outcome.productName} : ajoute au moins une photo avant la mise en ligne.` });
     } else if (outcome.status === 'no-price') {
       setScanMsg({ ok: false, text: `${outcome.productName} : renseigne un prix de vente avant la mise en ligne.` });
+    } else if (outcome.status === 'reserved-sourcing') {
+      setScanMsg({ ok: false, text: `${outcome.productName} est réservé à un sourcing sur mesure — pas de mise en ligne.` });
     } else if (outcome.status === 'not-found') {
       setScanMsg({ ok: false, text: 'Référence inconnue' });
     } else {

@@ -6,6 +6,7 @@ export type ValidationOutcome =
   | { status: 'already-online'; productId: string; productName: string }
   | { status: 'no-photos'; productId: string; productName: string }
   | { status: 'no-price'; productId: string; productName: string }
+  | { status: 'reserved-sourcing'; productId: string; productName: string }
   | { status: 'not-found' }
   | { status: 'error'; message: string };
 
@@ -28,6 +29,11 @@ export async function validateProductByBarcode(code: string): Promise<Validation
     if (!product) return { status: 'not-found' };
     if (product.status === 'for-sale-online') {
       return { status: 'already-online', productId: product.id, productName: product.name };
+    }
+    // Garde-fou : une pièce sourcée sur mesure pour un revendeur précis ne
+    // doit jamais atterrir dans le catalogue public par un scan malencontreux.
+    if (product.status === 'sourced-b2b') {
+      return { status: 'reserved-sourcing', productId: product.id, productName: product.name };
     }
     // Garde-fou : pas de mise en ligne sans au moins une photo.
     if (!Array.isArray(product.images) || product.images.length === 0) {

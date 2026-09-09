@@ -67,6 +67,8 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
       setScanError('Ajoute au moins une photo à cet article avant de le mettre en ligne.');
     } else if (outcome.status === 'no-price') {
       setScanError('Renseigne un prix de vente avant de mettre cet article en ligne.');
+    } else if (outcome.status === 'reserved-sourcing') {
+      setScanError('Cet article est réservé à un sourcing sur mesure — pas de mise en ligne.');
     } else if (outcome.status === 'not-found') {
       setScanError('Référence inconnue en base.');
     } else if (outcome.status === 'error') {
@@ -181,6 +183,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
   const formatStatus = (status: string) => {
     switch (status) {
       case 'draft': return 'Brouillon';
+      case 'sourced-b2b': return '🎯 Sourcing sur mesure';
       case 'for-sale-online': return 'À vendre en ligne';
       case 'for-sale-other-platform': return 'À vendre sur autre plateforme';
       case 'for-sale-b2b': return 'Revendeurs B2B uniquement';
@@ -263,6 +266,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                 product.status === 'for-sale-online' || product.status === 'for-sale-b2b' || product.status === 'cadeau-livre' ? 'success' :
                 product.status === 'sold-online' || product.status === 'sold-other-platform' || product.status === 'sold-b2b' ? 'warning' :
                 product.status === 'sold-display' || product.status === 'reserved-b2b' || product.status === 'cadeau-attribue' ? 'info' :
+                product.status === 'sourced-b2b' ? 'purple' :
                 product.status === 'draft' || product.status === 'cadeau' ? 'default' : 'info'
               }>
                 {formatStatus(product.status)}
