@@ -250,23 +250,22 @@ Deno.serve(async (req: Request) => {
     // porte SA PROPRE currency (en plus de celle d'unit_price). customer_locale
     // obligatoire également.
     const today = new Date().toISOString().slice(0, 10);
-    // JSON:API strict : AUCUN champ hors de `data` à la racine. Le compte de
-    // règlement se désigne à la fois par bank_account_id (résolu ci-dessus
-    // via /v2/organizations) ET par payment_methods — un TABLEAU d'objets
-    // typés (jamais un objet nu ni une string) : bank_account_id seul ne
-    // suffisait pas, Qonto veut explicitement ce bloc pour émettre.
+    // JSON:API strict : AUCUN champ hors de `data` à la racine. bank_account_id
+    // ET payment_methods (avec `type`) envoyés ensemble ont échoué de façon
+    // identique — cette tentative retire bank_account_id et change la clé du
+    // tableau payment_methods en `method` (au lieu de `type`), sur indication
+    // explicite : les deux ne sont peut-être pas censés cohabiter.
     const invoicePayload = {
       data: {
         attributes: {
           client_id: qontoClientId,
-          bank_account_id: bankAccountId,
           currency: 'EUR',
           customer_locale: 'fr',
           issue_date: today,
           due_date: today,
           payment_methods: [
             {
-              type: 'bank_transfer',
+              method: 'transfer',
               iban: qontoIban,
             },
           ],
