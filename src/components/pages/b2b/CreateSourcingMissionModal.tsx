@@ -116,6 +116,14 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
       setError('Le titre de la mission est requis');
       return;
     }
+    if (!userId) {
+      // Un sourcing est nominatif à UN sous-compte précis (jamais visible
+      // par le reste de l'entreprise, voir 0120) : impossible de laisser
+      // "Non précisé" désormais, une mission sans demandeur ne serait
+      // affichée à personne côté portail revendeur.
+      setError('Le demandeur (sous-compte) est requis');
+      return;
+    }
     if (!Number.isFinite(parsedAdvance) || parsedAdvance <= 0) {
       setError("L'avance versée doit être supérieure à 0");
       return;
@@ -188,16 +196,20 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
 
             <div>
               <label htmlFor="mission-requester" className="block text-sm font-medium text-gray-700 mb-1">
-                Demandeur (sous-compte)
+                Demandeur (sous-compte) <span className="text-red-500">*</span>
               </label>
+              <p className="text-xs text-gray-500 mb-1">
+                Cette mission ne sera visible que par ce sous-compte, jamais par le reste de l'entreprise.
+              </p>
               <select
                 id="mission-requester"
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
                 disabled={!resellerId || loadingContacts}
+                required
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
               >
-                <option value="">Non précisé</option>
+                <option value="" disabled>Sélectionner un sous-compte...</option>
                 {contacts.map((c) => (
                   <option key={c.id} value={c.profile_id}>
                     {c.first_name} {c.last_name} — {c.email}{c.is_primary ? ' (Principal)' : ''}
