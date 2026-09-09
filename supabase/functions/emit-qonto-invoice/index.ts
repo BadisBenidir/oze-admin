@@ -148,6 +148,14 @@ Deno.serve(async (req: Request) => {
       .single();
     if (profileError || !profile) return json({ error: profileError?.message || 'Profil client introuvable' }, 400);
 
+    // Restriction stricte : l'émission Qonto (facturation B2B Factur-X) est
+    // réservée aux clients professionnels (Société ou EI). Un particulier
+    // reste sur le PDF jsPDF standard (voir generate_invoice_for_order,
+    // invoice_type = 'b2c_retail' pour ce statut) — jamais de facture Qonto.
+    if (profile.legal_status === 'individual') {
+      return json({ error: "L'émission sur Qonto est réservée aux clients professionnels (Société ou EI), pas aux particuliers" }, 400);
+    }
+
     const { data: order, error: orderError } = await adminClient
       .from('orders')
       .select('id, order_number, created_at')

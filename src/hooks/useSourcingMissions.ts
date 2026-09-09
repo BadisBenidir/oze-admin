@@ -5,6 +5,8 @@ export interface SourcingMissionRequester {
   first_name: string | null;
   last_name: string | null;
   email: string | null;
+  /** Conditionne l'accès à l'émission Qonto (réservée Société/EI) — voir SourcingMissionDetailModal.tsx. */
+  legal_status: 'individual' | 'sole_proprietorship' | 'company' | null;
 }
 
 export interface SourcingMission {
@@ -112,7 +114,7 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
       setError(null);
       let query = supabase
         .from('b2b_sourcing_missions')
-        .select('*, resellers(company_name), requester:profiles!user_id(first_name, last_name, email)')
+        .select('*, resellers(company_name), requester:profiles!user_id(first_name, last_name, email, legal_status)')
         .order('created_at', { ascending: false });
       if (resellerId) query = query.eq('reseller_id', resellerId);
       const { data, error: fetchError } = await query;

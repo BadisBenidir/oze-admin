@@ -14,7 +14,7 @@ import {
   getShipmentStatus,
   type ShipmentStatus,
 } from '../orders/ShipmentStatusFilter';
-import { Eye, Download, Truck, Globe, Handshake, Gavel, Loader2, FileDown, Send } from 'lucide-react';
+import { Eye, Download, Truck, Globe, Handshake, Gavel, Loader2, FileDown, Send, CheckCircle2 } from 'lucide-react';
 
 interface OrdersProps {
   activeSubTab: string;
@@ -501,15 +501,28 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                               {invoiceBadges[order.id].invoiceType === 'b2b_facturx' ? 'B2B · Factur-X' : 'B2C · Standard'}
                             </Badge>
                           )}
-                          {invoiceBadges[order.id] && !invoiceBadges[order.id].qontoEmitted && (
+                          {invoiceBadges[order.id]?.qontoEmitted ? (
                             <button
-                              className="p-1 text-gray-400 hover:text-emerald-600 transition-colors disabled:opacity-40"
-                              onClick={() => handleEmitQonto(order.id)}
-                              disabled={downloadingOrderId === order.id}
-                              title="Émettre la facture officielle sur Qonto"
+                              className="p-1 text-emerald-600 hover:text-emerald-700 transition-colors"
+                              onClick={() => invoiceBadges[order.id].pdfUrl && window.open(invoiceBadges[order.id].pdfUrl!, '_blank', 'noopener,noreferrer')}
+                              title={`Émise sur Qonto (n° ${invoiceBadges[order.id].qontoInvoiceNumber || invoiceBadges[order.id].transmissionStatus}) — cliquer pour ouvrir le PDF`}
                             >
-                              <Send className="h-3 w-3 md:h-4 md:w-4" />
+                              <CheckCircle2 className="h-3 w-3 md:h-4 md:w-4" />
                             </button>
+                          ) : (
+                            // Réservé aux clients pro (Société/EI) — jamais un particulier,
+                            // voir invoice_type posé par generate_invoice_for_order selon
+                            // legal_status.
+                            invoiceBadges[order.id]?.invoiceType === 'b2b_facturx' && (
+                              <button
+                                className="p-1 text-gray-400 hover:text-emerald-600 transition-colors disabled:opacity-40"
+                                onClick={() => handleEmitQonto(order.id)}
+                                disabled={downloadingOrderId === order.id}
+                                title="Émettre la facture officielle sur Qonto"
+                              >
+                                <Send className="h-3 w-3 md:h-4 md:w-4" />
+                              </button>
+                            )
                           )}
                           {order.status === 'confirmed' && (
                             <button

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil, Trash2, Eye, EyeOff, Link2, Undo2 } from 'lucide-react';
+import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil, Trash2, Eye, EyeOff, Link2, Undo2, Send } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { Toast } from '../../ui/Toast';
 import { SourcingMission, SourcingMissionInput } from '../../../hooks/useSourcingMissions';
 import { useSourcingItems, SourcingItem } from '../../../hooks/useSourcingItems';
+import { useInvoices, useOrderInvoiceBadges } from '../../../hooks/useInvoices';
 import { AddSourcingItemModal } from './AddSourcingItemModal';
 import { CreateSourcingMissionModal } from './CreateSourcingMissionModal';
 import { LinkSourcingProductModal } from './LinkSourcingProductModal';
@@ -55,12 +56,36 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   const [deleteError, setDeleteError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [successToast, setSuccessToast] = useState('');
+  const { emitQontoInvoice, downloadingOrderId } = useInvoices();
+  const invoiceBadges = useOrderInvoiceBadges(mission?.order_id ? [mission.order_id] : []);
 
   useEffect(() => {
     setStatusError('');
   }, [mission?.id]);
 
   if (!mission) return null;
+
+  const invoiceBadge = mission.order_id ? invoiceBadges[mission.order_id] : undefined;
+  // Réservé aux clients pro (Société/EI) — jamais un particulier. Si aucune
+  // facture n'a encore été générée pour cette commande (invoiceBadge absent),
+  // on se fie directement au statut légal du demandeur plutôt que d'attendre
+  // qu'un admin l'ait déjà téléchargée une première fois ailleurs.
+  const canEmitQonto =
+    Boolean(mission.order_id) && (invoiceBadge ? invoiceBadge.invoiceType === 'b2b_facturx' : mission.requester?.legal_status && mission.requester.legal_status !== 'individual');
+
+  const handleEmitQonto = async () => {
+    if (!mission.order_id) return;
+    const result = await emitQontoInvoice(mission.order_id);
+    if (!result.success) {
+      alert(result.error);
+      return;
+    }
+    alert(
+      result.already_emitted
+        ? 'Cette commande avait déjà une facture Qonto émise.'
+        : `Facture émise avec succès sur Qonto (n° ${result.qonto_invoice_number || result.qonto_invoice_id}).`
+    );
+  };
 
   // Calculé directement à partir des pièces déjà chargées ici plutôt que
   // via mission.consumed_cost_amount (b2b_sourcing_mission_totals) : évite
@@ -382,14 +407,37 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
               </button>
             )}
             {mission.status === 'completed' && mission.order_id && (
-              <button
-                onClick={() => setShowCancelValidationConfirm(true)}
-                disabled={cancellingValidation}
-                className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50 text-sm font-medium"
-              >
-                <Undo2 className="h-4 w-4" />
-                {cancellingValidation ? 'Annulation...' : 'Annuler la validation du sourcing'}
-              </button>
+              <div className="flex items-center gap-2">
+                {invoiceBadge?.qontoEmitted ? (
+                  <button
+                    onClick={() => invoiceBadge.pdfUrl && window.open(invoiceBadge.pdfUrl, '_blank', 'noopener,noreferrer')}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors text-sm font-medium"
+                    title={`N° ${invoiceBadge.qontoInvoiceNumber || invoiceBadge.transmissionStatus}`}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Émise sur Qonto
+                  </button>
+                ) : (
+                  canEmitQonto && (
+                    <button
+                      onClick={handleEmitQonto}
+                      disabled={downloadingOrderId === mission.order_id}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50 text-sm font-medium"
+                    >
+                      <Send className="h-4 w-4" />
+                      {downloadingOrderId === mission.order_id ? 'Émission...' : 'Émettre sur Qonto'}
+                    </button>
+                  )
+                )}
+                <button
+                  onClick={() => setShowCancelValidationConfirm(true)}
+                  disabled={cancellingValidation}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50 text-sm font-medium"
+                >
+                  <Undo2 className="h-4 w-4" />
+                  {cancellingValidation ? 'Annulation...' : 'Annuler la validation du sourcing'}
+                </button>
+              </div>
             )}
           </div>
         </div>

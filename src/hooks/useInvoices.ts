@@ -5,8 +5,10 @@ import { extractFunctionErrorMessage } from '../utils/edgeFunctionError';
 
 export interface OrderInvoiceBadge {
   invoiceType: 'b2b_facturx' | 'b2c_retail';
-  transmissionStatus: 'not_applicable' | 'pending' | 'sent' | 'failed' | 'direct_pdf';
+  transmissionStatus: string;
   qontoEmitted: boolean;
+  qontoInvoiceNumber: string | null;
+  pdfUrl: string | null;
 }
 
 /**
@@ -29,7 +31,7 @@ export const useOrderInvoiceBadges = (orderIds: string[]) => {
     (async () => {
       const { data } = await supabase
         .from('invoices')
-        .select('order_id, invoice_type, transmission_status, qonto_invoice_id')
+        .select('order_id, invoice_type, transmission_status, qonto_invoice_id, qonto_invoice_number, pdf_url')
         .in('order_id', key.split(','));
       if (cancelled || !data) return;
       const next: Record<string, OrderInvoiceBadge> = {};
@@ -38,6 +40,8 @@ export const useOrderInvoiceBadges = (orderIds: string[]) => {
           invoiceType: row.invoice_type,
           transmissionStatus: row.transmission_status,
           qontoEmitted: Boolean(row.qonto_invoice_id),
+          qontoInvoiceNumber: row.qonto_invoice_number,
+          pdfUrl: row.pdf_url,
         };
       });
       setBadges(next);

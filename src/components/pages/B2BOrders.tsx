@@ -6,7 +6,7 @@ import { useB2BOrders, B2BOrder, B2BOrderComputedStatus, getRequesterDisplayName
 import { useSendcloudSync } from '../../hooks/useSendcloudSync';
 import { useInvoices, useOrderInvoiceBadges } from '../../hooks/useInvoices';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
-import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck, Search, FileDown, Loader2, Send } from 'lucide-react';
+import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck, Search, FileDown, Loader2, Send, CheckCircle2 } from 'lucide-react';
 
 // Insensible aux accents et à la casse — même pattern que ResellerDetail.tsx.
 const DIACRITICS_REGEX = new RegExp('[\\u0300-\\u036f]', 'g');
@@ -280,15 +280,26 @@ export const B2BOrders: React.FC = () => {
                                 <FileDown className="h-4 w-4" />
                               )}
                             </button>
-                            {invoiceBadges[order.id] && !invoiceBadges[order.id].qontoEmitted && (
+                            {invoiceBadges[order.id]?.qontoEmitted ? (
                               <button
-                                onClick={() => handleEmitQonto(order.id)}
-                                disabled={downloadingOrderId === order.id}
-                                className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-40"
-                                title="Émettre la facture officielle sur Qonto"
+                                onClick={() => invoiceBadges[order.id].pdfUrl && window.open(invoiceBadges[order.id].pdfUrl!, '_blank', 'noopener,noreferrer')}
+                                className="p-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+                                title={`Émise sur Qonto (n° ${invoiceBadges[order.id].qontoInvoiceNumber || invoiceBadges[order.id].transmissionStatus}) — cliquer pour ouvrir le PDF`}
                               >
-                                <Send className="h-4 w-4" />
+                                <CheckCircle2 className="h-4 w-4" />
                               </button>
+                            ) : (
+                              // Réservé aux clients pro (Société/EI) — jamais un particulier.
+                              invoiceBadges[order.id]?.invoiceType === 'b2b_facturx' && (
+                                <button
+                                  onClick={() => handleEmitQonto(order.id)}
+                                  disabled={downloadingOrderId === order.id}
+                                  className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-40"
+                                  title="Émettre la facture officielle sur Qonto"
+                                >
+                                  <Send className="h-4 w-4" />
+                                </button>
+                              )
                             )}
                           </div>
                         </td>
