@@ -47,10 +47,12 @@ interface SourcingMissionRow {
   requester: ProfileRef | null;
 }
 
-// Même règle "encaissée" que Accounting.tsx (paymentPaid) — une seule
-// définition ici pour ne pas la dupliquer/dévier entre les deux écrans.
+// Même règle "encaissée" que useAccountingRawData.ts (isOrderPaid) — exclut
+// explicitement les commandes annulées, dont payment_status reste 'paid'
+// (seul un remboursement suit l'annulation, jamais un reset de ce champ).
 const isOrderPaid = (o: { payment_status: string; status: string }): boolean =>
-  ['paid', 'succeeded'].includes(o.payment_status) || ['confirmed', 'shipped', 'delivered'].includes(o.status);
+  !['cancelled', 'canceled'].includes(o.status) &&
+  (['paid', 'succeeded'].includes(o.payment_status) || ['confirmed', 'shipped', 'delivered'].includes(o.status));
 
 // Nom complet d'un sous-compte, avec repli sur l'email si le nom est vide —
 // jamais le nom de l'entreprise ici, qui reste un dernier recours à part

@@ -63,9 +63,16 @@ export interface AccountingRawData {
 
 /** Prédicat "encaissé" partagé avec useSalesJournalExport.ts / Accounting.tsx
  * — ne jamais diverger de cette définition (paiement carte confirmé OU
- * commande déjà passée par un statut qui implique le paiement). */
+ * commande déjà passée par un statut qui implique le paiement).
+ *
+ * Exclut explicitement `status = 'cancelled'`/`'canceled'` : payment_status
+ * reste 'paid' après une annulation (le paiement a bien eu lieu, seul un
+ * remboursement suit), donc sans cette exclusion une commande entièrement
+ * annulée continuait de compter dans le CA/marge de Comptabilité & Finances
+ * — total_amount n'est pas fiable à 0 sur tous les chemins d'annulation. */
 export const isOrderPaid = (o: Pick<AccountingOrder, 'payment_status' | 'status'>): boolean =>
-  ['paid', 'succeeded'].includes(o.payment_status) || ['confirmed', 'shipped', 'delivered'].includes(o.status);
+  !['cancelled', 'canceled'].includes(o.status) &&
+  (['paid', 'succeeded'].includes(o.payment_status) || ['confirmed', 'shipped', 'delivered'].includes(o.status));
 
 /** Charge en un seul aller-retour toutes les données brutes nécessaires aux
  * 4 onglets de "Comptabilité & Finances" sur une fenêtre glissante de 25
