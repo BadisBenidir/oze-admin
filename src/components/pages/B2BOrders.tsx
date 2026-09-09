@@ -63,7 +63,15 @@ export const B2BOrders: React.FC = () => {
 
   const handleEmitQonto = async (orderId: string) => {
     const result = await emitQontoInvoice(orderId);
-    if (!result.success) alert(result.error);
+    if (!result.success) {
+      alert(result.error);
+      return;
+    }
+    alert(
+      result.already_emitted
+        ? 'Cette commande avait déjà une facture Qonto émise.'
+        : `Facture émise avec succès sur Qonto (n° ${result.qonto_invoice_number || result.qonto_invoice_id}).`
+    );
   };
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ checked: number; updated: number } | null>(null);

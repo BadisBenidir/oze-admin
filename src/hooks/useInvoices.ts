@@ -138,7 +138,19 @@ export const useInvoices = () => {
     try {
       const { data, error } = await supabase.functions.invoke('emit-qonto-invoice', { body: { order_id: orderId } });
       if (error) throw new Error(await extractFunctionErrorMessage(error, "Échec de l'émission sur Qonto"));
-      return { success: true as const, ...(data as Record<string, unknown>) };
+      const result = data as {
+        already_emitted?: boolean;
+        qonto_invoice_id?: string;
+        qonto_invoice_number?: string;
+        pdf_url?: string;
+      };
+      return {
+        success: true as const,
+        already_emitted: result?.already_emitted,
+        qonto_invoice_id: result?.qonto_invoice_id,
+        qonto_invoice_number: result?.qonto_invoice_number,
+        pdf_url: result?.pdf_url,
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erreur lors de l'émission sur Qonto";
       setDownloadError(message);

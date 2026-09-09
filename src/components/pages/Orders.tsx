@@ -84,7 +84,15 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
 
   const handleEmitQonto = async (orderId: string) => {
     const result = await emitQontoInvoice(orderId);
-    if (!result.success) alert(result.error);
+    if (!result.success) {
+      alert(result.error);
+      return;
+    }
+    alert(
+      result.already_emitted
+        ? 'Cette commande avait déjà une facture Qonto émise.'
+        : `Facture émise avec succès sur Qonto (n° ${result.qonto_invoice_number || result.qonto_invoice_id}).`
+    );
   };
 
   // Canal choisi dans le sélecteur rapide, appliqué AVANT le filtre de
