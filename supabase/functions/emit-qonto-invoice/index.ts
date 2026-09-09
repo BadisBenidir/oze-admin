@@ -249,6 +249,13 @@ Deno.serve(async (req: Request) => {
     // obligatoire également.
     const today = new Date().toISOString().slice(0, 10);
     const invoicePayload = {
+      // "invalid_iban"/"IBAN is empty" a persisté identiquement quel que
+      // soit l'endroit testé (racine des attributs, bank_account_id,
+      // relationships) — ajouté ici aussi à la RACINE DU BODY (sibling de
+      // `data`, pas dans data.attributes) par sécurité, en plus des mêmes
+      // placements déjà tentés : un champ non reconnu par Qonto est ignoré
+      // sans erreur, jamais de risque à en couvrir plusieurs à la fois.
+      iban: qontoIban,
       data: {
         attributes: {
           client_id: qontoClientId,
@@ -256,13 +263,10 @@ Deno.serve(async (req: Request) => {
           customer_locale: 'fr',
           issue_date: today,
           due_date: today,
-          // "invalid_iban"/"IBAN is empty" a persisté identiquement à la
-          // racine du payload, sous bank_account_id ET sous payment_methods
-          // imbriqué — le champ exact reste incertain, donc envoyé ici à
-          // deux endroits plausibles (payment_methods.iban ET iban en
-          // attribut direct) : un champ non reconnu par Qonto est ignoré
-          // sans erreur, jamais de risque à en couvrir plusieurs.
           iban: qontoIban,
+          // Qonto attend les modalités de règlement au pluriel
+          // (payment_methods), jamais "payment_method" au singulier ni une
+          // string nue.
           payment_methods: {
             iban: qontoIban,
           },
@@ -304,6 +308,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('emit-qonto-invoice: payload attributes keys', Object.keys(invoicePayload.data.attributes));
     console.log('PAYLOAD COMPLET ENVOYÉ A QONTO:', JSON.stringify(invoicePayload, null, 2));
+    console.log('Qonto POST Body:', JSON.stringify(invoicePayload, null, 2));
 
     const invoiceRes = await fetch(`${QONTO_BASE_URL}/client_invoices`, {
       method: 'POST',
