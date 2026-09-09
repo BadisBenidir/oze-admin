@@ -237,7 +237,11 @@ Deno.serve(async (req: Request) => {
     const orgData = await orgRes.json();
     const bankAccounts = orgData?.organization?.bank_accounts || [];
     const settlementAccount = bankAccounts.find((a: { iban?: string }) => a.iban === qontoIban) || bankAccounts[0];
-    const beneficiaryName: string = orgData?.organization?.legal_name || 'OZË PARIS';
+    // Valeurs en dur en priorité (confirmées telles quelles par la lecture
+    // réelle de la facture PROFORMA) — jamais dépendantes d'un champ
+    // organization.legal_name dont la présence sur /v2/organizations n'est
+    // pas garantie.
+    const beneficiaryName = 'OZË PARIS';
     const settlementBic: string = settlementAccount?.bic || 'QNTOFRP1XXX';
 
     // 4. Émission de la facture officielle, finalisée (numéro officiel +
@@ -287,6 +291,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('emit-qonto-invoice: payload attributes keys', Object.keys(invoicePayload.data.attributes));
     console.log('Qonto POST Body:', JSON.stringify(invoicePayload, null, 2));
+    console.log('PAYLOAD PAYMENT_METHODS:', JSON.stringify(invoicePayload.data.attributes.payment_methods, null, 2));
 
     const invoiceRes = await fetch(`${QONTO_BASE_URL}/client_invoices`, {
       method: 'POST',
