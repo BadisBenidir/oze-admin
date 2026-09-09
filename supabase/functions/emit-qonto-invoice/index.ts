@@ -223,12 +223,11 @@ Deno.serve(async (req: Request) => {
     console.log('emit-qonto-invoice: QONTO_IBAN lu, longueur', qontoIban.length, 'préfixe', qontoIban.slice(0, 4));
     console.log('QONTO_IBAN lu dans la fonction :', qontoIban);
 
-    // Le secret QONTO_IBAN est confirmé non-vide (log ci-dessus) et pourtant
-    // Qonto renvoie "invalid_iban"/"IBAN is empty" quel que soit l'endroit
-    // où `iban` est placé en ATTRIBUT — en JSON:API strict, le compte
-    // bancaire de règlement est plus probablement une RELATION
-    // (relationships.bank_account), pas un attribut. Résolution de son id
-    // via /v2/organizations, comme qonto-sync.
+    // Qonto v2 en JSON:API strict : le compte de règlement se désigne par
+    // `bank_account_id` en attribut (Qonto lie alors automatiquement l'IBAN
+    // par défaut de ce compte) — jamais un `iban` ou `payment_methods` en
+    // attribut libre, ni une relation JSON:API séparée. Résolu via
+    // /v2/organizations, comme qonto-sync.
     const orgRes = await fetch(`${QONTO_BASE_URL}/organizations/${orgSlug}`, { headers: qontoHeaders });
     if (!orgRes.ok) {
       const body = await orgRes.text();
@@ -239,6 +238,9 @@ Deno.serve(async (req: Request) => {
     const settlementAccount = bankAccounts.find((a: { iban?: string }) => a.iban === qontoIban) || bankAccounts[0];
     const bankAccountId: string | undefined = settlementAccount?.id || settlementAccount?.slug;
     console.log('emit-qonto-invoice: bank_account résolu ?', Boolean(bankAccountId), 'iban match ?', settlementAccount?.iban === qontoIban);
+    if (!bankAccountId) {
+      return json({ error: "Impossible de résoudre l'id du compte bancaire Qonto (bank_account_id) — vérifier QONTO_IBAN et /v2/organizations" }, 502);
+    }
 
     // 4. Émission de la facture officielle, finalisée (numéro officiel +
     // routage PDP automatique côté Qonto pour un client pro). Le 422 réel
@@ -248,28 +250,19 @@ Deno.serve(async (req: Request) => {
     // porte SA PROPRE currency (en plus de celle d'unit_price). customer_locale
     // obligatoire également.
     const today = new Date().toISOString().slice(0, 10);
+    // JSON:API strict : AUCUN champ hors de `data` à la racine, jamais de
+    // iban/payment_methods en attribut libre — le compte de règlement est
+    // désigné par bank_account_id (résolu ci-dessus via /v2/organizations),
+    // Qonto lie alors automatiquement l'IBAN par défaut de ce compte.
     const invoicePayload = {
-      // "invalid_iban"/"IBAN is empty" a persisté identiquement quel que
-      // soit l'endroit testé (racine des attributs, bank_account_id,
-      // relationships) — ajouté ici aussi à la RACINE DU BODY (sibling de
-      // `data`, pas dans data.attributes) par sécurité, en plus des mêmes
-      // placements déjà tentés : un champ non reconnu par Qonto est ignoré
-      // sans erreur, jamais de risque à en couvrir plusieurs à la fois.
-      iban: qontoIban,
       data: {
         attributes: {
           client_id: qontoClientId,
+          bank_account_id: bankAccountId,
           currency: 'EUR',
           customer_locale: 'fr',
           issue_date: today,
           due_date: today,
-          iban: qontoIban,
-          // Qonto attend les modalités de règlement au pluriel
-          // (payment_methods), jamais "payment_method" au singulier ni une
-          // string nue.
-          payment_methods: {
-            iban: qontoIban,
-          },
           sections: [
             {
               items: activeItems.map((item) => {
@@ -296,18 +289,10 @@ Deno.serve(async (req: Request) => {
           note: VAT_NOTE,
           finalize: true,
         },
-        // Relation JSON:API vers le compte bancaire de règlement — couvre
-        // l'hypothèse que le compte s'exprime en `relationships`, pas en
-        // attribut plat, tant que ni `iban` ni `payment_methods.iban` en
-        // attribut n'ont fonctionné.
-        ...(bankAccountId
-          ? { relationships: { bank_account: { data: { type: 'bank_accounts', id: bankAccountId } } } }
-          : {}),
       },
     };
 
     console.log('emit-qonto-invoice: payload attributes keys', Object.keys(invoicePayload.data.attributes));
-    console.log('PAYLOAD COMPLET ENVOYÉ A QONTO:', JSON.stringify(invoicePayload, null, 2));
     console.log('Qonto POST Body:', JSON.stringify(invoicePayload, null, 2));
 
     const invoiceRes = await fetch(`${QONTO_BASE_URL}/client_invoices`, {
