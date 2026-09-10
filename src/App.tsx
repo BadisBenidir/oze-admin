@@ -37,7 +37,29 @@ function App() {
   }
 
   if (status === 'signed-out') {
+    // Vraie URL dédiée pour l'écran de connexion (voir useNavigation pour le
+    // même principe appliqué aux onglets) — mémorise la page initialement
+    // demandée (?next=...) pour y revenir après connexion, plutôt que de
+    // toujours retomber sur l'accueil. replaceState (pas pushState) : ce
+    // n'est pas une navigation volontaire de l'utilisateur, pas d'entrée
+    // supplémentaire dans l'historique.
+    if (window.location.pathname !== '/connexion') {
+      const current = window.location.pathname + window.location.search;
+      const next = current !== '/' ? `?next=${encodeURIComponent(current)}` : '';
+      window.history.replaceState({}, '', `/connexion${next}`);
+    }
     return <LoginScreen />;
+  }
+
+  // Connecté mais encore sur /connexion (juste après une connexion réussie,
+  // ou accès direct à /connexion déjà authentifié) : restaure la
+  // destination d'origine AVANT qu'AdminApp/ResellerApp ne montent, sinon
+  // leur résolution d'URL initiale (useNavigation) verrait encore
+  // /connexion et retomberait sur l'onglet par défaut.
+  if (window.location.pathname === '/connexion') {
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get('next');
+    window.history.replaceState({}, '', next ? decodeURIComponent(next) : '/');
   }
 
   if (role === 'reseller') {
