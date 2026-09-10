@@ -14,6 +14,11 @@ export interface OnlineReseller {
 export interface DailyVisitCount {
   date: string;
   count: number;
+  /** true = valeur reconstituée (commandes/recharges/dernière connexion),
+   * jamais un vrai comptage de visiteurs uniques — voir
+   * backfill_reseller_daily_activity (0126). false = donnée réelle issue du
+   * tracking en direct (reseller_daily_sessions). */
+  estimated: boolean;
 }
 
 const toDateKey = (d: Date) => d.toISOString().slice(0, 10);
@@ -80,29 +85,47 @@ export const useB2BTraffic = (isAdmin: boolean, historyDays: 14 | 30 = 30) => {
       const windowStart = new Date();
       windowStart.setDate(windowStart.getDate() - (historyDays - 1));
 
-      const { data, error: fetchError } = await supabase
-        .from('reseller_daily_sessions')
-        .select('date')
-        .gte('date', toDateKey(windowStart))
-        .order('date', { ascending: true });
-      if (fetchError) throw new Error(fetchError.message);
+      const [realRes, backfillRes] = await Promise.all([
+        supabase
+          .from('reseller_daily_sessions')
+          .select('date')
+          .gte('date', toDateKey(windowStart))
+          .order('date', { ascending: true }),
+        supabase.rpc('backfill_reseller_daily_activity', { p_days: historyDays }),
+      ]);
+      if (realRes.error) throw new Error(realRes.error.message);
+      // Le rattrapage est un confort d'affichage, pas une donnée critique :
+      // une erreur dessus (ex: fonction pas encore déployée) ne doit jamais
+      // faire échouer tout le dashboard, juste laisser les jours sans
+      // tracking réel à 0.
+      if (backfillRes.error) console.error('Erreur lors du rattrapage d\'historique B2B:', backfillRes.error.message);
 
-      const counts = new Map<string, number>();
-      (data || []).forEach((row: { date: string }) => {
-        counts.set(row.date, (counts.get(row.date) || 0) + 1);
+      const realCounts = new Map<string, number>();
+      (realRes.data || []).forEach((row: { date: string }) => {
+        realCounts.set(row.date, (realCounts.get(row.date) || 0) + 1);
+      });
+      const backfillCounts = new Map<string, number>();
+      ((backfillRes.data || []) as { activity_date: string; profile_count: number }[]).forEach((row) => {
+        backfillCounts.set(row.activity_date, row.profile_count);
       });
 
-      // Toujours tous les jours de la fenêtre, même à 0 visiteur — un
+      // Un jour avec du vrai suivi (reseller_daily_sessions) fait toujours
+      // foi ; sinon on retombe sur l'estimation reconstituée, sinon 0 — un
       // graphique continu plutôt que des trous silencieux.
       const series: DailyVisitCount[] = [];
       for (let i = 0; i < historyDays; i++) {
         const d = new Date(windowStart);
         d.setDate(d.getDate() + i);
         const key = toDateKey(d);
-        series.push({ date: key, count: counts.get(key) || 0 });
+        const real = realCounts.get(key);
+        series.push(
+          real !== undefined
+            ? { date: key, count: real, estimated: false }
+            : { date: key, count: backfillCounts.get(key) || 0, estimated: true }
+        );
       }
       setDailyHistory(series);
-      setUniqueToday(counts.get(today) || 0);
+      setUniqueToday(realCounts.get(today) ?? backfillCounts.get(today) ?? 0);
     } catch (err) {
       console.error('Erreur lors du chargement du trafic B2B:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');

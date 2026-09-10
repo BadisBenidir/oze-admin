@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import { Radio, Users, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { AccountingKpiCard } from './accounting/AccountingKpiCard';
@@ -131,15 +131,33 @@ export const B2BTraffic: React.FC = () => {
           {loading ? (
             <div className="h-64 bg-gray-100 rounded-lg animate-pulse" />
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={historyDays === 30 ? 2 : 0} />
-                <YAxis tick={{ fontSize: 12 }} width={30} allowDecimals={false} />
-                <Tooltip formatter={(v: any) => [`${v} visiteur${Number(v) > 1 ? 's' : ''}`, 'Uniques']} />
-                <Bar dataKey="count" name="Visiteurs uniques" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={historyDays === 30 ? 2 : 0} />
+                  <YAxis tick={{ fontSize: 12 }} width={30} allowDecimals={false} />
+                  <Tooltip
+                    formatter={(v: any, _name: any, item: any) => [
+                      `${v} visiteur${Number(v) > 1 ? 's' : ''}${item?.payload?.estimated ? ' (estimé)' : ''}`,
+                      'Uniques',
+                    ]}
+                  />
+                  <Bar dataKey="count" name="Visiteurs uniques" radius={[4, 4, 0, 0]}>
+                    {chartData.map((d) => (
+                      <Cell key={d.date} fill={d.estimated ? '#c4b5fd' : '#7c3aed'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              {chartData.some((d) => d.estimated) && (
+                <p className="text-xs text-gray-400 mt-2 flex items-center gap-1.5">
+                  <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-300" />
+                  Violet clair = période reconstituée (commandes, recharges, dernière connexion connue) avant le
+                  démarrage du suivi en direct — pas un vrai comptage de visiteurs uniques.
+                </p>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
