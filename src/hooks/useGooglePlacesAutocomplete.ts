@@ -57,8 +57,19 @@ export const useGooglePlacesAutocomplete = (
   onSelectRef.current = onSelect;
 
   useEffect(() => {
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
-    if (!apiKey || !inputRef.current) return;
+    // Le fichier .env local utilise VITE_GOOGLE_MAPS_KEY (sans "_API") —
+    // les deux noms sont acceptés pour ne pas dépendre de la convention
+    // exacte utilisée côté Vercel, jamais vérifiable depuis ce repo.
+    const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_KEY) as
+      | string
+      | undefined;
+    if (!apiKey) {
+      console.warn(
+        "useGooglePlacesAutocomplete: aucune clé API Google Maps configurée (VITE_GOOGLE_MAPS_API_KEY / VITE_GOOGLE_MAPS_KEY) — l'autocomplétion d'adresse reste désactivée, saisie manuelle uniquement."
+      );
+      return;
+    }
+    if (!inputRef.current) return;
 
     let cancelled = false;
 
