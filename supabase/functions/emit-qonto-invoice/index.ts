@@ -7,12 +7,15 @@
 // officiel sur la ligne `invoices` correspondante (voir 0118).
 //
 // Structure du payload POST /v2/client_invoices et de sa réponse CONFIRMÉE
-// par un appel réel réussi (201) contre l'API Qonto pendant le diagnostic de
-// ce fichier : payload plat (jamais d'enveloppe JSON:API), payment_methods
-// en objet unique, items[].unit_price en objet Amount {value, currency}.
-// La création de client (/v2/clients) reste elle non vérifiée en conditions
-// réelles au-delà du premier profil testé — ajuster si un futur profil
-// (société notamment) révèle un écart.
+// par des appels réels réussis (201) contre l'API Qonto pendant le
+// diagnostic de ce fichier, sur un client individuel ET un client société :
+// payload plat (jamais d'enveloppe JSON:API), payment_methods en objet
+// unique, items[].unit_price en objet Amount {value, currency}. Le client
+// (/v2/clients) doit impérativement porter locale/currency/billing_address.
+// street_address/tax_identification_number (jamais address/identification_
+// number) — sans locale/currency, Qonto crée le client (200) mais refuse
+// ENSUITE toute facture pour lui ("customer/locale"/"customer/currency must
+// have a value"), d'où le PATCH de rattrapage sur les clients déjà en cache.
 //
 // Émission volontairement RÉSERVÉE AUX ADMINS (jamais auto-déclenchée par un
 // clic client sur "Télécharger la facture") : une émission Qonto finalisée
@@ -170,42 +173,47 @@ Deno.serve(async (req: Request) => {
     const activeItems = ((items || []) as OrderItemRow[]).filter((i) => i.status !== 'cancelled');
 
     // 2. Client Qonto — créé une seule fois par profil, réutilisé ensuite.
+    // Champs CONFIRMÉS par des 422 réels sur un client société : `locale`
+    // et `currency` sont obligatoires pour pouvoir émettre une facture à ce
+    // client (absents, sans eux Qonto refuse TOUTE facture pour ce client
+    // avec "customer/locale"/"customer/currency must have a value"), et
+    // l'adresse va sous billing_address.street_address (jamais `address`),
+    // le SIRET sous tax_identification_number (jamais identification_number).
+    const isPro = profile.legal_status !== 'individual';
+    const clientPayload: Record<string, unknown> = isPro
+      ? {
+          kind: 'company',
+          name: profile.legal_entity_name,
+          email: profile.email,
+          locale: 'fr',
+          currency: 'EUR',
+          vat_number: profile.vat_number || undefined,
+          legal_form: profile.legal_form || undefined,
+          tax_identification_number: profile.siret,
+          billing_address: {
+            street_address: profile.legal_address,
+            city: profile.legal_city,
+            zip_code: profile.legal_postal_code,
+            country_code: toIsoCountryCode(profile.legal_country),
+          },
+        }
+      : {
+          kind: 'individual',
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          email: profile.email,
+          locale: 'fr',
+          currency: 'EUR',
+          billing_address: {
+            street_address: profile.address,
+            city: profile.city,
+            zip_code: profile.postal_code,
+            country_code: toIsoCountryCode(profile.country),
+          },
+        };
+
     let qontoClientId = profile.qonto_client_id as string | null;
     if (!qontoClientId) {
-      const isPro = profile.legal_status !== 'individual';
-      // `kind` obligatoire (422 sans lui) : 'individual' pour un particulier,
-      // 'company' pour une EI comme pour une société (Qonto ne distingue pas
-      // ces deux dernières à ce niveau, seulement via identification_number/
-      // legal_form). L'adresse doit être imbriquée sous `billing_address`,
-      // country_code strictement en 2 lettres (voir toIsoCountryCode).
-      const clientPayload: Record<string, unknown> = isPro
-        ? {
-            kind: 'company',
-            name: profile.legal_entity_name,
-            email: profile.email,
-            vat_number: profile.vat_number || undefined,
-            legal_form: profile.legal_form || undefined,
-            identification_number: profile.siret,
-            billing_address: {
-              address: profile.legal_address,
-              city: profile.legal_city,
-              zip_code: profile.legal_postal_code,
-              country_code: toIsoCountryCode(profile.legal_country),
-            },
-          }
-        : {
-            kind: 'individual',
-            first_name: profile.first_name,
-            last_name: profile.last_name,
-            email: profile.email,
-            billing_address: {
-              address: profile.address,
-              city: profile.city,
-              zip_code: profile.postal_code,
-              country_code: toIsoCountryCode(profile.country),
-            },
-          };
-
       const clientRes = await fetch(`${QONTO_BASE_URL}/clients`, {
         method: 'POST',
         headers: qontoHeaders,
@@ -221,6 +229,20 @@ Deno.serve(async (req: Request) => {
         return json({ error: 'Qonto /clients a répondu sans id de client exploitable', raw: clientData }, 502);
       }
       await adminClient.from('profiles').update({ qonto_client_id: qontoClientId }).eq('id', profile.id);
+    } else {
+      // Rattrapage : un client déjà mis en cache a pu être créé AVANT ce
+      // correctif (locale/currency/street_address manquants) — un PATCH
+      // idempotent le complète systématiquement avant chaque émission,
+      // sans jamais avoir besoin de connaître son état réel au préalable.
+      const patchRes = await fetch(`${QONTO_BASE_URL}/clients/${qontoClientId}`, {
+        method: 'PATCH',
+        headers: qontoHeaders,
+        body: JSON.stringify(clientPayload),
+      });
+      if (!patchRes.ok) {
+        const body = await patchRes.text();
+        console.error('emit-qonto-invoice: PATCH /clients a échoué (non bloquant)', patchRes.status, body);
+      }
     }
 
     // 3. IBAN de règlement — vérifié et nettoyé AVANT tout appel, pour
