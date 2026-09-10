@@ -20,6 +20,7 @@ import { CartBlockingModal } from '../components/pages/reseller/CartBlockingModa
 import { Auctions } from '../components/pages/reseller/Auctions';
 import { AuctionAccessModal } from '../components/pages/reseller/AuctionAccessModal';
 import { useAuctionAccess } from '../hooks/useAuctionAccess';
+import { useResellerPresenceTracking } from '../hooks/useResellerPresenceTracking';
 import { Terms } from '../components/pages/reseller/Terms';
 import { ShoppingCart, Wallet, X, Lock } from 'lucide-react';
 
@@ -56,6 +57,20 @@ function ResellerApp() {
   const wallet = useWallet(profile?.id);
   const auctionAccess = useAuctionAccess(profile?.id);
   const currentTab = activeTab || 'catalog';
+
+  // Présence temps réel + visiteur unique du jour (onglet admin
+  // "Statistiques B2B") — no-op tant que `profile` n'est pas encore chargé.
+  useResellerPresenceTracking(
+    profile
+      ? {
+          id: profile.id,
+          email: profile.email,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          company_name: profile.company_name,
+        }
+      : null
+  );
 
   const [showAuctionAccessModal, setShowAuctionAccessModal] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'cancel' | null>(null);

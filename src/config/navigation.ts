@@ -26,7 +26,8 @@ import {
   Rocket,
   PackageCheck,
   PackageSearch,
-  Gift
+  Gift,
+  Radio
 } from 'lucide-react';
 import { MenuItem } from '../types';
 
@@ -109,6 +110,19 @@ export const navigationItems: MenuItem[] = [
       { id: 'promo-codes', label: 'Codes Promos', path: '/espace-b2b/codes-promo', icon: Ticket },
       { id: 'commissions', label: 'Chiffre d\'affaires B2B', path: '/espace-b2b/chiffre-affaires', icon: Banknote },
       { id: 'gift-rewards', label: 'Portefeuilles offerts', path: '/espace-b2b/portefeuilles-offerts', icon: Gift },
+    ]
+  },
+  {
+    id: 'b2b-traffic',
+    label: 'Statistiques B2B',
+    icon: Radio,
+    path: '/statistiques-b2b',
+    // Page unique pilotée par ses propres filtres internes (14/30 jours) —
+    // voir B2BTraffic.tsx. Un seul sous-item requis pour rester compatible
+    // avec le mécanisme de sélection de la barre latérale (AdminApp.tsx
+    // attend toujours au moins un subItems[0]), même pattern que 'accounting'.
+    subItems: [
+      { id: 'overview', label: 'Statistiques B2B', path: '/statistiques-b2b/vue-ensemble', icon: Radio },
     ]
   },
 ];
