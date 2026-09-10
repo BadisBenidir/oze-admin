@@ -13,7 +13,6 @@ import { useAdminAuth } from '../hooks/useAdminAuth';
 import { usePendingGiftRewardsCount } from '../hooks/useGiftRewards';
 
 function AdminApp() {
-  const { activeTab, activeSubTab, navigateTo } = useNavigation();
   const { isAdmin } = useAdminAuth();
   const pendingGiftRewardsCount = usePendingGiftRewardsCount(isAdmin);
 
@@ -34,6 +33,8 @@ function AdminApp() {
           }
     );
   }, [pendingGiftRewardsCount]);
+
+  const { activeTab, activeSubTab, navigateTo } = useNavigation(navigationItems, 'dashboard');
 
   // Set default sub-tab when tab changes
   useEffect(() => {

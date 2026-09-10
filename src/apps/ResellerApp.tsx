@@ -49,8 +49,9 @@ const DEFAULT_TITLE = 'Portail B2B | OZË Paris';
 const DEFAULT_DESCRIPTION = 'Espace professionnel exclusif OZË Paris - Maroquinerie de luxe de seconde main.';
 
 function ResellerApp() {
-  const { activeTab, activeSubTab, navigateTo } = useNavigation();
   const { profile } = useResellerAuth();
+  const navItems = profile?.is_primary ? [...resellerNavigationItems, resellerTeamNavItem] : resellerNavigationItems;
+  const { activeTab, activeSubTab, navigateTo } = useNavigation(navItems, 'catalog');
   const cart = useB2BCart(profile?.id, Boolean(profile?.legal_status));
   const wallet = useWallet(profile?.id);
   const auctionAccess = useAuctionAccess(profile?.id);
@@ -185,8 +186,6 @@ function ResellerApp() {
     setCheckoutOrderId(orderId);
     setCheckoutStatus('success');
   };
-
-  const navItems = profile?.is_primary ? [...resellerNavigationItems, resellerTeamNavItem] : resellerNavigationItems;
 
   const handleGoToOrders = () => {
     setCheckoutStatus(null);
