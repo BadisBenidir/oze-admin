@@ -144,8 +144,8 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
                   <button
                     key={inc}
                     onClick={() => submitBid(item.current_price + inc)}
-                    disabled={submitting || inc < item.min_increment}
-                    title={inc < item.min_increment ? `Pas minimal : ${EUR(item.min_increment)}` : undefined}
+                    disabled={submitting || inc < item.min_increment || isWinning}
+                    title={isWinning ? 'Vous menez déjà cette enchère' : inc < item.min_increment ? `Pas minimal : ${EUR(item.min_increment)}` : undefined}
                     className="px-2 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
                   >
                     +{inc} €
@@ -191,7 +191,9 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
                 </button>
               </form>
               <p className="text-[11px] text-gray-400 leading-snug">
-                Enchère automatique : nous surenchérirons du pas minimal requis uniquement si nécessaire, jusqu'à votre plafond.
+                {isWinning
+                  ? 'Vous menez déjà cette enchère : réglez uniquement votre plafond si vous voulez augmenter votre marge de sécurité.'
+                  : 'Enchère automatique : nous surenchérirons du pas minimal requis uniquement si nécessaire, jusqu\'à votre plafond.'}
               </p>
             </div>
             {error && (
