@@ -11,7 +11,12 @@ import { useCallback, useEffect, useState } from 'react';
  * normaux tant qu'elle n'est pas officiellement lancée. */
 export const AUCTION_ACCESS_CODE = (import.meta.env.VITE_AUCTION_ACCESS_PASSWORD as string | undefined) || 'OZE2026';
 
-const STORAGE_PREFIX = 'oze_auction_unlocked_';
+// v2 (pas juste "oze_auction_unlocked_") : invalide volontairement tout
+// déverrouillage posé sous l'ancien mode caché (cadenas discret, avant que
+// l'onglet "Enchères" devienne visible dans la nav) — sinon un revendeur qui
+// avait testé le cadenas pendant la période privée retombait directement
+// dans la page sans jamais voir le nouveau gate, code d'accès y compris.
+const STORAGE_PREFIX = 'oze_auction_unlocked_v2_';
 
 /** Déverrouillage local de l'accès anticipé aux enchères — même convention
  * que useB2BCart.ts (clé localStorage brute préfixée par profile.id, pas de
