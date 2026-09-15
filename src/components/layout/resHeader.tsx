@@ -10,6 +10,7 @@ interface ResellerHeaderProps {
 const TITLES: Record<string, string> = {
   catalog: 'Catalogue',
   'my-orders': 'Mes commandes',
+  auctions: 'Enchères',
   profile: 'Mon profil',
 };
 

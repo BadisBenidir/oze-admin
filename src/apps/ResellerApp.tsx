@@ -18,18 +18,18 @@ import { WalletPage } from '../components/pages/reseller/WalletPage';
 import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
 import { CartBlockingModal } from '../components/pages/reseller/CartBlockingModal';
 import { Auctions } from '../components/pages/reseller/Auctions';
-import { AuctionAccessModal } from '../components/pages/reseller/AuctionAccessModal';
+import { AuctionAccessGate } from '../components/pages/reseller/AuctionAccessGate';
 import { useAuctionAccess } from '../hooks/useAuctionAccess';
 import { useResellerPresenceTracking } from '../hooks/useResellerPresenceTracking';
 import { Terms } from '../components/pages/reseller/Terms';
-import { ShoppingCart, Wallet, X, Lock } from 'lucide-react';
+import { ShoppingCart, Wallet, X } from 'lucide-react';
 
-// Trois routes "réelles" (URL adressables) de l'app revendeur : la fiche
-// produit du catalogue B2B, le panier, et /auctions (mode sous-marin des
-// enchères — jamais dans la nav, seulement accessible via le cadenas
-// discret + code d'accès, voir useAuctionAccess). Tout le reste continue de
-// fonctionner par état d'onglet (voir useNavigation), sans dépendance à
-// react-router.
+// Deux routes "réelles" (URL adressables) hors du système d'onglets : la
+// fiche produit du catalogue B2B et le panier. Le reste — dont désormais
+// "Enchères" — fonctionne comme un onglet normal (voir useNavigation et
+// resellerNavigation.ts) : son contenu est simplement gaté par un code
+// d'accès tant que la fonctionnalité est en accès anticipé (voir
+// AuctionAccessGate / useAuctionAccess).
 const parseProductId = (pathname: string): string | null => {
   const match = pathname.match(/^\/catalogue\/([^/]+)\/?$/);
   return match ? decodeURIComponent(match[1]) : null;
@@ -43,6 +43,7 @@ const TAB_TITLES: Record<string, string> = {
   catalog: 'Catalogue B2B | OZË Paris',
   'my-orders': 'Mes Commandes | OZË Paris',
   sourcing: 'Sourcing sur mesure | OZË Paris',
+  auctions: 'Enchères B2B | OZË Paris',
   wallet: 'Mon Portefeuille | OZË Paris',
   profile: 'Mon Profil | OZË Paris',
 };
@@ -72,7 +73,6 @@ function ResellerApp() {
       : null
   );
 
-  const [showAuctionAccessModal, setShowAuctionAccessModal] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'cancel' | null>(null);
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
   const [checkoutOrderId, setCheckoutOrderId] = useState<string | null>(null);
@@ -123,25 +123,7 @@ function ResellerApp() {
 
   const productId = parseProductId(pathname);
   const isCartRoute = pathname === '/panier' || pathname === '/panier/';
-  const isAuctionRoute = pathname === '/auctions' || pathname === '/auctions/';
   const isTermsRoute = pathname === '/cgv' || pathname === '/cgv/';
-
-  // Mode sous-marin : un accès direct à /auctions sans déverrouillage
-  // préalable (voir useAuctionAccess) est renvoyé vers le catalogue — la
-  // vraie barrière reste la RLS Supabase (0104_auction_system.sql), ceci
-  // n'est qu'un filtre de confort côté client.
-  useEffect(() => {
-    if (isAuctionRoute && !auctionAccess.unlocked) {
-      navigatePath('/');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuctionRoute, auctionAccess.unlocked]);
-
-  const handleAuctionAccessCode = (code: string): boolean => {
-    const success = auctionAccess.tryUnlock(code);
-    if (success) navigatePath('/auctions');
-    return success;
-  };
 
   // Retour depuis Stripe : lu une seule fois au montage, puis l'URL est
   // nettoyée pour ne pas re-déclencher au rafraîchissement de la page.
@@ -224,12 +206,6 @@ function ResellerApp() {
       return <Terms />;
     }
 
-    if (isAuctionRoute) {
-      // Non déverrouillé : rien à afficher, l'effet ci-dessus renvoie vers
-      // '/' au prochain tick — évite un flash de contenu avant redirection.
-      return auctionAccess.unlocked ? <Auctions /> : null;
-    }
-
     switch (currentTab) {
       case 'my-orders':
       // Ex-onglet "Suivi livraisons" (voir resellerNavigation.ts) : le statut
@@ -240,6 +216,8 @@ function ResellerApp() {
         return <MyOrders onOpenProduct={openProduct} onWalletChanged={wallet.refresh} onGoToProfile={() => navigateTo('profile')} />;
       case 'sourcing':
         return <SourcingSurMesure />;
+      case 'auctions':
+        return auctionAccess.unlocked ? <Auctions /> : <AuctionAccessGate onSubmitCode={auctionAccess.tryUnlock} />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':
@@ -270,30 +248,18 @@ function ResellerApp() {
   const desktopCartButton = (
     <div className="flex items-center gap-2 md:gap-3">
       {walletBadge}
-      <div className="flex items-center gap-1">
-        <button
-          onClick={openCart}
-          className="relative flex items-center space-x-2 px-3 md:px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
-        >
-          <ShoppingCart className="h-4 w-4" />
-          <span className="hidden sm:inline">Panier</span>
-          {cartBadgeCount > 0 && (
-            <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
-              {cartBadgeCount}
-            </span>
-          )}
-        </button>
-        {/* Cadenas discret — mode sous-marin des enchères, jamais dans la nav
-            visible. Pas de title (éviterait un tooltip qui le trahirait au
-            survol) : aria-label seul pour rester accessible aux lecteurs d'écran. */}
-        <button
-          onClick={() => setShowAuctionAccessModal(true)}
-          className="text-gray-400 opacity-40 hover:opacity-100 transition-opacity cursor-pointer"
-          aria-label="Accès enchères"
-        >
-          <Lock className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      <button
+        onClick={openCart}
+        className="relative flex items-center space-x-2 px-3 md:px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+      >
+        <ShoppingCart className="h-4 w-4" />
+        <span className="hidden sm:inline">Panier</span>
+        {cartBadgeCount > 0 && (
+          <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center bg-red-600 text-white text-xs rounded-full">
+            {cartBadgeCount}
+          </span>
+        )}
+      </button>
     </div>
   );
 
@@ -335,7 +301,7 @@ function ResellerApp() {
         activeSubTab={activeSubTab}
         onTabChange={(tab) => {
           setCheckoutStatus(null);
-          if (productId || isCartRoute || isTermsRoute || isAuctionRoute) closeToRoot();
+          if (productId || isCartRoute || isTermsRoute) closeToRoot();
           navigateTo(tab, '');
         }}
         onSubTabChange={() => {}}
@@ -409,11 +375,6 @@ function ResellerApp() {
         </footer>
       </MainLayout>
       <CartBlockingModal blockingError={cart.blockingError} onClose={cart.dismissBlockingError} />
-      <AuctionAccessModal
-        isOpen={showAuctionAccessModal}
-        onClose={() => setShowAuctionAccessModal(false)}
-        onSubmitCode={handleAuctionAccessCode}
-      />
     </ResellerProtectedRoute>
   );
 }
