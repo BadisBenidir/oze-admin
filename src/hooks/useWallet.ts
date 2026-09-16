@@ -12,19 +12,6 @@ export interface WalletTransaction {
   created_at: string;
 }
 
-export interface LoyaltyGift {
-  id: string;
-  product_id: string;
-  tier_reached: number;
-  status: 'pending_discovery' | 'discovered' | 'included_in_order';
-  assigned_at: string;
-  product_name: string;
-  product_images: string[];
-  product_main_image_index: number;
-  product_condition: string;
-  product_description: string | null;
-}
-
 interface TopUpResult {
   success: boolean;
   error?: string;
@@ -46,7 +33,14 @@ export const useWallet = (profileId: string | undefined) => {
   const [loading, setLoading] = useState(true);
   const [cumulativePaid, setCumulativePaid] = useState<number>(0);
   const [giftsUnlocked, setGiftsUnlocked] = useState<number>(0);
-  const [pendingGifts, setPendingGifts] = useState<LoyaltyGift[]>([]);
+  // Portefeuilles offerts pas encore expédiés (pending + assigned), voir
+  // b2b_gift_rewards (0101/0111/0132) — remplace l'ancien pendingGifts basé
+  // sur loyalty_gifts (0040), table dans laquelle plus rien n'est écrit
+  // depuis 0101 : un revendeur n'avait donc plus aucun moyen de voir ses
+  // cadeaux débloqués. Pas de détail produit ici (b2b_gift_rewards ne lie à
+  // aucun article précis, contrairement à loyalty_gifts) : juste une
+  // quantité, affichée par WalletPage.tsx sous forme de bandeau générique.
+  const [pendingGiftCount, setPendingGiftCount] = useState<number>(0);
 
   const refresh = useCallback(async () => {
     if (!profileId) {
@@ -54,7 +48,7 @@ export const useWallet = (profileId: string | undefined) => {
       setTransactions([]);
       setCumulativePaid(0);
       setGiftsUnlocked(0);
-      setPendingGifts([]);
+      setPendingGiftCount(0);
       setLoading(false);
       return;
     }
@@ -72,14 +66,14 @@ export const useWallet = (profileId: string | undefined) => {
         .select('paid_amount')
         .eq('profile_id', profileId)
         .eq('type', 'rechargement'),
-      supabase.rpc('get_my_pending_loyalty_gifts'),
+      supabase.from('b2b_gift_rewards').select('quantity, status').eq('profile_id', profileId).neq('status', 'shipped'),
     ]);
 
     setBalance(Number(profileData?.wallet_balance ?? 0));
     setTransactions((txData || []) as WalletTransaction[]);
     setCumulativePaid((paidData || []).reduce((sum, row) => sum + Number(row.paid_amount ?? 0), 0));
     setGiftsUnlocked(Number(profileData?.loyalty_gifts_unlocked ?? 0));
-    setPendingGifts((giftsData || []) as unknown as LoyaltyGift[]);
+    setPendingGiftCount((giftsData || []).reduce((sum, row) => sum + Number(row.quantity ?? 0), 0));
     setLoading(false);
   }, [profileId]);
 
@@ -99,11 +93,6 @@ export const useWallet = (profileId: string | undefined) => {
     return { success: true };
   };
 
-  const markGiftDiscovered = async (giftId: string) => {
-    await supabase.rpc('mark_loyalty_gift_discovered', { p_gift_id: giftId });
-    setPendingGifts((prev) => prev.map((g) => (g.id === giftId ? { ...g, status: 'discovered' } : g)));
-  };
-
   const progressInTier = Math.min(Math.max(cumulativePaid - giftsUnlocked * LOYALTY_TIER_AMOUNT, 0), LOYALTY_TIER_AMOUNT);
   const remainingToNextTier = Math.max(LOYALTY_TIER_AMOUNT - progressInTier, 0);
 
@@ -113,8 +102,7 @@ export const useWallet = (profileId: string | undefined) => {
     loading,
     refresh,
     topUp,
-    pendingGifts,
-    markGiftDiscovered,
+    pendingGiftCount,
     loyaltyProgress: {
       progressInTier,
       remainingToNextTier,
