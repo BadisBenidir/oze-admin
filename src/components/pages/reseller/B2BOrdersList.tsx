@@ -8,6 +8,12 @@ import { FULFILLMENT_RANK } from '../../../hooks/useB2BOrders';
 import { ShoppingBag, ImageOff, AlertCircle, Eye, X, Package, MapPin, Truck, FileDown, Ban, BadgeCheck } from 'lucide-react';
 import { CancelMyOrderModal } from './CancelMyOrderModal';
 
+// Doit rester strictement identique à CANCEL_WINDOW_MS côté Edge Function
+// (cancel-my-b2b-order-item) — ce contrôle client n'est qu'un confort
+// d'affichage, la vraie limite est appliquée serveur.
+const CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
+const isWithinCancelWindow = (createdAt: string) => Date.now() - new Date(createdAt).getTime() <= CANCEL_WINDOW_MS;
+
 interface ShipmentSummary {
   status: 'cancelled' | 'unpaid' | 'delivered' | 'shipped' | 'preparing' | 'in_stock' | 'confirmed';
   trackingNumber: string | null;
@@ -511,13 +517,20 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                       <span className="text-xs text-red-600">{downloadError}</span>
                     )}
                     {canCancel && !['shipped', 'delivered', 'cancelled'].includes(viewingOrder.status) && viewingOrder.order_items.some((i) => i.status === 'active') && (
-                      <button
-                        onClick={() => setCancellingOrder(viewingOrder)}
-                        className="flex items-center justify-center space-x-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm"
-                      >
-                        <Ban className="h-4 w-4" />
-                        <span>Annuler la commande</span>
-                      </button>
+                      isWithinCancelWindow(viewingOrder.created_at) ? (
+                        <button
+                          onClick={() => setCancellingOrder(viewingOrder)}
+                          className="flex items-center justify-center space-x-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm"
+                        >
+                          <Ban className="h-4 w-4" />
+                          <span>Annuler la commande</span>
+                        </button>
+                      ) : (
+                        <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                          Délai d'annulation de 24h dépassé — contactez OZË Paris.
+                        </span>
+                      )
                     )}
                   </div>
                   <div className="w-full sm:w-56 space-y-1.5">

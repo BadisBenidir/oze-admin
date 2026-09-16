@@ -2,17 +2,20 @@
 //
 // Annulation en LIBRE-SERVICE côté revendeur (pas admin) : tout ou partie
 // des articles ACTIFS d'une de ses propres commandes, tant qu'elle n'a pas
-// encore été expédiée. Toujours remboursée en crédit portefeuille — jamais
-// via Stripe, c'est une règle fixe côté client (voir spec) — et remise en
-// vente sur le catalogue B2B ('for-sale-b2b'), jamais en brouillon/archivée.
+// encore été expédiée, ET dans les 24h suivant l'achat (voir CANCEL_WINDOW_MS
+// — au-delà, seul OZË Paris peut encore annuler manuellement côté admin).
+// Toujours remboursée en crédit portefeuille — jamais via Stripe, c'est une
+// règle fixe côté client (voir spec) — et remise en vente sur le catalogue
+// B2B ('for-sale-b2b'), jamais en brouillon/archivée.
 //
 // cancel_b2b_order_item/cancel_b2b_order sont SECURITY DEFINER et ne
 // vérifient elles-mêmes AUCUNE autorisation (elles font confiance à
 // l'appelant, jusqu'ici toujours l'admin via les Edge Functions dédiées) —
 // c'est cette fonction qui doit donc vérifier que la commande appartient
-// bien au revendeur connecté et qu'elle n'est pas déjà expédiée, AVANT
-// d'appeler les RPC, sans quoi n'importe quel revendeur pourrait annuler
-// n'importe quelle commande en devinant un UUID.
+// bien au revendeur connecté, qu'elle n'est pas déjà expédiée, ET que le
+// délai de 24h n'est pas dépassé, AVANT d'appeler les RPC, sans quoi
+// n'importe quel revendeur pourrait annuler n'importe quelle commande en
+// devinant un UUID, ou passé le délai autorisé.
 //
 // Déploiement : `supabase functions deploy cancel-my-b2b-order-item`
 
@@ -28,6 +31,9 @@ const json = (body: unknown, status = 200) =>
 
 const RESTOCK_ACTION = 'for-sale-b2b';
 const REASON = 'Annulation par le revendeur';
+// Urgent — demande explicite : un revendeur ne peut plus annuler lui-même
+// passé ce délai depuis la création de la commande, pas plus.
+const CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -58,7 +64,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: order, error: orderError } = await adminClient
       .from('orders')
-      .select('id, status, reseller_id, placed_by_profile_id, order_channel')
+      .select('id, status, reseller_id, placed_by_profile_id, order_channel, created_at')
       .eq('id', order_id)
       .maybeSingle();
 
@@ -74,6 +80,9 @@ Deno.serve(async (req: Request) => {
     }
     if (['shipped', 'delivered', 'cancelled'].includes(order.status)) {
       return json({ error: 'Cette commande a déjà été expédiée et ne peut plus être annulée en ligne — contactez OZË Paris.' }, 400);
+    }
+    if (Date.now() - new Date(order.created_at).getTime() > CANCEL_WINDOW_MS) {
+      return json({ error: 'Le délai de 24h pour annuler cette commande vous-même est dépassé — contactez OZË Paris.' }, 400);
     }
 
     const { data: activeItems, error: itemsError } = await adminClient
