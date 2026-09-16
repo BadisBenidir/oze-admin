@@ -48,6 +48,7 @@ export const Resellers: React.FC = () => {
     fetchContacts,
     inviteContact,
     removeContact,
+    updateContactCanPreviewDrops,
   } = useResellers(isAdmin);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -70,6 +71,7 @@ export const Resellers: React.FC = () => {
   const [contactToRemove, setContactToRemove] = useState<ResellerContact | null>(null);
   const [removingContact, setRemovingContact] = useState(false);
   const [removeContactError, setRemoveContactError] = useState<string | null>(null);
+  const [togglingPreviewId, setTogglingPreviewId] = useState<string | null>(null);
 
   useEffect(() => {
     if (inviteCooldown <= 0) return;
@@ -181,6 +183,17 @@ export const Resellers: React.FC = () => {
     } finally {
       setInviting(false);
     }
+  };
+
+  const handleTogglePreviewAccess = async (contact: ResellerContact) => {
+    setTogglingPreviewId(contact.id);
+    const result = await updateContactCanPreviewDrops(contact.id, !contact.can_preview_drops);
+    if (result.success) {
+      setContacts((prev) => prev.map((c) => (c.id === contact.id ? { ...c, can_preview_drops: !c.can_preview_drops } : c)));
+    } else {
+      setContactsError(result.error || "Erreur lors de la mise à jour de l'accès avant-première");
+    }
+    setTogglingPreviewId(null);
   };
 
   const handleConfirmRemoveContact = async () => {
@@ -428,23 +441,38 @@ export const Resellers: React.FC = () => {
           ) : (
             <ul className="space-y-2">
               {contacts.map((c) => (
-                <li key={c.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{c.first_name} {c.last_name}</p>
-                      <p className="text-xs text-gray-500">{c.email}</p>
+                <li key={c.id} className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{c.first_name} {c.last_name}</p>
+                      <p className="text-xs text-gray-500 truncate">{c.email}</p>
                     </div>
                     {c.is_primary && <Badge variant="info">Principal</Badge>}
                   </div>
-                  {!c.is_primary && (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
-                      onClick={() => { setRemoveContactError(null); setContactToRemove(c); }}
-                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                      title="Supprimer ce contact"
+                      onClick={() => handleTogglePreviewAccess(c)}
+                      disabled={togglingPreviewId === c.id}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border transition-colors disabled:opacity-50 ${
+                        c.can_preview_drops
+                          ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                          : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-100'
+                      }`}
+                      title={c.can_preview_drops ? "Accès avant-première actif — cliquer pour le retirer" : 'Donner l\'accès avant-première aux drops planifiés'}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Eye className="h-3 w-3" />
+                      Avant-première
                     </button>
-                  )}
+                    {!c.is_primary && (
+                      <button
+                        onClick={() => { setRemoveContactError(null); setContactToRemove(c); }}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                        title="Supprimer ce contact"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

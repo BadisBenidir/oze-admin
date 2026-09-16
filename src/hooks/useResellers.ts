@@ -51,6 +51,9 @@ export interface ResellerContact {
   reseller_id: string;
   profile_id: string;
   is_primary: boolean;
+  /** Accès en lecture seule aux drops encore planifiés (0129) — jamais un
+   * droit d'achat, voir b2b_catalog / cart_items_guard_purchasable. */
+  can_preview_drops: boolean;
   created_at: string;
   first_name: string;
   last_name: string;
@@ -111,6 +114,7 @@ interface UseResellersResult {
   resetContactPassword: (profileId: string, password: string) => Promise<{ success: boolean; error?: string }>;
   updateContactEmail: (profileId: string, newEmail: string) => Promise<{ success: boolean; error?: string }>;
   updateContactProfile: (profileId: string, data: ContactProfileUpdate) => Promise<{ success: boolean; error?: string }>;
+  updateContactCanPreviewDrops: (contactId: string, value: boolean) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useResellers = (isAuthenticated: boolean = false): UseResellersResult => {
@@ -249,7 +253,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     const { data, error: fetchError } = await supabase
       .from('reseller_contacts')
       .select(`
-        id, reseller_id, profile_id, is_primary, created_at,
+        id, reseller_id, profile_id, is_primary, can_preview_drops, created_at,
         profiles!inner(
           first_name, last_name, email, phone, address, city, postal_code, country, wallet_balance,
           legal_status, legal_entity_name, siret, vat_number, legal_form, legal_address, legal_city, legal_postal_code, legal_country
@@ -267,6 +271,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       reseller_id: string;
       profile_id: string;
       is_primary: boolean;
+      can_preview_drops: boolean;
       created_at: string;
       profiles: {
         first_name: string; last_name: string; email: string; wallet_balance: number;
@@ -281,6 +286,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       reseller_id: c.reseller_id,
       profile_id: c.profile_id,
       is_primary: c.is_primary,
+      can_preview_drops: c.can_preview_drops,
       created_at: c.created_at,
       first_name: c.profiles.first_name,
       last_name: c.profiles.last_name,
@@ -356,6 +362,28 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     return { success: true };
   };
 
+  // Direct .update() (comme updateResellerStatus), pas d'edge function : la
+  // policy reseller_contacts_admin_all (for all using is_admin()) autorise
+  // déjà l'UPDATE admin sur cette table, et can_preview_drops n'a aucune
+  // conséquence sensible (contrairement à l'email/mot de passe du contact).
+  const updateContactCanPreviewDrops = async (contactId: string, value: boolean): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error: updateError } = await supabase
+        .from('reseller_contacts')
+        .update({ can_preview_drops: value })
+        .eq('id', contactId);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error("Erreur lors de la mise à jour de l'accès avant-première:", err);
+      return { success: false, error: err instanceof Error ? err.message : 'Erreur inconnue' };
+    }
+  };
+
   const removeContact = async (contactId: string): Promise<{ success: boolean; error?: string }> => {
     const { error } = await invokeEdgeFunction('delete-reseller-contact', { contact_id: contactId });
     if (error) {
@@ -389,5 +417,6 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     resetContactPassword,
     updateContactEmail,
     updateContactProfile,
+    updateContactCanPreviewDrops,
   };
 };

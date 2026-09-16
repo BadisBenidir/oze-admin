@@ -5,6 +5,7 @@ import { useB2BProduct } from '../../../hooks/useB2BProduct';
 import { useB2BCart } from '../../../hooks/useB2BCart';
 import { supabase } from '../../../lib/supabase';
 import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
+import { DropPreviewBadge } from './DropPreviewBadge';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -17,6 +18,7 @@ import {
   AlertTriangle,
   ZoomIn,
   Clock,
+  Eye,
   Archive,
   Download,
 } from 'lucide-react';
@@ -121,11 +123,18 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
   const hasDiscount = Boolean(product.original_price && product.original_price > product.price);
   const discountPercent = hasDiscount ? Math.round((1 - product.price / product.original_price!) * 100) : 0;
 
+  // Avant-première d'un drop planifié (0129, accès can_preview_drops) :
+  // produit encore 'draft', mais consultable en lecture — distinct de
+  // isReadOnly ci-dessous (article déjà vendu/archivé), qui ne s'applique
+  // jamais à ce cas malgré le même statut 'draft' sous-jacent.
+  const isDropPreview = product.status === 'draft' && Boolean(product.drop_preview_scheduled_at);
+
   // Article consulté depuis l'historique de commandes une fois vendu/retiré
   // du catalogue : plus achetable, on n'affiche que la consultation (photos,
   // grade, défauts, description, référence) — jamais le bouton d'achat ni le
   // statut de réservation, qui n'ont plus de sens ici.
-  const isReadOnly = product.status !== 'for-sale-b2b';
+  const isReadOnly = !isDropPreview && product.status !== 'for-sale-b2b';
+  const canBuy = !isReadOnly && !isDropPreview;
 
   const inCart = cart.isInCart(product.id);
   const goPrev = () => setActiveIndex((i) => (i - 1 + images.length) % images.length);
@@ -251,6 +260,12 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
               <span>Cet article n'est plus au catalogue (vendu ou archivé) — vous consultez sa fiche en lecture seule.</span>
             </div>
           )}
+          {isDropPreview && (
+            <div className="mb-4 flex items-center gap-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+              <Eye className="h-4 w-4 flex-shrink-0" />
+              <span>Accès avant-première — cet article ne sera en vente qu'à l'ouverture officielle du drop.</span>
+            </div>
+          )}
           {product.brand?.name && <p className="text-sm font-medium text-gray-500">{product.brand.name}</p>}
           <h1 className="text-2xl font-semibold text-gray-900 mt-0.5">{product.name}</h1>
 
@@ -292,18 +307,24 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
             </div>
           )}
 
-          {!isReadOnly && product.held_by_other && !inCart && (
+          {canBuy && product.held_by_other && !inCart && (
             <div className="mt-4 flex items-center gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               <Clock className="h-4 w-4 flex-shrink-0" />
               <span>Cet article est actuellement dans le panier d'un autre revendeur.</span>
             </div>
           )}
 
-          {!isReadOnly && addError && (
+          {canBuy && addError && (
             <div className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{addError}</div>
           )}
 
-          {!isReadOnly && (
+          {isDropPreview && (
+            <div className="mt-6">
+              <DropPreviewBadge scheduledAt={product.drop_preview_scheduled_at!} />
+            </div>
+          )}
+
+          {canBuy && (
             <button
               onClick={handleAdd}
               disabled={buttonDisabled}

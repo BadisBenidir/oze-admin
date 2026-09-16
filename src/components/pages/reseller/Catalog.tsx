@@ -11,6 +11,7 @@ import { useB2BCart } from '../../../hooks/useB2BCart';
 // notifier l'une l'autre. C'est ce qui causait un panier "ajouté" qui ne se
 // reflétait dans le badge/la page panier qu'après rechargement complet.
 import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
+import { DropPreviewBadge } from './DropPreviewBadge';
 import {
   Search,
   ShoppingCart,
@@ -20,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Eye,
   SlidersHorizontal,
   X,
   RotateCcw,
@@ -428,6 +430,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
+  const isDropPreview = product.status === 'draft' && Boolean(product.drop_preview_scheduled_at);
   const held = product.held_by_other && !inCart;
   const disabled = adding || inCart || held;
   const hasDiscount = Boolean(product.original_price && product.original_price > product.price);
@@ -450,6 +453,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
         {hasDiscount && (
           <span className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-red-600 text-white text-xs font-semibold rounded">
             -{discountPercent}%
+          </span>
+        )}
+        {isDropPreview && (
+          <span className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 bg-gray-900/90 text-white text-[10px] font-semibold rounded-full">
+            <Eye className="h-3 w-3" />
+            Avant-première
           </span>
         )}
         {image ? (
@@ -485,35 +494,41 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
               <Badge variant={GRADE_VARIANTS[product.condition]}>Grade {product.condition}</Badge>
             )}
           </div>
-          <button
-            onClick={handleAdd}
-            disabled={disabled}
-            className={`w-full flex items-center justify-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-              inCart
-                ? 'bg-green-50 text-green-700 cursor-default'
-                : disabled
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-900 text-white hover:bg-gray-800'
-            }`}
-          >
-            {inCart ? (
-              <>
-                <Check className="h-3 w-3" />
-                <span>Dans le panier</span>
-              </>
-            ) : held ? (
-              <>
-                <Clock className="h-3 w-3" />
-                <span>Dans un panier</span>
-              </>
-            ) : (
-              <>
-                <ShoppingCart className="h-3 w-3" />
-                <span>{adding ? 'Ajout...' : 'Ajouter'}</span>
-              </>
-            )}
-          </button>
-          {addError && <p className="text-[11px] text-red-600">{addError}</p>}
+          {isDropPreview ? (
+            <DropPreviewBadge scheduledAt={product.drop_preview_scheduled_at!} compact />
+          ) : (
+            <>
+              <button
+                onClick={handleAdd}
+                disabled={disabled}
+                className={`w-full flex items-center justify-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                  inCart
+                    ? 'bg-green-50 text-green-700 cursor-default'
+                    : disabled
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-900 text-white hover:bg-gray-800'
+                }`}
+              >
+                {inCart ? (
+                  <>
+                    <Check className="h-3 w-3" />
+                    <span>Dans le panier</span>
+                  </>
+                ) : held ? (
+                  <>
+                    <Clock className="h-3 w-3" />
+                    <span>Dans un panier</span>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="h-3 w-3" />
+                    <span>{adding ? 'Ajout...' : 'Ajouter'}</span>
+                  </>
+                )}
+              </button>
+              {addError && <p className="text-[11px] text-red-600">{addError}</p>}
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

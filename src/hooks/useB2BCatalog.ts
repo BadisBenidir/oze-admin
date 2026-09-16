@@ -24,6 +24,10 @@ export interface B2BCatalogItem {
   price: number;
   original_price: number | null;
   held_by_other: boolean;
+  /** Non-null uniquement pour un article encore 'draft' visible en
+   * avant-première d'un drop planifié (0129, réservé aux contacts
+   * can_preview_drops) — signal unique pour désactiver l'achat côté UI. */
+  drop_preview_scheduled_at: string | null;
   brand?: { id: string; name: string };
   category?: { id: string; name: string };
 }
@@ -99,16 +103,17 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
       const from = (page - 1) * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
-      // La vue b2b_catalog ne renvoie déjà que status = 'for-sale-b2b' (voir
-      // migration 0042 — un incident précédent venait d'un second bras de
-      // cette vue qui laissait passer les produits déjà commandés quel que
-      // soit leur statut, utilisé par erreur ici aussi). Ce filtre explicite
-      // est redondant avec la vue mais volontairement conservé : si la vue
-      // change un jour, cette requête reste sûre par elle-même.
+      // La vue b2b_catalog ne renvoie déjà que status = 'for-sale-b2b' OU
+      // 'draft' avec accès avant-première (0129 — voir son WHERE, réservé
+      // aux contacts can_preview_drops sur un drop encore planifié) ; jamais
+      // un produit déjà commandé quel que soit son statut (incident 0042).
+      // Ce filtre explicite est redondant avec la vue mais volontairement
+      // conservé : si la vue change un jour, cette requête reste sûre par
+      // elle-même.
       let query = supabase
         .from('b2b_catalog')
         .select('*, brand:brands(id, name), category:categories(id, name)', { count: 'exact' })
-        .eq('status', 'for-sale-b2b');
+        .in('status', ['for-sale-b2b', 'draft']);
 
       if (currentFilters.search) {
         query = query.or(`name.ilike.%${currentFilters.search}%,product_code.ilike.%${currentFilters.search}%`);
@@ -156,7 +161,7 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
       const { data, error: fetchError } = await supabase
         .from('b2b_catalog')
         .select('brand:brands(id, name), category:categories(id, name), condition')
-        .eq('status', 'for-sale-b2b');
+        .in('status', ['for-sale-b2b', 'draft']);
 
       if (fetchError) throw new Error(fetchError.message);
 
