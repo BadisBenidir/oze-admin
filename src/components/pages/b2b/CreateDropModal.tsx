@@ -58,16 +58,18 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
       setLoadError('');
       try {
         // En édition, les articles déjà sélectionnés peuvent avoir été
-        // basculés hors 'draft' entre-temps par un autre drop : on les
-        // inclut quand même pour ne pas les faire disparaître de la liste.
+        // basculés hors 'draft'/'draft-b2b' entre-temps par un autre drop :
+        // on les inclut quand même pour ne pas les faire disparaître de la
+        // liste. 'draft-b2b' (0130) : articles créés directement depuis
+        // Produits B2B, éligibles aux drops au même titre qu'un 'draft' classique.
         const preselected = editingDrop?.product_ids || [];
         const { data, error } = await supabase
           .from('products')
           .select('id, name, product_code, sale_price, images, main_image_index, brand:brands(name)')
           .or(
             preselected.length > 0
-              ? `status.eq.draft,id.in.(${preselected.join(',')})`
-              : 'status.eq.draft'
+              ? `status.in.(draft,draft-b2b),id.in.(${preselected.join(',')})`
+              : 'status.in.(draft,draft-b2b)'
           )
           .order('created_at', { ascending: false });
 

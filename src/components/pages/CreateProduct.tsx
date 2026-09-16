@@ -214,13 +214,15 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
     setProductData(prev => ({ ...prev, ...updates }));
   };
 
-  // Vrai pour tout statut de la famille B2B ('for-sale-b2b', 'reserved-b2b',
-  // 'sold-b2b', ...), pas seulement à la création : en édition, un produit
-  // déjà réservé/vendu B2B doit garder le formulaire simplifié plutôt que de
-  // basculer sur le formulaire générique du site public.
+  // Vrai pour tout statut de la famille B2B ('draft-b2b', 'for-sale-b2b',
+  // 'reserved-b2b', 'sold-b2b', ...), pas seulement à la création : en
+  // édition, un produit déjà brouillon/réservé/vendu B2B doit garder le
+  // formulaire simplifié plutôt que de basculer sur le formulaire générique
+  // du site public.
   const isB2B = productData.status.endsWith('-b2b');
 
   const B2B_STATUS_LABELS: Record<string, string> = {
+    'draft-b2b': 'Brouillon (B2B)',
     'for-sale-b2b': 'Revendeurs B2B uniquement',
     'reserved-b2b': 'Réservé (B2B)',
     'sold-b2b': 'Vendu (B2B)',
@@ -536,6 +538,8 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
       // Afficher la modal de succès
       const baseMessage = isEditMode
         ? 'Les modifications ont été sauvegardées avec succès.'
+        : productData.status === 'draft-b2b'
+        ? 'Votre produit a été enregistré en brouillon — ajoutez-le à un drop (Drops B2B) ou basculez-le en vente directe quand vous êtes prêt.'
         : 'Votre produit a été ajouté au catalogue et est maintenant disponible.';
 
       setModalData({
@@ -1440,7 +1444,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
           ) : isB2B ? (
             <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 flex items-center justify-between">
               <Badge variant="info">{B2B_STATUS_LABELS[productData.status] || productData.status}</Badge>
-              {isEditMode && productId && productData.status === 'draft' && (
+              {isEditMode && productId && productData.status === 'draft-b2b' && (
                 <button
                   type="button"
                   onClick={() => setShowDirectSaleModal(true)}

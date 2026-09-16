@@ -8,6 +8,7 @@ import { ProductDetail } from './ProductDetail';
 import { Package, Plus, Search, Trash2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const statusOptions = [
+  { value: 'draft-b2b', label: 'Brouillon' },
   { value: 'for-sale-b2b', label: 'En vente (B2B)' },
   { value: 'reserved-b2b', label: 'Réservé' },
   { value: 'sold-b2b', label: 'Vendu' },
@@ -24,6 +25,8 @@ const ALL_B2B_STATUSES = statusOptions.map((o) => o.value);
 
 const statusBadge = (status: string) => {
   switch (status) {
+    case 'draft-b2b':
+      return <Badge variant="default">Brouillon</Badge>;
     case 'reserved-b2b':
       return <Badge variant="info">Réservé</Badge>;
     case 'sold-b2b':
@@ -107,7 +110,7 @@ export const B2BProducts: React.FC = () => {
   };
 
   if (showCreate) {
-    return <CreateProduct onBack={handleBackFromCreate} productId={selectedProductId || undefined} defaultStatus="for-sale-b2b" />;
+    return <CreateProduct onBack={handleBackFromCreate} productId={selectedProductId || undefined} defaultStatus="draft-b2b" />;
   }
 
   if (showDetail && selectedProductId) {

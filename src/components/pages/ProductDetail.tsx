@@ -183,6 +183,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
   const formatStatus = (status: string) => {
     switch (status) {
       case 'draft': return 'Brouillon';
+      case 'draft-b2b': return 'Brouillon (B2B)';
       case 'sourced-b2b': return '🎯 Sourcing sur mesure';
       case 'for-sale-online': return 'À vendre en ligne';
       case 'for-sale-other-platform': return 'À vendre sur autre plateforme';
@@ -267,7 +268,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                 product.status === 'sold-online' || product.status === 'sold-other-platform' || product.status === 'sold-b2b' ? 'warning' :
                 product.status === 'sold-display' || product.status === 'reserved-b2b' || product.status === 'cadeau-attribue' ? 'info' :
                 product.status === 'sourced-b2b' ? 'purple' :
-                product.status === 'draft' || product.status === 'cadeau' ? 'default' : 'info'
+                product.status === 'draft' || product.status === 'draft-b2b' || product.status === 'cadeau' ? 'default' : 'info'
               }>
                 {formatStatus(product.status)}
               </Badge>
@@ -450,6 +451,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                     >
                       <optgroup label="📝 En préparation">
                         <option value="draft">Brouillon</option>
+                        <option value="draft-b2b">Brouillon (B2B)</option>
                       </optgroup>
                       <optgroup label="🏪 Disponible à la vente">
                         <option value="for-sale-online">À vendre en ligne</option>
@@ -472,7 +474,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                     {statusUpdateSuccess && (
                       <p className="text-xs text-green-600 mt-1">✓ Statut mis à jour avec succès</p>
                     )}
-                    {product.status === 'draft' && (
+                    {(product.status === 'draft' || product.status === 'draft-b2b') && (
                       <button
                         onClick={() => setShowDirectSaleModal(true)}
                         className="mt-2 flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-gray-900"
