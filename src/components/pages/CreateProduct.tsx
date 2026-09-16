@@ -120,7 +120,7 @@ const detectSourcePlatform = (reference: string): SourcePlatform => {
 const computePurchasePriceWithTax = (rawPrice: number, platform: SourcePlatform): number => {
   if (rawPrice <= 0) return 0;
   if (platform === 'EcoRing') {
-    const fee = rawPrice >= 10000 ? 1000 : 5000;
+    const fee = rawPrice >= 10000 ? 1000 : 500;
     return (rawPrice + fee) * 1.1 * 1.02;
   }
   if (platform === 'Aucnet') {
