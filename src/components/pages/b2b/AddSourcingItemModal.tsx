@@ -67,6 +67,8 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
   // Chargé une fois à l'ouverture — le catalogue de brouillons reste petit
   // (contrairement au catalogue complet), donc pas besoin d'une recherche
   // serveur à la frappe : on filtre en mémoire (voir filteredProducts).
+  // 'draft-b2b' (0130) : articles créés directement depuis Produits B2B,
+  // sourçables au même titre qu'un brouillon classique.
   useEffect(() => {
     if (!isOpen) return;
     let mounted = true;
@@ -78,7 +80,7 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
         const { data, error: fetchError } = await supabase
           .from('products')
           .select('id, name, product_code, sale_price, purchase_price, images, main_image_index, brand:brands(name)')
-          .eq('status', 'draft')
+          .in('status', ['draft', 'draft-b2b'])
           .order('created_at', { ascending: false });
         if (fetchError) throw new Error(fetchError.message);
         if (mounted) setDraftProducts((data || []) as unknown as StockProduct[]);
