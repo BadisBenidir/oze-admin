@@ -185,6 +185,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
       case 'draft': return 'Brouillon';
       case 'draft-b2b': return 'Brouillon (B2B)';
       case 'sourced-b2b': return '🎯 Sourcing sur mesure';
+      case 'drop-b2b': return '🚀 Programmé (Drop)';
       case 'for-sale-online': return 'À vendre en ligne';
       case 'for-sale-other-platform': return 'À vendre sur autre plateforme';
       case 'for-sale-b2b': return 'Revendeurs B2B uniquement';
@@ -267,7 +268,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                 product.status === 'for-sale-online' || product.status === 'for-sale-b2b' || product.status === 'cadeau-livre' ? 'success' :
                 product.status === 'sold-online' || product.status === 'sold-other-platform' || product.status === 'sold-b2b' ? 'warning' :
                 product.status === 'sold-display' || product.status === 'reserved-b2b' || product.status === 'cadeau-attribue' ? 'info' :
-                product.status === 'sourced-b2b' ? 'purple' :
+                product.status === 'sourced-b2b' || product.status === 'drop-b2b' ? 'purple' :
                 product.status === 'draft' || product.status === 'draft-b2b' || product.status === 'cadeau' ? 'default' : 'info'
               }>
                 {formatStatus(product.status)}

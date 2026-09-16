@@ -9,6 +9,7 @@ import { Package, Plus, Search, Trash2, AlertCircle, ChevronLeft, ChevronRight }
 
 const statusOptions = [
   { value: 'draft-b2b', label: 'Brouillon' },
+  { value: 'drop-b2b', label: 'Programmé (Drop)' },
   { value: 'for-sale-b2b', label: 'En vente (B2B)' },
   { value: 'reserved-b2b', label: 'Réservé' },
   { value: 'sold-b2b', label: 'Vendu' },
@@ -27,6 +28,8 @@ const statusBadge = (status: string) => {
   switch (status) {
     case 'draft-b2b':
       return <Badge variant="default">Brouillon</Badge>;
+    case 'drop-b2b':
+      return <Badge variant="purple">Programmé (Drop)</Badge>;
     case 'reserved-b2b':
       return <Badge variant="info">Réservé</Badge>;
     case 'sold-b2b':
