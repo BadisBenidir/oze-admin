@@ -237,8 +237,8 @@ export const GiftRewards: React.FC = () => {
                   <tr className="border-b border-gray-100">
                     <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">Date du rechargement</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">Revendeur / Sous-compte</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-900 text-sm">Montant rechargé</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-900 text-sm">Offerts dus</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-900 text-sm" title="Montant de CETTE recharge précise, pas le cumul du profil">Montant rechargé</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-900 text-sm" title="Calculé sur le cumul total payé par le sous-compte (1 000 € = 1 portefeuille), pas seulement cette recharge — peut donc dépasser 1 même pour un petit montant si un ou plusieurs paliers étaient déjà atteints (voir 0131)">Offerts dus</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">Statut</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">Commande associée</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">Date d'expédition</th>

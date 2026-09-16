@@ -8,7 +8,9 @@ export interface GiftReward {
   transaction_id: string;
   /** Montant réellement rechargé ayant déclenché ce(s) portefeuille(s) offert(s) — voir 0101. */
   recharge_amount: number;
-  /** Nombre de portefeuilles offerts dus pour cette recharge (Math.floor(montant / 1000) depuis 0111 ; recharges antérieures calculées sur / 500, voir 0101). */
+  /** Nombre de portefeuilles offerts dus pour cette recharge — calculé sur le
+   * cumul PAYÉ du profil, pas seulement ce montant (voir 0131, qui corrige
+   * le calcul par recharge individuelle introduit par 0101/0111). */
   quantity: number;
   status: 'pending' | 'assigned' | 'shipped';
   assigned_order_id: string | null;
@@ -65,10 +67,9 @@ const mapRow = (row: Row): GiftReward => {
 };
 
 /**
- * Portefeuilles offerts dus (>= 1 000 € rechargés depuis 0111, voir
- * 0101_b2b_gift_rewards.sql / 0111_wallet_bonus_update.sql) — vue admin
- * globale, pour la page "Portefeuilles offerts" et le badge de la barre
- * latérale.
+ * Portefeuilles offerts dus (1 par tranche de 1 000 € CUMULÉS rechargés par
+ * le profil, voir credit_wallet_topup / 0131) — vue admin globale, pour la
+ * page "Portefeuilles offerts" et le badge de la barre latérale.
  */
 export const useGiftRewards = (isAdmin: boolean = false) => {
   const [rewards, setRewards] = useState<GiftReward[]>([]);
