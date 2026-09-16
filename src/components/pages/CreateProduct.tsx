@@ -284,6 +284,38 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
     loadAllBrands();
   }, [isAdmin]);
 
+  // Auto-détection de la marque depuis le début du nom saisi (ex: "LOUIS
+  // VUITTON / Monogram / Porte Monnaie" -> détecte "Louis Vuitton") tant
+  // qu'aucune marque n'a encore été choisie — ne remplace JAMAIS un choix
+  // déjà fait (manuellement ou par cette même détection), et ne joue qu'à la
+  // création (jamais en édition, même logique que le prix d'achat auto ci-
+  // dessus : rouvrir une fiche existante ne doit rien recalculer tout seul).
+  // Prend la marque correspondante la plus longue en cas d'ambiguïté (ex:
+  // "Christian Dior" prime sur "Dior" si les deux matchent le début du nom).
+  useEffect(() => {
+    if (isEditMode || productData.brand || allBrands.length === 0) return;
+    const nameUpper = productData.name.trim().toUpperCase();
+    if (!nameUpper) return;
+
+    let bestMatch: Brand | null = null;
+    for (const brand of allBrands) {
+      const brandUpper = brand.name.toUpperCase();
+      const isPrefixMatch =
+        nameUpper === brandUpper ||
+        nameUpper.startsWith(brandUpper + ' ') ||
+        nameUpper.startsWith(brandUpper + '/');
+      if (isPrefixMatch && (!bestMatch || brandUpper.length > bestMatch.name.length)) {
+        bestMatch = brand;
+      }
+    }
+
+    if (bestMatch) {
+      updateProductData({ brand: bestMatch.id, brandName: bestMatch.name });
+      setBrandSearchTerm(bestMatch.name);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productData.name, productData.brand, allBrands, isEditMode]);
+
   // Effet pour charger les données du produit en mode édition
   useEffect(() => {
     const loadProductData = async () => {
