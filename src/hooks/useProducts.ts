@@ -16,6 +16,11 @@ export interface Product {
   genre: 'femme' | 'homme' | 'fille' | 'garcon' | null
   purchase_price: number | null
   sale_price: number
+  // Référence fournisseur (Aucnet/EcoRing/Autre) saisie à la création,
+  // remplace le champ poids dans le formulaire — voir CreateProduct.tsx /
+  // detectSourcePlatform et 0112_product_source_reference.sql.
+  source_reference: string | null
+  source_platform: 'Aucnet' | 'EcoRing' | 'Autre' | null
   weight: number | null
   images: string[]
   main_image_index: number
@@ -93,7 +98,7 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
 
       if (currentFilters.search) {
         const searchTerm = currentFilters.search
-        countQuery = countQuery.or('name.ilike.%' + searchTerm + '%,product_code.ilike.%' + searchTerm + '%')
+        countQuery = countQuery.or('name.ilike.%' + searchTerm + '%,product_code.ilike.%' + searchTerm + '%,source_reference.ilike.%' + searchTerm + '%')
       }
       if (currentFilters.categoryId) {
         countQuery = countQuery.eq('category_id', currentFilters.categoryId)
@@ -118,7 +123,7 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
 
       if (currentFilters.search) {
         const searchTerm = currentFilters.search
-        dataQuery = dataQuery.or('name.ilike.%' + searchTerm + '%,product_code.ilike.%' + searchTerm + '%')
+        dataQuery = dataQuery.or('name.ilike.%' + searchTerm + '%,product_code.ilike.%' + searchTerm + '%,source_reference.ilike.%' + searchTerm + '%')
       }
       if (currentFilters.categoryId) {
         dataQuery = dataQuery.eq('category_id', currentFilters.categoryId)

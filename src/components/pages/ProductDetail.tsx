@@ -407,6 +407,15 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                   <label className="text-sm font-medium text-gray-500">Prix de vente</label>
                   <p className="text-lg font-semibold text-gray-900">{product.sale_price.toFixed(2)} €</p>
                 </div>
+                {product.source_reference && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Référence fournisseur</label>
+                    <p className="text-gray-900 font-mono text-sm">
+                      {product.source_reference}
+                      {product.source_platform && <span className="ml-2 font-sans text-gray-500">({product.source_platform})</span>}
+                    </p>
+                  </div>
+                )}
               </div>
               
               {product.weight && (
