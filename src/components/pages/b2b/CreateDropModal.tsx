@@ -63,18 +63,30 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
         // liste. 'draft-b2b' (0130) : articles créés directement depuis
         // Produits B2B, éligibles aux drops au même titre qu'un 'draft' classique.
         const preselected = editingDrop?.product_ids || [];
-        const { data, error } = await supabase
-          .from('products')
-          .select('id, name, product_code, sale_price, images, main_image_index, brand:brands(name)')
-          .or(
-            preselected.length > 0
-              ? `status.in.(draft,draft-b2b),id.in.(${preselected.join(',')})`
-              : 'status.in.(draft,draft-b2b)'
-          )
-          .order('created_at', { ascending: false });
+        const [{ data, error }, { data: sourcedItems, error: sourcedError }] = await Promise.all([
+          supabase
+            .from('products')
+            .select('id, name, product_code, sale_price, images, main_image_index, brand:brands(name)')
+            .or(
+              preselected.length > 0
+                ? `status.in.(draft,draft-b2b),id.in.(${preselected.join(',')})`
+                : 'status.in.(draft,draft-b2b)'
+            )
+            .order('created_at', { ascending: false }),
+          // Exclut aussi tout article déjà engagé dans une mission de
+          // sourcing sur mesure active (0134) : un même article ne doit
+          // jamais être à la fois en sourcing ET dans un drop à venir. Le
+          // statut 'sourced-b2b' exclut déjà normalement ces articles du
+          // filtre ci-dessus, ce check est une deuxième barrière au cas où
+          // le statut aurait dérivé.
+          supabase.from('b2b_sourcing_items').select('product_id').not('product_id', 'is', null).neq('status', 'cancelled'),
+        ]);
 
         if (error) throw new Error(error.message);
-        setProducts((data || []) as unknown as DraftProduct[]);
+        if (sourcedError) throw new Error(sourcedError.message);
+
+        const sourcedProductIds = new Set((sourcedItems || []).map((i) => i.product_id));
+        setProducts(((data || []) as unknown as DraftProduct[]).filter((p) => !sourcedProductIds.has(p.id)));
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Erreur de chargement des articles');
       } finally {

@@ -68,7 +68,12 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
   // (contrairement au catalogue complet), donc pas besoin d'une recherche
   // serveur à la frappe : on filtre en mémoire (voir filteredProducts).
   // 'draft-b2b' (0130) : articles créés directement depuis Produits B2B,
-  // sourçables au même titre qu'un brouillon classique.
+  // sourçables au même titre qu'un brouillon classique. Exclut aussi tout
+  // article déjà programmé dans un drop encore planifié (0134) : un même
+  // article ne doit jamais être à la fois en sourcing sur mesure ET dans un
+  // drop à venir — ajouter un article au product_ids d'un drop ne change pas
+  // son statut tant que le drop n'est pas exécuté, donc le filtre de statut
+  // seul ne suffit pas à l'exclure ici.
   useEffect(() => {
     if (!isOpen) return;
     let mounted = true;
@@ -77,13 +82,20 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
       setLoadingProducts(true);
       setLoadError('');
       try {
-        const { data, error: fetchError } = await supabase
-          .from('products')
-          .select('id, name, product_code, sale_price, purchase_price, images, main_image_index, brand:brands(name)')
-          .in('status', ['draft', 'draft-b2b'])
-          .order('created_at', { ascending: false });
+        const [{ data, error: fetchError }, { data: plannedDrops, error: dropsError }] = await Promise.all([
+          supabase
+            .from('products')
+            .select('id, name, product_code, sale_price, purchase_price, images, main_image_index, brand:brands(name)')
+            .in('status', ['draft', 'draft-b2b'])
+            .order('created_at', { ascending: false }),
+          supabase.from('drops').select('product_ids').eq('status', 'planifie'),
+        ]);
         if (fetchError) throw new Error(fetchError.message);
-        if (mounted) setDraftProducts((data || []) as unknown as StockProduct[]);
+        if (dropsError) throw new Error(dropsError.message);
+
+        const idsInUpcomingDrops = new Set((plannedDrops || []).flatMap((d) => d.product_ids || []));
+        const available = ((data || []) as unknown as StockProduct[]).filter((p) => !idsInUpcomingDrops.has(p.id));
+        if (mounted) setDraftProducts(available);
       } catch (err) {
         if (mounted) setLoadError(err instanceof Error ? err.message : 'Erreur de chargement des articles');
       } finally {
