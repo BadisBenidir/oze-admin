@@ -252,6 +252,7 @@ export const AuctionsAdmin: React.FC = () => {
                           <tr className="border-b border-gray-100">
                             <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs">Pièce</th>
                             <th className="text-right py-2.5 px-3 font-medium text-gray-500 text-xs">Départ → Actuel</th>
+                            <th className="text-right py-2.5 px-3 font-medium text-gray-500 text-xs">Bénéfice/Perte</th>
                             <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs">Meilleur enchérisseur</th>
                             <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs">Temps restant</th>
                             <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs">Statut</th>
@@ -260,12 +261,13 @@ export const AuctionsAdmin: React.FC = () => {
                         </thead>
                         <tbody>
                           {itemsLoading ? (
-                            <tr><td colSpan={6} className="py-6 text-center text-sm text-gray-400">Chargement...</td></tr>
+                            <tr><td colSpan={7} className="py-6 text-center text-sm text-gray-400">Chargement...</td></tr>
                           ) : items.length === 0 ? (
-                            <tr><td colSpan={6} className="py-6 text-center text-sm text-gray-500">Aucune pièce sur cette session.</td></tr>
+                            <tr><td colSpan={7} className="py-6 text-center text-sm text-gray-500">Aucune pièce sur cette session.</td></tr>
                           ) : (
                             items.map((item) => {
                               const extended = new Date(item.ends_at).getTime() > new Date(selectedSession.ends_at).getTime();
+                              const profit = item.product_purchase_price != null ? item.current_price - item.product_purchase_price : null;
                               return (
                                 <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
                                   <td className="py-2.5 px-3">
@@ -282,6 +284,15 @@ export const AuctionsAdmin: React.FC = () => {
                                   </td>
                                   <td className="py-2.5 px-3 text-right text-xs text-gray-600 tabular-nums">
                                     {EUR(item.start_price)} → <span className="font-semibold text-gray-900">{EUR(item.current_price)}</span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right text-xs tabular-nums">
+                                    {profit == null ? (
+                                      <span className="text-gray-400" title="Aucun prix d'achat renseigné sur la fiche produit">—</span>
+                                    ) : (
+                                      <span className={`font-semibold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {profit >= 0 ? '+' : '-'}{EUR(Math.abs(profit))}
+                                      </span>
+                                    )}
                                   </td>
                                   <td className="py-2.5 px-3 text-xs text-gray-700">
                                     {item.winner_name ? (
@@ -316,6 +327,30 @@ export const AuctionsAdmin: React.FC = () => {
                             })
                           )}
                         </tbody>
+                        {items.length > 0 && (
+                          <tfoot>
+                            <tr className="border-t border-gray-200 bg-gray-50">
+                              <td className="py-2.5 px-3 text-xs font-semibold text-gray-700">Total</td>
+                              <td className="py-2.5 px-3 text-right text-xs text-gray-600 tabular-nums">
+                                {EUR(items.reduce((sum, i) => sum + i.start_price, 0))} → <span className="font-semibold text-gray-900">{EUR(items.reduce((sum, i) => sum + i.current_price, 0))}</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right text-xs tabular-nums">
+                                {(() => {
+                                  const known = items.filter((i) => i.product_purchase_price != null);
+                                  if (known.length === 0) return <span className="text-gray-400">—</span>;
+                                  const total = known.reduce((sum, i) => sum + (i.current_price - (i.product_purchase_price as number)), 0);
+                                  return (
+                                    <span className={`font-semibold ${total >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      {total >= 0 ? '+' : '-'}{EUR(Math.abs(total))}
+                                      {known.length < items.length && <span className="text-gray-400 font-normal"> ({known.length}/{items.length})</span>}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                              <td className="py-2.5 px-3" colSpan={4}></td>
+                            </tr>
+                          </tfoot>
+                        )}
                       </table>
                     </div>
                   </CardContent>
