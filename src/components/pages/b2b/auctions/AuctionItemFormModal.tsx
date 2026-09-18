@@ -59,12 +59,14 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
   const [draftProducts, setDraftProducts] = useState<DraftProduct[]>([]);
   const [linkedProduct, setLinkedProduct] = useState<DraftProduct | null>(null);
 
+  // 'draft-b2b' (0130) : articles créés directement depuis Produits B2B,
+  // liables à un lot d'enchère au même titre qu'un brouillon classique.
   useEffect(() => {
     if (!isOpen) return;
     supabase
       .from('products')
       .select('id, name, product_code, images, main_image_index, condition, brand:brands(name)')
-      .eq('status', 'draft')
+      .in('status', ['draft', 'draft-b2b'])
       .order('created_at', { ascending: false })
       .then(({ data }) => setDraftProducts((data || []) as unknown as DraftProduct[]));
   }, [isOpen]);
