@@ -176,6 +176,11 @@ export const AuctionsAdmin: React.FC = () => {
                       {new Date(s.starts_at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} →{' '}
                       {new Date(s.ends_at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </p>
+                    {s.status !== 'closed' && (
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        S'ouvre et se clôture automatiquement à ces heures — les boutons ci-dessous ne servent qu'à forcer la transition en avance.
+                      </p>
+                    )}
                     <div className="flex items-center gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
                       {s.status === 'upcoming' && (
                         <button
