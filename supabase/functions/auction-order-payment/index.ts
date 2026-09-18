@@ -58,6 +58,22 @@ Deno.serve(async (req: Request) => {
     if (order.placed_by_profile_id !== user.id) return json({ error: 'Cette commande ne vous appartient pas' }, 403);
     if (order.payment_status === 'paid') return json({ error: 'Cette commande est déjà payée' }, 400);
 
+    // Le lot doit être réellement adjugé (status='sold') avant tout paiement —
+    // vérifié ICI, avant de créer la session Stripe, car une fois celle-ci
+    // payée l'argent est débité : trop tard pour refuser à la confirmation
+    // (confirm_auction_order_payment, 0144, ne fait que ce filet de sécurité
+    // en dernier recours). pay_auction_order_with_wallet revérifie aussi
+    // côté SQL (défense en profondeur si cette RPC est appelée directement).
+    const { data: item, error: itemError } = await adminClient
+      .from('auction_items')
+      .select('status')
+      .eq('order_id', order_id)
+      .maybeSingle();
+    if (itemError) return json({ error: itemError.message }, 400);
+    if (!item || item.status !== 'sold') {
+      return json({ error: "Ce lot n'a pas encore été adjugé — paiement impossible pour le moment" }, 409);
+    }
+
     if (payment_method === 'wallet') {
       // Via callerClient (pas adminClient) : pay_auction_order_with_wallet lit
       // auth.uid() pour vérifier lui-même le propriétaire de la commande.
