@@ -564,7 +564,7 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Articles</p>
-                  {hasActiveItems && !['shipped', 'delivered', 'cancelled'].includes(order.computedStatus) && (
+                  {hasActiveItems && !order.order_number?.startsWith('AUC-') && !['shipped', 'delivered', 'cancelled'].includes(order.computedStatus) && (
                     <button
                       onClick={() => setCancellingOrder(true)}
                       className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-800 transition-colors"
@@ -675,7 +675,7 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                               {item.is_loyalty_gift ? 'Offert' : `${item.line_total.toFixed(0)} €`}
                             </td>
                             <td className="py-3 px-4 text-right">
-                              {!isCancelled && (
+                              {!isCancelled && !order.order_number?.startsWith('AUC-') && (
                                 <button
                                   onClick={() => setCancellingItem(item)}
                                   className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"

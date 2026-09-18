@@ -516,7 +516,7 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                     {showInvoiceActions && downloadError && downloadingOrderId === null && (
                       <span className="text-xs text-red-600">{downloadError}</span>
                     )}
-                    {canCancel && !['shipped', 'delivered', 'cancelled'].includes(viewingOrder.status) && viewingOrder.order_items.some((i) => i.status === 'active') && (
+                    {canCancel && !viewingOrder.order_number?.startsWith('AUC-') && !['shipped', 'delivered', 'cancelled'].includes(viewingOrder.status) && viewingOrder.order_items.some((i) => i.status === 'active') && (
                       isWithinCancelWindow(viewingOrder.created_at) ? (
                         <button
                           onClick={() => setCancellingOrder(viewingOrder)}
