@@ -59,6 +59,10 @@ export const AuctionsAdmin: React.FC = () => {
   const [generatingId, setGeneratingId] = useState<string | null>(null);
 
   const selectedSession = useMemo(() => sessions.find((s) => s.id === selectedSessionId) || null, [sessions, selectedSessionId]);
+  const existingAuctionProductIds = useMemo(
+    () => new Set(items.filter((i) => i.product_id).map((i) => i.product_id as string)),
+    [items]
+  );
   const closedSessions = useMemo(() => sessions.filter((s) => s.status === 'closed'), [sessions]);
   const [resultsSessionId, setResultsSessionId] = useState<string | null>(null);
   const resultsSession = useMemo(() => closedSessions.find((s) => s.id === resultsSessionId) || closedSessions[0] || null, [closedSessions, resultsSessionId]);
@@ -483,6 +487,7 @@ export const AuctionsAdmin: React.FC = () => {
       <AuctionItemFormModal
         isOpen={showItemModal}
         onClose={() => setShowItemModal(false)}
+        existingProductIds={existingAuctionProductIds}
         onSubmit={async (input, productId) => {
           if (!selectedSession) return { success: false, error: 'Session inconnue' };
           return addItem(selectedSession.ends_at, input, productId);

@@ -35,6 +35,10 @@ interface AuctionItemFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (input: AuctionItemInput, productId: string | null) => Promise<{ success: boolean; error?: string }>;
+  /** product_id des lots déjà présents sur CETTE session — grisés et non
+   * sélectionnables pour éviter d'ajouter deux fois le même article (même
+   * pattern que AddSourcingItemModal.tsx/existingProductIds). */
+  existingProductIds: Set<string>;
 }
 
 /** Ajout rapide d'un lot à la session sélectionnée — voir auction_items,
@@ -43,7 +47,7 @@ interface AuctionItemFormModalProps {
  * "Générer la commande" une fois le lot adjugé — même contrainte que pour
  * le Sourcing sur mesure (0098) : ce repo ne crée jamais lui-même de
  * marque/catégorie pour une fiche produit inventée à la volée. */
-export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOpen, onClose, onSubmit }) => {
+export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOpen, onClose, onSubmit, existingProductIds }) => {
   const [title, setTitle] = useState('');
   const [brand, setBrand] = useState('');
   const [grade, setGrade] = useState(GRADES[1]);
@@ -207,19 +211,27 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
                           {draftProducts.length === 0 ? 'Aucun article en brouillon.' : 'Aucun résultat pour cette recherche.'}
                         </div>
                       ) : (
-                        filteredProducts.map((p) => (
-                          <button
-                            type="button"
-                            key={p.id}
-                            onClick={() => handleSelectProduct(p)}
-                            className="w-full flex items-center gap-2 p-2 text-left hover:bg-gray-50"
-                          >
-                            <div className="h-8 w-8 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
-                              {p.images?.[0] ? <img src={p.images[0]} alt="" className="h-full w-full object-cover" /> : <Package className="h-3.5 w-3.5 text-gray-400" />}
-                            </div>
-                            <span className="text-xs text-gray-800 truncate">{p.name}</span>
-                          </button>
-                        ))
+                        filteredProducts.map((p) => {
+                          const alreadyAdded = existingProductIds.has(p.id);
+                          return (
+                            <button
+                              type="button"
+                              key={p.id}
+                              onClick={() => !alreadyAdded && handleSelectProduct(p)}
+                              disabled={alreadyAdded}
+                              title={alreadyAdded ? 'Déjà ajouté à cette session' : undefined}
+                              className={`w-full flex items-center gap-2 p-2 text-left ${
+                                alreadyAdded ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="h-8 w-8 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
+                                {p.images?.[0] ? <img src={p.images[0]} alt="" className="h-full w-full object-cover" /> : <Package className="h-3.5 w-3.5 text-gray-400" />}
+                              </div>
+                              <span className="text-xs text-gray-800 truncate flex-1">{p.name}</span>
+                              {alreadyAdded && <span className="text-[10px] text-gray-500 flex-shrink-0">Déjà ajouté</span>}
+                            </button>
+                          );
+                        })
                       )}
                     </div>
                   </>
