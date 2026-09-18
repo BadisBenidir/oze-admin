@@ -61,7 +61,7 @@ export const useMyAuctionPayments = (enabled: boolean) => {
     };
   }, [enabled, fetchPayments]);
 
-  const pay = async (orderId: string, paymentMethod: 'wallet' | 'card'): Promise<PayAuctionResult> => {
+  const pay = async (orderId: string, paymentMethod: 'wallet' | 'card' | 'mixed'): Promise<PayAuctionResult> => {
     const { data, error } = await invokeEdgeFunction<{ url?: string; success?: boolean }>('auction-order-payment', {
       order_id: orderId,
       payment_method: paymentMethod,

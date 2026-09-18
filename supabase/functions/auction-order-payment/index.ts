@@ -39,7 +39,7 @@ Deno.serve(async (req: Request) => {
     if (userError || !user) return json({ error: 'Non authentifié' }, 401);
 
     const { order_id, payment_method } = await req.json();
-    if (!order_id || !['wallet', 'card'].includes(payment_method)) {
+    if (!order_id || !['wallet', 'card', 'mixed'].includes(payment_method)) {
       return json({ error: 'Paramètres invalides' }, 400);
     }
 
@@ -47,7 +47,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: order, error: orderError } = await adminClient
       .from('orders')
-      .select('id, total_amount, payment_status, placed_by_profile_id, order_channel, order_number, email')
+      .select('id, total_amount, payment_status, placed_by_profile_id, order_channel, order_number, email, reseller_id')
       .eq('id', order_id)
       .maybeSingle();
 
@@ -85,10 +85,32 @@ Deno.serve(async (req: Request) => {
       return json({ success: true, already_paid: Boolean((data as { already_paid?: boolean } | null)?.already_paid) });
     }
 
-    // payment_method === 'card'
+    // payment_method === 'card' ou 'mixed'
     if (!stripeSecretKey) {
       return json({ error: 'STRIPE_SECRET_KEY manquant dans les secrets Supabase' }, 500);
     }
+
+    const totalAmount = Number(order.total_amount);
+    let mixedWalletAmount = 0;
+    let chargeAmount = totalAmount;
+
+    // Paiement mixte : débite IMMÉDIATEMENT tout le solde disponible (jamais
+    // un montant choisi par le client), Stripe ne facture que le reste —
+    // même principe que le panier B2B classique (0036).
+    if (payment_method === 'mixed') {
+      const { data: profileRow } = await adminClient
+        .from('profiles')
+        .select('wallet_balance')
+        .eq('id', user.id)
+        .single();
+      const balance = Number(profileRow?.wallet_balance || 0);
+      if (balance <= 0 || balance >= totalAmount) {
+        return json({ error: "Paiement mixte non applicable : utilisez 'solde' (couvre tout) ou 'carte' (aucun solde à utiliser)" }, 400);
+      }
+      mixedWalletAmount = balance;
+      chargeAmount = totalAmount - balance;
+    }
+
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
     const origin = req.headers.get('origin') || 'https://admin.ozeparis.com';
 
@@ -98,7 +120,7 @@ Deno.serve(async (req: Request) => {
         price_data: {
           currency: 'eur',
           product_data: { name: `Lot d'enchère — commande ${order.order_number}` },
-          unit_amount: Math.round(Number(order.total_amount) * 100),
+          unit_amount: Math.round(chargeAmount * 100),
         },
         quantity: 1,
       }],
@@ -106,10 +128,29 @@ Deno.serve(async (req: Request) => {
       metadata: {
         type: 'auction_payment',
         order_id,
+        wallet_amount_used: String(mixedWalletAmount),
       },
       success_url: `${origin}/?b2b_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?b2b_checkout=cancel`,
     });
+
+    // Débite le solde MAINTENANT que la session existe (le débit est lié à
+    // session.id pour être finalisé ou remboursé selon l'issue du paiement —
+    // voir b2b-stripe-webhook). En cas d'échec (solde changé entre-temps), on
+    // n'envoie surtout pas au client une session Stripe dont le montant
+    // suppose à tort que le solde la complète : elle reste orpheline et
+    // expire d'elle-même sans qu'aucune charge n'ait eu lieu.
+    if (payment_method === 'mixed' && mixedWalletAmount > 0) {
+      const { error: debitError } = await adminClient.rpc('debit_wallet_amount', {
+        p_profile_id: user.id,
+        p_reseller_id: order.reseller_id,
+        p_amount: mixedWalletAmount,
+        p_stripe_session_id: session.id,
+      });
+      if (debitError) {
+        return json({ error: 'Le solde a changé entre-temps, réessayez le paiement.' }, 409);
+      }
+    }
 
     return json({ url: session.url });
   } catch (err) {

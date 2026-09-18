@@ -198,6 +198,23 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: error.message }), { status: 500 });
       }
 
+      // Paiement mixte (0145) : rattache la part solde débitée par avance
+      // (auction-order-payment) à la commande — total_amount n'est PAS
+      // recalculé ici (contrairement à finalize_wallet_order_debit côté
+      // panier classique), la commande d'enchère a déjà son total définitif
+      // depuis sa création à l'adjudication.
+      if (!data?.already_processed && Number(metadata.wallet_amount_used || 0) > 0) {
+        const { data: walletFinalize, error: walletFinalizeError } = await adminClient.rpc('finalize_auction_wallet_debit', {
+          p_stripe_session_id: session.id,
+          p_order_id: metadata.order_id,
+        });
+        if (walletFinalizeError || !walletFinalize?.found) {
+          console.error(`${LOG_PREFIX} finalize_auction_wallet_debit n'a rien trouvé/échoué pour la session ${session.id}:`, walletFinalizeError?.message);
+        } else {
+          console.log(`${LOG_PREFIX} Part solde (${walletFinalize.amount}€) rattachée à la commande d'enchère ${metadata.order_id}`);
+        }
+      }
+
       console.log(`${LOG_PREFIX} Commande d'enchère ${data?.order_id} confirmée pour la session ${session.id} (already_processed: ${!!data?.already_processed})`);
       return new Response(JSON.stringify({ received: true }), { status: 200 });
     } catch (err) {

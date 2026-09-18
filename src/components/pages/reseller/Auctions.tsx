@@ -5,6 +5,7 @@ import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useAuctionItems, AuctionItem, QUICK_BID_INCREMENTS, computeQuickBidIncrement } from '../../../hooks/useAuctionItems';
 import { useMyAuctionPayments } from '../../../hooks/useMyAuctionPayments';
+import { useWallet } from '../../../hooks/useWallet';
 import { AuctionCountdown } from './AuctionCountdown';
 import { AuctionItemDetailModal } from './AuctionItemDetailModal';
 import { AuctionPaymentsDue } from './AuctionPaymentsDue';
@@ -253,6 +254,7 @@ export const Auctions: React.FC = () => {
   const { profile, acceptTerms } = useResellerAuth();
   const { session, items, myBidItemIds, myMaxAmounts, loading, error, placeAutoBid } = useAuctionItems(true, profile?.id);
   const { payments: pendingPayments, pay: payAuctionOrder } = useMyAuctionPayments(Boolean(profile?.id));
+  const { balance: walletBalance } = useWallet(profile?.id);
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
   const viewingItem = items.find((i) => i.id === viewingItemId) || null;
   const [termsCheckbox, setTermsCheckbox] = useState(false);
@@ -270,7 +272,7 @@ export const Auctions: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6">
-      <AuctionPaymentsDue payments={pendingPayments} onPay={payAuctionOrder} />
+      <AuctionPaymentsDue payments={pendingPayments} walletBalance={walletBalance} onPay={payAuctionOrder} />
 
       <div className="mb-6">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
