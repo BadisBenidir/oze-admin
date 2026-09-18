@@ -256,14 +256,15 @@ export const AuctionsAdmin: React.FC = () => {
                             <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs">Meilleur enchérisseur</th>
                             <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs">Temps restant</th>
                             <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs">Statut</th>
+                            <th className="text-left py-2.5 px-3 font-medium text-gray-500 text-xs">Paiement</th>
                             <th className="text-right py-2.5 px-3 font-medium text-gray-500 text-xs"></th>
                           </tr>
                         </thead>
                         <tbody>
                           {itemsLoading ? (
-                            <tr><td colSpan={7} className="py-6 text-center text-sm text-gray-400">Chargement...</td></tr>
+                            <tr><td colSpan={8} className="py-6 text-center text-sm text-gray-400">Chargement...</td></tr>
                           ) : items.length === 0 ? (
-                            <tr><td colSpan={7} className="py-6 text-center text-sm text-gray-500">Aucune pièce sur cette session.</td></tr>
+                            <tr><td colSpan={8} className="py-6 text-center text-sm text-gray-500">Aucune pièce sur cette session.</td></tr>
                           ) : (
                             items.map((item) => {
                               const extended = new Date(item.ends_at).getTime() > new Date(selectedSession.ends_at).getTime();
@@ -322,6 +323,31 @@ export const AuctionsAdmin: React.FC = () => {
                                     ) : '—'}
                                   </td>
                                   <td className="py-2.5 px-3">{itemStatusBadge(item.status)}</td>
+                                  <td className="py-2.5 px-3">
+                                    {item.status !== 'sold' ? (
+                                      <span className="text-xs text-gray-400">—</span>
+                                    ) : !item.order_id ? (
+                                      <button
+                                        onClick={() => handleGenerateOrder(item.id)}
+                                        disabled={generatingId === item.id}
+                                        title={!item.product_id ? "Lier une fiche produit à ce lot avant de générer la commande" : undefined}
+                                        className="px-2.5 py-1 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-xs font-medium whitespace-nowrap"
+                                      >
+                                        {generatingId === item.id ? 'Génération...' : 'Générer la commande'}
+                                      </button>
+                                    ) : item.order_payment_status === 'paid' ? (
+                                      <Badge variant="success">Payé</Badge>
+                                    ) : item.payment_deadline && new Date(item.payment_deadline).getTime() <= Date.now() ? (
+                                      <Badge variant="danger">En retard</Badge>
+                                    ) : (
+                                      <Badge variant="warning">
+                                        En attente
+                                        {item.payment_deadline
+                                          ? ` (avant ${new Date(item.payment_deadline).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})`
+                                          : ''}
+                                      </Badge>
+                                    )}
+                                  </td>
                                   <td className="py-2.5 px-3 text-right">
                                     {item.status === 'active' && item.current_price === item.start_price && (
                                       <button
@@ -358,7 +384,7 @@ export const AuctionsAdmin: React.FC = () => {
                                   );
                                 })()}
                               </td>
-                              <td className="py-2.5 px-3" colSpan={4}></td>
+                              <td className="py-2.5 px-3" colSpan={5}></td>
                             </tr>
                           </tfoot>
                         )}
