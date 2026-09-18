@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 export interface AdminAuctionItem {
@@ -63,6 +63,14 @@ export const useAdminAuctionItems = (sessionId: string | null) => {
   const [items, setItems] = useState<AdminAuctionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // AuctionsAdmin.tsx instancie ce hook deux fois en parallèle (onglets
+  // "Sessions & Lots" et "Résultats & Facturation") — si les deux pointent
+  // sur la même session, un nom de canal basé uniquement sur sessionId
+  // collisionne : supabase-js réutilise le canal déjà abonné du premier
+  // hook et refuse d'y ajouter les écouteurs du second ("cannot add
+  // postgres_changes callbacks ... after subscribe()"). Un suffixe unique
+  // par instance de hook évite la collision.
+  const instanceId = useRef(Math.random().toString(36).slice(2)).current;
 
   const fetchItems = useCallback(async () => {
     if (!sessionId) {
@@ -95,7 +103,7 @@ export const useAdminAuctionItems = (sessionId: string | null) => {
   useEffect(() => {
     if (!sessionId) return;
     const channel = supabase
-      .channel(`admin-auction-items-${sessionId}`)
+      .channel(`admin-auction-items-${sessionId}-${instanceId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_items', filter: `session_id=eq.${sessionId}` }, () => fetchItems())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'auction_bids' }, () => fetchItems())
       .subscribe();
