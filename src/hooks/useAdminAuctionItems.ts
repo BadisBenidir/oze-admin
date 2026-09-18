@@ -13,6 +13,7 @@ export interface AdminAuctionItem {
   min_increment: number;
   reserve_price: number | null;
   current_winner_id: string | null;
+  current_max_amount: number | null;
   winner_name: string | null;
   winner_email: string | null;
   ends_at: string;

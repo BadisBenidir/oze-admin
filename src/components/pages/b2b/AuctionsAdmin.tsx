@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Gavel, Plus, AlertCircle, Trophy, Radio, CheckCircle2, Trash2, ImageOff,
-  Ticket, Receipt, Clock, Zap,
+  Ticket, Receipt, Clock, Zap, TrendingUp,
 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
@@ -296,10 +296,20 @@ export const AuctionsAdmin: React.FC = () => {
                                   </td>
                                   <td className="py-2.5 px-3 text-xs text-gray-700">
                                     {item.winner_name ? (
-                                      <>
-                                        <p>{item.winner_name}</p>
-                                        <p className="text-gray-400">{item.winner_email}</p>
-                                      </>
+                                      <div className="flex items-center gap-1.5">
+                                        <div>
+                                          <p>{item.winner_name}</p>
+                                          <p className="text-gray-400">{item.winner_email}</p>
+                                        </div>
+                                        {item.current_max_amount != null && item.current_max_amount > item.current_price && (
+                                          <span
+                                            className="flex-shrink-0 text-green-600"
+                                            title={`A encore de la marge : plafond secret ${EUR(item.current_max_amount)}, resurenchérira automatiquement jusqu'à ce montant`}
+                                          >
+                                            <TrendingUp className="h-3.5 w-3.5" />
+                                          </span>
+                                        )}
+                                      </div>
                                     ) : '—'}
                                   </td>
                                   <td className="py-2.5 px-3">
