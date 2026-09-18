@@ -15,6 +15,10 @@ interface AuctionItemDetailModalProps {
    * (voir Auctions.tsx) — place_auto_bid (0109) le refuserait de toute
    * façon côté serveur, ce n'est qu'un confort d'affichage ici. */
   canBid: boolean;
+  /** Session encore 'upcoming' (voir Auctions.tsx) : lot visible en aperçu,
+   * aucune enchère acceptée avant l'ouverture (place_auto_bid, 0138). */
+  isPreview: boolean;
+  sessionStartsAt: string | null;
   onClose: () => void;
   onBid: (maxAmount: number) => Promise<{ success: boolean; error?: string; warning?: string }>;
 }
@@ -24,7 +28,7 @@ interface AuctionItemDetailModalProps {
  * carrousel), avec l'enchère directement disponible ici plutôt que sur la
  * carte de la grille. Enchère automatique (proxy bidding, 0108) : le champ
  * libre fixe un plafond, pas une mise ponctuelle. */
-export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ item, isWinning, isOutbid, myMax, canBid, onClose, onBid }) => {
+export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ item, isWinning, isOutbid, myMax, canBid, isPreview, sessionStartsAt, onClose, onBid }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -168,8 +172,21 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                   <p className="text-2xl font-bold text-gray-900">{EUR(item.current_price)}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-gray-400">Temps restant</p>
-                  <AuctionCountdown endsAt={item.ends_at} className="text-base" />
+                  {isPreview ? (
+                    <>
+                      <p className="text-xs text-gray-400">Ouverture</p>
+                      <p className="text-base font-semibold text-gray-900">
+                        {sessionStartsAt
+                          ? new Date(sessionStartsAt).toLocaleString('fr-FR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' })
+                          : '—'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-400">Temps restant</p>
+                      <AuctionCountdown endsAt={item.ends_at} className="text-base" />
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -186,7 +203,11 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                 </div>
               )}
 
-              {item.status !== 'active' ? (
+              {isPreview ? (
+                <p className="mt-4 text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5">
+                  Aperçu — les enchères ne sont pas encore ouvertes.
+                </p>
+              ) : item.status !== 'active' ? (
                 <div className="mt-4">
                   <Badge variant={item.status === 'sold' ? 'success' : 'default'}>
                     {item.status === 'sold' ? 'Vendu' : 'Invendu'}

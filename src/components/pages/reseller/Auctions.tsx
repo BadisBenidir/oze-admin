@@ -20,6 +20,12 @@ interface ItemCardProps {
    * (voir Auctions.tsx) — place_auto_bid (0109) le refuserait de toute
    * façon côté serveur, ce n'est qu'un confort d'affichage ici. */
   canBid: boolean;
+  /** Session encore 'upcoming' (voir Auctions.tsx) : le lot est visible en
+   * aperçu (prix de départ, photos, description) mais aucune enchère n'est
+   * acceptée avant l'ouverture — place_auto_bid (0138) le refuserait de
+   * toute façon côté serveur, ce n'est qu'un confort d'affichage ici. */
+  isPreview: boolean;
+  sessionStartsAt: string | null;
   onOpen: () => void;
   onBid: (maxAmount: number) => Promise<{ success: boolean; error?: string; warning?: string }>;
 }
@@ -29,7 +35,7 @@ interface ItemCardProps {
  * la propagation du clic pour ne pas déclencher onOpen en même temps.
  * Enchère automatique (proxy bidding, 0108) : le champ libre fixe un
  * plafond, pas une mise ponctuelle — le système surenchérit seul jusque-là. */
-const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, canBid, onOpen, onBid }) => {
+const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, canBid, isPreview, sessionStartsAt, onOpen, onBid }) => {
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -93,8 +99,21 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
             <p className="text-sm sm:text-lg font-bold text-gray-900 truncate">{EUR(item.current_price)}</p>
           </div>
           <div className="text-right flex-shrink-0">
-            <p className="text-[10px] sm:text-xs text-gray-400">Restant</p>
-            <AuctionCountdown endsAt={item.ends_at} className="text-xs sm:text-sm" />
+            {isPreview ? (
+              <>
+                <p className="text-[10px] sm:text-xs text-gray-400">Ouverture</p>
+                <p className="text-xs sm:text-sm font-semibold text-gray-900">
+                  {sessionStartsAt
+                    ? new Date(sessionStartsAt).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                    : '—'}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[10px] sm:text-xs text-gray-400">Restant</p>
+                <AuctionCountdown endsAt={item.ends_at} className="text-xs sm:text-sm" />
+              </>
+            )}
           </div>
         </div>
 
@@ -111,7 +130,13 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
           </div>
         )}
 
-        {item.status !== 'active' ? (
+        {isPreview ? (
+          <div className="mt-auto pt-2 sm:pt-3">
+            <p className="text-[10px] sm:text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2 sm:px-2.5 py-1.5 sm:py-2">
+              Aperçu — les enchères ne sont pas encore ouvertes.
+            </p>
+          </div>
+        ) : item.status !== 'active' ? (
           <div className="mt-auto pt-2 sm:pt-3">
             <Badge variant={item.status === 'sold' ? 'success' : 'default'}>
               {item.status === 'sold' ? 'Vendu' : 'Invendu'}
@@ -329,6 +354,8 @@ export const Auctions: React.FC = () => {
               isOutbid={myBidItemIds.has(item.id) && item.current_winner_id !== profile?.id}
               myMax={myMaxAmounts.get(item.id)}
               canBid={canBid}
+              isPreview={session?.status === 'upcoming'}
+              sessionStartsAt={session?.starts_at ?? null}
               onOpen={() => setViewingItemId(item.id)}
               onBid={(maxAmount) => placeAutoBid(item.id, maxAmount)}
             />
@@ -342,6 +369,8 @@ export const Auctions: React.FC = () => {
         isOutbid={Boolean(viewingItem) && myBidItemIds.has(viewingItem!.id) && viewingItem?.current_winner_id !== profile?.id}
         myMax={viewingItem ? myMaxAmounts.get(viewingItem.id) : undefined}
         canBid={canBid}
+        isPreview={session?.status === 'upcoming'}
+        sessionStartsAt={session?.starts_at ?? null}
         onClose={() => setViewingItemId(null)}
         onBid={(maxAmount) => (viewingItem ? placeAutoBid(viewingItem.id, maxAmount) : Promise.resolve({ success: false, error: 'Pièce inconnue' }))}
       />
