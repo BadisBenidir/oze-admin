@@ -1,10 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
-/** Boutons d'enchère rapide proposés côté revendeur (carte + fiche détail).
- * Un montant reste désactivé si inférieur à item.min_increment — le
- * serveur (handle_new_bid, 0104) rejetterait de toute façon l'enchère. */
+/** Boutons d'enchère rapide proposés côté revendeur (carte + fiche détail). */
 export const QUICK_BID_INCREMENTS = [5, 10, 20];
+
+/** Montant réellement ajouté par un bouton d'enchère rapide (palier 5, 10 ou
+ * 20) : plutôt que d'ajouter bêtement le palier nominal à un prix de départ
+ * impair (typiquement 1 €), ajuste le montant pour que le nouveau prix
+ * retombe pile sur un multiple du palier — ex : prix actuel 1 € + palier 5 €
+ * → +4 € (arrive à 5 €), + palier 10 € → +9 € (arrive à 10 €), + palier
+ * 20 € → +19 € (arrive à 20 €). Dès que le prix est déjà aligné sur le
+ * palier (après cette première enchère), l'ajustement redevient simplement
+ * le palier nominal — comportement inchangé pour la suite des enchères.
+ * Jamais en dessous de min_increment (sinon place_auto_bid rejetterait
+ * l'enchère, "Montant insuffisant") : dans ce cas rare, rajoute des paliers
+ * entiers jusqu'à repasser au-dessus. Calcul en centimes pour éviter les
+ * arrondis flottants. */
+export const computeQuickBidIncrement = (currentPrice: number, tier: number, minIncrement: number): number => {
+  const priceCents = Math.round(currentPrice * 100);
+  const tierCents = Math.round(tier * 100);
+  const remainder = priceCents % tierCents;
+  let adjustedCents = remainder === 0 ? tierCents : tierCents - remainder;
+  const minCents = Math.round(minIncrement * 100);
+  while (adjustedCents < minCents) adjustedCents += tierCents;
+  return adjustedCents / 100;
+};
 
 export interface AuctionSession {
   id: string;

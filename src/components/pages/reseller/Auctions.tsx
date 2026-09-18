@@ -3,7 +3,7 @@ import { AlertCircle, ImageOff, Gavel, Trophy, TrendingDown, ChevronUp, ChevronD
 import { Card } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
-import { useAuctionItems, AuctionItem, QUICK_BID_INCREMENTS } from '../../../hooks/useAuctionItems';
+import { useAuctionItems, AuctionItem, QUICK_BID_INCREMENTS, computeQuickBidIncrement } from '../../../hooks/useAuctionItems';
 import { useMyAuctionPayments } from '../../../hooks/useMyAuctionPayments';
 import { AuctionCountdown } from './AuctionCountdown';
 import { AuctionItemDetailModal } from './AuctionItemDetailModal';
@@ -167,17 +167,20 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
 
             <div className="hidden sm:block space-y-2">
               <div className="grid grid-cols-3 gap-1.5">
-                {QUICK_BID_INCREMENTS.map((inc) => (
-                  <button
-                    key={inc}
-                    onClick={() => submitBid(item.current_price + inc)}
-                    disabled={submitting || inc < item.min_increment || isWinning}
-                    title={isWinning ? 'Vous menez déjà cette enchère' : inc < item.min_increment ? `Pas minimal : ${EUR(item.min_increment)}` : undefined}
-                    className="px-2 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
-                  >
-                    +{inc} €
-                  </button>
-                ))}
+                {QUICK_BID_INCREMENTS.map((tier) => {
+                  const inc = computeQuickBidIncrement(item.current_price, tier, item.min_increment);
+                  return (
+                    <button
+                      key={tier}
+                      onClick={() => submitBid(item.current_price + inc)}
+                      disabled={submitting || isWinning}
+                      title={isWinning ? 'Vous menez déjà cette enchère' : undefined}
+                      className="px-2 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+                    >
+                      +{inc} €
+                    </button>
+                  );
+                })}
               </div>
               <form onSubmit={handleCustomSubmit} className="flex gap-2">
                 <div className="flex-1 min-w-0 flex items-stretch border border-gray-200 rounded-lg overflow-hidden focus-within:border-gray-400">
