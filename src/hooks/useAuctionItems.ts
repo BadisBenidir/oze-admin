@@ -5,18 +5,21 @@ import { supabase } from '../lib/supabase';
 export const QUICK_BID_INCREMENTS = [5, 10, 20];
 
 /** Montant réellement ajouté par un bouton d'enchère rapide (palier 5, 10 ou
- * 20) : plutôt que d'ajouter bêtement le palier nominal à un prix de départ
- * impair (typiquement 1 €), ajuste le montant pour que le nouveau prix
- * retombe pile sur un multiple du palier — ex : prix actuel 1 € + palier 5 €
- * → +4 € (arrive à 5 €), + palier 10 € → +9 € (arrive à 10 €), + palier
- * 20 € → +19 € (arrive à 20 €). Dès que le prix est déjà aligné sur le
- * palier (après cette première enchère), l'ajustement redevient simplement
- * le palier nominal — comportement inchangé pour la suite des enchères.
+ * 20). Ne s'applique QUE sur la toute première enchère d'un lot (aucun
+ * gagnant actuel, hasBids = false) : plutôt que d'ajouter bêtement le palier
+ * nominal à un prix de départ impair (typiquement 1 €), ajuste le montant
+ * pour que le nouveau prix retombe pile sur un multiple du palier — ex :
+ * prix actuel 1 € + palier 5 € → +4 € (arrive à 5 €), + palier 10 € → +9 €
+ * (arrive à 10 €), + palier 20 € → +19 € (arrive à 20 €).
+ * Dès qu'une enchère existe déjà sur le lot (hasBids = true), on revient
+ * TOUJOURS au palier nominal exact (+5 €, +10 €, +20 €), quel que soit le
+ * prix courant — pas d'ajustement, jamais, sur les enchères suivantes.
  * Jamais en dessous de min_increment (sinon place_auto_bid rejetterait
- * l'enchère, "Montant insuffisant") : dans ce cas rare, rajoute des paliers
- * entiers jusqu'à repasser au-dessus. Calcul en centimes pour éviter les
- * arrondis flottants. */
-export const computeQuickBidIncrement = (currentPrice: number, tier: number, minIncrement: number): number => {
+ * l'enchère, "Montant insuffisant") : dans ce cas rare (premier bid
+ * seulement), rajoute des paliers entiers jusqu'à repasser au-dessus. Calcul
+ * en centimes pour éviter les arrondis flottants. */
+export const computeQuickBidIncrement = (currentPrice: number, tier: number, minIncrement: number, hasBids: boolean): number => {
+  if (hasBids) return tier;
   const priceCents = Math.round(currentPrice * 100);
   const tierCents = Math.round(tier * 100);
   const remainder = priceCents % tierCents;

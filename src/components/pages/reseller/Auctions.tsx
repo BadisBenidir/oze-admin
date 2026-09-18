@@ -168,7 +168,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
             <div className="hidden sm:block space-y-2">
               <div className="grid grid-cols-3 gap-1.5">
                 {QUICK_BID_INCREMENTS.map((tier) => {
-                  const inc = computeQuickBidIncrement(item.current_price, tier, item.min_increment);
+                  const inc = computeQuickBidIncrement(item.current_price, tier, item.min_increment, item.current_winner_id !== null);
                   return (
                     <button
                       key={tier}
