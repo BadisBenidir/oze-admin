@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { X, Package, Trash2, AlertCircle, AlertTriangle, MapPin, Ban, BadgeCheck, RefreshCw, Gift } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { B2BOrder, B2BOrderItem, B2BOrderComputedStatus, getRequesterDisplayName } from '../../../hooks/useB2BOrders';
-import { cancelOrderItem, cancelOrder } from '../../../hooks/useCancelOrderItem';
+import { cancelOrderItem, cancelOrder, cancelEntrupyCertificate } from '../../../hooks/useCancelOrderItem';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 import { supabase } from '../../../lib/supabase';
 
@@ -385,6 +385,7 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const [syncError, setSyncError] = useState<string | null>(null);
   const [pendingGifts, setPendingGifts] = useState<{ id: string; quantity: number }[]>([]);
   const [deferringGiftId, setDeferringGiftId] = useState<string | null>(null);
+  const [cancellingEntrupyId, setCancellingEntrupyId] = useState<string | null>(null);
   const pendingGiftQuantity = pendingGifts.reduce((sum, g) => sum + g.quantity, 0);
 
   // Rappel visuel "n'oublie pas le portefeuille offert" — voir
@@ -418,6 +419,27 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
     await supabase.rpc('defer_gift_reward_to_next_shipment', { p_gift_id: giftId });
     setDeferringGiftId(null);
     fetchPendingGifts();
+  };
+
+  const handleCancelEntrupy = async (orderItemId: string) => {
+    if (!window.confirm("Annuler le certificat Entrupy de cet article ? 19,99 € seront recrédités sur le portefeuille du revendeur — l'article lui-même reste dans la commande.")) {
+      return;
+    }
+    setCancellingEntrupyId(orderItemId);
+    const result = await cancelEntrupyCertificate(orderItemId);
+    setCancellingEntrupyId(null);
+    if (!result.success) {
+      setRefundNotice(`Erreur lors de l'annulation du certificat : ${result.error}`);
+      return;
+    }
+    if (result.refund_status === 'succeeded') {
+      setRefundNotice('Certificat Entrupy annulé — 19,99 € remboursés sur le portefeuille du revendeur.');
+    } else if (result.refund_status === 'failed') {
+      setRefundNotice(`Certificat annulé, mais le remboursement a échoué (${result.refund_error || 'erreur inconnue'}) — à traiter manuellement.`);
+    } else {
+      setRefundNotice('Certificat Entrupy annulé.');
+    }
+    onOrderUpdated();
   };
 
   if (!order) return null;
@@ -586,10 +608,19 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                     </div>
                                   )}
                                   {!isCancelled && item.entrupy_requested && (
-                                    <div className="mt-1">
+                                    <div className="mt-1 flex items-center gap-1.5">
                                       <Badge variant="purple">
                                         <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy inclus
                                       </Badge>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCancelEntrupy(item.id)}
+                                        disabled={cancellingEntrupyId === item.id}
+                                        title="Annuler uniquement le certificat Entrupy (rembourse 19,99 € sur le portefeuille, garde l'article)"
+                                        className="p-0.5 text-gray-400 hover:text-red-600 disabled:opacity-50"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
                                     </div>
                                   )}
                                   {!isCancelled && fulfillmentBadge(item.fulfillment_status) && (

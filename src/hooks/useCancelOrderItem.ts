@@ -27,6 +27,25 @@ export const cancelOrderItem = async (
   return { success: true, ...(data || {}) };
 };
 
+export interface CancelEntrupyResult {
+  success: boolean;
+  error?: string;
+  refund_status?: 'not_applicable' | 'succeeded' | 'failed';
+  refund_error?: string;
+}
+
+/** Retire le certificat Entrupy d'UN article sans annuler l'article — toujours
+ * remboursé en crédit portefeuille, jamais de choix Stripe (contrairement à
+ * cancelOrderItem). */
+export const cancelEntrupyCertificate = async (orderItemId: string): Promise<CancelEntrupyResult> => {
+  const { data, error } = await invokeEdgeFunction<CancelEntrupyResult>('cancel-entrupy-certificate', {
+    order_item_id: orderItemId,
+  });
+
+  if (error) return { success: false, error };
+  return { success: true, ...(data || {}) };
+};
+
 export interface CancelOrderResult {
   success: boolean;
   error?: string;
