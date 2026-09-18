@@ -301,7 +301,7 @@ export const AuctionsAdmin: React.FC = () => {
                                           <p>{item.winner_name}</p>
                                           <p className="text-gray-400">{item.winner_email}</p>
                                         </div>
-                                        {item.current_max_amount != null && item.current_max_amount > item.current_price && (
+                                        {item.current_max_amount != null && Number(item.current_max_amount) > Number(item.current_price) && (
                                           <span
                                             className="flex-shrink-0 text-green-600"
                                             title={`A encore de la marge : plafond secret ${EUR(item.current_max_amount)}, resurenchérira automatiquement jusqu'à ce montant`}
