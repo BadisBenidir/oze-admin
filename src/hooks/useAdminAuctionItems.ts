@@ -20,6 +20,9 @@ export interface AdminAuctionItem {
   product_id: string | null;
   product_name: string | null;
   created_at: string;
+  order_id: string | null;
+  payment_deadline: string | null;
+  order_payment_status: 'pending' | 'paid' | null;
 }
 
 export interface AuctionItemInput {
@@ -32,9 +35,10 @@ export interface AuctionItemInput {
   reserve_price?: number | null;
 }
 
-type Row = Omit<AdminAuctionItem, 'winner_name' | 'winner_email' | 'product_name'> & {
+type Row = Omit<AdminAuctionItem, 'winner_name' | 'winner_email' | 'product_name' | 'order_payment_status'> & {
   winner: { first_name: string | null; last_name: string | null; email: string | null } | null;
   product: { name: string } | null;
+  order: { payment_status: 'pending' | 'paid' } | null;
 };
 
 const mapRow = (row: Row): AdminAuctionItem => {
@@ -44,6 +48,7 @@ const mapRow = (row: Row): AdminAuctionItem => {
     winner_name: winnerName || null,
     winner_email: row.winner?.email || null,
     product_name: row.product?.name || null,
+    order_payment_status: row.order?.payment_status || null,
   };
 };
 
@@ -67,7 +72,7 @@ export const useAdminAuctionItems = (sessionId: string | null) => {
       setError(null);
       const { data, error: fetchError } = await supabase
         .from('auction_items')
-        .select('*, winner:profiles!current_winner_id(first_name, last_name, email), product:products(name)')
+        .select('*, winner:profiles!current_winner_id(first_name, last_name, email), product:products(name), order:orders(payment_status)')
         .eq('session_id', sessionId)
         .order('created_at', { ascending: true });
       if (fetchError) throw new Error(fetchError.message);

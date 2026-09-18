@@ -441,7 +441,7 @@ export const AuctionsAdmin: React.FC = () => {
                             </td>
                             <td className="py-2.5 px-3 text-right text-sm font-semibold text-gray-900 tabular-nums">{EUR(item.current_price)}</td>
                             <td className="py-2.5 px-3 text-right">
-                              {item.status === 'sold' && (
+                              {item.status === 'sold' && !item.order_id && (
                                 <button
                                   onClick={() => handleGenerateOrder(item.id)}
                                   disabled={generatingId === item.id}
@@ -450,6 +450,20 @@ export const AuctionsAdmin: React.FC = () => {
                                 >
                                   {generatingId === item.id ? 'Génération...' : 'Générer la commande'}
                                 </button>
+                              )}
+                              {item.status === 'sold' && item.order_id && (
+                                item.order_payment_status === 'paid' ? (
+                                  <Badge variant="success">Payé</Badge>
+                                ) : item.payment_deadline && new Date(item.payment_deadline).getTime() <= Date.now() ? (
+                                  <Badge variant="danger">En retard de paiement</Badge>
+                                ) : (
+                                  <Badge variant="warning">
+                                    En attente
+                                    {item.payment_deadline
+                                      ? ` (avant ${new Date(item.payment_deadline).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})`
+                                      : ''}
+                                  </Badge>
+                                )
                               )}
                             </td>
                           </tr>

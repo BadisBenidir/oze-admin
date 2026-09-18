@@ -179,6 +179,33 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Paiement d'un lot d'enchère adjugé (voir auction-order-payment) :
+  // commande déjà créée par admin_generate_order_from_auction_item/
+  // admin_close_auction_session, payment_status='pending' — on la finalise
+  // ici, jamais de nouvelle commande créée depuis ce chemin.
+  if (metadata.type === 'auction_payment') {
+    console.log(`${LOG_PREFIX} Session ${session.id} — paiement enchère, order_id: ${metadata.order_id}`);
+    try {
+      const adminClient = createClient(supabaseUrl, serviceRoleKey);
+      const { data, error } = await adminClient.rpc('confirm_auction_order_payment', {
+        p_order_id: metadata.order_id,
+        p_stripe_session_id: session.id,
+        p_stripe_payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : null,
+      });
+
+      if (error) {
+        console.error(`${LOG_PREFIX} ÉCHEC confirm_auction_order_payment pour la session ${session.id}: ${error.message} (code ${error.code ?? 'n/a'})`);
+        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+      }
+
+      console.log(`${LOG_PREFIX} Commande d'enchère ${data?.order_id} confirmée pour la session ${session.id} (already_processed: ${!!data?.already_processed})`);
+      return new Response(JSON.stringify({ received: true }), { status: 200 });
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Erreur non gérée paiement enchère (session ${session.id}):`, err instanceof Error ? err.stack || err.message : err);
+      return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Erreur inconnue' }), { status: 500 });
+    }
+  }
+
   console.log(`${LOG_PREFIX} Session ${session.id} — reseller_id: ${metadata.reseller_id}, product_ids bruts: ${metadata.product_ids}`);
 
   try {
