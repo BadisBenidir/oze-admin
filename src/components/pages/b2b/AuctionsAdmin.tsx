@@ -296,19 +296,20 @@ export const AuctionsAdmin: React.FC = () => {
                                   </td>
                                   <td className="py-2.5 px-3 text-xs text-gray-700">
                                     {item.winner_name ? (
-                                      <div className="flex items-center gap-1.5">
-                                        <div>
-                                          <p>{item.winner_name}</p>
-                                          <p className="text-gray-400">{item.winner_email}</p>
-                                        </div>
-                                        {item.current_max_amount != null && Number(item.current_max_amount) > Number(item.current_price) && (
-                                          <span
-                                            className="flex-shrink-0 text-green-600"
-                                            title={`A encore de la marge : plafond secret ${EUR(item.current_max_amount)}, resurenchérira automatiquement jusqu'à ce montant`}
-                                          >
-                                            <TrendingUp className="h-3.5 w-3.5" />
-                                          </span>
-                                        )}
+                                      <div>
+                                        <p>{item.winner_name}</p>
+                                        <p className="text-gray-400">{item.winner_email}</p>
+                                        {item.current_max_amount != null && (() => {
+                                          const marge = Number(item.current_max_amount) - Number(item.current_price);
+                                          const hasMarge = marge > 0;
+                                          return (
+                                            <p className={`mt-0.5 flex items-center gap-1 font-medium ${hasMarge ? 'text-green-600' : 'text-gray-400'}`}>
+                                              {hasMarge && <TrendingUp className="h-3 w-3 flex-shrink-0" />}
+                                              Plafond : {EUR(item.current_max_amount)}
+                                              {hasMarge ? ` (+${EUR(marge)})` : ' (aucune marge)'}
+                                            </p>
+                                          );
+                                        })()}
                                       </div>
                                     ) : '—'}
                                   </td>
