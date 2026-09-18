@@ -242,11 +242,10 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
   );
 };
 
-/** Page des enchères en direct — onglet "Enchères" de la nav, protégé par un
- * code d'accès tant que la fonctionnalité est en accès anticipé (voir
- * ResellerApp.tsx / useAuctionAccess). Charte graphique alignée sur le reste
- * du portail (Card/Badge partagés, boutons sombres). Grille 2 colonnes dès
- * mobile (cartes compactes) jusqu'à 4 colonnes en desktop large. */
+/** Page des enchères en direct — onglet "Enchères" de la nav, ouvert à tous
+ * les revendeurs. Charte graphique alignée sur le reste du portail
+ * (Card/Badge partagés, boutons sombres). Grille 2 colonnes dès mobile
+ * (cartes compactes) jusqu'à 4 colonnes en desktop large. */
 export const Auctions: React.FC = () => {
   const { profile, acceptTerms } = useResellerAuth();
   const { session, items, myBidItemIds, myMaxAmounts, loading, error, placeAutoBid } = useAuctionItems(true, profile?.id);

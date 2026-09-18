@@ -18,18 +18,14 @@ import { WalletPage } from '../components/pages/reseller/WalletPage';
 import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
 import { CartBlockingModal } from '../components/pages/reseller/CartBlockingModal';
 import { Auctions } from '../components/pages/reseller/Auctions';
-import { AuctionAccessGate } from '../components/pages/reseller/AuctionAccessGate';
-import { useAuctionAccess } from '../hooks/useAuctionAccess';
 import { useResellerPresenceTracking } from '../hooks/useResellerPresenceTracking';
 import { Terms } from '../components/pages/reseller/Terms';
 import { ShoppingCart, Wallet, X } from 'lucide-react';
 
 // Deux routes "réelles" (URL adressables) hors du système d'onglets : la
-// fiche produit du catalogue B2B et le panier. Le reste — dont désormais
-// "Enchères" — fonctionne comme un onglet normal (voir useNavigation et
-// resellerNavigation.ts) : son contenu est simplement gaté par un code
-// d'accès tant que la fonctionnalité est en accès anticipé (voir
-// AuctionAccessGate / useAuctionAccess).
+// fiche produit du catalogue B2B et le panier. Le reste — dont "Enchères",
+// ouvert à tous les revendeurs depuis la fin de l'accès anticipé — fonctionne
+// comme un onglet normal (voir useNavigation et resellerNavigation.ts).
 const parseProductId = (pathname: string): string | null => {
   const match = pathname.match(/^\/catalogue\/([^/]+)\/?$/);
   return match ? decodeURIComponent(match[1]) : null;
@@ -56,7 +52,6 @@ function ResellerApp() {
   const { activeTab, activeSubTab, navigateTo } = useNavigation(navItems, 'catalog');
   const cart = useB2BCart(profile?.id, Boolean(profile?.legal_status));
   const wallet = useWallet(profile?.id);
-  const auctionAccess = useAuctionAccess(profile?.id);
   const currentTab = activeTab || 'catalog';
 
   // Présence temps réel + visiteur unique du jour (onglet admin
@@ -217,7 +212,7 @@ function ResellerApp() {
       case 'sourcing':
         return <SourcingSurMesure />;
       case 'auctions':
-        return auctionAccess.unlocked ? <Auctions /> : <AuctionAccessGate onSubmitCode={auctionAccess.tryUnlock} />;
+        return <Auctions />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':
