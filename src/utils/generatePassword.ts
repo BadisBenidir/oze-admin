@@ -12,7 +12,11 @@
 const UPPERCASE = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const LOWERCASE = 'abcdefghijkmnpqrstuvwxyz';
 const DIGITS = '23456789';
-const SPECIAL = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+// Seulement des caractères spéciaux faciles à taper/dicter au téléphone —
+// exclut {}[]|<>^~`"'\ et la ponctuation ambiguë à l'oral (point, virgule,
+// point-virgule, deux-points) qui rendaient ces mots de passe pénibles à
+// communiquer à un revendeur.
+const SPECIAL = '!@#$%&*-_+';
 const ALL_CHARS = UPPERCASE + LOWERCASE + DIGITS + SPECIAL;
 
 const secureRandomInt = (maxExclusive: number): number => {
@@ -27,7 +31,7 @@ const pickRandomChar = (charset: string): string => charset[secureRandomInt(char
  * Génère un mot de passe temporaire d'au moins 12 caractères, garantissant
  * au moins une majuscule, une minuscule, un chiffre et un caractère spécial.
  */
-export const generateSecurePassword = (length = 14): string => {
+export const generateSecurePassword = (length = 12): string => {
   const safeLength = Math.max(length, 12);
 
   const requiredChars = [
