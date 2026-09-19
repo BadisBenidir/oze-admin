@@ -134,20 +134,20 @@ export const B2BOrders: React.FC = () => {
     setBulkSending(true);
     setBulkProgress({ done: 0, total: pendingFacturxOrders.length });
     let done = 0;
-    const failedOrderNumbers: string[] = [];
+    const failures: string[] = [];
     // Séquentiel plutôt qu'en parallèle : évite de bombarder l'API Qonto de
     // dizaines d'appels simultanés (limite de débit potentielle côté Qonto).
     for (const order of pendingFacturxOrders) {
       const result = await emitQontoInvoice(order.id);
-      if (!result.success) failedOrderNumbers.push(order.order_number);
+      if (!result.success) failures.push(`${order.order_number} : ${result.error || 'erreur inconnue'}`);
       done += 1;
       setBulkProgress({ done, total: pendingFacturxOrders.length });
     }
     await refreshInvoiceBadges();
     setBulkSending(false);
     setBulkProgress(null);
-    if (failedOrderNumbers.length > 0) {
-      alert(`${done - failedOrderNumbers.length}/${done} facture(s) émise(s). Échec sur : ${failedOrderNumbers.join(', ')}`);
+    if (failures.length > 0) {
+      alert(`${done - failures.length}/${done} facture(s) émise(s).\n\nÉchecs :\n${failures.join('\n')}`);
     } else {
       alert(`${done} facture(s) émise(s) avec succès sur Qonto.`);
     }
