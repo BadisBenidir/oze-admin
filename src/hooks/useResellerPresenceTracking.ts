@@ -53,12 +53,13 @@ export const useResellerPresenceTracking = (profile: TrackedProfile | null) => {
 
   useEffect(() => {
     if (!profile?.id) return;
-    const today = new Date().toISOString().slice(0, 10);
-    supabase
-      .from('reseller_daily_sessions')
-      .upsert({ profile_id: profile.id, date: today }, { onConflict: 'profile_id,date', ignoreDuplicates: true })
-      .then(({ error }) => {
-        if (error) console.error('Erreur lors de l\'enregistrement de la session quotidienne:', error.message);
-      });
+    // Passe par une RPC security definer (0149) plutôt qu'un insert direct
+    // + RLS — ce dernier échouait systématiquement en production (403 "new
+    // row violates row-level security policy") pour une raison jamais
+    // isolée malgré une policy et des ids en apparence corrects ; même
+    // pattern déjà appliqué à auction_bids (0108) pour un problème similaire.
+    supabase.rpc('log_reseller_daily_session').then(({ error }) => {
+      if (error) console.error('Erreur lors de l\'enregistrement de la session quotidienne:', error.message);
+    });
   }, [profile?.id]);
 };
