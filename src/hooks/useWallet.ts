@@ -93,8 +93,17 @@ export const useWallet = (profileId: string | undefined) => {
     return { success: true };
   };
 
-  const progressInTier = Math.min(Math.max(cumulativePaid - giftsUnlocked * LOYALTY_TIER_AMOUNT, 0), LOYALTY_TIER_AMOUNT);
-  const remainingToNextTier = Math.max(LOYALTY_TIER_AMOUNT - progressInTier, 0);
+  // Sur certains comptes, loyalty_gifts_unlocked (déjà accordés) dépasse ce
+  // que cumulativePaid justifierait réellement (recalcul historique — voir
+  // 0131 : le cadeau a longtemps pu être accordé sur une base différente du
+  // cumul strict de paid_amount). Dans ce cas il manque PLUS qu'un palier
+  // plein pour le prochain cadeau, pas juste 1000 € comme l'ancien calcul
+  // le supposait à tort (il plafonnait à 0 et affichait toujours "plus que
+  // 1000 €", même quand le vrai manque était largement supérieur) — la
+  // jauge semblait alors ne jamais avancer malgré de vraies recharges.
+  const totalPaidNeededForNextGift = (giftsUnlocked + 1) * LOYALTY_TIER_AMOUNT;
+  const remainingToNextTier = Math.max(totalPaidNeededForNextGift - cumulativePaid, 0);
+  const progressInTier = Math.max(LOYALTY_TIER_AMOUNT - remainingToNextTier, 0);
 
   return {
     balance,
