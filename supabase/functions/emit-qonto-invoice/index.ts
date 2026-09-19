@@ -291,9 +291,16 @@ Deno.serve(async (req: Request) => {
         bic: settlementBic,
       },
       items: activeItems.map((item) => {
-        const title = String(
+        const rawTitle = String(
           [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article'
         );
+        // Qonto rejette (422) tout `title` de plus de 120 caractères — les
+        // noms de produits luxe + condition peuvent facilement dépasser
+        // cette limite, ce qui faisait échouer l'émission de la facture.
+        const QONTO_ITEM_TITLE_MAX = 120;
+        const title = rawTitle.length > QONTO_ITEM_TITLE_MAX
+          ? rawTitle.slice(0, QONTO_ITEM_TITLE_MAX - 1) + '…'
+          : rawTitle;
         return {
           title,
           quantity: String(item.quantity || '1'),
