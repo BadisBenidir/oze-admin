@@ -23,12 +23,15 @@ import {
   UserPlus,
   Search,
   Mail,
+  Glasses,
 } from 'lucide-react';
 
 const statusBadge = (status: Reseller['status']) => {
   switch (status) {
     case 'active':
       return <Badge variant="success">Actif</Badge>;
+    case 'discovery':
+      return <Badge variant="purple">Découverte</Badge>;
     case 'suspended':
       return <Badge variant="danger">Suspendu</Badge>;
     default:
@@ -110,6 +113,15 @@ export const Resellers: React.FC = () => {
   const handleToggleStatus = async (reseller: Reseller) => {
     const newStatus = reseller.status === 'active' ? 'suspended' : 'active';
     await updateResellerStatus(reseller.id, newStatus);
+  };
+
+  // Accès découverte (0147) : lecture seule sur tout l'espace B2B, jamais
+  // d'achat/enchère possible — voir current_reseller_id()/
+  // reseller_can_transact(). Réversible : le toggle actif/suspendu
+  // ci-dessus repasse déjà un compte 'discovery' à 'active' (car il n'égale
+  // pas 'active'), pas besoin d'un bouton retour dédié.
+  const handleSetDiscovery = async (reseller: Reseller) => {
+    await updateResellerStatus(reseller.id, 'discovery');
   };
 
   const openContactsModal = async (reseller: Reseller) => {
@@ -390,6 +402,15 @@ export const Resellers: React.FC = () => {
                             >
                               {reseller.status === 'active' ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                             </button>
+                            {reseller.status !== 'discovery' && (
+                              <button
+                                onClick={() => handleSetDiscovery(reseller)}
+                                className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                title="Passer en accès découverte (lecture seule, aucun achat possible)"
+                              >
+                                <Glasses className="h-4 w-4" />
+                              </button>
+                            )}
                             <button
                               onClick={() => handleDelete(reseller)}
                               className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"

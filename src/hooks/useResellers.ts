@@ -8,7 +8,9 @@ export interface Reseller {
   id: string;
   company_name: string;
   legal_id: string | null;
-  status: 'pending' | 'active' | 'suspended' | 'deleted';
+  /** 'discovery' (0147) : accès en lecture seule à tout l'espace B2B, aucun
+   * achat/enchère possible — voir current_reseller_id()/reseller_can_transact(). */
+  status: 'pending' | 'active' | 'suspended' | 'deleted' | 'discovery';
   contact_email: string | null;
   contact_phone: string | null;
   billing_address: Record<string, unknown> | null;

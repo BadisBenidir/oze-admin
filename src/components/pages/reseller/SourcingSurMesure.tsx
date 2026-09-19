@@ -62,7 +62,8 @@ const classifySourcingItem = (item: ResellerSourcingItem): SourcingBucket => {
  * useResellerSourcing ne lit que des vues qui les excluent structurellement
  * — voir 0094/0095_b2b_sourcing_reseller_portal*.sql. */
 export const SourcingSurMesure: React.FC = () => {
-  const { isReseller } = useResellerAuth();
+  const { isReseller, profile } = useResellerAuth();
+  const isDiscovery = profile?.reseller_status === 'discovery';
   // Une mission annulée n'a jamais réellement été livrée au client — déjà
   // exclue par reseller_sourcing_missions, filtre redondant en défense en
   // profondeur (même principe que useMyShipments.ts).
@@ -132,13 +133,19 @@ export const SourcingSurMesure: React.FC = () => {
                   <div className="flex items-center gap-2">
                     {missionStatusBadge(mission.status)}
                     {mission.status === 'active' && mission.is_published_to_reseller && mission.items.length > 0 && (
-                      <button
-                        onClick={() => { setValidationError(''); setConfirmingMissionId(mission.id); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-xs font-medium"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Valider ma sélection
-                      </button>
+                      isDiscovery ? (
+                        <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                          Accès découverte : consultation uniquement
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => { setValidationError(''); setConfirmingMissionId(mission.id); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-xs font-medium"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Valider ma sélection
+                        </button>
+                      )
                     )}
                   </div>
                 </div>

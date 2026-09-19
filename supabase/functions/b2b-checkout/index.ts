@@ -53,11 +53,20 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // current_reseller_id() ne renvoie une valeur que pour un contact actif
-    // d'un revendeur au statut 'active' (voir migration 0001).
+    // current_reseller_id() renvoie désormais une valeur pour un revendeur
+    // 'active' OU 'discovery' (0147, accès lecture seule à tout l'espace
+    // B2B) — le simple fait d'avoir un id ne suffit donc plus à autoriser un
+    // achat, il faut le vérifier explicitement via reseller_can_transact().
     const { data: resellerId } = await callerClient.rpc('current_reseller_id');
     if (!resellerId) {
       return new Response(JSON.stringify({ error: 'Aucun compte revendeur actif associé à cet utilisateur' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const { data: canTransact } = await callerClient.rpc('reseller_can_transact');
+    if (!canTransact) {
+      return new Response(JSON.stringify({ error: "Accès découverte : l'achat n'est pas autorisé sur ce compte" }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

@@ -51,9 +51,10 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
   }, [cart.items.length]);
 
   const legalStatusMissing = Boolean(profile) && !profile?.legal_status;
+  const isDiscovery = profile?.reseller_status === 'discovery';
 
   const handlePay = async () => {
-    if (!profile || legalStatusMissing || !termsAccepted) return;
+    if (!profile || legalStatusMissing || !termsAccepted || isDiscovery) return;
     setError(null);
     setSubmitting(true);
     const paymentMethod = useWalletPayment ? (wallet.balance >= total ? 'wallet' : 'mixed') : 'card';
@@ -295,9 +296,16 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
             </span>
           </label>
 
+          {isDiscovery && (
+            <p className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+              Accès découverte : vous pouvez consulter le catalogue mais pas passer commande.
+            </p>
+          )}
+
           <button
             onClick={handlePay}
-            disabled={submitting || legalStatusMissing || !termsAccepted}
+            disabled={submitting || legalStatusMissing || !termsAccepted || isDiscovery}
             className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {submitting ? (

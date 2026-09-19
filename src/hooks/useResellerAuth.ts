@@ -11,7 +11,11 @@ export interface ResellerProfile {
   role: string
   reseller_id: string
   company_name: string
-  reseller_status: 'pending' | 'active' | 'suspended' | 'deleted'
+  /** 'discovery' (0147) : accès en lecture seule à tout l'espace B2B
+   * (catalogue, drops, enchères, sourcing), aucun achat/enchère possible —
+   * jamais bloqué comme 'pending'/'suspended'/'deleted', qui empêchent tout
+   * accès. Chaque écran d'achat doit vérifier ce champ explicitement. */
+  reseller_status: 'pending' | 'active' | 'suspended' | 'deleted' | 'discovery'
   /** Contact principal de l'entreprise : seul rôle autorisé à gérer les autres comptes de son équipe */
   is_primary: boolean
   /**
@@ -128,7 +132,10 @@ export const useResellerAuth = () => {
         return { profile: null, pendingReason: null }
       }
 
-      if (reseller.status !== 'active') {
+      // 'discovery' (0147) passe comme 'active' ici : accès complet en
+      // lecture, jamais redirigé vers l'écran "compte en attente" — seul
+      // reseller_status distingue ensuite les deux pour désactiver l'achat.
+      if (reseller.status !== 'active' && reseller.status !== 'discovery') {
         return {
           profile: null,
           pendingReason: reseller.status === 'suspended' ? 'suspended' : reseller.status === 'deleted' ? 'deleted' : 'pending',

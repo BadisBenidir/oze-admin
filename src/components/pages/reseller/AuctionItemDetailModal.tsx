@@ -15,6 +15,9 @@ interface AuctionItemDetailModalProps {
    * (voir Auctions.tsx) — place_auto_bid (0109) le refuserait de toute
    * façon côté serveur, ce n'est qu'un confort d'affichage ici. */
   canBid: boolean;
+  /** Compte en accès découverte (0147) : voir Auctions.tsx, message distinct
+   * de canBid=false pour statut juridique/CGV manquants. */
+  isDiscovery: boolean;
   /** Session encore 'upcoming' (voir Auctions.tsx) : lot visible en aperçu,
    * aucune enchère acceptée avant l'ouverture (place_auto_bid, 0138). */
   isPreview: boolean;
@@ -28,7 +31,7 @@ interface AuctionItemDetailModalProps {
  * carrousel), avec l'enchère directement disponible ici plutôt que sur la
  * carte de la grille. Enchère automatique (proxy bidding, 0108) : le champ
  * libre fixe un plafond, pas une mise ponctuelle. */
-export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ item, isWinning, isOutbid, myMax, canBid, isPreview, sessionStartsAt, onClose, onBid }) => {
+export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ item, isWinning, isOutbid, myMax, canBid, isDiscovery, isPreview, sessionStartsAt, onClose, onBid }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -219,7 +222,9 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                 </div>
               ) : !canBid ? (
                 <p className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
-                  Complétez les conditions requises (statut juridique et CGV, voir la page Enchères) pour enchérir.
+                  {isDiscovery
+                    ? 'Accès découverte : consultation uniquement.'
+                    : 'Complétez les conditions requises (statut juridique et CGV, voir la page Enchères) pour enchérir.'}
                 </p>
               ) : (
                 <div className="mt-4 space-y-2">

@@ -21,6 +21,10 @@ interface ItemCardProps {
    * (voir Auctions.tsx) — place_auto_bid (0109) le refuserait de toute
    * façon côté serveur, ce n'est qu'un confort d'affichage ici. */
   canBid: boolean;
+  /** Compte en accès découverte (0147) : catalogue/enchères visibles en
+   * lecture seule, jamais autorisé à enchérir — distinct de canBid=false
+   * pour manque de statut juridique/CGV (message différent). */
+  isDiscovery: boolean;
   /** Session encore 'upcoming' (voir Auctions.tsx) : le lot est visible en
    * aperçu (prix de départ, photos, description) mais aucune enchère n'est
    * acceptée avant l'ouverture — place_auto_bid (0138) le refuserait de
@@ -36,7 +40,7 @@ interface ItemCardProps {
  * la propagation du clic pour ne pas déclencher onOpen en même temps.
  * Enchère automatique (proxy bidding, 0108) : le champ libre fixe un
  * plafond, pas une mise ponctuelle — le système surenchérit seul jusque-là. */
-const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, canBid, isPreview, sessionStartsAt, onOpen, onBid }) => {
+const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, canBid, isDiscovery, isPreview, sessionStartsAt, onOpen, onBid }) => {
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -150,7 +154,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
         ) : !canBid ? (
           <div className="mt-auto pt-2 sm:pt-3" onClick={(e) => e.stopPropagation()}>
             <p className="text-[10px] sm:text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 sm:px-2.5 py-1.5 sm:py-2">
-              Complétez les conditions ci-dessus pour enchérir.
+              {isDiscovery ? 'Accès découverte : consultation uniquement.' : 'Complétez les conditions ci-dessus pour enchérir.'}
             </p>
           </div>
         ) : (
@@ -261,7 +265,8 @@ export const Auctions: React.FC = () => {
   const [acceptingTerms, setAcceptingTerms] = useState(false);
   const legalStatusMissing = !profile?.legal_status;
   const termsMissing = !legalStatusMissing && !profile?.terms_accepted_at;
-  const canBid = Boolean(profile?.legal_status) && Boolean(profile?.terms_accepted_at);
+  const isDiscovery = profile?.reseller_status === 'discovery';
+  const canBid = !isDiscovery && Boolean(profile?.legal_status) && Boolean(profile?.terms_accepted_at);
 
   const handleAcceptTerms = async () => {
     if (!termsCheckbox || acceptingTerms) return;
@@ -358,6 +363,7 @@ export const Auctions: React.FC = () => {
               isOutbid={myBidItemIds.has(item.id) && item.current_winner_id !== profile?.id}
               myMax={myMaxAmounts.get(item.id)}
               canBid={canBid}
+              isDiscovery={isDiscovery}
               isPreview={session?.status === 'upcoming'}
               sessionStartsAt={session?.starts_at ?? null}
               onOpen={() => setViewingItemId(item.id)}
@@ -373,6 +379,7 @@ export const Auctions: React.FC = () => {
         isOutbid={Boolean(viewingItem) && myBidItemIds.has(viewingItem!.id) && viewingItem?.current_winner_id !== profile?.id}
         myMax={viewingItem ? myMaxAmounts.get(viewingItem.id) : undefined}
         canBid={canBid}
+        isDiscovery={isDiscovery}
         isPreview={session?.status === 'upcoming'}
         sessionStartsAt={session?.starts_at ?? null}
         onClose={() => setViewingItemId(null)}

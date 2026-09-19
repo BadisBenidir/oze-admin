@@ -35,6 +35,8 @@ const resellerStatusBadge = (status: Reseller['status']) => {
   switch (status) {
     case 'active':
       return <Badge variant="success">Actif</Badge>;
+    case 'discovery':
+      return <Badge variant="purple">Découverte</Badge>;
     case 'suspended':
       return <Badge variant="danger">Suspendu</Badge>;
     default:
