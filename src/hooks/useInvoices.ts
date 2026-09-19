@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { generateInvoicePdf, InvoiceLineItem, InvoiceBillingDetails } from '../utils/generateInvoicePdf';
 import { extractFunctionErrorMessage } from '../utils/edgeFunctionError';
@@ -22,37 +22,44 @@ export const useOrderInvoiceBadges = (orderIds: string[]) => {
   const [badges, setBadges] = useState<Record<string, OrderInvoiceBadge>>({});
   const key = orderIds.slice().sort().join(',');
 
-  useEffect(() => {
+  const fetchBadges = useCallback(async () => {
     if (!key) {
       setBadges({});
       return;
     }
+    const { data } = await supabase
+      .from('invoices')
+      .select('order_id, invoice_type, transmission_status, qonto_invoice_id, qonto_invoice_number, pdf_url')
+      .in('order_id', key.split(','));
+    if (!data) return;
+    const next: Record<string, OrderInvoiceBadge> = {};
+    data.forEach((row) => {
+      next[row.order_id] = {
+        invoiceType: row.invoice_type,
+        transmissionStatus: row.transmission_status,
+        qontoEmitted: Boolean(row.qonto_invoice_id),
+        qontoInvoiceNumber: row.qonto_invoice_number,
+        pdfUrl: row.pdf_url,
+      };
+    });
+    setBadges(next);
+  }, [key]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
-        .from('invoices')
-        .select('order_id, invoice_type, transmission_status, qonto_invoice_id, qonto_invoice_number, pdf_url')
-        .in('order_id', key.split(','));
-      if (cancelled || !data) return;
-      const next: Record<string, OrderInvoiceBadge> = {};
-      data.forEach((row) => {
-        next[row.order_id] = {
-          invoiceType: row.invoice_type,
-          transmissionStatus: row.transmission_status,
-          qontoEmitted: Boolean(row.qonto_invoice_id),
-          qontoInvoiceNumber: row.qonto_invoice_number,
-          pdfUrl: row.pdf_url,
-        };
-      });
-      setBadges(next);
+      if (!cancelled) await fetchBadges();
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [fetchBadges]);
 
-  return badges;
+  // `refresh` : à rappeler après emitQontoInvoice (émission sur Qonto) —
+  // sans ça, le badge "Payé/Émis" (icône Send -> CheckCircle2) restait figé
+  // jusqu'au rechargement complet de la page, ce fetch initial étant le SEUL
+  // endroit qui peuplait `badges` (pas de refetch automatique après action).
+  return { badges, refresh: fetchBadges };
 };
 
 export interface InvoiceOrderInput {

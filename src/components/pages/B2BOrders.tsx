@@ -67,6 +67,7 @@ export const B2BOrders: React.FC = () => {
       alert(result.error);
       return;
     }
+    await refreshInvoiceBadges();
     alert(
       result.already_emitted
         ? 'Cette commande avait déjà une facture Qonto émise.'
@@ -92,7 +93,7 @@ export const B2BOrders: React.FC = () => {
     });
   }, [orders, search]);
 
-  const invoiceBadges = useOrderInvoiceBadges(filteredOrders.map((o) => o.id));
+  const { badges: invoiceBadges, refresh: refreshInvoiceBadges } = useOrderInvoiceBadges(filteredOrders.map((o) => o.id));
 
   const handleSyncSendcloud = async () => {
     setSyncNotice(null);

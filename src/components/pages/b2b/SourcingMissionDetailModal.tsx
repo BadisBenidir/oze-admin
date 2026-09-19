@@ -57,7 +57,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [successToast, setSuccessToast] = useState('');
   const { emitQontoInvoice, downloadingOrderId } = useInvoices();
-  const invoiceBadges = useOrderInvoiceBadges(mission?.order_id ? [mission.order_id] : []);
+  const { badges: invoiceBadges, refresh: refreshInvoiceBadges } = useOrderInvoiceBadges(mission?.order_id ? [mission.order_id] : []);
 
   useEffect(() => {
     setStatusError('');
@@ -80,6 +80,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
       alert(result.error);
       return;
     }
+    await refreshInvoiceBadges();
     alert(
       result.already_emitted
         ? 'Cette commande avait déjà une facture Qonto émise.'

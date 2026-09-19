@@ -88,6 +88,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
       alert(result.error);
       return;
     }
+    await refreshInvoiceBadges();
     alert(
       result.already_emitted
         ? 'Cette commande avait déjà une facture Qonto émise.'
@@ -119,7 +120,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
       ? channelFilteredOrders
       : channelFilteredOrders.filter((order) => getShipmentStatus(order) === shipmentFilter);
 
-  const invoiceBadges = useOrderInvoiceBadges(filteredOrders.map((o) => o.id));
+  const { badges: invoiceBadges, refresh: refreshInvoiceBadges } = useOrderInvoiceBadges(filteredOrders.map((o) => o.id));
 
   // Commandes B2B : composant et hook (useB2BOrders) entièrement séparés des
   // commandes B2C ci-dessous — simplement affiché sous cet onglet de
