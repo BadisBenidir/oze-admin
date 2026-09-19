@@ -78,6 +78,8 @@ export const B2BOrders: React.FC = () => {
   const [syncProgress, setSyncProgress] = useState<{ checked: number; updated: number } | null>(null);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Recherche : numéro de commande, revendeur/demandeur, ou numéro de série
   // d'un des articles (product_snapshot.serial_number, figé à la commande).
@@ -93,7 +95,10 @@ export const B2BOrders: React.FC = () => {
     });
   }, [orders, search]);
 
-  const { badges: invoiceBadges, refresh: refreshInvoiceBadges } = useOrderInvoiceBadges(filteredOrders.map((o) => o.id));
+  // Sur l'ensemble des commandes (pas seulement filteredOrders, sinon le
+  // bouton "Envoyer toutes les factures" ci-dessous ignorerait celles hors
+  // recherche en cours).
+  const { badges: invoiceBadges, refresh: refreshInvoiceBadges } = useOrderInvoiceBadges(orders.map((o) => o.id));
 
   const handleSyncSendcloud = async () => {
     setSyncNotice(null);
@@ -114,6 +119,38 @@ export const B2BOrders: React.FC = () => {
         ? `Arriéré important : ${result.checked} colis vérifiés (${result.updated} mis à jour), relance encore pour continuer.`
         : `${result.checked} colis vérifiés, ${result.updated} mis à jour.`
     );
+  };
+
+  // Clients pro (Factur-X) pas encore émis sur Qonto — jamais les B2C
+  // ('b2c_retail'), même règle que le bouton d'envoi individuel.
+  const pendingFacturxOrders = useMemo(
+    () => orders.filter((o) => invoiceBadges[o.id]?.invoiceType === 'b2b_facturx' && !invoiceBadges[o.id]?.qontoEmitted),
+    [orders, invoiceBadges]
+  );
+
+  const handleBulkEmitQonto = async () => {
+    if (pendingFacturxOrders.length === 0 || bulkSending) return;
+    if (!window.confirm(`Émettre ${pendingFacturxOrders.length} facture(s) sur Qonto ?`)) return;
+    setBulkSending(true);
+    setBulkProgress({ done: 0, total: pendingFacturxOrders.length });
+    let done = 0;
+    const failedOrderNumbers: string[] = [];
+    // Séquentiel plutôt qu'en parallèle : évite de bombarder l'API Qonto de
+    // dizaines d'appels simultanés (limite de débit potentielle côté Qonto).
+    for (const order of pendingFacturxOrders) {
+      const result = await emitQontoInvoice(order.id);
+      if (!result.success) failedOrderNumbers.push(order.order_number);
+      done += 1;
+      setBulkProgress({ done, total: pendingFacturxOrders.length });
+    }
+    await refreshInvoiceBadges();
+    setBulkSending(false);
+    setBulkProgress(null);
+    if (failedOrderNumbers.length > 0) {
+      alert(`${done - failedOrderNumbers.length}/${done} facture(s) émise(s). Échec sur : ${failedOrderNumbers.join(', ')}`);
+    } else {
+      alert(`${done} facture(s) émise(s) avec succès sur Qonto.`);
+    }
   };
 
   // Après annulation d'un article, `orders` se rafraîchit mais `viewingOrder`
@@ -147,6 +184,19 @@ export const B2BOrders: React.FC = () => {
                 : 'Actualisation...'
               : 'Actualiser les statuts Sendcloud'}
           </button>
+          {pendingFacturxOrders.length > 0 && (
+            <button
+              onClick={handleBulkEmitQonto}
+              disabled={bulkSending}
+              title="Émet sur Qonto toutes les factures B2B (Factur-X) pas encore envoyées"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-emerald-700 border border-emerald-200 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
+            >
+              {bulkSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {bulkSending
+                ? `Envoi... (${bulkProgress?.done ?? 0}/${bulkProgress?.total ?? pendingFacturxOrders.length})`
+                : `Envoyer toutes les factures (${pendingFacturxOrders.length})`}
+            </button>
+          )}
           <button
             onClick={refresh}
             className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
