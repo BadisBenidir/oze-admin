@@ -46,6 +46,63 @@ const ItemRow: React.FC<ItemRowProps> = ({ item, checked, onToggle, onRevertOne,
   );
 };
 
+// Regroupe par jour de création (created_at, déjà trié ascendant par la
+// requête — voir useReceptionItems.ts) plutôt que de laisser l'ordre
+// implicite : l'admin doit pouvoir voir directement quels articles sont
+// arrivés le même jour, pas juste deviner un tri invisible.
+const dateKey = (iso: string) => iso.slice(0, 10);
+const formatDateHeader = (key: string) =>
+  new Date(`${key}T00:00:00`).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+interface DateGroupedListProps {
+  items: ReceptionItem[];
+  emptyLabel: string;
+  checkedIds: Set<string>;
+  onToggle: (id: string) => void;
+  onToggleAll: (ids: string[]) => void;
+  onRevertOne?: (id: string) => void;
+  revertBusy?: boolean;
+}
+
+const DateGroupedList: React.FC<DateGroupedListProps> = ({ items, emptyLabel, checkedIds, onToggle, onToggleAll, onRevertOne, revertBusy }) => {
+  if (items.length === 0) {
+    return <p className="text-xs text-gray-400 px-4 py-6 text-center">{emptyLabel}</p>;
+  }
+
+  const groups = new Map<string, ReceptionItem[]>();
+  items.forEach((item) => {
+    const key = dateKey(item.created_at);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(item);
+  });
+
+  return (
+    <>
+      {Array.from(groups.entries()).map(([date, dateItems]) => {
+        const ids = dateItems.map((i) => i.id);
+        const allChecked = ids.every((id) => checkedIds.has(id));
+        return (
+          <div key={date}>
+            <div className="flex items-center justify-between px-4 py-1.5 bg-gray-50 border-b border-gray-100">
+              <p className="text-[11px] font-medium text-gray-500">{formatDateHeader(date)}</p>
+              <button
+                type="button"
+                onClick={() => onToggleAll(ids)}
+                className="text-[11px] font-medium text-gray-600 hover:text-gray-900 underline flex-shrink-0"
+              >
+                {allChecked ? 'Tout désélectionner' : 'Tout sélectionner'}
+              </button>
+            </div>
+            {dateItems.map((item) => (
+              <ItemRow key={item.id} item={item} checked={checkedIds.has(item.id)} onToggle={onToggle} onRevertOne={onRevertOne} revertBusy={revertBusy} />
+            ))}
+          </div>
+        );
+      })}
+    </>
+  );
+};
+
 export const ReceptionView: React.FC = () => {
   const { isAdmin } = useAdminAuth();
   const { groups, loading, error, markReceived, markReadyToShip, revertToReceived } = useReceptionItems(isAdmin);
@@ -66,6 +123,20 @@ export const ReceptionView: React.FC = () => {
 
   const clearSelection = (groupKey: string) => {
     setSelection((prev) => ({ ...prev, [groupKey]: new Set() }));
+  };
+
+  // Sélectionne/désélectionne tout un lot d'ids d'un coup — utilisé par le
+  // bouton "Tout sélectionner" en tête de colonne (toutes dates confondues)
+  // et par celui de chaque en-tête de date (0150).
+  const toggleAll = (groupKey: string, ids: string[]) => {
+    setSelection((prev) => {
+      const current = prev[groupKey] || new Set<string>();
+      const allSelected = ids.length > 0 && ids.every((id) => current.has(id));
+      const next = new Set(current);
+      if (allSelected) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return { ...prev, [groupKey]: next };
+    });
   };
 
   const handleMarkReceived = async (groupKey: string) => {
@@ -157,12 +228,23 @@ export const ReceptionView: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">À réceptionner ({group.toReceive.length})</p>
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">À réceptionner ({group.toReceive.length})</p>
+                    {group.toReceive.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleAll(toReceiveKey, group.toReceive.map((i) => i.id))}
+                        className="text-[11px] font-medium text-gray-500 hover:text-gray-900 underline flex-shrink-0"
+                      >
+                        Tout sélectionner
+                      </button>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleMarkReceived(toReceiveKey)}
                     disabled={selectedFor(toReceiveKey).size === 0 || busyKey === toReceiveKey}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                   >
                     <PackagePlus className="h-3.5 w-3.5" />
                     Marquer comme reçu
@@ -170,24 +252,35 @@ export const ReceptionView: React.FC = () => {
                 </div>
                 <Card>
                   <CardContent className="p-0">
-                    {group.toReceive.length === 0 ? (
-                      <p className="text-xs text-gray-400 px-4 py-6 text-center">Rien à réceptionner.</p>
-                    ) : (
-                      group.toReceive.map((item) => (
-                        <ItemRow key={item.id} item={item} checked={selectedFor(toReceiveKey).has(item.id)} onToggle={(id) => toggle(toReceiveKey, id)} />
-                      ))
-                    )}
+                    <DateGroupedList
+                      items={group.toReceive}
+                      emptyLabel="Rien à réceptionner."
+                      checkedIds={selectedFor(toReceiveKey)}
+                      onToggle={(id) => toggle(toReceiveKey, id)}
+                      onToggleAll={(ids) => toggleAll(toReceiveKey, ids)}
+                    />
                   </CardContent>
                 </Card>
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Reçus ({group.received.length})</p>
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">Reçus ({group.received.length})</p>
+                    {group.received.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleAll(receivedKey, group.received.map((i) => i.id))}
+                        className="text-[11px] font-medium text-gray-500 hover:text-gray-900 underline flex-shrink-0"
+                      >
+                        Tout sélectionner
+                      </button>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleMarkReadyToShip(receivedKey)}
                     disabled={selectedFor(receivedKey).size === 0 || busyKey === receivedKey}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                   >
                     <PackageCheck className="h-3.5 w-3.5" />
                     Marquer prêt à être livré
@@ -195,24 +288,35 @@ export const ReceptionView: React.FC = () => {
                 </div>
                 <Card>
                   <CardContent className="p-0">
-                    {group.received.length === 0 ? (
-                      <p className="text-xs text-gray-400 px-4 py-6 text-center">Rien de reçu en attente.</p>
-                    ) : (
-                      group.received.map((item) => (
-                        <ItemRow key={item.id} item={item} checked={selectedFor(receivedKey).has(item.id)} onToggle={(id) => toggle(receivedKey, id)} />
-                      ))
-                    )}
+                    <DateGroupedList
+                      items={group.received}
+                      emptyLabel="Rien de reçu en attente."
+                      checkedIds={selectedFor(receivedKey)}
+                      onToggle={(id) => toggle(receivedKey, id)}
+                      onToggleAll={(ids) => toggleAll(receivedKey, ids)}
+                    />
                   </CardContent>
                 </Card>
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Prêts à être livrés ({group.readyToShip.length})</p>
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">Prêts à être livrés ({group.readyToShip.length})</p>
+                    {group.readyToShip.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleAll(readyToShipKey, group.readyToShip.map((i) => i.id))}
+                        className="text-[11px] font-medium text-gray-500 hover:text-gray-900 underline flex-shrink-0"
+                      >
+                        Tout sélectionner
+                      </button>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleRevert(readyToShipKey, Array.from(selectedFor(readyToShipKey)))}
                     disabled={selectedFor(readyToShipKey).size === 0 || busyKey === readyToShipKey}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                   >
                     <Undo2 className="h-3.5 w-3.5" />
                     Remettre en attente
@@ -220,31 +324,37 @@ export const ReceptionView: React.FC = () => {
                 </div>
                 <Card>
                   <CardContent className="p-0">
-                    {group.readyToShip.length === 0 ? (
-                      <p className="text-xs text-gray-400 px-4 py-6 text-center">Rien de prêt à être livré.</p>
-                    ) : (
-                      group.readyToShip.map((item) => (
-                        <ItemRow
-                          key={item.id}
-                          item={item}
-                          checked={selectedFor(readyToShipKey).has(item.id)}
-                          onToggle={(id) => toggle(readyToShipKey, id)}
-                          onRevertOne={(id) => handleRevert(readyToShipKey, [id])}
-                          revertBusy={busyKey === readyToShipKey}
-                        />
-                      ))
-                    )}
+                    <DateGroupedList
+                      items={group.readyToShip}
+                      emptyLabel="Rien de prêt à être livré."
+                      checkedIds={selectedFor(readyToShipKey)}
+                      onToggle={(id) => toggle(readyToShipKey, id)}
+                      onToggleAll={(ids) => toggleAll(readyToShipKey, ids)}
+                      onRevertOne={(id) => handleRevert(readyToShipKey, [id])}
+                      revertBusy={busyKey === readyToShipKey}
+                    />
                   </CardContent>
                 </Card>
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Demande en cours ({group.inDeliveryRequest.length})</p>
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">Demande en cours ({group.inDeliveryRequest.length})</p>
+                    {group.inDeliveryRequest.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleAll(inDeliveryRequestKey, group.inDeliveryRequest.map((i) => i.id))}
+                        className="text-[11px] font-medium text-gray-500 hover:text-gray-900 underline flex-shrink-0"
+                      >
+                        Tout sélectionner
+                      </button>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleRevert(inDeliveryRequestKey, Array.from(selectedFor(inDeliveryRequestKey)))}
                     disabled={selectedFor(inDeliveryRequestKey).size === 0 || busyKey === inDeliveryRequestKey}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-300 text-xs font-medium rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                   >
                     <Undo2 className="h-3.5 w-3.5" />
                     Annuler / remettre en attente
@@ -252,20 +362,15 @@ export const ReceptionView: React.FC = () => {
                 </div>
                 <Card>
                   <CardContent className="p-0">
-                    {group.inDeliveryRequest.length === 0 ? (
-                      <p className="text-xs text-gray-400 px-4 py-6 text-center">Aucune demande de livraison en cours.</p>
-                    ) : (
-                      group.inDeliveryRequest.map((item) => (
-                        <ItemRow
-                          key={item.id}
-                          item={item}
-                          checked={selectedFor(inDeliveryRequestKey).has(item.id)}
-                          onToggle={(id) => toggle(inDeliveryRequestKey, id)}
-                          onRevertOne={(id) => handleRevert(inDeliveryRequestKey, [id])}
-                          revertBusy={busyKey === inDeliveryRequestKey}
-                        />
-                      ))
-                    )}
+                    <DateGroupedList
+                      items={group.inDeliveryRequest}
+                      emptyLabel="Aucune demande de livraison en cours."
+                      checkedIds={selectedFor(inDeliveryRequestKey)}
+                      onToggle={(id) => toggle(inDeliveryRequestKey, id)}
+                      onToggleAll={(ids) => toggleAll(inDeliveryRequestKey, ids)}
+                      onRevertOne={(id) => handleRevert(inDeliveryRequestKey, [id])}
+                      revertBusy={busyKey === inDeliveryRequestKey}
+                    />
                   </CardContent>
                 </Card>
               </div>
