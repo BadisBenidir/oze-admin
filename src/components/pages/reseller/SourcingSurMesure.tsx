@@ -191,6 +191,9 @@ export const SourcingSurMesure: React.FC = () => {
                               <CardContent className="p-3 flex-1 flex flex-col">
                                 {item.brand && <p className="text-xs text-gray-500 mb-1">{item.brand}</p>}
                                 <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-2">{item.title}</p>
+                                {item.unit_price != null && (
+                                  <p className="text-sm font-semibold text-gray-900 mb-1">{item.unit_price} €</p>
+                                )}
                                 <div className="mt-auto">{itemStatusBadge(item.status)}</div>
                               </CardContent>
                             </Card>

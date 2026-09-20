@@ -29,7 +29,7 @@ const missionStatusBadge = (status: SourcingMission['status']) => {
  * revendeur, servant d'enveloppe budgétaire pour des pièces sourcées à la
  * demande (voir SourcingMissionDetailModal pour le détail des pièces). */
 export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resellerId, resellerName, isAdmin }) => {
-  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation, deleteMission } = useSourcingMissions(resellerId, isAdmin);
+  const { missions, loading, error, refresh, createMission, updateMission, setMissionStatus, setMissionPublished, setMissionShowUnitPrices, cancelValidation, deleteMission } = useSourcingMissions(resellerId, isAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<SourcingMission | null>(null);
   const [successToast, setSuccessToast] = useState('');
@@ -141,6 +141,10 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
         onPublishChange={async (published) => {
           if (!viewingMission) return { success: false, error: 'Mission inconnue' };
           return setMissionPublished(viewingMission.id, published);
+        }}
+        onShowUnitPricesChange={async (show) => {
+          if (!viewingMission) return { success: false, error: 'Mission inconnue' };
+          return setMissionShowUnitPrices(viewingMission.id, show);
         }}
         onCancelValidation={async () => {
           if (!viewingMission) return { success: false, error: 'Mission inconnue' };

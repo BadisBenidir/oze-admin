@@ -32,6 +32,10 @@ export interface SourcingMission {
   /** Visible dans le portail revendeur (pro.ozeparis.com) dès true — voir 0094. */
   is_published_to_reseller: boolean;
   published_at: string | null;
+  /** Si true, reseller_sourcing_items (0151) expose à chaque pièce son prix
+   * unitaire calculé (floor(cost_price * (1 + marge%))) — jamais le coût ni
+   * la marge elle-même. False par défaut. */
+  show_unit_prices: boolean;
   /** Somme des cost_price des pièces validées/expédiées — voir b2b_sourcing_mission_totals (0091). */
   consumed_cost_amount: number;
   remaining_cost_budget: number;
@@ -85,6 +89,8 @@ interface UseSourcingMissionsResult {
   setMissionStatus: (id: string, status: 'active' | 'completed' | 'cancelled') => Promise<{ success: boolean; error?: string }>;
   /** Bascule la visibilité côté portail revendeur (reseller_sourcing_missions/items, voir 0094). */
   setMissionPublished: (id: string, published: boolean) => Promise<{ success: boolean; error?: string }>;
+  /** Bascule l'affichage du prix unitaire calculé par pièce côté revendeur (voir 0151). */
+  setMissionShowUnitPrices: (id: string, show: boolean) => Promise<{ success: boolean; error?: string }>;
   /** Annule la validation faite par le revendeur (RPC transactionnelle,
    * voir 0098) : commande annulée, produits repassés en brouillon, mission
    * réactivée. Réservé aux admins (vérifié côté RPC). */
@@ -216,6 +222,13 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     return { success: true };
   };
 
+  const setMissionShowUnitPrices = async (id: string, show: boolean): Promise<{ success: boolean; error?: string }> => {
+    const { error: updateError } = await supabase.from('b2b_sourcing_missions').update({ show_unit_prices: show }).eq('id', id);
+    if (updateError) return { success: false, error: updateError.message };
+    await fetchMissions();
+    return { success: true };
+  };
+
   const cancelValidation = async (id: string): Promise<{ success: boolean; error?: string }> => {
     const { error: rpcError } = await supabase.rpc('admin_cancel_sourcing_validation', { p_mission_id: id });
     if (rpcError) return { success: false, error: rpcError.message };
@@ -238,5 +251,5 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     fetchMissions();
   }, [isAdmin, fetchMissions]);
 
-  return { missions, loading, error, refresh: fetchMissions, createMission, updateMission, setMissionStatus, setMissionPublished, cancelValidation, deleteMission };
+  return { missions, loading, error, refresh: fetchMissions, createMission, updateMission, setMissionStatus, setMissionPublished, setMissionShowUnitPrices, cancelValidation, deleteMission };
 };

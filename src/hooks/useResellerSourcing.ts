@@ -22,6 +22,10 @@ export interface ResellerSourcingItem {
   defects?: string | null;
   defect_images?: string[] | null;
   category_name?: string | null;
+  /** Prix unitaire calculé (voir 0151) — présent uniquement si l'admin a
+   * activé "Afficher les prix unitaires" sur la mission, jamais le prix
+   * d'achat ni la marge elle-même. */
+  unit_price?: number | null;
 }
 
 export interface ResellerSourcingMission {
@@ -100,7 +104,7 @@ export const useResellerSourcing = (isAuthenticated: boolean = false) => {
         return;
       }
 
-      const itemColumns = 'id, mission_id, title, brand, photos, status, created_at, description, condition, material, colors, serial_number, defects, defect_images, category_name';
+      const itemColumns = 'id, mission_id, title, brand, photos, status, created_at, description, condition, material, colors, serial_number, defects, defect_images, category_name, unit_price';
       let { data: itemRows, error: itemsError } = await supabase
         .from('reseller_sourcing_items')
         .select(itemColumns)

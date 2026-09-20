@@ -60,10 +60,12 @@ const normalizeImageArray = (value: unknown): string[] => {
 };
 
 /** Fiche détail d'une pièce sourcée, façon fiche produit du catalogue —
- * jamais aucun prix ici (photos, marque, catégorie, grade, matière,
- * couleurs, n° de série, description, défauts) : voir
+ * jamais de prix d'achat/coût/marge ici (photos, marque, catégorie, grade,
+ * matière, couleurs, n° de série, description, défauts) : voir
  * 0097_reseller_sourcing_item_detail.sql, qui exclut structurellement
- * purchase_price/cost_price/billed_price de la vue source. */
+ * purchase_price/cost_price/billed_price de la vue source. Seul le prix
+ * unitaire déjà CALCULÉ (unit_price, voir 0151) peut apparaître, et
+ * seulement si l'admin l'a explicitement activé sur la mission. */
 export const SourcingItemDetailModal: React.FC<SourcingItemDetailModalProps> = ({ item, onClose }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
@@ -169,6 +171,9 @@ export const SourcingItemDetailModal: React.FC<SourcingItemDetailModalProps> = (
             <div>
               {item.brand && <p className="text-sm font-medium text-gray-500">{item.brand}</p>}
               <h2 className="text-xl font-semibold text-gray-900 mt-0.5">{item.title}</h2>
+              {item.unit_price != null && (
+                <p className="text-lg font-semibold text-gray-900 mt-1">{item.unit_price} €</p>
+              )}
 
               <div className="flex items-center flex-wrap gap-2 mt-3">
                 {item.condition && (

@@ -15,6 +15,8 @@ interface SourcingMissionDetailModalProps {
   onStatusChange: (status: 'active' | 'completed' | 'cancelled') => Promise<{ success: boolean; error?: string }>;
   onUpdateMission: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
   onPublishChange: (published: boolean) => Promise<{ success: boolean; error?: string }>;
+  /** Bascule l'affichage du prix unitaire calculé par pièce côté revendeur (voir 0151). */
+  onShowUnitPricesChange: (show: boolean) => Promise<{ success: boolean; error?: string }>;
   /** Annule la validation revendeur (RPC transactionnelle, voir 0098) : commande annulée, produits repassés en brouillon, mission réactivée. */
   onCancelValidation: () => Promise<{ success: boolean; error?: string }>;
   /** Supprime définitivement la mission (RPC transactionnelle, voir 0100).
@@ -41,7 +43,7 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
 /** Détail d'une mission de sourcing : cartouche avance/budget/marge, pièces
  * affectées à l'enveloppe d'achat, ajout d'une pièce, édition et clôture —
  * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
-export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onCancelValidation, onDelete, onItemsChanged }) => {
+export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onShowUnitPricesChange, onCancelValidation, onDelete, onItemsChanged }) => {
   const { items, loading, error, addItem, addItems, setItemStatus, removeItem, linkProduct } = useSourcingItems(mission?.id || null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -50,6 +52,8 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [publishError, setPublishError] = useState('');
   const [publishing, setPublishing] = useState(false);
+  const [unitPricesError, setUnitPricesError] = useState('');
+  const [togglingUnitPrices, setTogglingUnitPrices] = useState(false);
   const [cancellingValidation, setCancellingValidation] = useState(false);
   const [showCancelValidationConfirm, setShowCancelValidationConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -107,6 +111,11 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   const consumedRatio = mission.allocated_cost_budget > 0 ? Math.min(totalSpent / mission.allocated_cost_budget, 1) : 0;
   const overBudget = !isCompleted && remainingAfter < 0;
   const marginPercent = mission.advance_amount > 0 ? (marginReal / mission.advance_amount) * 100 : null;
+  // Prix unitaire calculé = floor(coût * (1 + marge%)) — exactement la même
+  // marge que celle affichée juste au-dessus ("Marge prévisionnelle...
+  // (20%)"), jamais un second taux saisi séparément (voir 0151).
+  const computeUnitPrice = (costPrice: number | null): number | null =>
+    costPrice != null && marginPercent != null ? Math.floor(costPrice * (1 + marginPercent / 100)) : null;
 
   const handleAddItem = async (input: Parameters<typeof addItem>[0]) => {
     const result = await addItem(input);
@@ -130,6 +139,14 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     const result = await onPublishChange(nextPublished);
     setPublishing(false);
     if (!result.success) setPublishError(result.error || 'Erreur lors de la mise à jour de la visibilité');
+  };
+
+  const handleToggleShowUnitPrices = async () => {
+    setTogglingUnitPrices(true);
+    setUnitPricesError('');
+    const result = await onShowUnitPricesChange(!mission.show_unit_prices);
+    setTogglingUnitPrices(false);
+    if (!result.success) setUnitPricesError(result.error || "Erreur lors de la mise à jour de l'affichage des prix");
   };
 
   const handleCloseMission = async () => {
@@ -234,6 +251,25 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
               </div>
             )}
 
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={mission.show_unit_prices}
+                onChange={handleToggleShowUnitPrices}
+                disabled={togglingUnitPrices}
+                className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400"
+              />
+              Afficher les prix unitaires au revendeur
+              {togglingUnitPrices && <span className="text-xs text-gray-400">Mise à jour...</span>}
+            </label>
+
+            {unitPricesError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                <p className="text-sm text-red-700">{unitPricesError}</p>
+              </div>
+            )}
+
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center mb-3">
                 <div>
@@ -304,6 +340,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Pièce</th>
                       <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Coût d'achat</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Prix unitaire calculé</th>
                       <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Statut</th>
                       <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs"></th>
                     </tr>
@@ -312,14 +349,14 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                     {loading ? (
                       [...Array(2)].map((_, i) => (
                         <tr key={`skeleton-${i}`} className="border-b border-gray-50">
-                          <td className="py-3 px-3" colSpan={4}>
+                          <td className="py-3 px-3" colSpan={5}>
                             <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
                           </td>
                         </tr>
                       ))
                     ) : items.length === 0 ? (
                       <tr>
-                        <td className="py-6 px-3 text-center text-sm text-gray-500" colSpan={4}>
+                        <td className="py-6 px-3 text-center text-sm text-gray-500" colSpan={5}>
                           Aucune pièce sourcée pour l'instant sur cette mission.
                         </td>
                       </tr>
@@ -356,6 +393,9 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                             </td>
                             <td className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums">
                               {item.cost_price != null ? `${item.cost_price.toFixed(2)} €` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums">
+                              {computeUnitPrice(item.cost_price) != null ? `${computeUnitPrice(item.cost_price)} €` : '—'}
                             </td>
                             <td className="py-2.5 px-3">
                               <select
