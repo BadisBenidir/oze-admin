@@ -72,7 +72,7 @@ export const useEntrupyCertificates = (isAdmin: boolean = false) => {
         .from('order_items')
         .select(SELECT_COLUMNS)
         .eq('entrupy_requested', true)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
       if (fetchError) throw new Error(fetchError.message);
       setItems(((data || []) as unknown as Row[]).map(mapRow));
     } catch (err) {

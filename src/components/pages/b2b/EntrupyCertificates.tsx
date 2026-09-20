@@ -172,10 +172,16 @@ export const EntrupyCertificates: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [importingItem, setImportingItem] = useState<EntrupyCertificateItem | null>(null);
 
+  // `items` arrive déjà triés du plus vieux au plus récent (voir
+  // useEntrupyCertificates). Dans l'onglet "Tous", les certificats terminés
+  // passent sous les "à faire" plutôt que de rester mélangés par date, pour
+  // que les plus anciens non traités restent toujours visibles en premier.
   const filteredItems = useMemo(() => {
-    if (statusFilter === 'pending') return items.filter((i) => i.entrupy_status === 'pending');
-    if (statusFilter === 'completed') return items.filter((i) => i.entrupy_status === 'completed');
-    return items;
+    const pending = items.filter((i) => i.entrupy_status === 'pending');
+    const completed = items.filter((i) => i.entrupy_status === 'completed');
+    if (statusFilter === 'pending') return pending;
+    if (statusFilter === 'completed') return completed;
+    return [...pending, ...completed];
   }, [items, statusFilter]);
 
   const totalPending = items.filter((i) => i.entrupy_status === 'pending').length;
