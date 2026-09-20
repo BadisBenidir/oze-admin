@@ -28,6 +28,11 @@ interface ShippingFormProps {
    * réglage temporaire jamais retiré, cause du bug d'affichage "0,00 €").
    */
   priceByMode: Record<DeliveryType, number>;
+  /** true si value.parcelPoint est exactement celui enregistré comme point
+   * relais par défaut du profil (voir RequestDeliveryModal.tsx) — affiche
+   * la mention "Point relais enregistré sur votre profil" plutôt qu'un
+   * point fraîchement choisi pour cette seule demande. */
+  isDefaultFromProfile?: boolean;
 }
 
 // Adapté de oze-storefront/ShippingForm.tsx : l'adresse d'un revendeur est
@@ -36,7 +41,7 @@ interface ShippingFormProps {
 // pas de formulaire d'adresse ici, seulement le choix du mode de livraison.
 // Composant contrôlé (pas d'étape/soumission propre) : fait partie de la
 // page panier fusionnée, la sélection vit dans CartPage.
-const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, value, onChange, priceByMode }) => {
+const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, value, onChange, priceByMode, isDefaultFromProfile }) => {
   const [searchPostalCode, setSearchPostalCode] = useState(companyAddress.postalCode);
   const [searchCity, setSearchCity] = useState(companyAddress.city);
   const [pickerLoading, setPickerLoading] = useState(false);
@@ -172,25 +177,33 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ companyAddress, value, onCh
             </div>
 
             {value.parcelPoint ? (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-start justify-between">
-                <div className="flex items-start">
-                  <CheckCircle className="h-5 w-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-green-800">{value.parcelPoint.name}</p>
-                    <p className="text-xs text-green-700">
-                      {value.parcelPoint.address && `${value.parcelPoint.address}, `}
-                      {value.parcelPoint.zipCode} {value.parcelPoint.city}
-                    </p>
-                    <p className="text-xs text-green-600 mt-0.5">{value.parcelPoint.network}</p>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start min-w-0">
+                    <CheckCircle className="h-5 w-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      {isDefaultFromProfile && (
+                        <p className="text-[11px] font-medium text-green-700 uppercase tracking-wide mb-0.5">
+                          Point relais enregistré sur votre profil
+                        </p>
+                      )}
+                      <p className="text-sm font-semibold text-green-800">{value.parcelPoint.name}</p>
+                      <p className="text-xs text-green-700">
+                        {value.parcelPoint.address && `${value.parcelPoint.address}, `}
+                        {value.parcelPoint.zipCode} {value.parcelPoint.city}
+                      </p>
+                      <p className="text-xs text-green-600 mt-0.5">{value.parcelPoint.network}</p>
+                    </div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={openPicker}
                   disabled={pickerLoading}
-                  className="text-xs text-gray-900 underline ml-3 whitespace-nowrap hover:text-gray-600 disabled:opacity-50"
+                  className="flex items-center gap-1.5 mt-3 text-xs text-gray-700 border border-gray-300 bg-white rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
-                  Changer
+                  <MapPin className="h-3.5 w-3.5" />
+                  {pickerLoading ? 'Ouverture de la carte…' : 'Choisir un autre point relais'}
                 </button>
               </div>
             ) : (

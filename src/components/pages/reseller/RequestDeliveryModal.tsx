@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Truck, AlertCircle, CreditCard } from 'lucide-react';
 import ShippingForm, { ShippingSelection } from './ShippingForm';
+import { ChronopostPickupPoint } from '../../../services/chronopostService';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { computeShippingCost } from '../../../utils/b2bShippingPricing';
 import { isPlausiblePhone } from '../../../utils/phoneValidation';
@@ -25,15 +26,30 @@ interface RequestDeliveryModalProps {
 export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ items, onClose, onSubmit }) => {
   const { profile } = useResellerAuth();
   const hasAddress = Boolean(profile?.address && profile?.city && profile?.postal_code);
+  // Point relais enregistré sur le profil (voir ResellerProfile.tsx) — figé
+  // à l'ouverture de la modale pour pouvoir détecter, plus bas, si le point
+  // actuellement sélectionné est encore celui-là ou un choisi pour cette
+  // seule demande (isDefaultFromProfile / proposition d'enregistrement).
+  const [defaultRelayPoint] = useState<ChronopostPickupPoint | null>(
+    (profile?.default_relay_point as unknown as ChronopostPickupPoint) || null
+  );
 
   const [shipping, setShipping] = useState<ShippingSelection>({
-    deliveryType: hasAddress ? 'domicile' : 'point_relais',
-    parcelPoint: null,
+    deliveryType:
+      profile?.default_delivery_type === 'domicile' && !hasAddress
+        ? 'point_relais'
+        : profile?.default_delivery_type || (hasAddress ? 'domicile' : 'point_relais'),
+    parcelPoint: defaultRelayPoint,
   });
+  const [saveAsDefaultRelay, setSaveAsDefaultRelay] = useState(false);
   const [instructions, setInstructions] = useState(profile?.delivery_instructions || '');
   const [phone, setPhone] = useState(profile?.phone || '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isDefaultFromProfile = Boolean(
+    shipping.parcelPoint && defaultRelayPoint && shipping.parcelPoint.code === defaultRelayPoint.code
+  );
 
   const needsPhone = !isPlausiblePhone(profile?.phone);
 
@@ -75,6 +91,21 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
       if (phoneError) {
         setSubmitting(false);
         setError("Impossible d'enregistrer le numéro de téléphone : " + phoneError.message);
+        return;
+      }
+    }
+
+    // N'écrase le point relais par défaut du profil que si le revendeur l'a
+    // explicitement demandé (case à cocher) — un point choisi "pour cette
+    // seule demande" reste local à cette commande sinon.
+    if (saveAsDefaultRelay && shipping.deliveryType === 'point_relais' && shipping.parcelPoint && profile) {
+      const { error: relayError } = await supabase
+        .from('profiles')
+        .update({ default_relay_point: shipping.parcelPoint, default_delivery_type: 'point_relais' })
+        .eq('id', profile.id);
+      if (relayError) {
+        setSubmitting(false);
+        setError("Impossible d'enregistrer ce point relais par défaut : " + relayError.message);
         return;
       }
     }
@@ -126,7 +157,20 @@ export const RequestDeliveryModal: React.FC<RequestDeliveryModalProps> = ({ item
               value={shipping}
               onChange={setShipping}
               priceByMode={priceByMode}
+              isDefaultFromProfile={isDefaultFromProfile}
             />
+
+            {shipping.deliveryType === 'point_relais' && shipping.parcelPoint && !isDefaultFromProfile && (
+              <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={saveAsDefaultRelay}
+                  onChange={(e) => setSaveAsDefaultRelay(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0"
+                />
+                Enregistrer ce point relais comme point par défaut sur mon profil
+              </label>
+            )}
 
             {shipping.deliveryType === 'domicile' && (
               <div>
