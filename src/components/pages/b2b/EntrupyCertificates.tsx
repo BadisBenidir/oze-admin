@@ -267,14 +267,22 @@ export const EntrupyCertificates: React.FC = () => {
   }, [items, statusFilter]);
 
   const now = new Date();
+  // Quota/coût Entrupy réel : consommé au moment de l'authentification
+  // physique (édition du certificat), pas de la demande.
   const completedThisMonth = items.filter((i) => i.entrupy_status === 'completed' && i.entrupy_completed_at && isSameMonth(i.entrupy_completed_at, now)).length;
-  const totalRealized = completedThisMonth + manualAdjustment.count;
-  const overQuota = Math.max(totalRealized - QUOTA_INCLUDED, 0);
-  const revenueEur = totalRealized * SALE_PRICE_EUR;
-  const costUsd = totalRealized <= QUOTA_INCLUDED ? SUBSCRIPTION_USD : SUBSCRIPTION_USD + overQuota * ADDON_USD;
+  const quotaRealized = completedThisMonth + manualAdjustment.count;
+  const overQuota = Math.max(quotaRealized - QUOTA_INCLUDED, 0);
+  const costUsd = quotaRealized <= QUOTA_INCLUDED ? SUBSCRIPTION_USD : SUBSCRIPTION_USD + overQuota * ADDON_USD;
   const costEur = costUsd * USD_TO_EUR;
+  const breakEvenReached = quotaRealized >= BREAKEVEN_COUNT;
+
+  // CA réel : le revendeur paie les 19,99 € à la DEMANDE du certificat, pas
+  // à son édition (voir paid_at, useEntrupyCertificates) — un article encore
+  // "à faire" ce mois-ci est déjà encaissé et compte donc dans le CA.
+  const paidThisMonth = items.filter((i) => i.paid_at && isSameMonth(i.paid_at, now)).length;
+  const paidRealized = paidThisMonth + manualAdjustment.count;
+  const revenueEur = paidRealized * SALE_PRICE_EUR;
   const profitEur = revenueEur - costEur;
-  const breakEvenReached = totalRealized >= BREAKEVEN_COUNT;
 
   return (
     <div className="p-4 md:p-6">
@@ -292,7 +300,7 @@ export const EntrupyCertificates: React.FC = () => {
                   <BadgeCheck className="h-4 w-4 text-gray-400" />
                   <p className="text-xs text-gray-500">Réalisés ce mois</p>
                 </div>
-                <p className="text-xl font-semibold text-gray-900">{totalRealized}</p>
+                <p className="text-xl font-semibold text-gray-900">{quotaRealized}</p>
                 {!manualAdjustment.loading && (
                   <div className="mt-1">
                     <ManualAdjustmentEditor count={manualAdjustment.count} saving={manualAdjustment.saving} onSave={manualAdjustment.setCount} />
@@ -307,7 +315,7 @@ export const EntrupyCertificates: React.FC = () => {
                   <p className="text-xs text-gray-500">Quota consommé</p>
                 </div>
                 <p className="text-xl font-semibold text-gray-900">
-                  {Math.min(totalRealized, QUOTA_INCLUDED)} / {QUOTA_INCLUDED}
+                  {Math.min(quotaRealized, QUOTA_INCLUDED)} / {QUOTA_INCLUDED}
                 </p>
                 {overQuota > 0 && <p className="text-xs text-amber-600 mt-1">+{overQuota} hors forfait</p>}
               </CardContent>
@@ -319,6 +327,7 @@ export const EntrupyCertificates: React.FC = () => {
                   <p className="text-xs text-gray-500">Chiffre d'affaires</p>
                 </div>
                 <p className="text-xl font-semibold text-gray-900">{eur(revenueEur)} €</p>
+                <p className="text-xs text-gray-400 mt-1">{paidRealized} certificat{paidRealized > 1 ? 's' : ''} payé{paidRealized > 1 ? 's' : ''}</p>
               </CardContent>
             </Card>
             <Card>
@@ -346,7 +355,7 @@ export const EntrupyCertificates: React.FC = () => {
           <p className={`text-xs mt-2 ${breakEvenReached ? 'text-green-600' : 'text-gray-400'}`}>
             {breakEvenReached
               ? `Seuil de rentabilité atteint (${BREAKEVEN_COUNT}ᵉ certificat du mois passé)`
-              : `Seuil de rentabilité à ${BREAKEVEN_COUNT} certificats — encore ${BREAKEVEN_COUNT - totalRealized} ce mois-ci`}
+              : `Seuil de rentabilité à ${BREAKEVEN_COUNT} certificats — encore ${BREAKEVEN_COUNT - quotaRealized} ce mois-ci`}
           </p>
         </div>
       )}

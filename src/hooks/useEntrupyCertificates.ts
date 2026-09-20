@@ -16,6 +16,14 @@ export interface EntrupyCertificateItem {
   entrupy_cert_url: string | null;
   entrupy_pdf_path: string | null;
   entrupy_completed_at: string | null;
+  /** Date de paiement réel du certificat (19,99 €) — le revendeur paie à la
+   * demande, pas à l'édition du certificat (voir entrupy_requested_at,
+   * 0119) : sert au calcul du CA, distinct de entrupy_completed_at qui sert
+   * lui au quota Entrupy réellement consommé (l'authentification physique a
+   * lieu à l'édition, pas à la demande). Repli sur order_created_at pour les
+   * certificats choisis dès le panier (entrupy_requested_at reste null dans
+   * ce cas, voir 0119). */
+  paid_at: string;
 }
 
 type Row = {
@@ -24,6 +32,7 @@ type Row = {
   entrupy_cert_url: string | null;
   entrupy_pdf_path: string | null;
   entrupy_completed_at: string | null;
+  entrupy_requested_at: string | null;
   product_snapshot: { name?: string; reference?: string; product_code?: string; images?: string[]; main_image_index?: number } | null;
   order: {
     id: string;
@@ -35,7 +44,7 @@ type Row = {
 };
 
 const SELECT_COLUMNS =
-  'id, entrupy_status, entrupy_cert_url, entrupy_pdf_path, entrupy_completed_at, product_snapshot, ' +
+  'id, entrupy_status, entrupy_cert_url, entrupy_pdf_path, entrupy_completed_at, entrupy_requested_at, product_snapshot, ' +
   'order:orders!inner(id, order_number, created_at, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email))';
 
 const mapRow = (row: Row): EntrupyCertificateItem => {
@@ -55,6 +64,7 @@ const mapRow = (row: Row): EntrupyCertificateItem => {
     entrupy_cert_url: row.entrupy_cert_url,
     entrupy_pdf_path: row.entrupy_pdf_path,
     entrupy_completed_at: row.entrupy_completed_at,
+    paid_at: row.entrupy_requested_at || row.order?.created_at || '',
   };
 };
 
