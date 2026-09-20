@@ -1,11 +1,32 @@
 import React, { useMemo, useState } from 'react';
-import { BadgeCheck, AlertCircle, ImageOff, Clock, Link as LinkIcon, Upload, X, ExternalLink } from 'lucide-react';
+import {
+  BadgeCheck, AlertCircle, ImageOff, Link as LinkIcon, Upload, X, ExternalLink,
+  Trash2, Euro, TrendingUp, TrendingDown, Wallet, Pencil, Check,
+} from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
-import { useEntrupyCertificates, EntrupyCertificateItem } from '../../../hooks/useEntrupyCertificates';
+import { useEntrupyCertificates, useEntrupyManualAdjustment, EntrupyCertificateItem } from '../../../hooks/useEntrupyCertificates';
 
 type StatusFilter = 'all' | 'pending' | 'completed';
+
+// Contrat Entrupy (forfait "Petit Unified Monthly USD") — constantes de
+// tarification, pas de donnée métier variable : pas besoin d'une table de
+// configuration pour ça, seul l'ajustement manuel mensuel (voir
+// useEntrupyManualAdjustment / 0155) est réellement dynamique.
+const SUBSCRIPTION_USD = 139;
+const QUOTA_INCLUDED = 25;
+const ADDON_USD = 5.6;
+const USD_TO_EUR = 0.92;
+const SALE_PRICE_EUR = 19.99;
+const BREAKEVEN_COUNT = 7;
+
+const isSameMonth = (isoDate: string, ref: Date): boolean => {
+  const d = new Date(isoDate);
+  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
+};
+
+const eur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const statusBadge = (status: EntrupyCertificateItem['entrupy_status']) =>
   status === 'completed' ? (
@@ -164,13 +185,74 @@ const ImportCertificateModal: React.FC<ImportModalProps> = ({ item, onClose, onI
   );
 };
 
+interface ManualAdjustmentEditorProps {
+  count: number;
+  saving: boolean;
+  onSave: (value: number) => Promise<{ success: boolean; error?: string }>;
+}
+
+/** Certificats réalisés manuellement hors plateforme ce mois — éditable en
+ * ligne, comptés dans le quota/CA du mois à côté des certificats importés
+ * ici (voir useEntrupyManualAdjustment). */
+const ManualAdjustmentEditor: React.FC<ManualAdjustmentEditorProps> = ({ count, saving, onSave }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(count));
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setDraft(String(count));
+          setEditing(true);
+        }}
+        className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 underline decoration-dotted"
+      >
+        <Pencil className="h-3 w-3" />
+        dont {count} hors plateforme
+      </button>
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <input
+        type="number"
+        min={0}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        className="w-16 px-2 py-1 border border-gray-300 rounded text-xs"
+        autoFocus
+      />
+      <button
+        type="button"
+        disabled={saving}
+        onClick={async () => {
+          const value = Math.max(0, parseInt(draft, 10) || 0);
+          const result = await onSave(value);
+          if (result.success) setEditing(false);
+        }}
+        className="p-1 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-50"
+        title="Enregistrer"
+      >
+        <Check className="h-3 w-3" />
+      </button>
+      <button type="button" onClick={() => setEditing(false)} className="p-1 text-gray-400 hover:text-gray-600" title="Annuler">
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+};
+
 /** Gestion et import des certificats d'authenticité Entrupy — une pièce vue
  * ici dès que order_items.entrupy_requested = true (voir 0083/0154). */
 export const EntrupyCertificates: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { items, loading, error, importCertificate, uploadPdf } = useEntrupyCertificates(isAdmin);
+  const { items, loading, error, importCertificate, uploadPdf, deleteCertificate } = useEntrupyCertificates(isAdmin);
+  const manualAdjustment = useEntrupyManualAdjustment(isAdmin);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [importingItem, setImportingItem] = useState<EntrupyCertificateItem | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // `items` arrive déjà triés du plus vieux au plus récent (voir
   // useEntrupyCertificates). Dans l'onglet "Tous", les certificats terminés
@@ -184,8 +266,15 @@ export const EntrupyCertificates: React.FC = () => {
     return [...pending, ...completed];
   }, [items, statusFilter]);
 
-  const totalPending = items.filter((i) => i.entrupy_status === 'pending').length;
-  const totalCompleted = items.filter((i) => i.entrupy_status === 'completed').length;
+  const now = new Date();
+  const completedThisMonth = items.filter((i) => i.entrupy_status === 'completed' && i.entrupy_completed_at && isSameMonth(i.entrupy_completed_at, now)).length;
+  const totalRealized = completedThisMonth + manualAdjustment.count;
+  const overQuota = Math.max(totalRealized - QUOTA_INCLUDED, 0);
+  const revenueEur = totalRealized * SALE_PRICE_EUR;
+  const costUsd = totalRealized <= QUOTA_INCLUDED ? SUBSCRIPTION_USD : SUBSCRIPTION_USD + overQuota * ADDON_USD;
+  const costEur = costUsd * USD_TO_EUR;
+  const profitEur = revenueEur - costEur;
+  const breakEvenReached = totalRealized >= BREAKEVEN_COUNT;
 
   return (
     <div className="p-4 md:p-6">
@@ -195,25 +284,70 @@ export const EntrupyCertificates: React.FC = () => {
       </div>
 
       {!loading && !error && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Clock className="h-4 w-4 text-amber-500" />
-                <p className="text-xs text-gray-500">À faire</p>
-              </div>
-              <p className="text-xl font-semibold text-amber-600">{totalPending}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <BadgeCheck className="h-4 w-4 text-green-500" />
-                <p className="text-xs text-gray-500">Terminés</p>
-              </div>
-              <p className="text-xl font-semibold text-green-600">{totalCompleted}</p>
-            </CardContent>
-          </Card>
+        <div className="mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <BadgeCheck className="h-4 w-4 text-gray-400" />
+                  <p className="text-xs text-gray-500">Réalisés ce mois</p>
+                </div>
+                <p className="text-xl font-semibold text-gray-900">{totalRealized}</p>
+                {!manualAdjustment.loading && (
+                  <div className="mt-1">
+                    <ManualAdjustmentEditor count={manualAdjustment.count} saving={manualAdjustment.saving} onSave={manualAdjustment.setCount} />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Wallet className="h-4 w-4 text-gray-400" />
+                  <p className="text-xs text-gray-500">Quota consommé</p>
+                </div>
+                <p className="text-xl font-semibold text-gray-900">
+                  {Math.min(totalRealized, QUOTA_INCLUDED)} / {QUOTA_INCLUDED}
+                </p>
+                {overQuota > 0 && <p className="text-xs text-amber-600 mt-1">+{overQuota} hors forfait</p>}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Euro className="h-4 w-4 text-gray-400" />
+                  <p className="text-xs text-gray-500">Chiffre d'affaires</p>
+                </div>
+                <p className="text-xl font-semibold text-gray-900">{eur(revenueEur)} €</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingDown className="h-4 w-4 text-gray-400" />
+                  <p className="text-xs text-gray-500">Coût Entrupy total</p>
+                </div>
+                <p className="text-xl font-semibold text-gray-900">{eur(costEur)} €</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {overQuota > 0 ? `139 $ + ${overQuota} × 5,60 $` : '139 $ (forfait)'}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingUp className={`h-4 w-4 ${profitEur >= 0 ? 'text-green-500' : 'text-red-500'}`} />
+                  <p className="text-xs text-gray-500">Bénéfice net</p>
+                </div>
+                <p className={`text-xl font-semibold ${profitEur >= 0 ? 'text-green-600' : 'text-red-600'}`}>{eur(profitEur)} €</p>
+              </CardContent>
+            </Card>
+          </div>
+          <p className={`text-xs mt-2 ${breakEvenReached ? 'text-green-600' : 'text-gray-400'}`}>
+            {breakEvenReached
+              ? `Seuil de rentabilité atteint (${BREAKEVEN_COUNT}ᵉ certificat du mois passé)`
+              : `Seuil de rentabilité à ${BREAKEVEN_COUNT} certificats — encore ${BREAKEVEN_COUNT - totalRealized} ce mois-ci`}
+          </p>
         </div>
       )}
 
@@ -309,6 +443,21 @@ export const EntrupyCertificates: React.FC = () => {
                               >
                                 <ExternalLink className="h-3 w-3" /> Voir
                               </a>
+                            )}
+                            {item.entrupy_status === 'completed' && (
+                              <button
+                                onClick={async () => {
+                                  if (!window.confirm('Supprimer ce certificat ? L\'article repassera en "À faire".')) return;
+                                  setDeletingId(item.id);
+                                  await deleteCertificate(item.id);
+                                  setDeletingId(null);
+                                }}
+                                disabled={deletingId === item.id}
+                                title="Supprimer le certificat"
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
                             )}
                             <button
                               onClick={() => setImportingItem(item)}

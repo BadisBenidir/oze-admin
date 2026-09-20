@@ -106,6 +106,16 @@ export const useEntrupyCertificates = (isAdmin: boolean = false) => {
     return { success: true };
   };
 
+  /** Retire un certificat déjà importé (repasse l'article en 'pending') — le
+   * fichier déposé sur Storage n'est volontairement pas supprimé (pas de
+   * policy DELETE garantie sur le bucket, voir 0155), juste dé-référencé. */
+  const deleteCertificate = async (itemId: string): Promise<{ success: boolean; error?: string }> => {
+    const { error: rpcError } = await supabase.rpc('admin_delete_entrupy_certificate', { p_order_item_id: itemId });
+    if (rpcError) return { success: false, error: rpcError.message };
+    await fetchItems();
+    return { success: true };
+  };
+
   /** Upload d'un PDF dans le bucket public `entrupy-certificates` — même
    * pattern que products-images (CreateProduct.tsx), pas d'URL signée dans
    * ce repo. Renvoie l'URL publique + le chemin de stockage. */
@@ -120,7 +130,7 @@ export const useEntrupyCertificates = (isAdmin: boolean = false) => {
     return { success: true, url: data.publicUrl, path: fileName };
   };
 
-  return { items, loading, error, refresh: fetchItems, importCertificate, uploadPdf };
+  return { items, loading, error, refresh: fetchItems, importCertificate, uploadPdf, deleteCertificate };
 };
 
 /** Compteur léger pour le badge de la barre latérale — certificats encore en attente d'édition. */
@@ -146,4 +156,57 @@ export const usePendingEntrupyCount = (isAdmin: boolean = false) => {
   }, [isAdmin, fetchCount]);
 
   return count;
+};
+
+/** Mois courant au format 'YYYY-MM', clé de public.entrupy_manual_adjustments. */
+const currentMonthKey = (): string => new Date().toISOString().slice(0, 7);
+
+/**
+ * Certificats réalisés manuellement hors plateforme ce mois-ci (ex. avant
+ * mise en place de cet onglet, ou en dépannage) — à additionner aux
+ * certificats `completed` du mois pour le quota Entrupy et le CA réels
+ * (voir 0155, qui seed 1 pour le mois de création de cette fonctionnalité).
+ */
+export const useEntrupyManualAdjustment = (isAdmin: boolean = false) => {
+  const [count, setCountState] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const fetchCount = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('entrupy_manual_adjustments')
+        .select('count')
+        .eq('month', currentMonthKey())
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      setCountState(data?.count || 0);
+    } catch (err) {
+      console.error('Erreur lors du chargement de l\'ajustement manuel Entrupy:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setLoading(false);
+      return;
+    }
+    fetchCount();
+  }, [isAdmin, fetchCount]);
+
+  const setCount = async (value: number): Promise<{ success: boolean; error?: string }> => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('entrupy_manual_adjustments')
+      .upsert({ month: currentMonthKey(), count: value, updated_at: new Date().toISOString() }, { onConflict: 'month' });
+    setSaving(false);
+    if (error) return { success: false, error: error.message };
+    setCountState(value);
+    return { success: true };
+  };
+
+  return { count, loading, saving, setCount };
 };
