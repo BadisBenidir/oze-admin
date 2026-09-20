@@ -12,28 +12,32 @@ import { B2BTraffic } from '../components/pages/B2BTraffic';
 import { navigationItems as staticNavigationItems } from '../config/navigation';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { usePendingGiftRewardsCount } from '../hooks/useGiftRewards';
+import { usePendingEntrupyCount } from '../hooks/useEntrupyCertificates';
 
 function AdminApp() {
   const { isAdmin } = useAdminAuth();
   const pendingGiftRewardsCount = usePendingGiftRewardsCount(isAdmin);
+  const pendingEntrupyCount = usePendingEntrupyCount(isAdmin);
 
   // Injecte dynamiquement le nombre de portefeuilles offerts en attente
-  // d'expédition sur le lien "Portefeuilles offerts" — la config statique
-  // (config/navigation.ts) ne connaît que la structure du menu, pas les
-  // compteurs vivants.
+  // d'expédition et de certificats Entrupy à éditer sur leurs liens
+  // respectifs — la config statique (config/navigation.ts) ne connaît que la
+  // structure du menu, pas les compteurs vivants.
   const navigationItems = useMemo(() => {
-    if (!pendingGiftRewardsCount) return staticNavigationItems;
+    if (!pendingGiftRewardsCount && !pendingEntrupyCount) return staticNavigationItems;
     return staticNavigationItems.map((item) =>
       item.id !== 'b2b'
         ? item
         : {
             ...item,
-            subItems: item.subItems?.map((sub) =>
-              sub.id === 'gift-rewards' ? { ...sub, badgeCount: pendingGiftRewardsCount } : sub
-            ),
+            subItems: item.subItems?.map((sub) => {
+              if (sub.id === 'gift-rewards' && pendingGiftRewardsCount) return { ...sub, badgeCount: pendingGiftRewardsCount };
+              if (sub.id === 'entrupy' && pendingEntrupyCount) return { ...sub, badgeCount: pendingEntrupyCount };
+              return sub;
+            }),
           }
     );
-  }, [pendingGiftRewardsCount]);
+  }, [pendingGiftRewardsCount, pendingEntrupyCount]);
 
   const { activeTab, activeSubTab, navigateTo } = useNavigation(navigationItems, 'dashboard');
 

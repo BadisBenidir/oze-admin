@@ -424,9 +424,21 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                     )}
                                     {!isCancelled && item.entrupy_requested && (
                                       <div className="mt-1">
-                                        <Badge variant="purple">
-                                          <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy
-                                        </Badge>
+                                        {item.entrupy_status === 'completed' && item.entrupy_cert_url ? (
+                                          <a
+                                            href={item.entrupy_cert_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-600 text-white rounded-full text-xs font-medium hover:bg-purple-700 transition-colors"
+                                          >
+                                            <BadgeCheck className="h-3 w-3" /> Télécharger le certificat Entrupy
+                                          </a>
+                                        ) : (
+                                          <Badge variant="purple">
+                                            <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy en cours d'édition
+                                          </Badge>
+                                        )}
                                       </div>
                                     )}
                                     {canRequestEntrupy(item) && (

@@ -7,6 +7,7 @@ import { B2BPromoCodes } from './B2BPromoCodes';
 import { B2BSourcing } from './B2BSourcing';
 import { GiftRewards } from './b2b/GiftRewards';
 import { AuctionsAdmin } from './b2b/AuctionsAdmin';
+import { EntrupyCertificates } from './b2b/EntrupyCertificates';
 
 interface B2BProps {
   activeSubTab: string;
@@ -28,6 +29,8 @@ export const B2B: React.FC<B2BProps> = ({ activeSubTab }) => {
       return <B2BRevenue />;
     case 'gift-rewards':
       return <GiftRewards />;
+    case 'entrupy':
+      return <EntrupyCertificates />;
     case 'resellers':
     default:
       return <Resellers />;

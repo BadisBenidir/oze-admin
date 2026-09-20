@@ -19,6 +19,8 @@ export interface MyB2BOrderItem {
   insurance_cost: number;
   entrupy_requested: boolean;
   entrupy_cost: number;
+  entrupy_status: 'pending' | 'completed';
+  entrupy_cert_url: string | null;
   product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string; reference?: string | null };
   status: 'active' | 'cancelled';
   cancellation_reason: string | null;

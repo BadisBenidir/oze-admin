@@ -27,7 +27,8 @@ import {
   PackageCheck,
   PackageSearch,
   Gift,
-  Radio
+  Radio,
+  BadgeCheck
 } from 'lucide-react';
 import { MenuItem } from '../types';
 
@@ -110,6 +111,7 @@ export const navigationItems: MenuItem[] = [
       { id: 'promo-codes', label: 'Codes Promos', path: '/espace-b2b/codes-promo', icon: Ticket },
       { id: 'commissions', label: 'Chiffre d\'affaires B2B', path: '/espace-b2b/chiffre-affaires', icon: Banknote },
       { id: 'gift-rewards', label: 'Portefeuilles offerts', path: '/espace-b2b/portefeuilles-offerts', icon: Gift },
+      { id: 'entrupy', label: 'Entrupy', path: '/espace-b2b/entrupy', icon: BadgeCheck },
     ]
   },
   {
