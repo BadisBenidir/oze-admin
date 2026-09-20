@@ -11,6 +11,10 @@ export interface SourcingItem {
   billed_price: number | null;
   /** Prix d'achat réel — seul montant imputé sur allocated_cost_budget (voir 0091). */
   cost_price: number | null;
+  /** Prix revendeur imposé manuellement par un admin (voir 0152) — prévaut
+   * sur le calcul automatique floor(cost_price * (1 + marge%)) dès qu'il
+   * est renseigné. */
+  custom_reseller_price: number | null;
   status: 'sourced' | 'validated' | 'shipped' | 'cancelled';
   photos: string[];
   created_at: string;
@@ -42,6 +46,8 @@ interface UseSourcingItemsResult {
    * validation bloque tant qu'un product_id manque, ce repo ne créant
    * jamais lui-même de marque/catégorie). */
   linkProduct: (itemId: string, productId: string) => Promise<{ success: boolean; error?: string }>;
+  /** Écrase (ou retire, si null) le prix revendeur calculé pour cette pièce (voir 0152). */
+  setCustomPrice: (itemId: string, price: number | null) => Promise<{ success: boolean; error?: string }>;
 }
 
 /** Pièces sourcées pour UNE mission (voir 0089_b2b_sourcing_missions.sql). */
@@ -131,9 +137,16 @@ export const useSourcingItems = (missionId: string | null): UseSourcingItemsResu
     return { success: true };
   };
 
+  const setCustomPrice = async (itemId: string, price: number | null): Promise<{ success: boolean; error?: string }> => {
+    const { error: updateError } = await supabase.from('b2b_sourcing_items').update({ custom_reseller_price: price }).eq('id', itemId);
+    if (updateError) return { success: false, error: updateError.message };
+    await fetchItems();
+    return { success: true };
+  };
+
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
 
-  return { items, loading, error, refresh: fetchItems, addItem, addItems, setItemStatus, removeItem, linkProduct };
+  return { items, loading, error, refresh: fetchItems, addItem, addItems, setItemStatus, removeItem, linkProduct, setCustomPrice };
 };

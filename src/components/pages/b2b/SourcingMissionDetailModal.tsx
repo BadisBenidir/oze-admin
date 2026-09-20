@@ -44,7 +44,9 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
  * affectées à l'enveloppe d'achat, ajout d'une pièce, édition et clôture —
  * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
 export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onShowUnitPricesChange, onCancelValidation, onDelete, onItemsChanged }) => {
-  const { items, loading, error, addItem, addItems, setItemStatus, removeItem, linkProduct } = useSourcingItems(mission?.id || null);
+  const { items, loading, error, addItem, addItems, setItemStatus, removeItem, linkProduct, setCustomPrice } = useSourcingItems(mission?.id || null);
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [savingPriceId, setSavingPriceId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [linkingItemId, setLinkingItemId] = useState<string | null>(null);
@@ -106,16 +108,52 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   // getSourcingMissionMetrics (même règle que les vues d'ensemble).
   const isCompleted = mission.status === 'completed';
   const remainingAfter = isCompleted ? 0 : mission.allocated_cost_budget - totalSpent;
-  const marginReal = isCompleted ? mission.advance_amount - totalSpent : mission.advance_amount - mission.allocated_cost_budget;
-  const marginLabel = isCompleted ? 'Marge réelle' : 'Marge prévisionnelle';
   const consumedRatio = mission.allocated_cost_budget > 0 ? Math.min(totalSpent / mission.allocated_cost_budget, 1) : 0;
   const overBudget = !isCompleted && remainingAfter < 0;
-  const marginPercent = mission.advance_amount > 0 ? (marginReal / mission.advance_amount) * 100 : null;
-  // Prix unitaire calculé = floor(coût * (1 + marge%)) — exactement la même
-  // marge que celle affichée juste au-dessus ("Marge prévisionnelle...
-  // (20%)"), jamais un second taux saisi séparément (voir 0151).
+  // Barème par défaut (avance/enveloppe), inchangé : sert de base au calcul
+  // automatique par pièce (computeUnitPrice) — exactement la formule déjà
+  // exposée au revendeur (0151/0152), jamais un second taux saisi
+  // séparément.
+  const defaultMarginPercent = mission.advance_amount > 0 ? ((mission.advance_amount - mission.allocated_cost_budget) / mission.advance_amount) * 100 : null;
   const computeUnitPrice = (costPrice: number | null): number | null =>
-    costPrice != null && marginPercent != null ? Math.floor(costPrice * (1 + marginPercent / 100)) : null;
+    costPrice != null && defaultMarginPercent != null ? Math.floor(costPrice * (1 + defaultMarginPercent / 100)) : null;
+  // Prix effectif d'une pièce : celui imposé manuellement (0152) sinon le
+  // calcul automatique — c'est CE prix qui alimente le total facturé et la
+  // marge affichés en haut, pas l'avance figée à la création de la mission.
+  const effectivePrice = (item: SourcingItem): number | null => item.custom_reseller_price ?? computeUnitPrice(item.cost_price);
+  const pricedItems = activeItems.filter((item) => effectivePrice(item) != null);
+  const totalBilled = pricedItems.reduce((sum, item) => sum + (effectivePrice(item) as number), 0);
+  // Tant qu'aucune pièce n'a de prix connu (mission toute neuve), retombe
+  // sur l'avance/enveloppe d'origine plutôt que d'afficher une marge à 0
+  // trompeuse.
+  const hasPricedItems = pricedItems.length > 0;
+  const marginReal = hasPricedItems
+    ? totalBilled - totalSpent
+    : isCompleted ? mission.advance_amount - totalSpent : mission.advance_amount - mission.allocated_cost_budget;
+  const marginLabel = isCompleted ? 'Marge réelle' : 'Marge prévisionnelle';
+  const marginBasis = hasPricedItems ? totalBilled : mission.advance_amount;
+  const marginPercent = marginBasis > 0 ? (marginReal / marginBasis) * 100 : null;
+
+  const handleSavePrice = async (item: SourcingItem, rawValue: string) => {
+    const trimmed = rawValue.trim();
+    const parsed = trimmed === '' ? null : Number(trimmed.replace(',', '.'));
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) return;
+    // Repasser au calcul automatique (vide le champ) quand la valeur saisie
+    // égale exactement le prix calculé — évite de figer inutilement un prix
+    // qui aurait de toute façon été le même.
+    const computed = computeUnitPrice(item.cost_price);
+    const nextValue = parsed !== null && parsed === computed ? null : parsed;
+    if (nextValue === (item.custom_reseller_price ?? null)) return;
+    setSavingPriceId(item.id);
+    await setCustomPrice(item.id, nextValue);
+    setSavingPriceId(null);
+    setPriceDrafts((prev) => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
+    onItemsChanged();
+  };
 
   const handleAddItem = async (input: Parameters<typeof addItem>[0]) => {
     const result = await addItem(input);
@@ -271,10 +309,16 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
             )}
 
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center mb-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center mb-3">
                 <div>
                   <p className="text-xs text-gray-500">Avance client</p>
                   <p className="text-sm font-semibold text-gray-900">{mission.advance_amount.toFixed(2)} €</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500" title="Somme des prix revendeur effectifs (manuels ou calculés) de chaque pièce">
+                    Total facturé
+                  </p>
+                  <p className="text-sm font-semibold text-gray-900">{hasPricedItems ? `${totalBilled.toFixed(2)} €` : '—'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Enveloppe d'achat</p>
@@ -394,15 +438,32 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                             <td className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap w-24 shrink-0">
                               {item.cost_price != null ? `${item.cost_price.toFixed(2)} €` : '—'}
                             </td>
-                            <td
-                              className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap w-24 shrink-0"
-                              title={
-                                computeUnitPrice(item.cost_price) != null && marginPercent != null
-                                  ? `Coût d'achat + ${marginPercent.toFixed(0)}% de marge, arrondi à l'euro inférieur`
-                                  : undefined
-                              }
-                            >
-                              {computeUnitPrice(item.cost_price) != null ? `${computeUnitPrice(item.cost_price)} €` : '—'}
+                            <td className="py-2.5 px-3 text-right w-24 shrink-0">
+                              <div
+                                className={`flex items-center justify-end gap-1 rounded-md px-1.5 py-1 transition-colors ${
+                                  item.custom_reseller_price != null ? 'bg-amber-50' : 'hover:bg-gray-50'
+                                }`}
+                                title={
+                                  defaultMarginPercent != null
+                                    ? `Coût d'achat + ${defaultMarginPercent.toFixed(0)}% de marge, arrondi à l'euro inférieur${
+                                        item.custom_reseller_price != null ? ' — prix modifié manuellement' : ''
+                                      }`
+                                    : undefined
+                                }
+                              >
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  disabled={isCompleted || savingPriceId === item.id}
+                                  value={priceDrafts[item.id] ?? (effectivePrice(item) != null ? String(effectivePrice(item)) : '')}
+                                  onChange={(e) => setPriceDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                                  onBlur={(e) => handleSavePrice(item, e.target.value)}
+                                  placeholder="—"
+                                  className="w-14 text-right text-sm font-medium text-gray-900 bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-gray-400 rounded px-1 py-0.5 tabular-nums disabled:opacity-50"
+                                />
+                                <span className="text-xs text-gray-400">€</span>
+                              </div>
                             </td>
                             <td className="py-2.5 px-3">
                               <select
