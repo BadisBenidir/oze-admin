@@ -184,30 +184,29 @@ export const B2BSourcing: React.FC = () => {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Mission</th>
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Entreprise</th>
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden lg:table-cell">Demandeur</th>
-                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Avance</th>
-                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden md:table-cell">Enveloppe achat</th>
-                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden md:table-cell">Consommé</th>
-                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Reste</th>
-                    <th className="text-right py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Marge</th>
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Statut</th>
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden lg:table-cell">Date d'avance</th>
+                    <th className="text-left py-2.5 px-3 font-medium text-gray-900 text-xs">Mission</th>
+                    <th className="text-left py-2.5 px-3 font-medium text-gray-900 text-xs">Entreprise</th>
+                    <th className="text-left py-2.5 px-3 font-medium text-gray-900 text-xs hidden lg:table-cell">Demandeur</th>
+                    <th className="text-right py-2.5 px-3 font-medium text-gray-900 text-xs">Avance</th>
+                    <th className="text-right py-2.5 px-3 font-medium text-gray-900 text-xs hidden md:table-cell">Consommé / Enveloppe</th>
+                    <th className="text-right py-2.5 px-3 font-medium text-gray-900 text-xs">Reste</th>
+                    <th className="text-right py-2.5 px-3 font-medium text-gray-900 text-xs">Marge</th>
+                    <th className="text-left py-2.5 px-3 font-medium text-gray-900 text-xs">Statut</th>
+                    <th className="text-left py-2.5 px-3 font-medium text-gray-900 text-xs hidden lg:table-cell">Date</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     [...Array(3)].map((_, i) => (
                       <tr key={`skeleton-${i}`} className="border-b border-gray-50">
-                        <td className="py-4 px-4 md:px-6" colSpan={10}>
+                        <td className="py-4 px-3" colSpan={9}>
                           <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
                         </td>
                       </tr>
                     ))
                   ) : filteredMissions.length === 0 ? (
                     <tr>
-                      <td className="py-8 px-4 md:px-6 text-center text-sm text-gray-500" colSpan={10}>
+                      <td className="py-8 px-3 text-center text-sm text-gray-500" colSpan={9}>
                         Aucune mission ne correspond à ces filtres.
                       </td>
                     </tr>
@@ -220,29 +219,30 @@ export const B2BSourcing: React.FC = () => {
                           onClick={() => setViewingMission(mission)}
                           className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer"
                         >
-                          <td className="py-3 px-4 md:px-6 text-sm font-medium text-gray-900">
+                          <td className="py-2.5 px-3 text-sm font-medium text-gray-900 max-w-[160px] truncate">
                             {mission.title}
-                            {mission.reference && <span className="block text-xs font-mono font-normal text-gray-400">{mission.reference}</span>}
+                            {mission.reference && <span className="block text-xs font-mono font-normal text-gray-400 truncate">{mission.reference}</span>}
                           </td>
-                          <td className="py-3 px-4 md:px-6 text-sm text-gray-600">{mission.company_name}</td>
-                          <td className="py-3 px-4 md:px-6 hidden lg:table-cell text-sm text-gray-600">
+                          <td className="py-2.5 px-3 text-sm text-gray-600 max-w-[120px] truncate">{mission.company_name}</td>
+                          <td className="py-2.5 px-3 hidden lg:table-cell text-sm text-gray-600 max-w-[160px]">
                             {mission.requester ? (
                               <>
-                                <p>{requesterLabel(mission)}</p>
-                                {mission.requester.email && <p className="text-xs text-gray-400">{mission.requester.email}</p>}
+                                <p className="truncate">{requesterLabel(mission)}</p>
+                                {mission.requester.email && <p className="text-xs text-gray-400 truncate">{mission.requester.email}</p>}
                               </>
                             ) : '—'}
                           </td>
-                          <td className="py-3 px-4 md:px-6 text-right text-sm text-gray-900 tabular-nums">{mission.advance_amount.toFixed(2)} €</td>
-                          <td className="py-3 px-4 md:px-6 hidden md:table-cell text-right text-sm text-gray-600 tabular-nums">{mission.allocated_cost_budget.toFixed(2)} €</td>
-                          <td className="py-3 px-4 md:px-6 hidden md:table-cell text-right text-sm text-gray-600 tabular-nums">{mission.consumed_cost_amount.toFixed(2)} €</td>
-                          <td className={`py-3 px-4 md:px-6 text-right text-sm font-semibold tabular-nums ${overBudget ? 'text-red-600' : 'text-gray-900'}`}>
-                            {remaining.toFixed(2)} €
+                          <td className="py-2.5 px-3 text-right text-sm text-gray-900 tabular-nums whitespace-nowrap">{mission.advance_amount.toFixed(0)} €</td>
+                          <td className="py-2.5 px-3 hidden md:table-cell text-right text-sm text-gray-600 tabular-nums whitespace-nowrap">
+                            {mission.consumed_cost_amount.toFixed(0)} / {mission.allocated_cost_budget.toFixed(0)} €
                           </td>
-                          <td className={`py-3 px-4 md:px-6 text-right text-sm font-semibold tabular-nums ${margin < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {margin.toFixed(2)} €
+                          <td className={`py-2.5 px-3 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${overBudget ? 'text-red-600' : 'text-gray-900'}`}>
+                            {remaining.toFixed(0)} €
                           </td>
-                          <td className="py-3 px-4 md:px-6">
+                          <td className={`py-2.5 px-3 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${margin < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {margin.toFixed(0)} €
+                          </td>
+                          <td className="py-2.5 px-3">
                             <div className="flex items-center gap-1.5">
                               {mission.is_published_to_reseller && (
                                 <Badge variant="success"><Eye className="h-3 w-3" /></Badge>
@@ -250,7 +250,7 @@ export const B2BSourcing: React.FC = () => {
                               {missionStatusBadge(mission.status)}
                             </div>
                           </td>
-                          <td className="py-3 px-4 md:px-6 hidden lg:table-cell text-sm text-gray-600">
+                          <td className="py-2.5 px-3 hidden lg:table-cell text-sm text-gray-600 whitespace-nowrap">
                             {mission.paid_at ? new Date(mission.paid_at).toLocaleDateString('fr-FR') : '—'}
                           </td>
                         </tr>
