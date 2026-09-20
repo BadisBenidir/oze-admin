@@ -335,14 +335,14 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
 
             <div className="border border-gray-100 rounded-lg overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full table-fixed">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Pièce</th>
-                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Coût d'achat</th>
-                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Prix revendeur</th>
+                      <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs w-[40%]">Pièce</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs w-24 shrink-0">Coût d'achat</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs w-24 shrink-0">Prix revendeur</th>
                       <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Statut</th>
-                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs"></th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs w-10 shrink-0"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -366,7 +366,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                         return (
                           <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
                             <td className="py-2.5 px-3">
-                              <div className="flex items-center gap-2.5">
+                              <div className="flex items-center gap-2.5 min-w-0">
                                 <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                                   {photo ? (
                                     <img src={photo} alt={item.title} className="h-full w-full object-cover" />
@@ -374,9 +374,9 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                                     <Package className="h-4 w-4 text-gray-400" />
                                   )}
                                 </div>
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
-                                  {item.brand && <p className="text-xs text-gray-500">{item.brand}</p>}
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-gray-900 break-words line-clamp-2">{item.title}</p>
+                                  {item.brand && <p className="text-xs text-gray-500 truncate">{item.brand}</p>}
                                   {!item.product_id && (
                                     <button
                                       type="button"
@@ -391,11 +391,11 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                                 </div>
                               </div>
                             </td>
-                            <td className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums">
+                            <td className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap w-24 shrink-0">
                               {item.cost_price != null ? `${item.cost_price.toFixed(2)} €` : '—'}
                             </td>
                             <td
-                              className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums"
+                              className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap w-24 shrink-0"
                               title={
                                 computeUnitPrice(item.cost_price) != null && marginPercent != null
                                   ? `Coût d'achat + ${marginPercent.toFixed(0)}% de marge, arrondi à l'euro inférieur`
