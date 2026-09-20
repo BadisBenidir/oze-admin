@@ -33,6 +33,12 @@ export const useWallet = (profileId: string | undefined) => {
   const [loading, setLoading] = useState(true);
   const [cumulativePaid, setCumulativePaid] = useState<number>(0);
   const [giftsUnlocked, setGiftsUnlocked] = useState<number>(0);
+  // Cumul payé au moment où le DERNIER cadeau a été accordé (0150) — la
+  // jauge ne mesure la progression que depuis ce point, jamais un
+  // rattrapage de tout l'historique (l'ancien barème était à 500€/palier,
+  // relevé depuis à 1000€ ; les cadeaux déjà accordés restent dus sans
+  // jamais être recomptés au barème actuel).
+  const [progressCheckpoint, setProgressCheckpoint] = useState<number>(0);
   // Portefeuilles offerts pas encore expédiés (pending + assigned), voir
   // b2b_gift_rewards (0101/0111/0132) — remplace l'ancien pendingGifts basé
   // sur loyalty_gifts (0040), table dans laquelle plus rien n'est écrit
@@ -48,6 +54,7 @@ export const useWallet = (profileId: string | undefined) => {
       setTransactions([]);
       setCumulativePaid(0);
       setGiftsUnlocked(0);
+      setProgressCheckpoint(0);
       setPendingGiftCount(0);
       setLoading(false);
       return;
@@ -55,7 +62,7 @@ export const useWallet = (profileId: string | undefined) => {
 
     setLoading(true);
     const [{ data: profileData }, { data: txData }, { data: paidData }, { data: giftsData }] = await Promise.all([
-      supabase.from('profiles').select('wallet_balance, loyalty_gifts_unlocked').eq('id', profileId).single(),
+      supabase.from('profiles').select('wallet_balance, loyalty_gifts_unlocked, loyalty_progress_checkpoint').eq('id', profileId).single(),
       supabase
         .from('wallet_transactions')
         .select('id, amount, type, status, order_id, note, created_at')
@@ -73,6 +80,7 @@ export const useWallet = (profileId: string | undefined) => {
     setTransactions((txData || []) as WalletTransaction[]);
     setCumulativePaid((paidData || []).reduce((sum, row) => sum + Number(row.paid_amount ?? 0), 0));
     setGiftsUnlocked(Number(profileData?.loyalty_gifts_unlocked ?? 0));
+    setProgressCheckpoint(Number(profileData?.loyalty_progress_checkpoint ?? 0));
     setPendingGiftCount((giftsData || []).reduce((sum, row) => sum + Number(row.quantity ?? 0), 0));
     setLoading(false);
   }, [profileId]);
@@ -93,17 +101,13 @@ export const useWallet = (profileId: string | undefined) => {
     return { success: true };
   };
 
-  // Sur certains comptes, loyalty_gifts_unlocked (déjà accordés) dépasse ce
-  // que cumulativePaid justifierait réellement (recalcul historique — voir
-  // 0131 : le cadeau a longtemps pu être accordé sur une base différente du
-  // cumul strict de paid_amount). Dans ce cas il manque PLUS qu'un palier
-  // plein pour le prochain cadeau, pas juste 1000 € comme l'ancien calcul
-  // le supposait à tort (il plafonnait à 0 et affichait toujours "plus que
-  // 1000 €", même quand le vrai manque était largement supérieur) — la
-  // jauge semblait alors ne jamais avancer malgré de vraies recharges.
-  const totalPaidNeededForNextGift = (giftsUnlocked + 1) * LOYALTY_TIER_AMOUNT;
-  const remainingToNextTier = Math.max(totalPaidNeededForNextGift - cumulativePaid, 0);
-  const progressInTier = Math.max(LOYALTY_TIER_AMOUNT - remainingToNextTier, 0);
+  // Progression depuis le dernier cadeau accordé (loyalty_progress_
+  // checkpoint, 0150) — jamais depuis zéro ni un recalcul de tout
+  // l'historique au barème actuel (celui-ci est passé de 500€ à 1000€ par
+  // palier avec le temps ; les cadeaux déjà accordés sous l'ancien barème
+  // restent dus sans être recomptés).
+  const progressInTier = Math.min(Math.max(cumulativePaid - progressCheckpoint, 0), LOYALTY_TIER_AMOUNT);
+  const remainingToNextTier = Math.max(LOYALTY_TIER_AMOUNT - progressInTier, 0);
 
   return {
     balance,
