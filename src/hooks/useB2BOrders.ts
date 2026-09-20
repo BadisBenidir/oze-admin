@@ -9,6 +9,19 @@ export interface B2BShipmentParcel {
   weight_kg: number | null;
 }
 
+/** Point relais choisi lors d'une demande de livraison (0065) — forme
+ * ChronopostPickupPoint, distincte des clés pickup_point_* de
+ * orders.shipping_address (adresse du checkout initial uniquement). */
+export interface B2BParcelPoint {
+  code: string;
+  name: string;
+  network: string;
+  address: string;
+  city: string;
+  zipCode: string;
+  country: string;
+}
+
 export interface B2BOrderItem {
   id: string;
   product_id: string;
@@ -32,6 +45,10 @@ export interface B2BOrderItem {
   shipment_id: string | null;
   parcel_id: string | null;
   shipment_parcel: B2BShipmentParcel | null;
+  /** Demande de livraison associée (0062) — porte le vrai lieu de livraison
+   * choisi, qui peut différer de orders.shipping_address (voir
+   * B2BOrderDetailModal.tsx / resolveDeliveryDisplay). */
+  shipment: { delivery_type: 'domicile' | 'point_relais'; parcel_point: B2BParcelPoint | null } | null;
 }
 
 export interface B2BOrderRequester {
@@ -140,7 +157,7 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
         .select(
           'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), ' +
           'placed_by:profiles!placed_by_profile_id(first_name, last_name, email), ' +
-          'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg))'
+          'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg), shipment:shipments(delivery_type, parcel_point))'
         )
         .eq('order_channel', 'b2b');
 

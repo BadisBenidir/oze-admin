@@ -103,6 +103,37 @@ const formatAddress = (address: Record<string, unknown>) => {
   };
 };
 
+/**
+ * Résout le VRAI lieu de livraison à afficher. Priorité au point relais
+ * d'une demande de livraison faite APRÈS le checkout (shipments.parcel_point
+ * via order_items.shipment_id, voir 0062/0065) sur l'adresse saisie au
+ * checkout initial (orders.shipping_address, formatAddress ci-dessus) : les
+ * deux peuvent différer quand le revendeur choisit un point relais différent
+ * depuis "Prêts à être expédiés" — c'est ce choix-là qui sert réellement à
+ * générer l'étiquette (generate-b2b-shipment-labels), pas l'adresse de
+ * checkout.
+ */
+const resolveDeliveryDisplay = (order: MyB2BOrder): ReturnType<typeof formatAddress> => {
+  const withRelayShipment = order.order_items.find(
+    (i) => i.status === 'active' && i.shipment?.delivery_type === 'point_relais' && i.shipment.parcel_point
+  );
+  const pp = withRelayShipment?.shipment?.parcel_point;
+  if (pp) {
+    return {
+      isPointRelais: true,
+      street: '',
+      city: pp.city || '',
+      postalCode: pp.zipCode || '',
+      country: pp.country || '',
+      instructions: '',
+      pickupPointName: pp.name || 'Point Relais',
+      pickupPointNetwork: pp.network || '',
+      pickupPointAddress: pp.address || '',
+    };
+  }
+  return formatAddress(order.shipping_address);
+};
+
 interface B2BOrdersListProps {
   orders: MyB2BOrder[];
   loading: boolean;
@@ -346,32 +377,40 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                   </div>
                 )}
 
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Adresse de livraison</p>
-                  <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-2">
-                    <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-gray-900">
-                      {(() => {
-                        const a = formatAddress(viewingOrder.shipping_address);
-                        return a.isPointRelais ? (
-                          <>
-                            <p className="font-medium">{a.pickupPointName || 'Point Relais'}</p>
-                            {a.pickupPointAddress && <p>{a.pickupPointAddress}</p>}
-                            <p>{a.postalCode} {a.city}</p>
-                            {a.pickupPointNetwork && <p className="text-xs text-gray-500 mt-1">{a.pickupPointNetwork}</p>}
-                          </>
+                {(() => {
+                  const a = resolveDeliveryDisplay(viewingOrder);
+                  return (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                        {a.isPointRelais ? 'Livraison en point relais' : 'Adresse de livraison'}
+                      </p>
+                      <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-2">
+                        {a.isPointRelais ? (
+                          <Package className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
                         ) : (
-                          <>
-                            <p>{a.street}</p>
-                            <p>{a.postalCode} {a.city}</p>
-                            <p>{a.country}</p>
-                            {a.instructions && <p className="text-xs text-gray-500 mt-1 italic">{a.instructions}</p>}
-                          </>
-                        );
-                      })()}
+                          <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                        )}
+                        <div className="text-sm text-gray-900">
+                          {a.isPointRelais ? (
+                            <>
+                              <p className="font-medium">{a.pickupPointName || 'Point Relais'}</p>
+                              {a.pickupPointAddress && <p>{a.pickupPointAddress}</p>}
+                              <p>{a.postalCode} {a.city}</p>
+                              {a.pickupPointNetwork && <p className="text-xs text-gray-500 mt-1">{a.pickupPointNetwork}</p>}
+                            </>
+                          ) : (
+                            <>
+                              <p>{a.street}</p>
+                              <p>{a.postalCode} {a.city}</p>
+                              <p>{a.country}</p>
+                              {a.instructions && <p className="text-xs text-gray-500 mt-1 italic">{a.instructions}</p>}
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {certificateError && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">

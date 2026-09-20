@@ -9,6 +9,20 @@ export interface MyB2BShipmentParcel {
   weight_kg: number | null;
 }
 
+/** Point relais choisi lors d'une demande de livraison (0065) — forme
+ * ChronopostPickupPoint (services/chronopostService.ts), pas les clés
+ * pickup_point_* de orders.shipping_address (celles-ci ne concernent que
+ * l'adresse saisie au moment du checkout initial, voir formatAddress). */
+export interface MyB2BParcelPoint {
+  code: string;
+  name: string;
+  network: string;
+  address: string;
+  city: string;
+  zipCode: string;
+  country: string;
+}
+
 export interface MyB2BOrderItem {
   id: string;
   product_id: string;
@@ -31,6 +45,12 @@ export interface MyB2BOrderItem {
   shipment_id: string | null;
   parcel_id: string | null;
   shipment_parcel: MyB2BShipmentParcel | null;
+  /** Demande de livraison associée (0062) — porte le VRAI mode/lieu de
+   * livraison choisi pour cet article, qui peut différer de
+   * orders.shipping_address si la demande a été faite après coup depuis
+   * "Prêts à être expédiés" avec un point relais différent de celui du
+   * checkout initial. */
+  shipment: { delivery_type: 'domicile' | 'point_relais'; parcel_point: MyB2BParcelPoint | null } | null;
 }
 
 export interface MyB2BOrder {
@@ -72,7 +92,7 @@ export const useMyB2BOrders = (isAuthenticated: boolean = false, profileId: stri
       const { data, error: fetchError } = await supabase
         .from('orders')
         .select(
-          'id, order_number, status, payment_status, subtotal, shipping_cost, total_amount, shipping_address, tracking_number, tracking_url, created_at, order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg))'
+          'id, order_number, status, payment_status, subtotal, shipping_cost, total_amount, shipping_address, tracking_number, tracking_url, created_at, order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg), shipment:shipments(delivery_type, parcel_point))'
         )
         .eq('order_channel', 'b2b')
         .eq('placed_by_profile_id', profileId)
