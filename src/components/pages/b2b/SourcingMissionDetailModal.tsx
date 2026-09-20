@@ -340,7 +340,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Pièce</th>
                       <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Coût d'achat</th>
-                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Prix unitaire calculé</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Prix revendeur</th>
                       <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Statut</th>
                       <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs"></th>
                     </tr>
@@ -394,7 +394,14 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                             <td className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums">
                               {item.cost_price != null ? `${item.cost_price.toFixed(2)} €` : '—'}
                             </td>
-                            <td className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums">
+                            <td
+                              className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums"
+                              title={
+                                computeUnitPrice(item.cost_price) != null && marginPercent != null
+                                  ? `Coût d'achat + ${marginPercent.toFixed(0)}% de marge, arrondi à l'euro inférieur`
+                                  : undefined
+                              }
+                            >
                               {computeUnitPrice(item.cost_price) != null ? `${computeUnitPrice(item.cost_price)} €` : '—'}
                             </td>
                             <td className="py-2.5 px-3">
