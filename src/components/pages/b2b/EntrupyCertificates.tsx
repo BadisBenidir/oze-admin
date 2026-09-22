@@ -1,12 +1,33 @@
 import React, { useMemo, useState } from 'react';
 import {
   BadgeCheck, AlertCircle, ImageOff, Link as LinkIcon, Upload, X, ExternalLink,
-  Trash2, Euro, TrendingUp, TrendingDown, Wallet, Pencil, Check,
+  Trash2, Euro, TrendingUp, TrendingDown, Wallet, Pencil, Check, Eye,
 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
+import { supabase } from '../../../lib/supabase';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { useEntrupyCertificates, useEntrupyManualAdjustment, EntrupyCertificateItem } from '../../../hooks/useEntrupyCertificates';
+import { B2BOrder, computeB2BOrderStatus } from '../../../hooks/useB2BOrders';
+import { B2BOrderDetailModal } from './B2BOrderDetailModal';
+
+// Même select que useB2BOrders.ts (voir aussi GiftRewards.tsx qui suit le
+// même pattern) — ici pour UNE commande précise ouverte depuis son numéro
+// dans le tableau Entrupy, pas la liste complète.
+const fetchOrderById = async (orderId: string): Promise<B2BOrder | null> => {
+  const { data, error } = await supabase
+    .from('orders')
+    .select(
+      'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), ' +
+      'placed_by:profiles!placed_by_profile_id(first_name, last_name, email), ' +
+      'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg), shipment:shipments(delivery_type, parcel_point))'
+    )
+    .eq('id', orderId)
+    .single();
+  if (error || !data) return null;
+  const order = data as unknown as B2BOrder;
+  return { ...order, placed_by_is_primary: true, computedStatus: computeB2BOrderStatus(order) };
+};
 
 type StatusFilter = 'all' | 'pending' | 'completed';
 
@@ -253,6 +274,15 @@ export const EntrupyCertificates: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [importingItem, setImportingItem] = useState<EntrupyCertificateItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [viewingOrder, setViewingOrder] = useState<B2BOrder | null>(null);
+  const [loadingOrderId, setLoadingOrderId] = useState<string | null>(null);
+
+  const handleViewOrder = async (orderId: string) => {
+    setLoadingOrderId(orderId);
+    const order = await fetchOrderById(orderId);
+    setLoadingOrderId(null);
+    if (order) setViewingOrder(order);
+  };
 
   // `items` arrive déjà triés du plus vieux au plus récent (voir
   // useEntrupyCertificates). Dans l'onglet "Tous", les certificats terminés
@@ -443,6 +473,14 @@ export const EntrupyCertificates: React.FC = () => {
                         <td className="py-3 px-4">{statusBadge(item.entrupy_status)}</td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleViewOrder(item.order_id)}
+                              disabled={loadingOrderId === item.order_id}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                              title="Voir le détail de la commande"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
                             {item.entrupy_status === 'completed' && item.entrupy_cert_url && (
                               <a
                                 href={item.entrupy_cert_url}
@@ -494,6 +532,10 @@ export const EntrupyCertificates: React.FC = () => {
           onImport={(certUrl, pdfPath) => importCertificate(importingItem.id, certUrl, pdfPath)}
           onUploadPdf={(file) => uploadPdf(importingItem.id, file)}
         />
+      )}
+
+      {viewingOrder && (
+        <B2BOrderDetailModal order={viewingOrder} onClose={() => setViewingOrder(null)} onOrderUpdated={() => {}} />
       )}
     </div>
   );
