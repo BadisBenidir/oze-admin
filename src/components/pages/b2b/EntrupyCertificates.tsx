@@ -1,33 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import {
   BadgeCheck, AlertCircle, ImageOff, Link as LinkIcon, Upload, X, ExternalLink,
-  Trash2, Euro, TrendingUp, TrendingDown, Wallet, Pencil, Check, Eye,
+  Trash2, Euro, TrendingUp, TrendingDown, Wallet, Pencil, Check, Eye, Package,
 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
-import { supabase } from '../../../lib/supabase';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { useEntrupyCertificates, useEntrupyManualAdjustment, EntrupyCertificateItem } from '../../../hooks/useEntrupyCertificates';
-import { B2BOrder, computeB2BOrderStatus } from '../../../hooks/useB2BOrders';
-import { B2BOrderDetailModal } from './B2BOrderDetailModal';
-
-// Même select que useB2BOrders.ts (voir aussi GiftRewards.tsx qui suit le
-// même pattern) — ici pour UNE commande précise ouverte depuis son numéro
-// dans le tableau Entrupy, pas la liste complète.
-const fetchOrderById = async (orderId: string): Promise<B2BOrder | null> => {
-  const { data, error } = await supabase
-    .from('orders')
-    .select(
-      'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), ' +
-      'placed_by:profiles!placed_by_profile_id(first_name, last_name, email), ' +
-      'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg), shipment:shipments(delivery_type, parcel_point))'
-    )
-    .eq('id', orderId)
-    .single();
-  if (error || !data) return null;
-  const order = data as unknown as B2BOrder;
-  return { ...order, placed_by_is_primary: true, computedStatus: computeB2BOrderStatus(order) };
-};
 
 type StatusFilter = 'all' | 'pending' | 'completed';
 
@@ -206,6 +185,97 @@ const ImportCertificateModal: React.FC<ImportModalProps> = ({ item, onClose, onI
   );
 };
 
+interface ArticleDetailModalProps {
+  item: EntrupyCertificateItem;
+  onClose: () => void;
+}
+
+/** Détail de l'article (pas de toute la commande) — tout ce qu'affiche déjà
+ * la ligne du tableau vient de `item` (useEntrupyCertificates), pas besoin
+ * de re-fetcher quoi que ce soit pour cette vue en lecture seule. */
+const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ item, onClose }) => {
+  return (
+    <div className="fixed inset-0 z-[60] overflow-y-auto">
+      <div className="fixed inset-0 bg-black bg-opacity-40" onClick={onClose} />
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-900">Détail de l'article</h3>
+            <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-16 w-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+              {item.product_image ? (
+                <img src={item.product_image} alt={item.product_name} className="h-full w-full object-cover" />
+              ) : (
+                <Package className="h-6 w-6 text-gray-300" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="font-medium text-gray-900">{item.product_name}</p>
+              {item.product_reference && <p className="text-xs text-gray-400 font-mono">{item.product_reference}</p>}
+            </div>
+          </div>
+
+          <div className="space-y-2.5 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">N° commande</span>
+              <span className="text-gray-900 font-mono">{item.order_number}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Date de commande</span>
+              <span className="text-gray-900">{item.order_created_at ? new Date(item.order_created_at).toLocaleDateString('fr-FR') : '—'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Revendeur</span>
+              <span className="text-gray-900 text-right">{item.reseller_company_name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Demandé par</span>
+              <span className="text-gray-900 text-right">{item.requester_name}{item.requester_email ? ` (${item.requester_email})` : ''}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Quantité</span>
+              <span className="text-gray-900">{item.quantity}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Prix unitaire</span>
+              <span className="text-gray-900">{item.unit_price.toFixed(2)} €</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Total ligne</span>
+              <span className="text-gray-900 font-semibold">{item.line_total.toFixed(2)} €</span>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+              <span className="text-gray-500">Certificat Entrupy</span>
+              {statusBadge(item.entrupy_status)}
+            </div>
+            {item.entrupy_status === 'completed' && item.entrupy_completed_at && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Édité le</span>
+                <span className="text-gray-900">{new Date(item.entrupy_completed_at).toLocaleDateString('fr-FR')}</span>
+              </div>
+            )}
+            {item.entrupy_cert_url && (
+              <a
+                href={item.entrupy_cert_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 mt-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> Voir le certificat
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface ManualAdjustmentEditorProps {
   count: number;
   saving: boolean;
@@ -274,15 +344,7 @@ export const EntrupyCertificates: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [importingItem, setImportingItem] = useState<EntrupyCertificateItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [viewingOrder, setViewingOrder] = useState<B2BOrder | null>(null);
-  const [loadingOrderId, setLoadingOrderId] = useState<string | null>(null);
-
-  const handleViewOrder = async (orderId: string) => {
-    setLoadingOrderId(orderId);
-    const order = await fetchOrderById(orderId);
-    setLoadingOrderId(null);
-    if (order) setViewingOrder(order);
-  };
+  const [viewingItem, setViewingItem] = useState<EntrupyCertificateItem | null>(null);
 
   // `items` arrive déjà triés du plus vieux au plus récent (voir
   // useEntrupyCertificates). Dans l'onglet "Tous", les certificats terminés
@@ -474,10 +536,9 @@ export const EntrupyCertificates: React.FC = () => {
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
-                              onClick={() => handleViewOrder(item.order_id)}
-                              disabled={loadingOrderId === item.order_id}
-                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
-                              title="Voir le détail de la commande"
+                              onClick={() => setViewingItem(item)}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Voir le détail de l'article"
                             >
                               <Eye className="h-3.5 w-3.5" />
                             </button>
@@ -534,9 +595,7 @@ export const EntrupyCertificates: React.FC = () => {
         />
       )}
 
-      {viewingOrder && (
-        <B2BOrderDetailModal order={viewingOrder} onClose={() => setViewingOrder(null)} onOrderUpdated={() => {}} />
-      )}
+      {viewingItem && <ArticleDetailModal item={viewingItem} onClose={() => setViewingItem(null)} />}
     </div>
   );
 };
