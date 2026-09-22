@@ -572,7 +572,11 @@ export const EntrupyCertificates: React.FC = () => {
                     ))
                   ) : (
                     filteredItems.map((item) => (
-                      <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      <tr
+                        key={item.id}
+                        onClick={() => setViewingItem(item)}
+                        className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer"
+                      >
                         <td className="py-3 px-4 text-sm text-gray-900">
                           <div className="flex items-center gap-2.5">
                             <div className="h-9 w-9 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -597,7 +601,7 @@ export const EntrupyCertificates: React.FC = () => {
                           {item.order_created_at ? new Date(item.order_created_at).toLocaleDateString('fr-FR') : '—'}
                         </td>
                         <td className="py-3 px-4">{statusBadge(item.entrupy_status)}</td>
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => setViewingItem(item)}
