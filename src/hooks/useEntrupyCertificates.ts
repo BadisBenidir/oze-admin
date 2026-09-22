@@ -9,6 +9,9 @@ export interface EntrupyCertificateItem {
   product_name: string;
   product_reference: string | null;
   product_image: string | null;
+  /** Toutes les photos du produit (pas seulement la principale) — pour la
+   * visionneuse en grand de la modale de détail. */
+  product_images: string[];
   quantity: number;
   unit_price: number;
   line_total: number;
@@ -63,6 +66,7 @@ const mapRow = (row: Row): EntrupyCertificateItem => {
     product_name: row.product_snapshot?.name || 'Article',
     product_reference: row.product_snapshot?.reference || row.product_snapshot?.product_code || null,
     product_image: row.product_snapshot?.images?.[row.product_snapshot?.main_image_index ?? 0] || row.product_snapshot?.images?.[0] || null,
+    product_images: row.product_snapshot?.images || [],
     quantity: row.quantity,
     unit_price: Number(row.unit_price) || 0,
     line_total: Number(row.line_total) || 0,

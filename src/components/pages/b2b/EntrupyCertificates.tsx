@@ -194,6 +194,10 @@ interface ArticleDetailModalProps {
  * la ligne du tableau vient de `item` (useEntrupyCertificates), pas besoin
  * de re-fetcher quoi que ce soit pour cette vue en lecture seule. */
 const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ item, onClose }) => {
+  const images = item.product_images.length > 0 ? item.product_images : item.product_image ? [item.product_image] : [];
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [lightbox, setLightbox] = useState(false);
+
   return (
     <div className="fixed inset-0 z-[60] overflow-y-auto">
       <div className="fixed inset-0 bg-black bg-opacity-40" onClick={onClose} />
@@ -206,15 +210,36 @@ const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ item, onClose }
             </button>
           </div>
 
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-16 w-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-              {item.product_image ? (
-                <img src={item.product_image} alt={item.product_name} className="h-full w-full object-cover" />
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => images.length > 0 && setLightbox(true)}
+              className="w-full aspect-square bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden"
+              title={images.length > 0 ? 'Voir en grand' : undefined}
+            >
+              {images[activeIndex] ? (
+                <img src={images[activeIndex]} alt={item.product_name} className="h-full w-full object-cover" />
               ) : (
-                <Package className="h-6 w-6 text-gray-300" />
+                <Package className="h-10 w-10 text-gray-300" />
               )}
-            </div>
-            <div className="min-w-0">
+            </button>
+            {images.length > 1 && (
+              <div className="flex items-center gap-2 mt-2 overflow-x-auto">
+                {images.map((img, idx) => (
+                  <button
+                    key={img + idx}
+                    type="button"
+                    onClick={() => setActiveIndex(idx)}
+                    className={`h-12 w-12 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-colors ${
+                      idx === activeIndex ? 'border-gray-900' : 'border-transparent hover:border-gray-300'
+                    }`}
+                  >
+                    <img src={img} alt={`${item.product_name} ${idx + 1}`} className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="mt-3">
               <p className="font-medium text-gray-900">{item.product_name}</p>
               {item.product_reference && <p className="text-xs text-gray-400 font-mono">{item.product_reference}</p>}
             </div>
@@ -272,6 +297,45 @@ const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ item, onClose }
           </div>
         </div>
       </div>
+
+      {lightbox && images[activeIndex] && (
+        <div className="fixed inset-0 z-[70] bg-black bg-opacity-90 flex items-center justify-center p-4" onClick={() => setLightbox(false)}>
+          <button
+            onClick={() => setLightbox(false)}
+            className="absolute top-4 right-4 p-2 text-white/80 hover:text-white rounded-lg transition-colors"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          {images.length > 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveIndex((prev) => (prev - 1 + images.length) % images.length);
+              }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white text-3xl leading-none rounded-full bg-white/10 hover:bg-white/20 transition-colors w-10 h-10 flex items-center justify-center"
+            >
+              ‹
+            </button>
+          )}
+          <img
+            src={images[activeIndex]}
+            alt={item.product_name}
+            className="max-h-[90vh] max-w-[90vw] object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          {images.length > 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveIndex((prev) => (prev + 1) % images.length);
+              }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white text-3xl leading-none rounded-full bg-white/10 hover:bg-white/20 transition-colors w-10 h-10 flex items-center justify-center"
+            >
+              ›
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
