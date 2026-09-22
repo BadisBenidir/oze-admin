@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, AlertCircle } from 'lucide-react';
-import { AuctionSessionInput } from '../../../../hooks/useAdminAuctionSessions';
+import { AuctionSession, AuctionSessionInput } from '../../../../hooks/useAdminAuctionSessions';
 
 interface AuctionSessionFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (input: AuctionSessionInput) => Promise<{ success: boolean; error?: string }>;
+  /** Session à modifier — absent en création. */
+  session?: AuctionSession | null;
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -22,26 +24,32 @@ const nextFridayAt = (hour: number, minute: number): Date => {
   return d;
 };
 
-/** Formulaire de création d'une session d'enchères hebdomadaire — voir
- * auction_sessions, 0104_auction_system.sql. */
-export const AuctionSessionFormModal: React.FC<AuctionSessionFormModalProps> = ({ isOpen, onClose, onSubmit }) => {
+/** Formulaire de création / modification d'une session d'enchères
+ * hebdomadaire — voir auction_sessions, 0104_auction_system.sql. */
+export const AuctionSessionFormModal: React.FC<AuctionSessionFormModalProps> = ({ isOpen, onClose, onSubmit, session }) => {
+  const isEdit = !!session;
   const [title, setTitle] = useState('');
   const [startsAt, setStartsAt] = useState(() => toLocalInputValue(nextFridayAt(10, 0)));
   const [endsAt, setEndsAt] = useState(() => toLocalInputValue(nextFridayAt(20, 0)));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  if (!isOpen) return null;
-
   const reset = () => {
-    setTitle('');
-    setStartsAt(toLocalInputValue(nextFridayAt(10, 0)));
-    setEndsAt(toLocalInputValue(nextFridayAt(20, 0)));
+    setTitle(session?.title ?? '');
+    setStartsAt(toLocalInputValue(session ? new Date(session.starts_at) : nextFridayAt(10, 0)));
+    setEndsAt(toLocalInputValue(session ? new Date(session.ends_at) : nextFridayAt(20, 0)));
     setError('');
   };
 
+  useEffect(() => {
+    if (isOpen) reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, session?.id]);
+
+  if (!isOpen) return null;
+
   const handleClose = () => {
-    reset();
+    setError('');
     onClose();
   };
 
@@ -64,7 +72,7 @@ export const AuctionSessionFormModal: React.FC<AuctionSessionFormModalProps> = (
     });
     setSubmitting(false);
     if (!result.success) {
-      setError(result.error || 'Erreur lors de la création');
+      setError(result.error || (isEdit ? 'Erreur lors de la modification' : 'Erreur lors de la création'));
       return;
     }
     handleClose();
@@ -76,7 +84,7 @@ export const AuctionSessionFormModal: React.FC<AuctionSessionFormModalProps> = (
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
-            <h3 className="text-base font-semibold text-gray-900">Créer une session</h3>
+            <h3 className="text-base font-semibold text-gray-900">{isEdit ? 'Modifier la session' : 'Créer une session'}</h3>
             <button onClick={handleClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
               <X className="h-5 w-5" />
             </button>
@@ -115,7 +123,9 @@ export const AuctionSessionFormModal: React.FC<AuctionSessionFormModalProps> = (
                 </div>
               </div>
               <p className="text-xs text-gray-400">
-                La session démarre au statut "À venir" — utilisez le bouton "Lancer en direct" au moment voulu pour la passer en 'live'.
+                {isEdit
+                  ? 'La date de fin des lots de la session et des accès revendeurs est recalée sur la nouvelle date de fin.'
+                  : 'La session s’ouvre et se clôture automatiquement à ces heures (statut "À venir" jusqu’au début).'}
               </p>
 
               {error && (
@@ -135,7 +145,7 @@ export const AuctionSessionFormModal: React.FC<AuctionSessionFormModalProps> = (
                 disabled={submitting}
                 className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm font-medium"
               >
-                {submitting ? 'Création...' : 'Créer la session'}
+                {submitting ? (isEdit ? 'Enregistrement...' : 'Création...') : (isEdit ? 'Enregistrer' : 'Créer la session')}
               </button>
             </div>
           </form>

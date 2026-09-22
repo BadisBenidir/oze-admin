@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Gavel, Plus, AlertCircle, Trophy, Radio, CheckCircle2, Trash2, ImageOff,
-  Ticket, Receipt, Clock, Zap, TrendingUp,
+  Ticket, Receipt, Clock, Zap, TrendingUp, Pencil,
 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
@@ -46,9 +46,10 @@ export const AuctionsAdmin: React.FC = () => {
   const [section, setSection] = useState<AdminAuctionSection>('sessions');
   const [successToast, setSuccessToast] = useState('');
 
-  const { sessions, loading: sessionsLoading, error: sessionsError, createSession, setSessionStatus, deleteSession } = useAdminAuctionSessions(isAdmin);
+  const { sessions, loading: sessionsLoading, error: sessionsError, createSession, updateSession, setSessionStatus, deleteSession } = useAdminAuctionSessions(isAdmin);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [showSessionModal, setShowSessionModal] = useState(false);
+  const [editingSession, setEditingSession] = useState<AuctionSession | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
@@ -190,6 +191,15 @@ export const AuctionsAdmin: React.FC = () => {
                         >
                           <Zap className="h-3 w-3" />
                           Lancer en direct
+                        </button>
+                      )}
+                      {s.status === 'upcoming' && (
+                        <button
+                          onClick={() => setEditingSession(s)}
+                          className="flex items-center gap-1 px-2.5 py-1 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Modifier
                         </button>
                       )}
                       {s.status !== 'closed' && (
@@ -560,6 +570,16 @@ export const AuctionsAdmin: React.FC = () => {
       )}
 
       <AuctionSessionFormModal isOpen={showSessionModal} onClose={() => setShowSessionModal(false)} onSubmit={createSession} />
+      <AuctionSessionFormModal
+        isOpen={!!editingSession}
+        session={editingSession}
+        onClose={() => setEditingSession(null)}
+        onSubmit={async (input) => {
+          const result = await updateSession(editingSession!.id, input);
+          if (result.success) setSuccessToast('Session modifiée.');
+          return result;
+        }}
+      />
 
       <AuctionItemFormModal
         isOpen={showItemModal}
