@@ -96,9 +96,11 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   const { orders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useB2BOrders(isAdmin, currentReseller.id, ordersFilterContact?.profile_id);
   const [orderSearch, setOrderSearch] = useState('');
   const filteredOrders = useMemo(() => {
+    // Chronologique : la plus ancienne en haut, la plus récente en bas.
+    const chronological = [...orders].sort((a, b) => a.created_at.localeCompare(b.created_at));
     const query = normalizeSearch(orderSearch);
-    if (!query) return orders;
-    return orders.filter((order) => {
+    if (!query) return chronological;
+    return chronological.filter((order) => {
       const requesterName = getRequesterDisplayName(order) || '';
       const itemNames = order.order_items.map((i) => i.product_snapshot?.name || '').join(' ');
       const haystack = [order.order_number, requesterName, order.email, orderStatusLabel(order.status), itemNames].join(' ');
