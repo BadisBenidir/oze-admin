@@ -64,7 +64,6 @@ export interface AdminShipment {
 }
 
 const DEFAULT_STATUSES: AdminShipment['status'][] = ['requested', 'preparing'];
-const FINAL_STATUSES: AdminShipment['status'][] = ['in_transit', 'delivered'];
 
 /**
  * Demandes de livraison B2B (voir finalize_b2b_delivery_request,
@@ -95,7 +94,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
           'requester:profiles(first_name, last_name, email, phone, address, city, postal_code, country)'
         )
         .in('status', statusesKey.split(','))
-        .order('requested_at', { ascending: !statuses.some((s) => FINAL_STATUSES.includes(s)) });
+        .order('requested_at', { ascending: true });
       if (shipmentsError) throw new Error(shipmentsError.message);
 
       type ShipmentRow = {
