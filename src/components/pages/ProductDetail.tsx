@@ -9,6 +9,7 @@ import { Modal } from '../ui/Modal';
 import { validateProductByBarcode } from '../../services/productValidationService';
 import { DirectB2BSaleModal } from '../products/DirectB2BSaleModal';
 import { ProductSaleDetails } from '../products/ProductSaleDetails';
+import { ImageLightbox } from '../ui/ImageLightbox';
 import {
   ArrowLeft,
   Package,
@@ -24,7 +25,6 @@ import {
   ScanLine,
   AlertTriangle,
   ZoomIn,
-  X,
   Handshake
 } from 'lucide-react';
 
@@ -41,7 +41,8 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [zoomedDefectImage, setZoomedDefectImage] = useState<string | null>(null);
+  const [zoomedDefectIndex, setZoomedDefectIndex] = useState<number | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showDirectSaleModal, setShowDirectSaleModal] = useState(false);
   const [statusUpdateSuccess, setStatusUpdateSuccess] = useState(false);
@@ -319,7 +320,8 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                     <img
                       src={product.images[currentImageIndex]}
                       alt={product.name}
-                      className="w-full h-full object-cover"
+                      onClick={() => setLightboxOpen(true)}
+                      className="w-full h-full object-cover cursor-zoom-in"
                     />
                     
                     {product.images.length > 1 && (
@@ -548,7 +550,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                       <button
                         key={index}
                         type="button"
-                        onClick={() => setZoomedDefectImage(img)}
+                        onClick={() => setZoomedDefectIndex(index)}
                         className="relative h-20 w-20 rounded-md overflow-hidden border border-red-200 group"
                       >
                         <img src={img} alt={`Défaut ${index + 1}`} className="w-full h-full object-cover" />
@@ -653,24 +655,24 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
         />
       )}
 
-      {zoomedDefectImage && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-6"
-          onClick={() => setZoomedDefectImage(null)}
-        >
-          <button
-            onClick={() => setZoomedDefectImage(null)}
-            className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white hover:bg-white/20"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          <img
-            src={zoomedDefectImage}
-            alt="Défaut agrandi"
-            className="max-w-full max-h-full rounded-lg object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+      {lightboxOpen && product.images.length > 0 && (
+        <ImageLightbox
+          images={product.images}
+          index={currentImageIndex}
+          onIndexChange={setCurrentImageIndex}
+          onClose={() => setLightboxOpen(false)}
+          alt={product.name}
+        />
+      )}
+
+      {zoomedDefectIndex !== null && product.defect_images && (
+        <ImageLightbox
+          images={product.defect_images}
+          index={zoomedDefectIndex}
+          onIndexChange={setZoomedDefectIndex}
+          onClose={() => setZoomedDefectIndex(null)}
+          alt="Défaut agrandi"
+        />
       )}
     </div>
   );
