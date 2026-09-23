@@ -391,30 +391,65 @@ Deno.serve(async (req: Request) => {
         phone_number: phone,
         email,
       };
+    } else if (shipment.delivery_type === 'point_relais') {
+      // Point relais avec code Sendcloud réel : l'adresse postale est celle
+      // du POINT RELAIS (cohérente avec son code postal/pays, voir cas Jette
+      // ci-dessous), jamais celle du profil — un revendeur qui livre en point
+      // relais n'a souvent aucune adresse sur son profil, ce qui envoyait un
+      // address_line_1 vide ("address_1 cannot be blank"). L'identité (nom,
+      // téléphone, email) reste celle du revendeur.
+      const { line1, houseNumber } = splitAddress(String(pp.address || profile?.address || pp.name || ''));
+      toAddress = {
+        name: truncate(contactName, 30),
+        address_line_1: truncate(line1, 30),
+        ...(houseNumber ? { house_number: houseNumber } : {}),
+        city: truncate(pp.city || profile?.city, 26),
+        postal_code: truncate(pp.zipCode, 10),
+        country_code: relayCountry,
+        phone_number: phone,
+        email,
+      };
     } else {
       const { line1, houseNumber } = splitAddress(profile?.address);
-      // Pays/code postal : pour un point relais (hasRealCode), ce sont ceux
-      // du POINT RELAIS lui-même qui priment, jamais ceux du profil du
-      // revendeur — cas réel qui cassait Jette (Belgique) malgré un carrier
-      // déjà correctement forcé sur Mondial Relay : to_address portait le
-      // pays/code postal du profil du revendeur (France), incohérent avec un
-      // to_service_point situé en Belgique, ce que Sendcloud rejette avec
-      // exactement "No shipping option could be found for the given country
-      // or postal code combination" (le message cite express. country ET
-      // postal code). Pour une livraison à domicile, ces champs restent
-      // évidemment ceux du profil — seule vraie adresse de destination.
-      const isRelayDelivery = shipment.delivery_type === 'point_relais';
+      // Livraison à domicile : l'adresse du profil est la seule vraie
+      // destination. (Pour un point relais, pays/code postal sont ceux du
+      // point relais — cas réel Jette/Belgique : Sendcloud rejetait un
+      // to_address français face à un to_service_point belge avec "No
+      // shipping option could be found for the given country or postal code
+      // combination". Voir la branche point_relais ci-dessus.)
       toAddress = {
         name: truncate(contactName, 30),
         address_line_1: truncate(line1, 30),
         ...(houseNumber ? { house_number: houseNumber } : {}),
         city: truncate(profile?.city, 26),
-        postal_code: isRelayDelivery ? truncate(pp.zipCode, 10) : truncate(profile?.postal_code, 10),
-        country_code: isRelayDelivery ? relayCountry : toCountryCode(profile?.country, profile?.postal_code),
+        postal_code: truncate(profile?.postal_code, 10),
+        country_code: toCountryCode(profile?.country, profile?.postal_code),
         phone_number: phone,
         email,
       };
     }
+
+    // Garde-fou AVANT tout appel Sendcloud : une adresse incomplète échoue
+    // ici avec un message clair, au lieu de créer un colis en échec
+    // ("address_1 cannot be blank") qui décale la numérotation des colis.
+    const missingFields = [
+      !toAddress.address_line_1 && 'adresse',
+      !toAddress.city && 'ville',
+      !toAddress.postal_code && 'code postal',
+    ].filter(Boolean);
+    if (missingFields.length > 0) {
+      const where = shipment.delivery_type === 'point_relais' ? 'du point relais choisi' : 'du profil du demandeur';
+      return json({
+        error: `Adresse de livraison incomplète (${missingFields.join(', ')} manquant) — vérifiez l'adresse ${where} puis réessayez.`,
+      }, 400);
+    }
+
+    // Les colis en échec d'un essai précédent sont remplacés par cette
+    // nouvelle tentative : on les supprime pour que la numérotation reparte
+    // des colis réellement créés (sinon un seul colis affichait "Colis 2"
+    // après un premier essai raté). Seuls les colis 'failed' sont touchés —
+    // aucun article n'y est rattaché (parcel_id n'est posé qu'en cas de succès).
+    await adminClient.from('shipment_parcels').delete().eq('shipment_id', shipment_id).eq('status', 'failed');
 
     // Pour un point relais international, deliveryIndicator/shipWith sont
     // résolus PAR COLIS dans la boucle (la méthode dépend du poids) — ces
