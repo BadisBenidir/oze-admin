@@ -83,9 +83,9 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
 
   return (
     <Card hover onClick={onOpen} className="overflow-hidden flex flex-col cursor-pointer">
-      <div className="relative aspect-square sm:aspect-auto sm:h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+      <div className="relative aspect-square bg-white flex items-center justify-center overflow-hidden">
         {item.images?.[0] ? (
-          <img src={item.images[0]} alt={item.title} className="w-full h-full object-cover" />
+          <img src={item.images[0]} alt={item.title} className="w-full h-full object-contain" />
         ) : (
           <ImageOff className="h-8 w-8 sm:h-10 sm:w-10 text-gray-300" />
         )}
