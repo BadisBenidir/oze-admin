@@ -2,32 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
 /** Boutons d'enchère rapide proposés côté revendeur (carte + fiche détail). */
-export const QUICK_BID_INCREMENTS = [5, 10, 20];
+export const QUICK_BID_INCREMENTS = [5, 10, 15];
 
-/** Montant réellement ajouté par un bouton d'enchère rapide (palier 5, 10 ou
- * 20). Ne s'applique QUE sur la toute première enchère d'un lot (aucun
- * gagnant actuel, hasBids = false) : plutôt que d'ajouter bêtement le palier
- * nominal à un prix de départ impair (typiquement 1 €), ajuste le montant
- * pour que le nouveau prix retombe pile sur un multiple du palier — ex :
- * prix actuel 1 € + palier 5 € → +4 € (arrive à 5 €), + palier 10 € → +9 €
- * (arrive à 10 €), + palier 20 € → +19 € (arrive à 20 €).
- * Dès qu'une enchère existe déjà sur le lot (hasBids = true), on revient
- * TOUJOURS au palier nominal exact (+5 €, +10 €, +20 €), quel que soit le
- * prix courant — pas d'ajustement, jamais, sur les enchères suivantes.
- * Jamais en dessous de min_increment (sinon place_auto_bid rejetterait
- * l'enchère, "Montant insuffisant") : dans ce cas rare (premier bid
- * seulement), rajoute des paliers entiers jusqu'à repasser au-dessus. Calcul
- * en centimes pour éviter les arrondis flottants. */
-export const computeQuickBidIncrement = (currentPrice: number, tier: number, minIncrement: number, hasBids: boolean): number => {
-  if (hasBids) return tier;
-  const priceCents = Math.round(currentPrice * 100);
-  const tierCents = Math.round(tier * 100);
-  const remainder = priceCents % tierCents;
-  let adjustedCents = remainder === 0 ? tierCents : tierCents - remainder;
-  const minCents = Math.round(minIncrement * 100);
-  while (adjustedCents < minCents) adjustedCents += tierCents;
-  return adjustedCents / 100;
-};
+/** Montant ajouté par un bouton d'enchère rapide : toujours le palier nominal
+ * exact (+5 €, +10 €, +15 €), sans aucun arrondi sur le prix courant. Seul
+ * garde-fou : jamais en dessous de min_increment (sinon place_auto_bid
+ * rejetterait l'enchère, "Montant insuffisant"). */
+export const computeQuickBidIncrement = (tier: number, minIncrement: number): number =>
+  Math.max(tier, minIncrement);
 
 export interface AuctionSession {
   id: string;

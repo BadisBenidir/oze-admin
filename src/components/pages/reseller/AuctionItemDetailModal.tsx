@@ -230,7 +230,7 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                 <div className="mt-4 space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     {QUICK_BID_INCREMENTS.map((tier) => {
-                      const inc = computeQuickBidIncrement(item.current_price, tier, item.min_increment, item.current_winner_id !== null);
+                      const inc = computeQuickBidIncrement(tier, item.min_increment);
                       return (
                         <button
                           key={tier}
