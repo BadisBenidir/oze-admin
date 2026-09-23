@@ -45,7 +45,7 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
       const { data, error: fetchError } = await supabase
         .from('order_items')
         .select(
-          'id, fulfillment_status, product_snapshot, created_at, order:orders!inner(id, order_number, order_channel, reseller_id, reseller:resellers(company_name))'
+          'id, fulfillment_status, product_snapshot, created_at, product:products(created_at), order:orders!inner(id, order_number, order_channel, reseller_id, reseller:resellers(company_name))'
         )
         .eq('status', 'active')
         .eq('order.order_channel', 'b2b')
@@ -60,6 +60,7 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
         fulfillment_status: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested';
         product_snapshot: ReceptionItem['product_snapshot'];
         created_at: string;
+        product: { created_at: string } | null;
         order: { id: string; order_number: string; reseller_id: string; reseller: { company_name: string } | null } | null;
       }>) {
         if (!row.order) continue;
@@ -80,12 +81,22 @@ export const useReceptionItems = (isAuthenticated: boolean = false) => {
           fulfillment_status: row.fulfillment_status,
           product_snapshot: row.product_snapshot,
           order: { id: row.order.id, order_number: row.order.order_number },
-          created_at: row.created_at,
+          // Date de création du produit (pas la date d'achat) : c'est elle qui
+          // sert au regroupement par jour de la Vue Réception.
+          created_at: row.product?.created_at || row.created_at,
         };
         if (row.fulfillment_status === 'ordered') group.toReceive.push(item);
         else if (row.fulfillment_status === 'received') group.received.push(item);
         else if (row.fulfillment_status === 'ready_to_ship') group.readyToShip.push(item);
         else group.inDeliveryRequest.push(item);
+      }
+
+      const byCreatedAt = (a: ReceptionItem, b: ReceptionItem) => a.created_at.localeCompare(b.created_at);
+      for (const group of byReseller.values()) {
+        group.toReceive.sort(byCreatedAt);
+        group.received.sort(byCreatedAt);
+        group.readyToShip.sort(byCreatedAt);
+        group.inDeliveryRequest.sort(byCreatedAt);
       }
 
       setGroups(Array.from(byReseller.values()).sort((a, b) => a.companyName.localeCompare(b.companyName)));

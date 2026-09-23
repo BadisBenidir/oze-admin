@@ -46,8 +46,8 @@ const ItemRow: React.FC<ItemRowProps> = ({ item, checked, onToggle, onRevertOne,
   );
 };
 
-// Regroupe par jour de création (created_at, déjà trié ascendant par la
-// requête — voir useReceptionItems.ts) plutôt que de laisser l'ordre
+// Regroupe par jour de création du produit (created_at, déjà trié ascendant
+// par useReceptionItems.ts — date de création, pas date d'achat) plutôt que de laisser l'ordre
 // implicite : l'admin doit pouvoir voir directement quels articles sont
 // arrivés le même jour, pas juste deviner un tri invisible.
 const dateKey = (iso: string) => iso.slice(0, 10);
