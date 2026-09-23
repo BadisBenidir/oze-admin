@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 
 export interface AdminAuctionItem {
   id: string;
@@ -17,7 +18,7 @@ export interface AdminAuctionItem {
   winner_name: string | null;
   winner_email: string | null;
   ends_at: string;
-  status: 'active' | 'sold' | 'unsold';
+  status: 'active' | 'sold' | 'unsold' | 'cancelled';
   product_id: string | null;
   product_name: string | null;
   product_purchase_price: number | null;
@@ -25,6 +26,24 @@ export interface AdminAuctionItem {
   order_id: string | null;
   payment_deadline: string | null;
   order_payment_status: 'pending' | 'paid' | null;
+  order_has_stripe_payment: boolean;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  refund_status: 'not_applicable' | 'succeeded' | 'failed' | null;
+  refund_method: 'wallet' | 'stripe' | null;
+  refund_error: string | null;
+}
+
+export type AuctionRestockAction = 'draft-b2b' | 'for-sale-b2b' | 'archived';
+
+export interface CancelAuctionItemResult {
+  success: boolean;
+  error?: string;
+  refund_status?: 'not_applicable' | 'succeeded' | 'failed';
+  refund_method?: 'wallet' | 'stripe' | null;
+  refund_error?: string;
+  wallet_refunded?: number;
+  stripe_refunded?: number;
 }
 
 export interface AuctionItemInput {
@@ -37,10 +56,10 @@ export interface AuctionItemInput {
   reserve_price?: number | null;
 }
 
-type Row = Omit<AdminAuctionItem, 'winner_name' | 'winner_email' | 'product_name' | 'product_purchase_price' | 'order_payment_status'> & {
+type Row = Omit<AdminAuctionItem, 'winner_name' | 'winner_email' | 'product_name' | 'product_purchase_price' | 'order_payment_status' | 'order_has_stripe_payment'> & {
   winner: { first_name: string | null; last_name: string | null; email: string | null } | null;
   product: { name: string; purchase_price: number | null } | null;
-  order: { payment_status: 'pending' | 'paid' } | null;
+  order: { payment_status: 'pending' | 'paid'; stripe_payment_intent_id: string | null } | null;
 };
 
 const mapRow = (row: Row): AdminAuctionItem => {
@@ -52,6 +71,7 @@ const mapRow = (row: Row): AdminAuctionItem => {
     product_name: row.product?.name || null,
     product_purchase_price: row.product?.purchase_price ?? null,
     order_payment_status: row.order?.payment_status || null,
+    order_has_stripe_payment: Boolean(row.order?.stripe_payment_intent_id),
   };
 };
 
@@ -83,7 +103,7 @@ export const useAdminAuctionItems = (sessionId: string | null) => {
       setError(null);
       const { data, error: fetchError } = await supabase
         .from('auction_items')
-        .select('*, winner:profiles!current_winner_id(first_name, last_name, email), product:products(name, purchase_price), order:orders(payment_status)')
+        .select('*, winner:profiles!current_winner_id(first_name, last_name, email), product:products(name, purchase_price), order:orders(payment_status, stripe_payment_intent_id)')
         .eq('session_id', sessionId)
         .order('created_at', { ascending: true });
       if (fetchError) throw new Error(fetchError.message);
@@ -170,5 +190,24 @@ export const useAdminAuctionItems = (sessionId: string | null) => {
     return { success: true, orderNumber: (data as { order_number?: string } | null)?.order_number };
   };
 
-  return { items, loading, error, refresh: fetchItems, addItem, removeItem, updateStartPrice, linkProduct, generateOrder };
+  /** Annule un lot adjugé (admin uniquement, Edge Function cancel-auction-item)
+   * et rembourse s'il était payé — voir 0156. */
+  const cancelItem = async (
+    id: string,
+    reason: string,
+    restockAction: AuctionRestockAction,
+    refundMethod?: 'wallet' | 'stripe'
+  ): Promise<CancelAuctionItemResult> => {
+    const { data, error: fnError } = await invokeEdgeFunction<CancelAuctionItemResult>('cancel-auction-item', {
+      item_id: id,
+      reason,
+      restock_action: restockAction,
+      refund_method: refundMethod,
+    });
+    if (fnError) return { success: false, error: fnError };
+    await fetchItems();
+    return { success: true, ...(data || {}) };
+  };
+
+  return { items, loading, error, refresh: fetchItems, addItem, removeItem, updateStartPrice, linkProduct, generateOrder, cancelItem };
 };

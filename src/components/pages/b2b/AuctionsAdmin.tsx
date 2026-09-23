@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Gavel, Plus, AlertCircle, Trophy, Radio, CheckCircle2, Trash2, ImageOff,
-  Ticket, Receipt, Clock, Zap, TrendingUp, Pencil,
+  Ticket, Receipt, Clock, Zap, TrendingUp, Pencil, Ban,
 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
@@ -13,6 +13,7 @@ import { useAdminAuctionAccess } from '../../../hooks/useAdminAuctionAccess';
 import { AuctionSessionFormModal } from './auctions/AuctionSessionFormModal';
 import { AuctionItemFormModal } from './auctions/AuctionItemFormModal';
 import { GrantAuctionAccessModal } from './auctions/GrantAuctionAccessModal';
+import { CancelAuctionItemModal } from './auctions/CancelAuctionItemModal';
 import { AuctionCountdown } from '../reseller/AuctionCountdown';
 
 type AdminAuctionSection = 'sessions' | 'access' | 'results';
@@ -33,6 +34,7 @@ const sessionStatusBadge = (status: AuctionSession['status']) => {
 const itemStatusBadge = (status: AdminAuctionItem['status']) => {
   if (status === 'sold') return <Badge variant="success">Adjugé</Badge>;
   if (status === 'unsold') return <Badge variant="warning">Non vendu</Badge>;
+  if (status === 'cancelled') return <Badge variant="danger">Annulé</Badge>;
   return <Badge variant="info">En cours</Badge>;
 };
 
@@ -54,7 +56,9 @@ export const AuctionsAdmin: React.FC = () => {
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
-  const { items, loading: itemsLoading, error: itemsError, addItem, removeItem, generateOrder } = useAdminAuctionItems(selectedSessionId);
+  const { items, loading: itemsLoading, error: itemsError, addItem, removeItem, generateOrder, cancelItem } = useAdminAuctionItems(selectedSessionId);
+  const [cancellingItem, setCancellingItem] = useState<AdminAuctionItem | null>(null);
+  const countedItems = useMemo(() => items.filter((i) => i.status !== 'cancelled'), [items]);
   const { grants, loading: grantsLoading, error: grantsError, grantAccess } = useAdminAuctionAccess(isAdmin);
   const [showGrantModal, setShowGrantModal] = useState(false);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
@@ -334,7 +338,17 @@ export const AuctionsAdmin: React.FC = () => {
                                   </td>
                                   <td className="py-2.5 px-3">{itemStatusBadge(item.status)}</td>
                                   <td className="py-2.5 px-3">
-                                    {item.status !== 'sold' ? (
+                                    {item.status === 'cancelled' ? (
+                                      <div className="text-xs" title={item.cancellation_reason || undefined}>
+                                        {item.refund_status === 'succeeded' ? (
+                                          <span className="text-green-600">Remboursé ({item.refund_method === 'stripe' ? 'Stripe' : 'crédit'})</span>
+                                        ) : item.refund_status === 'failed' ? (
+                                          <span className="text-red-600" title={item.refund_error || undefined}>Remboursement échoué</span>
+                                        ) : (
+                                          <span className="text-gray-400">Non payé</span>
+                                        )}
+                                      </div>
+                                    ) : item.status !== 'sold' ? (
                                       <span className="text-xs text-gray-400">—</span>
                                     ) : !item.order_id ? (
                                       <button
@@ -359,6 +373,15 @@ export const AuctionsAdmin: React.FC = () => {
                                     )}
                                   </td>
                                   <td className="py-2.5 px-3 text-right">
+                                    {item.status === 'sold' && (
+                                      <button
+                                        onClick={() => setCancellingItem(item)}
+                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Annuler ce lot (et rembourser s'il est payé)"
+                                      >
+                                        <Ban className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                     {item.status === 'active' && item.current_price === item.start_price && (
                                       <button
                                         onClick={() => removeItem(item.id)}
@@ -379,17 +402,17 @@ export const AuctionsAdmin: React.FC = () => {
                             <tr className="border-t border-gray-200 bg-gray-50">
                               <td className="py-2.5 px-3 text-xs font-semibold text-gray-700">Total</td>
                               <td className="py-2.5 px-3 text-right text-xs text-gray-600 tabular-nums">
-                                {EUR(items.reduce((sum, i) => sum + i.start_price, 0))} → <span className="font-semibold text-gray-900">{EUR(items.reduce((sum, i) => sum + i.current_price, 0))}</span>
+                                {EUR(countedItems.reduce((sum, i) => sum + i.start_price, 0))} → <span className="font-semibold text-gray-900">{EUR(countedItems.reduce((sum, i) => sum + i.current_price, 0))}</span>
                               </td>
                               <td className="py-2.5 px-3 text-right text-xs tabular-nums">
                                 {(() => {
-                                  const known = items.filter((i) => i.product_purchase_price != null);
+                                  const known = countedItems.filter((i) => i.product_purchase_price != null);
                                   if (known.length === 0) return <span className="text-gray-400">—</span>;
                                   const total = known.reduce((sum, i) => sum + (i.current_price - (i.product_purchase_price as number)), 0);
                                   return (
                                     <span className={`font-semibold ${total >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                       {total >= 0 ? '+' : '-'}{EUR(Math.abs(total))}
-                                      {known.length < items.length && <span className="text-gray-400 font-normal"> ({known.length}/{items.length})</span>}
+                                      {known.length < countedItems.length && <span className="text-gray-400 font-normal"> ({known.length}/{countedItems.length})</span>}
                                     </span>
                                   );
                                 })()}
@@ -521,6 +544,8 @@ export const AuctionsAdmin: React.FC = () => {
                             <td className="py-2.5 px-3">
                               {item.status === 'sold' ? (
                                 <Badge variant="success">Adjugé</Badge>
+                              ) : item.status === 'cancelled' ? (
+                                <Badge variant="danger">Annulé</Badge>
                               ) : (
                                 <Badge variant="warning">
                                   {item.current_winner_id ? 'Non vendu (réserve non atteinte)' : 'Non vendu (aucune enchère)'}
@@ -569,6 +594,29 @@ export const AuctionsAdmin: React.FC = () => {
         </div>
       )}
 
+      {cancellingItem && (
+        <CancelAuctionItemModal
+          item={cancellingItem}
+          onClose={() => setCancellingItem(null)}
+          onConfirm={async (reason, restockAction, refundMethod) => {
+            const result = await cancelItem(cancellingItem.id, reason, restockAction, refundMethod);
+            if (!result.success) return result;
+            setCancellingItem(null);
+            if (result.refund_status === 'failed') {
+              alert(`Lot annulé, mais le remboursement a échoué : ${result.refund_error || 'erreur inconnue'} — à traiter manuellement.`);
+            } else if (result.refund_status === 'succeeded') {
+              const parts = [
+                result.stripe_refunded ? `${EUR(result.stripe_refunded)} sur la carte` : '',
+                result.wallet_refunded ? `${EUR(result.wallet_refunded)} en crédit` : '',
+              ].filter(Boolean).join(' + ');
+              setSuccessToast(`Lot annulé et remboursé (${parts}).`);
+            } else {
+              setSuccessToast('Lot annulé.');
+            }
+            return result;
+          }}
+        />
+      )}
       <AuctionSessionFormModal isOpen={showSessionModal} onClose={() => setShowSessionModal(false)} onSubmit={createSession} />
       <AuctionSessionFormModal
         isOpen={!!editingSession}
