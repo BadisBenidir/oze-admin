@@ -32,7 +32,7 @@ interface ItemCardProps {
   isPreview: boolean;
   sessionStartsAt: string | null;
   onOpen: () => void;
-  onBid: (maxAmount: number) => Promise<{ success: boolean; error?: string; warning?: string }>;
+  onBid: (maxAmount: number, exact?: boolean) => Promise<{ success: boolean; error?: string; warning?: string }>;
 }
 
 /** Carte cliquable (ouvre la fiche détail, voir onOpen) qui permet AUSSI
@@ -48,12 +48,12 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
   const ended = new Date(item.ends_at).getTime() <= Date.now() || item.status !== 'active';
   const nextMinBid = item.current_price + item.min_increment;
 
-  const submitBid = async (maxAmount: number) => {
+  const submitBid = async (maxAmount: number, exact = false) => {
     if (submitting || ended) return;
     setSubmitting(true);
     setError('');
     setWarning('');
-    const result = await onBid(maxAmount);
+    const result = await onBid(maxAmount, exact);
     setSubmitting(false);
     if (!result.success) {
       setError(result.error || "Erreur lors de l'enchère");
@@ -177,7 +177,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
                   return (
                     <button
                       key={tier}
-                      onClick={() => submitBid(item.current_price + inc)}
+                      onClick={() => submitBid(item.current_price + inc, true)}
                       disabled={submitting || isWinning}
                       title={isWinning ? 'Vous menez déjà cette enchère' : undefined}
                       className="px-2 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
@@ -367,7 +367,7 @@ export const Auctions: React.FC = () => {
               isPreview={session?.status === 'upcoming'}
               sessionStartsAt={session?.starts_at ?? null}
               onOpen={() => setViewingItemId(item.id)}
-              onBid={(maxAmount) => placeAutoBid(item.id, maxAmount)}
+              onBid={(maxAmount, exact) => placeAutoBid(item.id, maxAmount, exact)}
             />
           ))}
         </div>
@@ -383,7 +383,7 @@ export const Auctions: React.FC = () => {
         isPreview={session?.status === 'upcoming'}
         sessionStartsAt={session?.starts_at ?? null}
         onClose={() => setViewingItemId(null)}
-        onBid={(maxAmount) => (viewingItem ? placeAutoBid(viewingItem.id, maxAmount) : Promise.resolve({ success: false, error: 'Pièce inconnue' }))}
+        onBid={(maxAmount, exact) => (viewingItem ? placeAutoBid(viewingItem.id, maxAmount, exact) : Promise.resolve({ success: false, error: 'Pièce inconnue' }))}
       />
     </div>
   );

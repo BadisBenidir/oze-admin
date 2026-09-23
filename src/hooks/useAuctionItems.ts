@@ -161,9 +161,9 @@ export const useAuctionItems = (enabled: boolean, profileId?: string | null) => 
    * plafond. `warning` reste renseigné même en succès quand l'utilisateur a
    * été immédiatement surenchéri par un plafond concurrent déjà supérieur.
    */
-  const placeAutoBid = async (itemId: string, maxAmount: number): Promise<{ success: boolean; error?: string; warning?: string }> => {
+  const placeAutoBid = async (itemId: string, maxAmount: number, exact = false): Promise<{ success: boolean; error?: string; warning?: string }> => {
     if (!profileId) return { success: false, error: 'Profil inconnu' };
-    const { data, error: rpcError } = await supabase.rpc('place_auto_bid', { p_item_id: itemId, p_max_amount: maxAmount });
+    const { data, error: rpcError } = await supabase.rpc('place_auto_bid', { p_item_id: itemId, p_max_amount: maxAmount, p_exact: exact });
     if (rpcError) return { success: false, error: rpcError.message };
     const row = (Array.isArray(data) ? data[0] : data) as { success: boolean; message: string | null } | null;
     if (!row?.success) return { success: false, error: row?.message || "Erreur lors de l'enchère" };

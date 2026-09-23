@@ -23,7 +23,7 @@ interface AuctionItemDetailModalProps {
   isPreview: boolean;
   sessionStartsAt: string | null;
   onClose: () => void;
-  onBid: (maxAmount: number) => Promise<{ success: boolean; error?: string; warning?: string }>;
+  onBid: (maxAmount: number, exact?: boolean) => Promise<{ success: boolean; error?: string; warning?: string }>;
 }
 
 /** Fiche détail d'un lot d'enchère — galerie photo façon fiche produit du
@@ -54,12 +54,12 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
   const goPrev = () => setActiveIndex((i) => (i - 1 + images.length) % images.length);
   const goNext = () => setActiveIndex((i) => (i + 1) % images.length);
 
-  const submitBid = async (maxAmount: number) => {
+  const submitBid = async (maxAmount: number, exact = false) => {
     if (submitting || ended) return;
     setSubmitting(true);
     setError('');
     setWarning('');
-    const result = await onBid(maxAmount);
+    const result = await onBid(maxAmount, exact);
     setSubmitting(false);
     if (!result.success) {
       setError(result.error || "Erreur lors de l'enchère");
@@ -234,7 +234,7 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                       return (
                         <button
                           key={tier}
-                          onClick={() => submitBid(item.current_price + inc)}
+                          onClick={() => submitBid(item.current_price + inc, true)}
                           disabled={submitting || isWinning}
                           title={isWinning ? 'Vous menez déjà cette enchère' : undefined}
                           className="px-3 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
