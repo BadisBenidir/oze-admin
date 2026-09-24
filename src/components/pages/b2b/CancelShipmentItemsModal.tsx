@@ -29,6 +29,8 @@ export interface CancelShipmentItemsResult {
 
 interface CancelShipmentItemsModalProps {
   shipment: AdminShipment;
+  /** Articles cochés à l'ouverture (bouton "Annuler" d'une ligne). */
+  initialSelectedIds?: string[];
   onClose: () => void;
   onDone: (result: CancelShipmentItemsResult) => void;
 }
@@ -39,9 +41,9 @@ const EUR = (n: number) => n.toFixed(2).replace('.', ',') + ' €';
  * encore étiquetés (article jamais reçu) : remboursement du prix de
  * l'article ET, au choix, des frais de port — Edge Function
  * cancel-shipment-items (voir 0161). */
-export const CancelShipmentItemsModal: React.FC<CancelShipmentItemsModalProps> = ({ shipment, onClose, onDone }) => {
+export const CancelShipmentItemsModal: React.FC<CancelShipmentItemsModalProps> = ({ shipment, initialSelectedIds, onClose, onDone }) => {
   const items = shipment.pendingItems;
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(items.length === 1 ? [items[0].id] : []));
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSelectedIds?.length ? initialSelectedIds : items.length === 1 ? [items[0].id] : []));
   const [reason, setReason] = useState(CANCEL_REASONS[0]);
   const [restockAction, setRestockAction] = useState<'draft' | 'for-sale-b2b' | 'archived'>('archived');
   const selectedItems = items.filter((i) => selected.has(i.id));
@@ -50,7 +52,7 @@ export const CancelShipmentItemsModal: React.FC<CancelShipmentItemsModalProps> =
   // Stripe n'est possible que si TOUTES les commandes payées concernées ont
   // une part carte (sinon remboursement au solde uniquement).
   const itemStripeOk = selectedItems.length > 0 && selectedItems.every((i) => i.order?.payment_status !== 'paid' || Boolean(i.order?.stripe_payment_intent_id));
-  const [itemRefundMethod, setItemRefundMethod] = useState<'wallet' | 'stripe'>('stripe');
+  const [itemRefundMethod, setItemRefundMethod] = useState<'wallet' | 'stripe'>('wallet');
   const effectiveItemMethod = itemStripeOk ? itemRefundMethod : 'wallet';
 
   const hasFee = shipment.shipping_cost > 0;

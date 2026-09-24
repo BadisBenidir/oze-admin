@@ -129,6 +129,8 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   const [splitError, setSplitError] = useState<string | null>(null);
   const [showCancelRequest, setShowCancelRequest] = useState(false);
   const [showCancelItems, setShowCancelItems] = useState(false);
+  // Article présélectionné quand l'annulation part du bouton d'une ligne.
+  const [cancelItemIds, setCancelItemIds] = useState<string[]>([]);
   const [cancellingLabels, setCancellingLabels] = useState(false);
   const [cancelLabelsError, setCancelLabelsError] = useState<string | null>(null);
 
@@ -339,10 +341,11 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                   parcelPointNetwork={shipment.parcel_point ? String((shipment.parcel_point as Record<string, unknown>).network || '') || null : null}
                   parcelPointCountry={guessRelayCountry(shipment.parcel_point)}
                   onGenerated={onGenerated}
+                  onCancelItem={(itemId) => { setCancelItemIds([itemId]); setShowCancelItems(true); }}
                 />
                 <div className="flex justify-end flex-wrap gap-2 mt-3">
                   <button
-                    onClick={() => setShowCancelItems(true)}
+                    onClick={() => { setCancelItemIds([]); setShowCancelItems(true); }}
                     title="Article jamais reçu : annule l'article et rembourse son prix (et les frais de port si besoin)"
                     className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
                   >
@@ -482,6 +485,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
       {showCancelItems && (
         <CancelShipmentItemsModal
           shipment={shipment}
+          initialSelectedIds={cancelItemIds}
           onClose={() => setShowCancelItems(false)}
           onDone={(result) => {
             setShowCancelItems(false);

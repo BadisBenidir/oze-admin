@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye, BadgeCheck, X } from 'lucide-react';
+import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye, BadgeCheck, X, PackageX } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { useGenerateShipmentLabels, ParcelResult, CarrierOverride } from '../../../hooks/useGenerateShipmentLabels';
@@ -21,12 +21,15 @@ interface ParcelSplitEditorProps {
   /** Pays RÉEL du point relais (code ISO2), voir calcul dans ShipmentDetailModal.tsx. */
   parcelPointCountry?: string | null;
   onGenerated: () => void;
+  /** Annuler cet article seul (article non reçu) — ouvre la modale
+   * d'annulation avec l'article présélectionné. */
+  onCancelItem?: (itemId: string) => void;
 }
 
 const itemRef = (item: AdminShipmentItem) =>
   item.product?.b2b_reference || item.product?.reference || item.product?.product_code || '—';
 
-export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, deliveryType, parcelPointNetwork, parcelPointCountry, onGenerated }) => {
+export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, deliveryType, parcelPointNetwork, parcelPointCountry, onGenerated, onCancelItem }) => {
   const { generate } = useGenerateShipmentLabels();
   const { download: downloadLabel, downloadingUrl } = useDownloadShipmentLabel();
   const [parcels, setParcels] = useState<ParcelDraft[]>([{ items: items.map((i) => i.id) }]);
@@ -222,6 +225,16 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                                   className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
                                 >
                                   <Eye className="h-3 w-3" /> Voir la fiche
+                                </button>
+                              )}
+                              {onCancelItem && (
+                                <button
+                                  type="button"
+                                  onClick={() => onCancelItem(item.id)}
+                                  title="Annuler cet article (non reçu) et le rembourser"
+                                  className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 hover:underline"
+                                >
+                                  <PackageX className="h-3 w-3" /> Annuler
                                 </button>
                               )}
                             </div>
