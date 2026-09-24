@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban, PackageX } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban, PackageX, Combine } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipment, AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { ParcelSplitEditor } from './ParcelSplitEditor';
 import { CancelDeliveryRequestModal } from './CancelDeliveryRequestModal';
 import { CancelShipmentItemsModal } from './CancelShipmentItemsModal';
+import { MergeShipmentsModal } from './MergeShipmentsModal';
 import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 import { supabase } from '../../../lib/supabase';
@@ -14,6 +15,9 @@ interface ShipmentDetailModalProps {
   shipment: AdminShipment | null;
   onClose: () => void;
   onGenerated: () => void;
+  /** Toutes les demandes actives (en attente / en préparation), pour proposer
+   * le regroupement avec une autre demande du même revendeur. */
+  activeShipments?: AdminShipment[];
 }
 
 const itemRef = (item: AdminShipmentItem) =>
@@ -110,7 +114,7 @@ const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, reverti
   );
 };
 
-export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipment, onClose, onGenerated }) => {
+export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipment, onClose, onGenerated, activeShipments = [] }) => {
   const { download: downloadLabel, downloadingUrl } = useDownloadShipmentLabel();
   const { sync: syncSendcloud } = useSendcloudSync();
   const [syncing, setSyncing] = useState(false);
@@ -132,6 +136,11 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   // Article présélectionné quand l'annulation part du bouton d'une ligne.
   const [cancelItemIds, setCancelItemIds] = useState<string[]>([]);
   const [cancellingLabels, setCancellingLabels] = useState(false);
+  const [showMerge, setShowMerge] = useState(false);
+  const [mergeNotice, setMergeNotice] = useState<string | null>(null);
+  useEffect(() => {
+    setMergeNotice(null);
+  }, [shipment?.id]);
   const [cancelLabelsError, setCancelLabelsError] = useState<string | null>(null);
 
   if (!shipment) return null;
@@ -238,6 +247,12 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   // Envoi annulable tant qu'aucun colis n'a été pris en charge par le
   // transporteur (Sendcloud refuse ensuite l'annulation).
   const canCancelLabels = realParcels.length > 0 && realParcels.every((p) => p.status === 'label_created');
+  // Regroupement : même revendeur, demandes pas encore chez le transporteur.
+  const isMergeable = (s: AdminShipment) =>
+    ['requested', 'preparing'].includes(s.status) && s.parcels.every((p) => !['shipped', 'delivered'].includes(p.status));
+  const mergeCandidates = isMergeable(shipment)
+    ? activeShipments.filter((s) => s.id !== shipment.id && s.reseller_id === shipment.reseller_id && isMergeable(s))
+    : [];
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -326,6 +341,26 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                 )}
               </div>
             </div>
+
+            {mergeNotice && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="text-sm text-green-800">{mergeNotice}</p>
+              </div>
+            )}
+            {mergeCandidates.length > 0 && (
+              <div className="flex items-center justify-between gap-3 bg-blue-50 border border-blue-100 rounded-lg p-3">
+                <p className="text-sm text-blue-900">
+                  {mergeCandidates.length} autre{mergeCandidates.length > 1 ? 's' : ''} demande{mergeCandidates.length > 1 ? 's' : ''} en cours pour ce revendeur.
+                </p>
+                <button
+                  onClick={() => setShowMerge(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors flex-shrink-0"
+                >
+                  <Combine className="h-4 w-4" />
+                  Regrouper dans un carton
+                </button>
+              </div>
+            )}
 
             {shipment.pendingItems.length > 0 && (
               <div>
@@ -481,6 +516,23 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
           </div>
         </div>
       </div>
+
+      {showMerge && (
+        <MergeShipmentsModal
+          target={shipment}
+          candidates={mergeCandidates}
+          onClose={() => setShowMerge(false)}
+          onDone={(result) => {
+            setShowMerge(false);
+            setMergeNotice(
+              `${result.moved_items || 0} article${(result.moved_items || 0) > 1 ? 's' : ''} regroupé${(result.moved_items || 0) > 1 ? 's' : ''} dans cette demande`
+              + (result.cancelled_labels ? ` — ${result.cancelled_labels} bordereau${result.cancelled_labels > 1 ? 'x' : ''} annulé${result.cancelled_labels > 1 ? 's' : ''} chez Sendcloud` : '')
+              + (result.attached_to_existing_label ? ' — ajoutés au bordereau existant.' : '.')
+            );
+            onGenerated();
+          }}
+        />
+      )}
 
       {showCancelItems && (
         <CancelShipmentItemsModal

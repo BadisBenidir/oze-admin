@@ -290,7 +290,12 @@ export const ShipmentRequestsView: React.FC = () => {
         </Card>
       )}
 
-      <ShipmentDetailModal shipment={viewingSnapshot} onClose={closeShipment} onGenerated={handleGenerated} />
+      <ShipmentDetailModal
+        shipment={viewingSnapshot}
+        onClose={closeShipment}
+        onGenerated={handleGenerated}
+        activeShipments={[...requestedData.shipments, ...preparingData.shipments]}
+      />
     </div>
   );
 };
