@@ -247,11 +247,11 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   // Envoi annulable tant qu'aucun colis n'a été pris en charge par le
   // transporteur (Sendcloud refuse ensuite l'annulation).
   const canCancelLabels = realParcels.length > 0 && realParcels.every((p) => p.status === 'label_created');
-  // Regroupement : même revendeur, demandes pas encore chez le transporteur.
-  const isMergeable = (s: AdminShipment) =>
-    ['requested', 'preparing'].includes(s.status) && s.parcels.every((p) => !['shipped', 'delivered'].includes(p.status));
-  const mergeCandidates = isMergeable(shipment)
-    ? activeShipments.filter((s) => s.id !== shipment.id && s.reseller_id === shipment.reseller_id && isMergeable(s))
+  // Regroupement : autres demandes "En attente" de la MÊME personne (une
+  // entreprise a souvent plusieurs sous-comptes, chacun ses propres envois).
+  const mergeCandidates = shipment.status === 'requested' && shipment.requested_by_profile_id
+    ? activeShipments.filter((s) =>
+        s.id !== shipment.id && s.status === 'requested' && s.requested_by_profile_id === shipment.requested_by_profile_id)
     : [];
 
   return (
@@ -350,7 +350,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
             {mergeCandidates.length > 0 && (
               <div className="flex items-center justify-between gap-3 bg-blue-50 border border-blue-100 rounded-lg p-3">
                 <p className="text-sm text-blue-900">
-                  {mergeCandidates.length} autre{mergeCandidates.length > 1 ? 's' : ''} demande{mergeCandidates.length > 1 ? 's' : ''} en cours pour ce revendeur.
+                  {mergeCandidates.length} autre{mergeCandidates.length > 1 ? 's' : ''} demande{mergeCandidates.length > 1 ? 's' : ''} en attente pour {shipment.requester.fullName}.
                 </p>
                 <button
                   onClick={() => setShowMerge(true)}

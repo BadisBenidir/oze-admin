@@ -1,5 +1,6 @@
 -- ============================================================================
--- Regrouper deux demandes de livraison d'un même revendeur dans un seul
+-- Regrouper deux demandes de livraison "En attente" d'une même personne
+-- (même sous-compte, pas seulement la même entreprise) dans un seul
 -- carton — ADMIN UNIQUEMENT, via l'Edge Function merge-shipments.
 --
 -- La demande "source" est fusionnée dans la demande "cible" (celle ouverte
@@ -46,11 +47,13 @@ begin
   if v_target.id is null or v_source.id is null then
     raise exception 'Demande de livraison introuvable';
   end if;
-  if v_target.reseller_id <> v_source.reseller_id then
-    raise exception 'Les deux demandes doivent appartenir au même revendeur';
+  if v_target.reseller_id <> v_source.reseller_id
+     or v_target.requested_by_profile_id is null
+     or v_target.requested_by_profile_id is distinct from v_source.requested_by_profile_id then
+    raise exception 'Les deux demandes doivent avoir été faites par la même personne';
   end if;
-  if v_target.status not in ('requested', 'preparing') or v_source.status not in ('requested', 'preparing') then
-    raise exception 'Seules les demandes en attente ou en préparation peuvent être regroupées';
+  if v_target.status <> 'requested' or v_source.status <> 'requested' then
+    raise exception 'Seules deux demandes « En attente » peuvent être regroupées';
   end if;
   if exists (
     select 1 from public.shipment_parcels

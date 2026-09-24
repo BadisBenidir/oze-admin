@@ -53,6 +53,8 @@ export interface AdminShipmentRequester {
 export interface AdminShipment {
   id: string;
   reseller_id: string;
+  /** Sous-compte qui a fait la demande (plusieurs par entreprise). */
+  requested_by_profile_id: string | null;
   companyName: string;
   requester: AdminShipmentRequester;
   requested_at: string;
@@ -94,7 +96,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
       const { data: shipmentRows, error: shipmentsError } = await supabase
         .from('shipments')
         .select(
-          'id, reseller_id, requested_at, delivery_type, parcel_point, delivery_instructions, status, shipping_cost, stripe_session_id, ' +
+          'id, reseller_id, requested_by_profile_id, requested_at, delivery_type, parcel_point, delivery_instructions, status, shipping_cost, stripe_session_id, ' +
           'reseller:resellers(company_name), ' +
           'requester:profiles(first_name, last_name, email, phone, address, city, postal_code, country)'
         )
@@ -105,6 +107,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
       type ShipmentRow = {
         id: string;
         reseller_id: string;
+        requested_by_profile_id: string | null;
         requested_at: string;
         delivery_type: 'domicile' | 'point_relais';
         parcel_point: Record<string, unknown> | null;
@@ -176,6 +179,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
           return {
             id: s.id,
             reseller_id: s.reseller_id,
+            requested_by_profile_id: s.requested_by_profile_id,
             companyName: s.reseller?.company_name || 'Revendeur',
             requester: {
               fullName,

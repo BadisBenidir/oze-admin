@@ -58,15 +58,17 @@ Deno.serve(async (req: Request) => {
 
     const { data: shipments, error: shipmentsError } = await adminClient
       .from('shipments')
-      .select('id, reseller_id, status')
+      .select('id, reseller_id, requested_by_profile_id, status')
       .in('id', [target_id, source_id]);
     if (shipmentsError) return json({ error: shipmentsError.message }, 500);
     const target = shipments?.find((s) => s.id === target_id);
     const source = shipments?.find((s) => s.id === source_id);
     if (!target || !source) return json({ error: 'Demande de livraison introuvable' }, 404);
-    if (target.reseller_id !== source.reseller_id) return json({ error: 'Les deux demandes doivent appartenir au même revendeur' }, 400);
-    if (!['requested', 'preparing'].includes(target.status) || !['requested', 'preparing'].includes(source.status)) {
-      return json({ error: 'Seules les demandes en attente ou en préparation peuvent être regroupées' }, 400);
+    if (target.reseller_id !== source.reseller_id || !target.requested_by_profile_id || target.requested_by_profile_id !== source.requested_by_profile_id) {
+      return json({ error: 'Les deux demandes doivent avoir été faites par la même personne' }, 400);
+    }
+    if (target.status !== 'requested' || source.status !== 'requested') {
+      return json({ error: 'Seules deux demandes « En attente » peuvent être regroupées' }, 400);
     }
 
     const { data: parcels, error: parcelsError } = await adminClient

@@ -14,7 +14,7 @@ export interface MergeShipmentsResult {
 
 interface MergeShipmentsModalProps {
   target: AdminShipment;
-  /** Autres demandes actives (en attente / en préparation) du même revendeur. */
+  /** Autres demandes "En attente" de la même personne. */
   candidates: AdminShipment[];
   onClose: () => void;
   onDone: (result: MergeShipmentsResult) => void;
@@ -81,7 +81,7 @@ export const MergeShipmentsModal: React.FC<MergeShipmentsModalProps> = ({ target
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">Demande à regrouper dedans</p>
               {candidates.length === 0 ? (
-                <p className="text-sm text-gray-500">Aucune autre demande en attente ou en préparation pour ce revendeur.</p>
+                <p className="text-sm text-gray-500">Aucune autre demande en attente pour cette personne.</p>
               ) : (
                 <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
                   {candidates.map((c) => (
