@@ -7,6 +7,7 @@ import { CancelDeliveryRequestModal } from './CancelDeliveryRequestModal';
 import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 import { supabase } from '../../../lib/supabase';
+import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 
 interface ShipmentDetailModalProps {
   shipment: AdminShipment | null;
@@ -126,6 +127,8 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   const [splitting, setSplitting] = useState(false);
   const [splitError, setSplitError] = useState<string | null>(null);
   const [showCancelRequest, setShowCancelRequest] = useState(false);
+  const [cancellingLabels, setCancellingLabels] = useState(false);
+  const [cancelLabelsError, setCancelLabelsError] = useState<string | null>(null);
 
   if (!shipment) return null;
 
@@ -144,6 +147,26 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     if ((data?.updated_count || 0) === 0) {
       setRevertError("Cet article n'a pas pu être annulé.");
       return;
+    }
+    onGenerated();
+  };
+
+  // Annule le(s) bordereau(x) chez Sendcloud puis remet la demande "En
+  // attente" (Edge Function cancel-shipment-labels, voir 0160).
+  const handleCancelLabels = async () => {
+    if (!window.confirm("Annuler l'envoi ? Le(s) bordereau(x) seront annulés chez Sendcloud et la demande repassera « En attente » pour générer une nouvelle étiquette.")) {
+      return;
+    }
+    setCancelLabelsError(null);
+    setCancellingLabels(true);
+    const { data, error } = await invokeEdgeFunction<{ failures?: string[] }>('cancel-shipment-labels', { shipment_id: shipment.id });
+    setCancellingLabels(false);
+    if (error) {
+      setCancelLabelsError(error);
+      return;
+    }
+    if (data?.failures?.length) {
+      setCancelLabelsError(`Annulation partielle — non annulé(s) chez Sendcloud : ${data.failures.join(' · ')}`);
     }
     onGenerated();
   };
@@ -208,6 +231,9 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   // Annulable tant qu'aucune étiquette Sendcloud n'existe sur la demande
   // (admin_cancel_delivery_request_core revérifie côté serveur).
   const canCancelRequest = shipment.status === 'requested' && realParcels.length === 0 && shipment.shippedItems.length === 0;
+  // Envoi annulable tant qu'aucun colis n'a été pris en charge par le
+  // transporteur (Sendcloud refuse ensuite l'annulation).
+  const canCancelLabels = realParcels.length > 0 && realParcels.every((p) => p.status === 'label_created');
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -244,6 +270,26 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
             {syncError && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                 <p className="text-sm text-red-700">{syncError}</p>
+              </div>
+            )}
+            {canCancelLabels && (
+              <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-sm text-amber-800">
+                  Bordereau généré, colis pas encore remis au transporteur.
+                </p>
+                <button
+                  onClick={handleCancelLabels}
+                  disabled={cancellingLabels}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  <Ban className="h-4 w-4" />
+                  {cancellingLabels ? 'Annulation...' : "Annuler l'envoi"}
+                </button>
+              </div>
+            )}
+            {cancelLabelsError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-sm text-red-700">{cancelLabelsError}</p>
               </div>
             )}
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-start gap-2">
