@@ -251,6 +251,10 @@ const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ item, onClose }
               <span className="text-gray-900 font-mono">{item.order_number}</span>
             </div>
             <div className="flex justify-between">
+              <span className="text-gray-500">Date de création</span>
+              <span className="text-gray-900">{item.product_created_at ? new Date(item.product_created_at).toLocaleDateString('fr-FR') : '—'}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-gray-500">Date de commande</span>
               <span className="text-gray-900">{item.order_created_at ? new Date(item.order_created_at).toLocaleDateString('fr-FR') : '—'}</span>
             </div>
@@ -556,7 +560,7 @@ export const EntrupyCertificates: React.FC = () => {
                     <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">Article</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">N° commande</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">Revendeur</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">Date commande</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">Date de création</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900 text-sm">Statut</th>
                     <th className="text-right py-3 px-4 font-medium text-gray-900 text-sm">Actions</th>
                   </tr>
@@ -598,7 +602,7 @@ export const EntrupyCertificates: React.FC = () => {
                           <p className="text-xs text-gray-500">{item.requester_name}</p>
                         </td>
                         <td className="py-3 px-4 text-sm text-gray-600">
-                          {item.order_created_at ? new Date(item.order_created_at).toLocaleDateString('fr-FR') : '—'}
+                          {item.product_created_at ? new Date(item.product_created_at).toLocaleDateString('fr-FR') : '—'}
                         </td>
                         <td className="py-3 px-4">{statusBadge(item.entrupy_status)}</td>
                         <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
