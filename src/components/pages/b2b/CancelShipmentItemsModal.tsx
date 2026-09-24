@@ -21,6 +21,7 @@ export interface CancelShipmentItemsResult {
   error?: string;
   cancelled_count?: number;
   items_refunded?: number;
+  entrupy_refunded?: number;
   shipping_refunded?: number;
   shipment_status?: string;
   failures?: string[];
@@ -70,6 +71,12 @@ export const CancelShipmentItemsModal: React.FC<CancelShipmentItemsModalProps> =
       .reduce((s, i) => s + Number(i.line_total) + (i.insured ? Number(i.insurance_cost) : 0), 0),
     [selectedItems]
   );
+
+  // Certificats Entrupy des articles annulés : remboursés automatiquement en
+  // crédit sur le solde par cancel_b2b_order_item (0162), en plus du prix.
+  const entrupyItems = selectedItems.filter((i) => i.order?.payment_status === 'paid' && i.entrupy_requested && Number(i.entrupy_cost) > 0);
+  const entrupyTotal = entrupyItems.reduce((s, i) => s + Number(i.entrupy_cost), 0);
+  const plural = entrupyItems.length > 1 ? 's' : '';
 
   const toggle = (id: string) => setSelected((prev) => {
     const next = new Set(prev);
@@ -191,6 +198,12 @@ export const CancelShipmentItemsModal: React.FC<CancelShipmentItemsModalProps> =
                   </label>
                 </div>
               </div>
+            )}
+
+            {entrupyTotal > 0 && (
+              <p className="text-sm text-purple-800 bg-purple-50 border border-purple-100 rounded-lg p-2.5">
+                Certificat{plural} Entrupy : {EUR(entrupyTotal)} annulé{plural} et remboursé{plural} automatiquement en crédit sur le solde.
+              </p>
             )}
 
             {hasFee && (

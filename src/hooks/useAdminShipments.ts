@@ -7,6 +7,7 @@ export interface AdminShipmentItem {
   insured: boolean;
   insurance_cost: number;
   entrupy_requested: boolean;
+  entrupy_cost: number;
   fulfillment_status: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'label_created' | 'shipped' | 'delivered';
   parcel_id: string | null;
   product_id: string;
@@ -134,7 +135,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
         supabase
           .from('order_items')
           .select(
-            'id, line_total, insured, insurance_cost, entrupy_requested, fulfillment_status, parcel_id, product_id, shipment_id, order:orders(order_number, payment_status, stripe_payment_intent_id), ' +
+            'id, line_total, insured, insurance_cost, entrupy_requested, entrupy_cost, fulfillment_status, parcel_id, product_id, shipment_id, order:orders(order_number, payment_status, stripe_payment_intent_id), ' +
             'product:products(name, images, main_image_index, product_code, reference, b2b_reference, condition, sale_price, brand:brands(name))'
           )
           .in('shipment_id', shipmentIds),

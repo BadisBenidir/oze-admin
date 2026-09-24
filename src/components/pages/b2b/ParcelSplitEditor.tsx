@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye, BadgeCheck } from 'lucide-react';
+import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye, BadgeCheck, X } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { useGenerateShipmentLabels, ParcelResult, CarrierOverride } from '../../../hooks/useGenerateShipmentLabels';
 import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
 import { ProductDetail } from '../ProductDetail';
 import { isPlausiblePhone } from '../../../utils/phoneValidation';
+import { cancelEntrupyCertificate } from '../../../hooks/useCancelOrderItem';
 
 interface ParcelDraft {
   items: string[];
@@ -33,6 +34,26 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
   const [results, setResults] = useState<ParcelResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewingProductId, setViewingProductId] = useState<string | null>(null);
+  const [cancellingEntrupyId, setCancellingEntrupyId] = useState<string | null>(null);
+
+  // Retire le certificat Entrupy d'un article en attente d'expédition
+  // (cancel-entrupy-certificate : 19,99 € recrédités sur le solde du
+  // revendeur, l'article reste dans la demande).
+  const handleCancelEntrupy = async (itemId: string) => {
+    if (!window.confirm("Retirer le certificat Entrupy de cet article ? Il sera remboursé en crédit sur le solde du revendeur ; l'article reste dans la demande.")) return;
+    setError(null);
+    setCancellingEntrupyId(itemId);
+    const result = await cancelEntrupyCertificate(itemId);
+    setCancellingEntrupyId(null);
+    if (!result.success) {
+      setError(result.error || 'Impossible de retirer le certificat');
+      return;
+    }
+    if (result.refund_status === 'failed') {
+      setError(`Certificat retiré, mais le remboursement a échoué : ${result.refund_error || 'erreur inconnue'} — à traiter manuellement.`);
+    }
+    onGenerated();
+  };
   const phoneMissing = !isPlausiblePhone(requesterPhone);
   const [phoneOverride, setPhoneOverride] = useState('');
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -177,10 +198,19 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                               {product?.condition && <span> · État {product.condition}</span>}
                             </p>
                             {item.entrupy_requested && (
-                              <div className="mt-1">
+                              <div className="mt-1 flex items-center gap-1.5">
                                 <Badge variant="purple">
                                   <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy à joindre
                                 </Badge>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelEntrupy(item.id)}
+                                  disabled={cancellingEntrupyId === item.id}
+                                  title="Retirer le certificat Entrupy (remboursé en crédit sur le solde, garde l'article)"
+                                  className="p-0.5 text-gray-400 hover:text-red-600 disabled:opacity-50"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
                               </div>
                             )}
                             <div className="flex items-center gap-2 mt-1">

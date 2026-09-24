@@ -122,6 +122,9 @@ Deno.serve(async (req: Request) => {
     // ---- 1. Annulation + remboursement de chaque article ------------------
     const itemResults: Array<{ id: string; refund_status: string; refunded: number; error?: string }> = [];
     let itemsRefunded = 0;
+    // Certificats Entrupy : retirés et recrédités sur le solde directement
+    // par cancel_b2b_order_item (0162), dans la même transaction.
+    let entrupyRefunded = 0;
 
     for (const itemId of item_ids as string[]) {
       const { data: result, error: rpcError } = await adminClient.rpc('cancel_b2b_order_item', {
@@ -133,6 +136,8 @@ Deno.serve(async (req: Request) => {
         itemResults.push({ id: itemId, refund_status: 'failed', refunded: 0, error: `Annulation : ${rpcError.message}` });
         continue;
       }
+
+      entrupyRefunded += Number(result?.entrupy_refund_amount) || 0;
 
       if (result?.payment_status !== 'paid') {
         await adminClient.from('order_items').update({ refund_status: 'not_applicable' }).eq('id', itemId);
@@ -230,6 +235,7 @@ Deno.serve(async (req: Request) => {
       success: true,
       cancelled_count: cancelledIds.length,
       items_refunded: itemsRefunded,
+      entrupy_refunded: entrupyRefunded,
       shipping_refunded: shippingError ? 0 : shippingAmount,
       shipment_status: detach?.shipment_status,
       failures: failures.length ? failures : undefined,
