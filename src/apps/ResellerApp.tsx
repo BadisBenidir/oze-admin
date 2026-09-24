@@ -3,6 +3,8 @@ import { useNavigation } from '../hooks/useNavigation';
 import { useResellerAuth } from '../hooks/useResellerAuth';
 import { useB2BCart } from '../hooks/useB2BCart';
 import { useWallet } from '../hooks/useWallet';
+import { useResellerNotifications } from '../hooks/useResellerNotifications';
+import { ResellerNotificationsBanner } from '../components/pages/reseller/ResellerNotificationsBanner';
 import { ResellerProtectedRoute } from '../components/auth/ResellerProtectedRoute';
 import { MainLayout } from '../components/layout/layMainLayout';
 import { ResellerHeader } from '../components/layout/resHeader';
@@ -52,6 +54,7 @@ function ResellerApp() {
   const { activeTab, activeSubTab, navigateTo } = useNavigation(navItems, 'catalog');
   const cart = useB2BCart(profile?.id, Boolean(profile?.legal_status));
   const wallet = useWallet(profile?.id);
+  const { notifications, markRead: markNotificationRead } = useResellerNotifications(profile?.id);
   const currentTab = activeTab || 'catalog';
 
   // Présence temps réel + visiteur unique du jour (onglet admin
@@ -305,6 +308,7 @@ function ResellerApp() {
         navRightContent={desktopCartButton}
         mobileExtra={mobileCartButton}
       >
+        <ResellerNotificationsBanner notifications={notifications} onDismiss={markNotificationRead} />
         {checkoutStatus === 'cancel' && (
           <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
             <p className="text-sm text-amber-800">Paiement annulé — votre panier a été conservé.</p>

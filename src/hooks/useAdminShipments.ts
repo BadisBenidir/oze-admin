@@ -57,7 +57,10 @@ export interface AdminShipment {
   delivery_type: 'domicile' | 'point_relais';
   parcel_point: Record<string, unknown> | null;
   delivery_instructions: string | null;
-  status: 'requested' | 'preparing' | 'in_transit' | 'delivered';
+  status: 'requested' | 'preparing' | 'in_transit' | 'delivered' | 'cancelled';
+  /** Frais de port payés par le revendeur (Stripe, voir b2b-request-delivery-checkout). */
+  shipping_cost: number;
+  has_stripe_payment: boolean;
   pendingItems: AdminShipmentItem[];
   shippedItems: AdminShipmentItem[];
   parcels: AdminShipmentParcel[];
@@ -89,7 +92,7 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
       const { data: shipmentRows, error: shipmentsError } = await supabase
         .from('shipments')
         .select(
-          'id, reseller_id, requested_at, delivery_type, parcel_point, delivery_instructions, status, ' +
+          'id, reseller_id, requested_at, delivery_type, parcel_point, delivery_instructions, status, shipping_cost, stripe_session_id, ' +
           'reseller:resellers(company_name), ' +
           'requester:profiles(first_name, last_name, email, phone, address, city, postal_code, country)'
         )
@@ -104,7 +107,9 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
         delivery_type: 'domicile' | 'point_relais';
         parcel_point: Record<string, unknown> | null;
         delivery_instructions: string | null;
-        status: 'requested' | 'preparing' | 'in_transit' | 'delivered';
+        status: AdminShipment['status'];
+        shipping_cost: number | null;
+        stripe_session_id: string | null;
         reseller: { company_name: string } | null;
         requester: {
           first_name: string | null; last_name: string | null; email: string | null; phone: string | null;
@@ -184,6 +189,8 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
             parcel_point: s.parcel_point,
             delivery_instructions: s.delivery_instructions,
             status: s.status,
+            shipping_cost: Number(s.shipping_cost) || 0,
+            has_stripe_payment: Boolean(s.stripe_session_id),
             pendingItems: pendingByShipment.get(s.id) || [],
             shippedItems: shippedByShipment.get(s.id) || [],
             parcels: parcelsByShipment.get(s.id) || [],

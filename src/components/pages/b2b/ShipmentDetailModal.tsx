@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw } from 'lucide-react';
+import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipment, AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { ParcelSplitEditor } from './ParcelSplitEditor';
+import { CancelDeliveryRequestModal } from './CancelDeliveryRequestModal';
 import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 import { supabase } from '../../../lib/supabase';
@@ -124,6 +125,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   const [selectedForSplit, setSelectedForSplit] = useState<Set<string>>(new Set());
   const [splitting, setSplitting] = useState(false);
   const [splitError, setSplitError] = useState<string | null>(null);
+  const [showCancelRequest, setShowCancelRequest] = useState(false);
 
   if (!shipment) return null;
 
@@ -203,6 +205,9 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     itemCountByParcel.set(item.parcel_id, (itemCountByParcel.get(item.parcel_id) || 0) + 1);
   }
   const pendingItemsKey = shipment.pendingItems.map((i) => i.id).sort().join(',');
+  // Annulable tant qu'aucune étiquette Sendcloud n'existe sur la demande
+  // (admin_cancel_delivery_request_core revérifie côté serveur).
+  const canCancelRequest = shipment.status === 'requested' && realParcels.length === 0 && shipment.shippedItems.length === 0;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -287,6 +292,17 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                   parcelPointCountry={guessRelayCountry(shipment.parcel_point)}
                   onGenerated={onGenerated}
                 />
+                {canCancelRequest && (
+                  <div className="flex justify-end mt-3">
+                    <button
+                      onClick={() => setShowCancelRequest(true)}
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                    >
+                      <Ban className="h-4 w-4" />
+                      Annuler la demande
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -406,6 +422,21 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
           </div>
         </div>
       </div>
+
+      {showCancelRequest && (
+        <CancelDeliveryRequestModal
+          shipment={shipment}
+          onClose={() => setShowCancelRequest(false)}
+          onCancelled={(result) => {
+            setShowCancelRequest(false);
+            if (result.refund_status === 'failed') {
+              alert(`Demande annulée et revendeur notifié, mais le remboursement des frais de port a échoué : ${result.refund_error || 'erreur inconnue'} — à traiter manuellement.`);
+            }
+            onGenerated();
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 };
