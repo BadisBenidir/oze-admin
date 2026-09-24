@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban } from 'lucide-react';
+import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban, PackageX } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipment, AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { ParcelSplitEditor } from './ParcelSplitEditor';
 import { CancelDeliveryRequestModal } from './CancelDeliveryRequestModal';
+import { CancelShipmentItemsModal } from './CancelShipmentItemsModal';
 import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 import { supabase } from '../../../lib/supabase';
@@ -127,6 +128,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   const [splitting, setSplitting] = useState(false);
   const [splitError, setSplitError] = useState<string | null>(null);
   const [showCancelRequest, setShowCancelRequest] = useState(false);
+  const [showCancelItems, setShowCancelItems] = useState(false);
   const [cancellingLabels, setCancellingLabels] = useState(false);
   const [cancelLabelsError, setCancelLabelsError] = useState<string | null>(null);
 
@@ -338,8 +340,16 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                   parcelPointCountry={guessRelayCountry(shipment.parcel_point)}
                   onGenerated={onGenerated}
                 />
+                <div className="flex justify-end flex-wrap gap-2 mt-3">
+                  <button
+                    onClick={() => setShowCancelItems(true)}
+                    title="Article jamais reçu : annule l'article et rembourse son prix (et les frais de port si besoin)"
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    <PackageX className="h-4 w-4" />
+                    {shipment.pendingItems.length > 1 ? 'Annuler des articles' : "Annuler l'article"}
+                  </button>
                 {canCancelRequest && (
-                  <div className="flex justify-end mt-3">
                     <button
                       onClick={() => setShowCancelRequest(true)}
                       className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
@@ -347,8 +357,8 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                       <Ban className="h-4 w-4" />
                       Annuler la demande
                     </button>
-                  </div>
                 )}
+                </div>
               </div>
             )}
 
@@ -468,6 +478,21 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
           </div>
         </div>
       </div>
+
+      {showCancelItems && (
+        <CancelShipmentItemsModal
+          shipment={shipment}
+          onClose={() => setShowCancelItems(false)}
+          onDone={(result) => {
+            setShowCancelItems(false);
+            if (result.failures?.length) {
+              alert(`Annulation effectuée, mais certains remboursements ont échoué — à traiter manuellement :\n${result.failures.join('\n')}`);
+            }
+            onGenerated();
+            if (result.shipment_status === 'cancelled') onClose();
+          }}
+        />
+      )}
 
       {showCancelRequest && (
         <CancelDeliveryRequestModal
