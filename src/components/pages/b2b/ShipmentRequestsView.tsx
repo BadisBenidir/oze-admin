@@ -1,11 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { useAdminShipments, AdminShipment } from '../../../hooks/useAdminShipments';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 import { ShipmentDetailModal } from './ShipmentDetailModal';
-import { AlertCircle, Truck, Eye, CheckCircle, RefreshCw, Package } from 'lucide-react';
+import { AlertCircle, Truck, Eye, CheckCircle, RefreshCw, Package, Search, X } from 'lucide-react';
+
+// Insensible aux accents et à la casse — même pattern que B2BOrders.tsx.
+const DIACRITICS_REGEX = new RegExp('[\u0300-\u036f]', 'g');
+const normalizeSearch = (value: string): string =>
+  value.normalize('NFD').replace(DIACRITICS_REGEX, '').toLowerCase().trim();
+
+// Tout ce qu'on peut vouloir retrouver dans une demande : demandeur,
+// entreprise, adresse / point relais, articles (nom, marque, références),
+// n° de commande et n° de suivi.
+const shipmentHaystack = (s: AdminShipment): string => {
+  const pp = (s.parcel_point || {}) as Record<string, unknown>;
+  const items = [...s.pendingItems, ...s.shippedItems];
+  return normalizeSearch([
+    s.requester.fullName, s.requester.email, s.requester.phone, s.companyName,
+    s.requester.city, s.requester.postalCode,
+    pp.name, pp.city, pp.zipCode,
+    ...items.flatMap((i) => [i.product?.name, i.product?.brand?.name, i.product?.b2b_reference, i.product?.reference, i.product?.product_code, i.order?.order_number]),
+    ...s.parcels.map((p) => p.tracking_number),
+  ].filter(Boolean).join(' '));
+};
 
 const statusBadge = (status: AdminShipment['status']) => {
   if (status === 'preparing') return <Badge variant="warning">En préparation</Badge>;
@@ -57,7 +77,20 @@ export const ShipmentRequestsView: React.FC = () => {
     in_transit: inTransitData,
     delivered: deliveredData,
   };
-  const { shipments, loading, error } = dataByTab[tab];
+  const { shipments: tabShipments, loading, error } = dataByTab[tab];
+  const [search, setSearch] = useState('');
+  const shipments = useMemo(() => {
+    const query = normalizeSearch(search);
+    if (!query) return tabShipments;
+    return tabShipments.filter((s) => shipmentHaystack(s).includes(query));
+  }, [tabShipments, search]);
+  // Pendant une recherche, chaque onglet affiche son nombre de résultats —
+  // permet de voir tout de suite dans quel onglet se trouve la demande.
+  const countFor = (t: Tab) => {
+    const query = normalizeSearch(search);
+    const list = dataByTab[t].shipments;
+    return query ? list.filter((s) => shipmentHaystack(s).includes(query)).length : list.length;
+  };
 
   const refreshAll = () => {
     requestedData.refresh();
@@ -131,7 +164,7 @@ export const ShipmentRequestsView: React.FC = () => {
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Demandes de livraison</h3>
-          <p className="text-sm text-gray-500">{loading ? 'Chargement...' : `${shipments.length} demande${shipments.length > 1 ? 's' : ''}`}</p>
+          <p className="text-sm text-gray-500">{loading ? 'Chargement...' : `${tabShipments.length} demande${tabShipments.length > 1 ? 's' : ''}`}</p>
         </div>
         <button
           onClick={handleSyncAll}
@@ -163,9 +196,25 @@ export const ShipmentRequestsView: React.FC = () => {
               tab === t ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {TAB_CONFIG[t].label} ({dataByTab[t].loading ? '…' : dataByTab[t].shipments.length})
+            {TAB_CONFIG[t].label} ({dataByTab[t].loading ? '…' : countFor(t)})
           </button>
         ))}
+      </div>
+
+      <div className="mb-4 relative max-w-md">
+        <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher un nom, une commande, un article, un n° de suivi..."
+          className="w-full pl-9 pr-9 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm"
+        />
+        {search && (
+          <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600" title="Effacer">
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {error && (
@@ -177,8 +226,10 @@ export const ShipmentRequestsView: React.FC = () => {
 
       {!loading && !error && shipments.length === 0 && (
         <div className="text-center py-16 border border-dashed border-gray-200 rounded-lg">
-          {TAB_CONFIG[tab].emptyIcon}
-          <p className="text-sm text-gray-500">{TAB_CONFIG[tab].emptyTitle}</p>
+          {search.trim() ? <Search className="h-10 w-10 text-gray-300 mx-auto mb-3" /> : TAB_CONFIG[tab].emptyIcon}
+          <p className="text-sm text-gray-500">
+            {search.trim() ? `Aucune demande ne correspond à « ${search.trim()} » dans cet onglet.` : TAB_CONFIG[tab].emptyTitle}
+          </p>
         </div>
       )}
 
