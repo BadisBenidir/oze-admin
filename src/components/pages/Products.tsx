@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { archivedNotice } from '../../services/productDeletionService';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { CategoryModal } from '../ui/CategoryModal';
@@ -191,9 +192,10 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
   const handleDeleteProduct = async (id: string, productName: string) => {
     if (confirm(`Êtes-vous sûr de vouloir supprimer le produit "${productName}" ?`)) {
       try {
-        await deleteProduct(id)
+        const outcome = await deleteProduct(id)
+        if (outcome.archived) alert(archivedNotice(productName))
       } catch (error) {
-        // L'erreur est déjà loggée dans le hook
+        alert(`Suppression impossible : ${error instanceof Error ? error.message : 'erreur inconnue'}`)
       }
     }
   }

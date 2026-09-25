@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { deleteProductAdmin, archivedNotice } from '../../services/productDeletionService';
 import { Card, CardContent } from '../ui/Card';
 import { Modal } from '../ui/Modal';
 import { ProductLabel } from './ProductLabel';
@@ -104,9 +105,11 @@ export const LiveAuctionPage: React.FC<LiveAuctionPageProps> = ({ onView }) => {
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Supprimer définitivement le produit « ${name} » ?`)) return;
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    if (error) {
-      setMessage({ ok: false, text: `Suppression impossible : ${error.message}` });
+    try {
+      const outcome = await deleteProductAdmin(id);
+      if (outcome.archived) setMessage({ ok: true, text: archivedNotice(name) });
+    } catch (err) {
+      setMessage({ ok: false, text: `Suppression impossible : ${err instanceof Error ? err.message : 'erreur inconnue'}` });
       return;
     }
     fetchAuction();

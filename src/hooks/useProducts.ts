@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { deleteProductAdmin, DeleteProductOutcome } from '../services/productDeletionService'
 
 // Interface pour un produit
 export interface Product {
@@ -70,7 +71,7 @@ interface UseProductsResult {
   setPage: (page: number) => void
   setFilters: (filters: ProductFilters) => void
   filters: ProductFilters
-  deleteProduct: (id: string) => Promise<void>
+  deleteProduct: (id: string) => Promise<DeleteProductOutcome>
 }
 
 const ITEMS_PER_PAGE = 20
@@ -183,18 +184,11 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
     }
   }
 
-  const deleteProduct = async (id: string) => {
+  const deleteProduct = async (id: string): Promise<DeleteProductOutcome> => {
     try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', id)
-
-      if (error) {
-        throw new Error(error.message)
-      }
-
+      const outcome = await deleteProductAdmin(id)
       await fetchProducts(currentPage, filtersRef.current)
+      return outcome
     } catch (err) {
       console.error('Erreur lors de la suppression du produit:', err)
       throw err

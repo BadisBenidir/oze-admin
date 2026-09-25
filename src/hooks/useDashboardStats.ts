@@ -93,7 +93,9 @@ export const useDashboardStats = (isAuthenticated: boolean = false): UseDashboar
       if (brandsError) throw brandsError
 
       // Calculer les statistiques
-      const products = productsData || []
+      // Les produits archivés (supprimés mais conservés pour l'historique,
+      // voir admin_delete_product) ne font plus partie du stock.
+      const products = (productsData || []).filter(p => p.status !== 'archived')
       const totalProducts = products.length
       const productsForSale = products.filter(p => 
         p.status === 'for-sale-online' || p.status === 'for-sale-other-platform'
