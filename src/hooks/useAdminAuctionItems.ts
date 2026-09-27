@@ -26,6 +26,8 @@ export interface AdminAuctionItem {
   order_id: string | null;
   payment_deadline: string | null;
   order_payment_status: 'pending' | 'paid' | null;
+  /** Date du paiement (orders.paid_at, 0165) — NULL pour les anciens paiements carte. */
+  order_paid_at: string | null;
   order_has_stripe_payment: boolean;
   cancelled_at: string | null;
   cancellation_reason: string | null;
@@ -56,10 +58,10 @@ export interface AuctionItemInput {
   reserve_price?: number | null;
 }
 
-type Row = Omit<AdminAuctionItem, 'winner_name' | 'winner_email' | 'product_name' | 'product_purchase_price' | 'order_payment_status' | 'order_has_stripe_payment'> & {
+type Row = Omit<AdminAuctionItem, 'winner_name' | 'winner_email' | 'product_name' | 'product_purchase_price' | 'order_payment_status' | 'order_paid_at' | 'order_has_stripe_payment'> & {
   winner: { first_name: string | null; last_name: string | null; email: string | null } | null;
   product: { name: string; purchase_price: number | null } | null;
-  order: { payment_status: 'pending' | 'paid'; stripe_payment_intent_id: string | null } | null;
+  order: { payment_status: 'pending' | 'paid'; paid_at: string | null; stripe_payment_intent_id: string | null } | null;
 };
 
 const mapRow = (row: Row): AdminAuctionItem => {
@@ -71,6 +73,7 @@ const mapRow = (row: Row): AdminAuctionItem => {
     product_name: row.product?.name || null,
     product_purchase_price: row.product?.purchase_price ?? null,
     order_payment_status: row.order?.payment_status || null,
+    order_paid_at: row.order?.paid_at ?? null,
     order_has_stripe_payment: Boolean(row.order?.stripe_payment_intent_id),
   };
 };
@@ -103,7 +106,7 @@ export const useAdminAuctionItems = (sessionId: string | null) => {
       setError(null);
       const { data, error: fetchError } = await supabase
         .from('auction_items')
-        .select('*, winner:profiles!current_winner_id(first_name, last_name, email), product:products(name, purchase_price), order:orders(payment_status, stripe_payment_intent_id)')
+        .select('*, winner:profiles!current_winner_id(first_name, last_name, email), product:products(name, purchase_price), order:orders(payment_status, paid_at, stripe_payment_intent_id)')
         .eq('session_id', sessionId)
         .order('created_at', { ascending: true });
       if (fetchError) throw new Error(fetchError.message);

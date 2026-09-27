@@ -38,6 +38,19 @@ const itemStatusBadge = (status: AdminAuctionItem['status']) => {
   return <Badge variant="info">En cours</Badge>;
 };
 
+/** Lot payé : "Payé en retard" si orders.paid_at (0165) dépasse l'échéance.
+ * Sans paid_at (anciens paiements carte), impossible de savoir → "Payé". */
+const paymentBadge = (item: AdminAuctionItem) => {
+  const late = item.order_paid_at && item.payment_deadline
+    && new Date(item.order_paid_at).getTime() > new Date(item.payment_deadline).getTime();
+  if (!late) return <Badge variant="success">Payé</Badge>;
+  return (
+    <Badge variant="purple">
+      Payé en retard ({new Date(item.order_paid_at!).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})
+    </Badge>
+  );
+};
+
 /** Interface admin de pilotage des enchères B2B — Sessions & Lots / Accès
  * Revendeurs / Résultats & Facturation. La RLS (0104/0105) autorise déjà
  * les admins en écriture totale sur les 4 tables ; les deux seules actions
@@ -360,7 +373,7 @@ export const AuctionsAdmin: React.FC = () => {
                                         {generatingId === item.id ? 'Génération...' : 'Générer la commande'}
                                       </button>
                                     ) : item.order_payment_status === 'paid' ? (
-                                      <Badge variant="success">Payé</Badge>
+                                      paymentBadge(item)
                                     ) : item.payment_deadline && new Date(item.payment_deadline).getTime() <= Date.now() ? (
                                       <Badge variant="danger">En retard</Badge>
                                     ) : (
@@ -569,7 +582,7 @@ export const AuctionsAdmin: React.FC = () => {
                               )}
                               {item.status === 'sold' && item.order_id && (
                                 item.order_payment_status === 'paid' ? (
-                                  <Badge variant="success">Payé</Badge>
+                                  paymentBadge(item)
                                 ) : item.payment_deadline && new Date(item.payment_deadline).getTime() <= Date.now() ? (
                                   <Badge variant="danger">En retard de paiement</Badge>
                                 ) : (
