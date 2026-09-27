@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useB2BCart, INSURANCE_RATE, ENTRUPY_CERTIFICATE_PRICE } from '../../../hooks/useB2BCart';
 import { useWallet } from '../../../hooks/useWallet';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
+import { useMyAuctionPayments } from '../../../hooks/useMyAuctionPayments';
 import CheckoutSummary from './CheckoutSummary';
 import { VolumeDiscountBanner } from './VolumeDiscountBanner';
 import { PromoCodeField, AppliedPromo } from './PromoCodeField';
@@ -25,6 +26,9 @@ const formatCountdown = (ms: number): string => {
 
 export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWalletPaymentSuccess, onOpenTerms }) => {
   const { profile } = useResellerAuth();
+  // Lot d'enchère impayé > 24h : commande bloquée (vrai contrôle dans
+  // b2b-checkout, 0166) tant qu'il n'est pas réglé ou annulé.
+  const { hasOverduePayment } = useMyAuctionPayments(Boolean(profile?.id));
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +58,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
   const isDiscovery = profile?.reseller_status === 'discovery';
 
   const handlePay = async () => {
-    if (!profile || legalStatusMissing || !termsAccepted || isDiscovery) return;
+    if (!profile || legalStatusMissing || !termsAccepted || isDiscovery || hasOverduePayment) return;
     setError(null);
     setSubmitting(true);
     const paymentMethod = useWalletPayment ? (wallet.balance >= total ? 'wallet' : 'mixed') : 'card';
@@ -138,6 +142,16 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start space-x-2">
           <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {hasOverduePayment && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start space-x-2">
+          <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700">
+            Votre compte est temporairement restreint : vous avez un lot remporté non payé depuis plus de 24h.
+            Réglez-le depuis la page Enchères pour pouvoir passer commande.
+          </p>
         </div>
       )}
 
@@ -305,7 +319,7 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
 
           <button
             onClick={handlePay}
-            disabled={submitting || legalStatusMissing || !termsAccepted || isDiscovery}
+            disabled={submitting || legalStatusMissing || !termsAccepted || isDiscovery || hasOverduePayment}
             className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {submitting ? (

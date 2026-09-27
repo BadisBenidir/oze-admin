@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 
@@ -25,9 +25,17 @@ export interface PayAuctionResult {
  * à la clôture (admin_close_auction_session, 0137) n'est pas encore payée —
  * affiché dans un espace dédié de la page Enchères (voir AuctionPaymentsDue).
  */
+/** Message affiché tant qu'un lot remporté reste impayé après son échéance —
+ * mêmes termes que le refus serveur (0166 / b2b-checkout). */
+export const OVERDUE_RESTRICTION_MESSAGE =
+  'Votre compte est temporairement restreint : vous avez un lot remporté non payé depuis plus de 24h. Veuillez régulariser votre situation pour participer à nouveau.';
+
 export const useMyAuctionPayments = (enabled: boolean) => {
   const [payments, setPayments] = useState<PendingAuctionPayment[]>([]);
   const [loading, setLoading] = useState(true);
+  // Suffixe unique : le hook peut être monté par plusieurs écrans à la fois
+  // (Enchères, Panier) — un nom de canal partagé ferait échouer le second.
+  const instanceId = useRef(Math.random().toString(36).slice(2)).current;
 
   const fetchPayments = useCallback(async () => {
     if (!enabled) {
@@ -52,7 +60,7 @@ export const useMyAuctionPayments = (enabled: boolean) => {
   useEffect(() => {
     if (!enabled) return;
     const channel = supabase
-      .channel('my-auction-payments')
+      .channel(`my-auction-payments-${instanceId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'auction_items' }, () => fetchPayments())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => fetchPayments())
       .subscribe();
@@ -72,5 +80,11 @@ export const useMyAuctionPayments = (enabled: boolean) => {
     return { success: true };
   };
 
-  return { payments, loading, refresh: fetchPayments, pay };
+  // Restriction côté affichage uniquement — le vrai blocage est serveur
+  // (0166 : trigger auction_bids + contrôle dans b2b-checkout).
+  const hasOverduePayment = payments.some(
+    (p) => p.payment_deadline && new Date(p.payment_deadline).getTime() < Date.now()
+  );
+
+  return { payments, loading, refresh: fetchPayments, pay, hasOverduePayment };
 };

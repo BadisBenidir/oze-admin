@@ -3,6 +3,7 @@ import { X, ChevronLeft, ChevronRight, ImageOff, AlertCircle, Trophy, TrendingDo
 import { Badge } from '../../ui/Badge';
 import { AuctionItem, QUICK_BID_INCREMENTS, computeQuickBidIncrement } from '../../../hooks/useAuctionItems';
 import { AuctionCountdown } from './AuctionCountdown';
+import { OVERDUE_RESTRICTION_MESSAGE } from '../../../hooks/useMyAuctionPayments';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
@@ -18,6 +19,8 @@ interface AuctionItemDetailModalProps {
   /** Compte en accès découverte (0147) : voir Auctions.tsx, message distinct
    * de canBid=false pour statut juridique/CGV manquants. */
   isDiscovery: boolean;
+  /** Lot remporté impayé depuis plus de 24h (0166) : enchères bloquées. */
+  isRestricted: boolean;
   /** Session encore 'upcoming' (voir Auctions.tsx) : lot visible en aperçu,
    * aucune enchère acceptée avant l'ouverture (place_auto_bid, 0138). */
   isPreview: boolean;
@@ -31,7 +34,7 @@ interface AuctionItemDetailModalProps {
  * carrousel), avec l'enchère directement disponible ici plutôt que sur la
  * carte de la grille. Enchère automatique (proxy bidding, 0108) : le champ
  * libre fixe un plafond, pas une mise ponctuelle. */
-export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ item, isWinning, isOutbid, myMax, canBid, isDiscovery, isPreview, sessionStartsAt, onClose, onBid }) => {
+export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ item, isWinning, isOutbid, myMax, canBid, isDiscovery, isRestricted, isPreview, sessionStartsAt, onClose, onBid }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -222,7 +225,9 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
                 </div>
               ) : !canBid ? (
                 <p className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
-                  {isDiscovery
+                  {isRestricted
+                    ? OVERDUE_RESTRICTION_MESSAGE
+                    : isDiscovery
                     ? 'Accès découverte : consultation uniquement.'
                     : 'Complétez les conditions requises (statut juridique et CGV, voir la page Enchères) pour enchérir.'}
                 </p>

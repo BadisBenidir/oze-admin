@@ -72,6 +72,17 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Défaut de paiement d'enchère > 24h (0166) : aucun nouvel achat tant que
+    // le lot en retard n'est pas payé ou annulé. `=== false` : une erreur
+    // RPC (migration pas encore appliquée) ne bloque personne.
+    const { data: canPurchase } = await callerClient.rpc('can_user_purchase');
+    if (canPurchase === false) {
+      return new Response(JSON.stringify({ error: 'Votre compte est temporairement restreint : vous avez un lot remporté non payé depuis plus de 24h. Veuillez régulariser votre situation (page Enchères) pour passer commande.' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { product_ids, insured_product_ids, entrupy_product_ids, promo_code, payment_method, terms_accepted } = await req.json();
     if (!Array.isArray(product_ids) || product_ids.length === 0) {
       return new Response(JSON.stringify({ error: 'Le panier est vide' }), {

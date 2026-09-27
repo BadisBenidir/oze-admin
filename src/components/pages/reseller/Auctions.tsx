@@ -4,7 +4,7 @@ import { Card } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useAuctionItems, AuctionItem, QUICK_BID_INCREMENTS, computeQuickBidIncrement } from '../../../hooks/useAuctionItems';
-import { useMyAuctionPayments } from '../../../hooks/useMyAuctionPayments';
+import { useMyAuctionPayments, OVERDUE_RESTRICTION_MESSAGE } from '../../../hooks/useMyAuctionPayments';
 import { useWallet } from '../../../hooks/useWallet';
 import { AuctionCountdown } from './AuctionCountdown';
 import { AuctionItemDetailModal } from './AuctionItemDetailModal';
@@ -25,6 +25,8 @@ interface ItemCardProps {
    * lecture seule, jamais autorisé à enchérir — distinct de canBid=false
    * pour manque de statut juridique/CGV (message différent). */
   isDiscovery: boolean;
+  /** Lot remporté impayé depuis plus de 24h (0166) : enchères bloquées. */
+  isRestricted: boolean;
   /** Session encore 'upcoming' (voir Auctions.tsx) : le lot est visible en
    * aperçu (prix de départ, photos, description) mais aucune enchère n'est
    * acceptée avant l'ouverture — place_auto_bid (0138) le refuserait de
@@ -40,7 +42,7 @@ interface ItemCardProps {
  * la propagation du clic pour ne pas déclencher onOpen en même temps.
  * Enchère automatique (proxy bidding, 0108) : le champ libre fixe un
  * plafond, pas une mise ponctuelle — le système surenchérit seul jusque-là. */
-const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, canBid, isDiscovery, isPreview, sessionStartsAt, onOpen, onBid }) => {
+const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, canBid, isDiscovery, isRestricted, isPreview, sessionStartsAt, onOpen, onBid }) => {
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -154,7 +156,11 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
         ) : !canBid ? (
           <div className="mt-auto pt-2 sm:pt-3" onClick={(e) => e.stopPropagation()}>
             <p className="text-[10px] sm:text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 sm:px-2.5 py-1.5 sm:py-2">
-              {isDiscovery ? 'Accès découverte : consultation uniquement.' : 'Complétez les conditions ci-dessus pour enchérir.'}
+              {isRestricted
+                ? 'Compte restreint : lot remporté non payé depuis plus de 24h.'
+                : isDiscovery
+                  ? 'Accès découverte : consultation uniquement.'
+                  : 'Complétez les conditions ci-dessus pour enchérir.'}
             </p>
           </div>
         ) : (
@@ -257,7 +263,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
 export const Auctions: React.FC = () => {
   const { profile, acceptTerms } = useResellerAuth();
   const { session, items, myBidItemIds, myMaxAmounts, loading, error, placeAutoBid } = useAuctionItems(true, profile?.id);
-  const { payments: pendingPayments, pay: payAuctionOrder } = useMyAuctionPayments(Boolean(profile?.id));
+  const { payments: pendingPayments, pay: payAuctionOrder, hasOverduePayment } = useMyAuctionPayments(Boolean(profile?.id));
   const { balance: walletBalance } = useWallet(profile?.id);
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
   const viewingItem = items.find((i) => i.id === viewingItemId) || null;
@@ -266,7 +272,7 @@ export const Auctions: React.FC = () => {
   const legalStatusMissing = !profile?.legal_status;
   const termsMissing = !legalStatusMissing && !profile?.terms_accepted_at;
   const isDiscovery = profile?.reseller_status === 'discovery';
-  const canBid = !isDiscovery && Boolean(profile?.legal_status) && Boolean(profile?.terms_accepted_at);
+  const canBid = !isDiscovery && !hasOverduePayment && Boolean(profile?.legal_status) && Boolean(profile?.terms_accepted_at);
 
   const handleAcceptTerms = async () => {
     if (!termsCheckbox || acceptingTerms) return;
@@ -277,6 +283,13 @@ export const Auctions: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6">
+      {hasOverduePayment && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700">{OVERDUE_RESTRICTION_MESSAGE}</p>
+        </div>
+      )}
+
       <AuctionPaymentsDue payments={pendingPayments} walletBalance={walletBalance} onPay={payAuctionOrder} />
 
       <div className="mb-6">
@@ -364,6 +377,7 @@ export const Auctions: React.FC = () => {
               myMax={myMaxAmounts.get(item.id)}
               canBid={canBid}
               isDiscovery={isDiscovery}
+              isRestricted={hasOverduePayment}
               isPreview={session?.status === 'upcoming'}
               sessionStartsAt={session?.starts_at ?? null}
               onOpen={() => setViewingItemId(item.id)}
@@ -380,6 +394,7 @@ export const Auctions: React.FC = () => {
         myMax={viewingItem ? myMaxAmounts.get(viewingItem.id) : undefined}
         canBid={canBid}
         isDiscovery={isDiscovery}
+        isRestricted={hasOverduePayment}
         isPreview={session?.status === 'upcoming'}
         sessionStartsAt={session?.starts_at ?? null}
         onClose={() => setViewingItemId(null)}
