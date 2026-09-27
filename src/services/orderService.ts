@@ -466,6 +466,67 @@ class OrderService {
       .slice(0, limit);
   }
 
+  // Achats payés (catalogue B2B, solde et/ou carte) et paiements de lots
+  // d'enchère. Datés au paiement : orders.paid_at (0165) si connu, sinon
+  // created_at (les commandes catalogue sont payées dès leur création). Deux
+  // requêtes fusionnées car un lot d'enchère est payé bien après la création
+  // de sa commande (à l'adjudication) : trier sur created_at seul le raterait.
+  // Les commandes d'enchère encore impayées ne sont pas des achats → ignorées.
+  async getRecentPurchases(limit = 3) {
+    const select =
+      'id, created_at, paid_at, total_amount, payment_status, stripe_payment_intent_id, ' +
+      'reseller:resellers(company_name), placed_by:profiles!orders_placed_by_profile_id_fkey(first_name, last_name), ' +
+      'order_items(product_snapshot), auction_items(title, payment_deadline)';
+    const [byCreated, byPaid] = await Promise.all([
+      supabase.from('orders').select(select).eq('payment_status', 'paid').order('created_at', { ascending: false }).limit(limit),
+      supabase.from('orders').select(select).not('paid_at', 'is', null).order('paid_at', { ascending: false }).limit(limit),
+    ]);
+
+    const rows = new Map<string, any>();
+    for (const row of [...(byCreated.data || []), ...(byPaid.data || [])] as any[]) rows.set(row.id, row);
+    if (rows.size === 0) return [];
+
+    // Part payée avec le solde (wallet_transactions 'achat') — le reste est
+    // passé par Stripe.
+    const { data: walletRows } = await supabase
+      .from('wallet_transactions')
+      .select('order_id, amount')
+      .eq('type', 'achat')
+      .in('order_id', [...rows.keys()]);
+    const walletPaid = new Map<string, number>();
+    for (const w of (walletRows || []) as any[]) {
+      walletPaid.set(w.order_id, (walletPaid.get(w.order_id) || 0) + Number(w.amount));
+    }
+
+    return [...rows.values()].map((row) => {
+      const reseller = Array.isArray(row.reseller) ? row.reseller[0] : row.reseller;
+      const placedBy = Array.isArray(row.placed_by) ? row.placed_by[0] : row.placed_by;
+      const contactName = placedBy ? `${placedBy.first_name || ''} ${placedBy.last_name || ''}`.trim() : '';
+      const auctionItem = Array.isArray(row.auction_items) ? row.auction_items[0] : row.auction_items;
+      const items = (row.order_items || []) as any[];
+      const firstName = items[0]?.product_snapshot?.name || 'Produit';
+      const paidAt: string = row.paid_at || row.created_at;
+      const wallet = walletPaid.get(row.id) || 0;
+      const method = wallet > 0 && row.stripe_payment_intent_id
+        ? 'solde + carte'
+        : wallet > 0
+          ? 'crédit'
+          : row.stripe_payment_intent_id
+            ? 'carte'
+            : null;
+      return {
+        id: `purchase-${row.id}`,
+        isAuction: Boolean(auctionItem),
+        label: auctionItem ? auctionItem.title || firstName : items.length > 1 ? `${firstName} + ${items.length - 1} autre(s)` : firstName,
+        amount: Number(row.total_amount),
+        method,
+        late: Boolean(auctionItem?.payment_deadline && row.paid_at && new Date(row.paid_at) > new Date(auctionItem.payment_deadline)),
+        who: contactName || reseller?.company_name || 'Client',
+        created_at: paidAt,
+      };
+    });
+  }
+
   // Certificats Entrupy ajoutés APRÈS coup sur une commande déjà passée
   // (entrupy_requested_at, voir 0119) — jamais ceux choisis dès le panier
   // (entrupy_requested posé à la création, sans horodatage dédié, déjà
@@ -503,12 +564,8 @@ class OrderService {
   // total renvoyé : "Voir plus" l'augmente de 10 à chaque clic pour élargir
   // le vivier avant de retrier et de retronquer au même nombre.
   async getRecentActivity(limit = 3) {
-    // 1. Récupérer les dernières commandes
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('id, created_at, total_amount')
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    // 1. Récupérer les derniers achats payés (catalogue + lots d'enchère)
+    const purchases = await this.getRecentPurchases(limit);
 
     // 2. Récupérer les derniers profils inscrits
     const { data: profiles } = await supabase
@@ -528,15 +585,18 @@ class OrderService {
 
     const activities = [];
 
-    // Transformer les commandes en format "Activité"
-    if (orders) {
-      orders.forEach(o => activities.push({
-        id: `order-${o.id}`,
+    // Transformer les achats en format "Activité"
+    purchases.forEach(p => {
+      const via = p.method ? ` (${p.method})` : '';
+      activities.push({
+        id: p.id,
         type: 'order',
-        text: `Nouvelle commande de ${o.total_amount}€`,
-        date: new Date(o.created_at)
-      }));
-    }
+        text: p.isAuction
+          ? `🔨 Lot d'enchère ${p.label} (${p.amount.toFixed(2)} €) payé${p.late ? ' en retard' : ''} par ${p.who}${via}`
+          : `🛒 Achat ${p.label} (${p.amount.toFixed(2)} €) par ${p.who}${via}`,
+        date: new Date(p.created_at)
+      });
+    });
 
     // Transformer les profils en format "Activité"
     if (profiles) {
