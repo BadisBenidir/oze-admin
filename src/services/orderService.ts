@@ -418,7 +418,7 @@ class OrderService {
     const { data, error } = await supabase
       .from('order_items')
       .select(
-        'id, order_id, line_total, insured, insurance_cost, cancelled_at, refund_method, product_snapshot, orders!inner(order_number, reseller:resellers(company_name), placed_by:profiles!orders_placed_by_profile_id_fkey(first_name, last_name))'
+        'id, order_id, line_total, insured, insurance_cost, cancelled_at, cancellation_reason, refund_method, product_snapshot, orders!inner(order_number, reseller:resellers(company_name), placed_by:profiles!orders_placed_by_profile_id_fkey(first_name, last_name))'
       )
       .eq('status', 'cancelled')
       .not('cancelled_at', 'is', null)
@@ -440,7 +440,12 @@ class OrderService {
       const reseller = Array.isArray(order?.reseller) ? order.reseller[0] : order?.reseller;
       const placedBy = Array.isArray(order?.placed_by) ? order.placed_by[0] : order?.placed_by;
       const contactName = placedBy ? `${placedBy.first_name || ''} ${placedBy.last_name || ''}`.trim() : '';
-      const who = contactName || reseller?.company_name || 'Revendeur';
+      // Seul cancel-my-b2b-order-item (libre-service revendeur) utilise ce
+      // motif ; tous les autres chemins d'annulation sont réservés à l'admin.
+      const byReseller = first.cancellation_reason === 'Annulation par le revendeur';
+      const who = byReseller
+        ? contactName || reseller?.company_name || 'Revendeur'
+        : `l'admin${contactName ? ` (client : ${contactName})` : ''}`;
       const amount = items.reduce(
         (sum: number, i: any) => sum + Number(i.line_total) + (i.insured ? Number(i.insurance_cost) : 0),
         0
