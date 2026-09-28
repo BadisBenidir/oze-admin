@@ -107,9 +107,6 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   // RÉELLE plutôt que l'enveloppe allouée au départ — voir
   // getSourcingMissionMetrics (même règle que les vues d'ensemble).
   const isCompleted = mission.status === 'completed';
-  const remainingAfter = isCompleted ? 0 : mission.allocated_cost_budget - totalSpent;
-  const consumedRatio = mission.allocated_cost_budget > 0 ? Math.min(totalSpent / mission.allocated_cost_budget, 1) : 0;
-  const overBudget = !isCompleted && remainingAfter < 0;
   // Barème par défaut (avance/enveloppe), inchangé : sert de base au calcul
   // automatique par pièce (computeUnitPrice) — exactement la formule déjà
   // exposée au revendeur (0151/0152), jamais un second taux saisi
@@ -135,12 +132,19 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     : isCompleted ? 'Marge réelle' : 'Marge prévisionnelle';
   const marginBasis = hasPricedItems ? totalBilled : mission.advance_amount;
   const marginPercent = marginBasis > 0 ? (marginReal / marginBasis) * 100 : null;
-  // La commande générée à la validation facture les pièces au réel (0153) :
-  // l'écart avec l'avance déjà encaissée n'est jamais régularisé
-  // automatiquement — reste à sourcer, rembourser ou créditer (positif) ou à
-  // réclamer au client (négatif). La marge "forfait" n'est vraie que si
-  // l'avance est conservée en entier.
-  const unallocatedAdvance = mission.advance_amount - totalBilled;
+  // Reste à dépenser = part de l'avance client pas encore facturée en pièces
+  // (la commande générée à la validation facture au réel, 0153 : cet écart
+  // n'est jamais régularisé automatiquement — à sourcer, rembourser ou
+  // créditer ; négatif = dépassement à réclamer au client). Sans pièce
+  // chiffrée, retombe sur l'enveloppe d'achat restante.
+  const remainingAfter = hasPricedItems
+    ? mission.advance_amount - totalBilled
+    : isCompleted ? 0 : mission.allocated_cost_budget - totalSpent;
+  const consumedRatio = hasPricedItems
+    ? (mission.advance_amount > 0 ? Math.min(totalBilled / mission.advance_amount, 1) : 0)
+    : (mission.allocated_cost_budget > 0 ? Math.min(totalSpent / mission.allocated_cost_budget, 1) : 0);
+  const overBudget = remainingAfter < 0;
+  // La marge "forfait" n'est vraie que si l'avance est conservée en entier.
   const flatMargin = mission.advance_amount - totalSpent;
   const flatMarginPercent = mission.advance_amount > 0 ? (flatMargin / mission.advance_amount) * 100 : null;
 
@@ -339,7 +343,12 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                   <p className="text-sm font-semibold text-gray-900">{totalSpent.toFixed(2)} €</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Reste à dépenser</p>
+                  <p
+                    className="text-xs text-gray-500"
+                    title={hasPricedItems ? "Avance client − total facturé : à sourcer, rembourser ou créditer au client (négatif = dépassement à réclamer)" : "Enveloppe d'achat − dépensé"}
+                  >
+                    Reste à dépenser
+                  </p>
                   <p className={`text-sm font-semibold ${overBudget ? 'text-red-600' : 'text-gray-900'}`}>{remainingAfter.toFixed(2)} €</p>
                 </div>
                 <div>
@@ -350,21 +359,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 </div>
               </div>
               {hasPricedItems && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3 text-sm">
-                  <div
-                    className={`rounded-lg border px-3 py-2 ${unallocatedAdvance < 0 ? 'bg-red-50 border-red-200' : unallocatedAdvance > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}
-                  >
-                    <p className="text-xs text-gray-500">
-                      {unallocatedAdvance < 0 ? 'Dépassement de l\'avance (à réclamer au client)' : 'Solde avance non alloué'}
-                    </p>
-                    <p className={`font-semibold ${unallocatedAdvance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                      {Math.abs(unallocatedAdvance).toFixed(2)} €
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Avance {mission.advance_amount.toFixed(2)} € − total facturé {totalBilled.toFixed(2)} €
-                      {unallocatedAdvance > 0 && ' — reste à sourcer, rembourser ou créditer au client'}
-                    </p>
-                  </div>
+                <div className="mb-3 text-sm">
                   <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
                     <p className="text-xs text-gray-500">Marge si l'avance est conservée en forfait</p>
                     <p className={`font-semibold ${flatMargin < 0 ? 'text-red-600' : 'text-gray-900'}`}>
@@ -383,7 +378,9 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 />
               </div>
               <p className="text-xs text-gray-400 mt-1.5">
-                {totalSpent.toFixed(2)} € / {mission.allocated_cost_budget.toFixed(2)} € sourcés
+                {hasPricedItems
+                  ? `${totalBilled.toFixed(2)} € / ${mission.advance_amount.toFixed(2)} € d'avance facturés en pièces`
+                  : `${totalSpent.toFixed(2)} € / ${mission.allocated_cost_budget.toFixed(2)} € sourcés`}
               </p>
             </div>
 
