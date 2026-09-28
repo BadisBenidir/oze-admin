@@ -130,9 +130,19 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   const marginReal = hasPricedItems
     ? totalBilled - totalSpent
     : isCompleted ? mission.advance_amount - totalSpent : mission.advance_amount - mission.allocated_cost_budget;
-  const marginLabel = isCompleted ? 'Marge réelle' : 'Marge prévisionnelle';
+  const marginLabel = hasPricedItems
+    ? 'Marge sur pièces sourcées'
+    : isCompleted ? 'Marge réelle' : 'Marge prévisionnelle';
   const marginBasis = hasPricedItems ? totalBilled : mission.advance_amount;
   const marginPercent = marginBasis > 0 ? (marginReal / marginBasis) * 100 : null;
+  // La commande générée à la validation facture les pièces au réel (0153) :
+  // l'écart avec l'avance déjà encaissée n'est jamais régularisé
+  // automatiquement — reste à sourcer, rembourser ou créditer (positif) ou à
+  // réclamer au client (négatif). La marge "forfait" n'est vraie que si
+  // l'avance est conservée en entier.
+  const unallocatedAdvance = mission.advance_amount - totalBilled;
+  const flatMargin = mission.advance_amount - totalSpent;
+  const flatMarginPercent = mission.advance_amount > 0 ? (flatMargin / mission.advance_amount) * 100 : null;
 
   const handleSavePrice = async (item: SourcingItem, rawValue: string) => {
     const trimmed = rawValue.trim();
@@ -335,10 +345,37 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 <div>
                   <p className="text-xs text-gray-500">{marginLabel}</p>
                   <p className={`text-sm font-semibold ${marginReal < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {marginReal.toFixed(2)} €{marginPercent !== null && ` (${marginPercent.toFixed(0)}%)`}
+                    {marginReal.toFixed(2)} €{marginPercent !== null && ` (${marginPercent.toFixed(1)}%)`}
                   </p>
                 </div>
               </div>
+              {hasPricedItems && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3 text-sm">
+                  <div
+                    className={`rounded-lg border px-3 py-2 ${unallocatedAdvance < 0 ? 'bg-red-50 border-red-200' : unallocatedAdvance > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}
+                  >
+                    <p className="text-xs text-gray-500">
+                      {unallocatedAdvance < 0 ? 'Dépassement de l\'avance (à réclamer au client)' : 'Solde avance non alloué'}
+                    </p>
+                    <p className={`font-semibold ${unallocatedAdvance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      {Math.abs(unallocatedAdvance).toFixed(2)} €
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Avance {mission.advance_amount.toFixed(2)} € − total facturé {totalBilled.toFixed(2)} €
+                      {unallocatedAdvance > 0 && ' — reste à sourcer, rembourser ou créditer au client'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                    <p className="text-xs text-gray-500">Marge si l'avance est conservée en forfait</p>
+                    <p className={`font-semibold ${flatMargin < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      {flatMargin.toFixed(2)} €{flatMarginPercent !== null && ` (${flatMarginPercent.toFixed(2)}%)`}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Avance {mission.advance_amount.toFixed(2)} € − achats {totalSpent.toFixed(2)} € — uniquement si le solde non alloué n'est pas rendu au client
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full ${overBudget ? 'bg-red-500' : consumedRatio >= 1 ? 'bg-amber-500' : 'bg-gray-900'}`}
