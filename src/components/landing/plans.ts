@@ -11,12 +11,12 @@
  *   VITE_B2B_SUBSCRIPTION_PERIOD          remplace "/ mois" (commun aux deux pass)
  *   VITE_B2B_WHATSAPP_NUMBER              numéro international sans + ni espaces, ex. 33612345678
  *                                         (Pass Boutiques ; sinon repli sur l'email)
- *   VITE_B2B_DISCORD_URL                  invitation Discord (bouton masqué si absent)
+ *   VITE_B2B_DISCORD_URL                  remplace l'invitation Discord par défaut
  */
 const env = (key: string) => ((import.meta.env[key] as string | undefined) ?? '').trim();
 
 export const PERIOD = env('VITE_B2B_SUBSCRIPTION_PERIOD') || '/ mois';
-export const DISCORD_URL = env('VITE_B2B_DISCORD_URL');
+export const DISCORD_URL = env('VITE_B2B_DISCORD_URL') || 'https://discord.gg/qVX3ueywBu';
 export const WHATSAPP_NUMBER = env('VITE_B2B_WHATSAPP_NUMBER').replace(/\D/g, '');
 export const SUPPORT_EMAIL = 'contact@ozeparis.com';
 export const accessRequestUrl = (pass: string) =>

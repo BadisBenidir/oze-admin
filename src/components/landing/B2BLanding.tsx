@@ -413,10 +413,9 @@ export const B2BLanding: React.FC = () => {
             >
               Découvrir les offres <ArrowRight className="h-5 w-5" />
             </button>
-            {/* En dev, affiché même sans lien pour voir le rendu ; en prod, masqué tant que l'invitation n'est pas configurée */}
-            {(DISCORD_URL || import.meta.env.DEV) && (
+            {DISCORD_URL && (
               <a
-                href={DISCORD_URL || '#'}
+                href={DISCORD_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex w-full items-center justify-center gap-3 rounded-xl bg-[#5865F2] px-10 py-4 text-base font-semibold text-white transition-colors hover:bg-[#4752C4] sm:w-auto"
