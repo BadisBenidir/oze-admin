@@ -6,7 +6,7 @@ import {
   COMPANY_LEGAL_NAME, COMPANY_SIRET, COMPANY_RCS, COMPANY_VAT_NUMBER, COMPANY_ADDRESS,
 } from '../../config/legal';
 import heroImg from './assets/hero.jpeg';
-import clubImg from './assets/club.webp';
+import clubImg from './assets/club.jpeg';
 import dropsImg from './assets/drops.webp';
 import encheresImg from './assets/encheres.webp';
 import logo from './assets/logo_oze_paris_b2b.png';
@@ -658,7 +658,7 @@ export const B2BLanding: React.FC = () => {
 
       {/* TARIFS */}
       <section id="tarifs" className="relative scroll-mt-20 overflow-hidden py-20 sm:py-24">
-        <img src={clubImg} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={clubImg} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover object-[50%_30%]" />
         <div className="absolute inset-0 bg-black/65" />
         <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center">
