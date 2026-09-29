@@ -191,7 +191,7 @@ const ARTICLE_IMAGES = Object.values(
 
 /**
  * Bandeau défilant en boucle : la liste est rendue deux fois et translatée de
- * -50 %, ce qui donne un raccord invisible. Pause au survol ; sans animation
+ * -50 %, ce qui donne un raccord invisible. Sans animation
  * (prefers-reduced-motion), le bandeau devient simplement défilable à la main.
  */
 const ArticlesMarquee: React.FC = () => (
@@ -203,9 +203,8 @@ const ArticlesMarquee: React.FC = () => (
     }}
   >
     <style>{`
-      @keyframes oze-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-      .oze-marquee-track { animation: oze-marquee 60s linear infinite; }
-      .oze-marquee:hover .oze-marquee-track { animation-play-state: paused; }
+      @keyframes oze-marquee { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-50%, 0, 0); } }
+      .oze-marquee-track { animation: oze-marquee 60s linear infinite; will-change: transform; backface-visibility: hidden; }
       @media (prefers-reduced-motion: reduce) { .oze-marquee-track { animation: none; } }
     `}</style>
     <div className="oze-marquee-track flex w-max gap-2 sm:gap-3">
@@ -215,9 +214,14 @@ const ArticlesMarquee: React.FC = () => (
           src={src}
           alt={i < ARTICLE_IMAGES.length ? 'Exemple de pièce du catalogue B2B' : ''}
           aria-hidden={i >= ARTICLE_IMAGES.length}
-          loading="lazy"
+          // Taille fixe réservée et chargement immédiat (~300 Ko en tout) : une image qui
+          // apparaît en cours de route changerait la largeur de la bande et ferait sauter l'animation.
+          width={300}
+          height={440}
+          loading="eager"
+          decoding="async"
           draggable={false}
-          className="h-48 w-auto flex-shrink-0 rounded-xl border border-gray-200 shadow-sm sm:h-60"
+          className="h-48 w-[131px] flex-shrink-0 rounded-xl border border-gray-200 shadow-sm sm:h-60 sm:w-[164px]"
         />
       ))}
     </div>
