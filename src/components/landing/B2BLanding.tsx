@@ -45,18 +45,23 @@ const NAV = [
 ];
 
 // Sections détaillées (texte + aperçu). `image` : capture de la plateforme à ajouter
-// dans ./assets puis importer ; sans image, un emplacement vide est affiché.
+// dans ./assets puis importer.
+// layout : 'wide' = texte centré + capture pleine largeur, 'split' = texte et capture côte à côte,
+// 'text' = texte seul centré, avec ses étapes clés (`steps`).
 const FEATURES: {
   id: string;
+  layout: 'wide' | 'split' | 'text';
   eyebrow: string;
   title: string;
   titleBold: string;
   text: string;
   cta: { label: string; href?: string };
   image?: string;
+  steps?: { title: string; text: string }[];
 }[] = [
   {
     id: 'drops',
+    layout: 'wide',
     eyebrow: 'Drops & Catalogue',
     title: 'Des arrivages réguliers,',
     titleBold: 'à l\'unité',
@@ -66,6 +71,7 @@ const FEATURES: {
   },
   {
     id: 'encheres',
+    layout: 'split',
     eyebrow: 'Enchères',
     title: 'Des enchères privées,',
     titleBold: 'dès 0 €',
@@ -75,11 +81,17 @@ const FEATURES: {
   },
   {
     id: 'sourcing',
+    layout: 'text',
     eyebrow: 'Sourcing sur mesure',
     title: 'Vos pièces cibles,',
     titleBold: 'sourcées pour vous',
-    text: 'Vous nous confiez un budget et vos modèles cibles. Un accompagnateur dédié, joignable en direct, sélectionne avec vous chaque pièce, une par une, avant achat. Tout est suivi dans votre espace, avec un reporting complet du budget engagé.',
+    text: 'Pour les budgets importants, un accompagnement de A à Z : vous fixez l\'enveloppe et les modèles recherchés, nous chassons les pièces et vous les validez une par une avant achat.',
     cta: { label: 'Lancer une mission', href: `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Mission de sourcing')}` },
+    steps: [
+      { title: 'Vous fixez le budget', text: 'Une enveloppe allouée, vos modèles cibles, vos critères de grade et d\'état.' },
+      { title: 'On sélectionne avec vous', text: 'Chaque pièce repérée vous est proposée et validée une par une, avant achat.' },
+      { title: 'Un accompagnateur dédié', text: 'Un interlocuteur unique, joignable en direct, et un reporting complet du budget engagé.' },
+    ],
   },
 ];
 
@@ -408,51 +420,75 @@ export const B2BLanding: React.FC = () => {
       </section>
 
       {/* DÉTAIL DES 3 SOLUTIONS (cibles des liens Drops / Enchères / Sourcing du header) */}
-      {FEATURES.map((f, i) => (
-        <section
-          key={f.id}
-          id={f.id}
-          className={`scroll-mt-20 py-20 sm:py-24 ${i % 2 === 0 ? 'bg-neutral-50' : 'bg-white'}`}
-        >
-          <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16">
-            <div className={i % 2 === 1 ? 'lg:order-2' : ''}>
-              <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">{f.eyebrow}</p>
-              <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
-                {f.title} <span className="font-semibold">{f.titleBold}</span>
-              </h2>
-              <p className="mt-6 text-base leading-relaxed text-gray-600">{f.text}</p>
-              {f.cta.href ? (
-                <a
-                  href={f.cta.href}
-                  className="mt-8 inline-flex items-center gap-2 rounded-xl bg-black px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
-                >
-                  {f.cta.label} <ArrowRight className="h-4 w-4" />
-                </a>
-              ) : (
-                <button
-                  onClick={() => scrollTo('tarifs')}
-                  className="mt-8 inline-flex items-center gap-2 rounded-xl bg-black px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
-                >
-                  {f.cta.label} <ArrowRight className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-            {f.image ? (
-              <img
-                src={f.image}
-                alt={f.eyebrow}
-                loading="lazy"
-                className="w-full rounded-2xl border border-gray-200 object-cover shadow-xl"
-              />
+      {FEATURES.map((f, i) => {
+        const centered = f.layout !== 'split';
+        const heading = (
+          <>
+            <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">{f.eyebrow}</p>
+            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
+              {f.title} <span className="font-semibold">{f.titleBold}</span>
+            </h2>
+            <p className={`mt-6 text-base leading-relaxed text-gray-600 sm:text-lg ${centered ? 'mx-auto max-w-2xl' : ''}`}>
+              {f.text}
+            </p>
+          </>
+        );
+        const ctaClass = 'inline-flex items-center gap-2 rounded-xl bg-black px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800';
+        const cta = f.cta.href ? (
+          <a href={f.cta.href} className={ctaClass}>
+            {f.cta.label} <ArrowRight className="h-4 w-4" />
+          </a>
+        ) : (
+          <button onClick={() => scrollTo('tarifs')} className={ctaClass}>
+            {f.cta.label} <ArrowRight className="h-4 w-4" />
+          </button>
+        );
+        const screenshot = f.image && (
+          <img
+            src={f.image}
+            alt={f.eyebrow}
+            loading="lazy"
+            className="w-full rounded-2xl border border-gray-200 object-cover shadow-2xl"
+          />
+        );
+
+        return (
+          <section
+            key={f.id}
+            id={f.id}
+            className={`scroll-mt-20 py-20 sm:py-28 ${i % 2 === 0 ? 'bg-neutral-50' : 'bg-white'}`}
+          >
+            {f.layout === 'split' ? (
+              <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16">
+                <div className="lg:order-2">
+                  {heading}
+                  <div className="mt-8">{cta}</div>
+                </div>
+                {screenshot}
+              </div>
             ) : (
-              // Emplacement de la capture de la plateforme (à fournir) : renseigner `image` dans FEATURES.
-              <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 bg-white text-sm text-gray-400">
-                Aperçu {f.eyebrow.toLowerCase()} à venir
+              <div className="mx-auto max-w-7xl px-4 text-center sm:px-6">
+                {heading}
+                <div className="mt-8">{cta}</div>
+                {f.layout === 'wide' && screenshot && <div className="mt-14">{screenshot}</div>}
+                {f.steps && (
+                  <ol className="mx-auto mt-14 grid max-w-5xl grid-cols-1 gap-6 text-left md:grid-cols-3">
+                    {f.steps.map((s, n) => (
+                      <li key={s.title} className="rounded-2xl border border-gray-200 bg-white p-8">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black text-sm font-semibold text-white">
+                          {n + 1}
+                        </span>
+                        <h3 className="mt-5 text-lg font-semibold">{s.title}</h3>
+                        <p className="mt-2 text-sm leading-relaxed text-gray-600">{s.text}</p>
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </div>
             )}
-          </div>
-        </section>
-      ))}
+          </section>
+        );
+      })}
 
       {/* COMMENT ÇA MARCHE */}
       <section className="py-20 sm:py-24">
