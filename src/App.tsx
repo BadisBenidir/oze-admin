@@ -7,6 +7,7 @@ import { supabase } from './lib/supabase';
 import AdminApp from './apps/AdminApp';
 import ResellerApp from './apps/ResellerApp';
 import { B2BLanding } from './components/landing/B2BLanding';
+import { B2BSignup } from './components/landing/B2BSignup';
 import { Terms } from './components/pages/reseller/Terms';
 
 function App() {
@@ -47,6 +48,10 @@ function App() {
     // Vercel) : "/" retombe alors sur l'écran de connexion, comme avant.
     if (window.location.pathname === '/' && import.meta.env.VITE_B2B_LANDING_ENABLED === 'true') {
       return <B2BLanding />;
+    }
+    // Inscription à un pass depuis la landing (infos du compte, puis Stripe).
+    if (window.location.pathname.replace(/\/$/, '') === '/inscription' && import.meta.env.VITE_B2B_LANDING_ENABLED === 'true') {
+      return <B2BSignup />;
     }
     // Lien "CGV / Mentions légales" du pied de la landing : lisible sans compte.
     if (window.location.pathname === '/cgv' || window.location.pathname === '/cgv/') {

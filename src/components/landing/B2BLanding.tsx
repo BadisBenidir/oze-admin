@@ -11,6 +11,9 @@ import dropsImg from './assets/drops.webp';
 import encheresImg from './assets/encheres.webp';
 import logo from './assets/logo_oze_paris_b2b.png';
 import logoWhite from './assets/logo_oze_paris_b2b_white.png';
+import {
+  PERIOD, DISCORD_URL, WHATSAPP_NUMBER, SUPPORT_EMAIL, AGENT_URL, PLANS, signupUrl, type Plan, type SignupPlanId,
+} from './plans';
 
 /**
  * Landing page publique de pro.ozeparis.com (visiteur non connecté sur "/",
@@ -19,30 +22,8 @@ import logoWhite from './assets/logo_oze_paris_b2b_white.png';
  * Hero : photo plein écran (assets/hero.jpeg, originale non recompressée), texte blanc centré ;
  * header transparent sur la photo puis blanc au scroll, comme le site principal.
  *
- * Abonnement : aucun système d'abonnement n'existe encore dans l'app — chaque
- * pass pointe vers un Stripe Payment Link / Checkout configuré dans Vercel.
- * Sans lien configuré, le bouton retombe sur une demande d'accès par email
- * plutôt que d'afficher un bouton mort.
- *   VITE_B2B_PASS_DROPS_CHECKOUT_URL      lien Stripe du Pass Drops
- *   VITE_B2B_PASS_DROPS_PRICE             remplace le prix par défaut (39,90 €)
- *   VITE_B2B_SUBSCRIPTION_CHECKOUT_URL    lien Stripe du Pass Revendeur
- *   VITE_B2B_SUBSCRIPTION_PRICE           remplace le prix par défaut (69,90 €)
- *   VITE_B2B_SUBSCRIPTION_PERIOD          remplace "/ mois" (commun aux deux pass)
- *   VITE_B2B_WHATSAPP_NUMBER              numéro international sans + ni espaces, ex. 33612345678
- *                                         (Pass Boutiques ; sinon repli sur l'email)
- *   VITE_B2B_DISCORD_URL                  invitation Discord (bouton masqué si absent)
+ * Offres, prix et réglages Vercel : voir ./plans.ts.
  */
-const env = (key: string) => ((import.meta.env[key] as string | undefined) ?? '').trim();
-const PERIOD = env('VITE_B2B_SUBSCRIPTION_PERIOD') || '/ mois';
-const DISCORD_URL = env('VITE_B2B_DISCORD_URL');
-const WHATSAPP_NUMBER = env('VITE_B2B_WHATSAPP_NUMBER').replace(/\D/g, '');
-const SUPPORT_EMAIL = 'contact@ozeparis.com';
-const accessRequestUrl = (pass: string) =>
-  `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Demande d'accès — ${pass} OZË Paris`)}`;
-const AGENT_URL = WHATSAPP_NUMBER
-  ? `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Bonjour, je souhaite en savoir plus sur le Pass Boutiques OZË Paris.')}`
-  : accessRequestUrl('Pass Boutiques');
-
 // Pas de lien « Tarifs » : le bouton « Rejoindre le Club » du header y mène déjà.
 const NAV = [
   { id: 'solutions', label: 'Solutions' },
@@ -154,68 +135,6 @@ const STEPS = [
   { title: 'Commandez, expédiez quand vous voulez', text: 'Vos pièces vous attendent : demandez une livraison groupée dès que vous le souhaitez.' },
 ];
 
-type Plan = {
-  id: string;
-  name: string;
-  pitch: string;
-  price: string;
-  checkoutUrl: string;
-  featured?: boolean;
-  badge?: string;
-  intro?: string;
-  features: { label: string; included: boolean }[];
-  agent?: boolean; // bouton « Contacter un agent » (WhatsApp) au lieu du paiement
-};
-
-const PLANS: Plan[] = [
-  {
-    id: 'drops',
-    name: 'Pass Drops',
-    pitch: 'Pour acheter sur le catalogue et les drops, à l\'unité.',
-    price: env('VITE_B2B_PASS_DROPS_PRICE') || '39,90 €',
-    checkoutUrl: env('VITE_B2B_PASS_DROPS_CHECKOUT_URL'),
-    features: [
-      { label: 'Drops & catalogue B2B, achat à l\'unité', included: true },
-      { label: 'Certificats Entrupy disponibles', included: true },
-      { label: 'Expédition groupée quand vous voulez', included: true },
-      { label: 'Sessions d\'enchères privées', included: false },
-      { label: 'Sourcing sur mesure', included: false },
-    ],
-  },
-  {
-    id: 'revendeur',
-    name: 'Pass Revendeur',
-    pitch: 'L\'accès complet à la plateforme pour les revendeurs.',
-    price: env('VITE_B2B_SUBSCRIPTION_PRICE') || '69,90 €',
-    checkoutUrl: env('VITE_B2B_SUBSCRIPTION_CHECKOUT_URL'),
-    featured: true,
-    badge: 'Accès complet',
-    features: [
-      { label: 'Drops & catalogue B2B, achat à l\'unité', included: true },
-      { label: 'Sessions d\'enchères privées, lots dès 0 €', included: true },
-      { label: 'Sourcing sur mesure', included: true },
-      { label: 'Certificats Entrupy disponibles', included: true },
-      { label: 'Expédition groupée quand vous voulez', included: true },
-    ],
-  },
-  {
-    id: 'boutiques',
-    name: 'Pass Boutiques',
-    pitch: 'Pour les boutiques et gros volumes, avec une équipe à vos côtés.',
-    price: '',
-    checkoutUrl: '',
-    agent: true,
-    intro: 'Tout le Pass Revendeur, plus :',
-    features: [
-      { label: 'Une équipe dédiée à votre boutique', included: true },
-      { label: 'Un agent joignable en direct sur WhatsApp', included: true },
-      { label: 'Sourcing en volume pour vos réassorts', included: true },
-      { label: 'Conditions tarifaires sur mesure', included: true },
-      { label: 'Plusieurs comptes pour votre équipe', included: true },
-    ],
-  },
-];
-
 const FAQ = [
   {
     q: 'Comment l\'authenticité des pièces est-elle garantie ?',
@@ -257,8 +176,9 @@ const WhatsAppIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
   const { name, pitch, price, checkoutUrl, featured, badge, intro, features, agent } = plan;
-  const href = agent ? AGENT_URL : checkoutUrl || accessRequestUrl(name);
-  const external = agent ? !!WHATSAPP_NUMBER : !!checkoutUrl;
+  // Les pass souscrivables passent d'abord par /inscription (infos du compte), qui redirige ensuite vers Stripe.
+  const href = agent ? AGENT_URL : signupUrl(plan.id as SignupPlanId);
+  const external = agent && !!WHATSAPP_NUMBER;
   const muted = featured ? 'text-white/60' : 'text-gray-500';
 
   return (
