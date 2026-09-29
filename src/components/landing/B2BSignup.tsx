@@ -482,7 +482,7 @@ const SignupForm: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <CreditCard className="h-4 w-4" /> Continuer vers le paiement
+                        <CreditCard className="h-4 w-4" /> S'abonner et payer — {plan.price} {PERIOD}
                       </>
                     )}
                   </button>
@@ -555,26 +555,24 @@ const SignupForm: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Sécurité */}
-        <div className="mt-8">
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center sm:p-5">
-            <div className="mb-2 flex items-center justify-center">
-              <Shield className="mr-2 h-5 w-5 text-blue-600" />
-              <span className="text-sm font-semibold text-blue-900 sm:text-base">Paiement 100 % sécurisé</span>
-            </div>
-            <p className="text-xs text-blue-700 sm:text-sm">
-              Vos données sont protégées et le paiement est opéré par notre partenaire de confiance Stripe.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-1.5 text-xs text-blue-600">
-              {['SSL sécurisé', 'Données protégées', 'Stripe certifié'].map((t) => (
-                <span key={t} className="flex items-center">
-                  <Check className="mr-1 h-3.5 w-3.5" /> {t}
-                </span>
-              ))}
+              {/* Sécurité, collé sous le récapitulatif */}
+              <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <div className="flex items-center">
+                  <Shield className="mr-2 h-4 w-4 flex-shrink-0 text-blue-600" />
+                  <span className="text-sm font-semibold text-blue-900">Paiement 100 % sécurisé</span>
+                </div>
+                <p className="mt-1.5 text-xs text-blue-700">
+                  Vos données sont protégées et le paiement est opéré par notre partenaire de confiance Stripe.
+                </p>
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-blue-600">
+                  {['SSL sécurisé', 'Données protégées', 'Stripe certifié'].map((t) => (
+                    <span key={t} className="flex items-center">
+                      <Check className="mr-1 h-3.5 w-3.5" /> {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
