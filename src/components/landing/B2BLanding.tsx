@@ -7,9 +7,6 @@ import {
 } from '../../config/legal';
 import clubImg from './assets/club.webp';
 import sourcingImg from './assets/sourcing.webp';
-import catalogueImg from './assets/pillar-catalogue.webp';
-import encheresImg from './assets/pillar-encheres.webp';
-import logistiqueImg from './assets/pillar-logistique.webp';
 import logo from './assets/logo_oze_paris_b2b.png';
 
 /**
@@ -46,23 +43,44 @@ const PILLARS = [
   {
     id: 'catalogue',
     icon: LayoutGrid,
-    image: catalogueImg,
+    tag: 'Catalogue',
     title: 'Drops & Catalogue B2B',
     text: 'Nouveaux arrivages réguliers, sélection rigoureuse des grades et des états, achat à l\'unité sans quantité minimale imposée.',
+    points: [
+      'Achat à l\'unité, sans minimum de commande',
+      'Grade et état détaillés sur chaque pièce',
+      'Pièces gardées sur votre compte, expédition groupée quand vous voulez',
+      'Paiement par carte ou portefeuille B2B',
+    ],
+    featured: false,
   },
   {
     id: 'encheres',
     icon: Gavel,
-    image: encheresImg,
+    tag: 'Dès 0 €',
     title: 'Enchères B2B exclusives',
     text: 'Sessions privées réservées aux membres, avec des pièces très demandées mises en vente à partir de 0 €.',
+    points: [
+      'Prix de départ à 0 € sur les lots',
+      'Sessions privées, entre professionnels uniquement',
+      'Calendrier des prochaines sessions dans votre espace',
+      'Lots remportés à régler sous 24h',
+    ],
+    featured: true,
   },
   {
     id: 'sourcing-sur-mesure',
     icon: PackageSearch,
-    image: logistiqueImg,
+    tag: 'Sur mesure',
     title: 'Sourcing sur mesure',
     text: 'Vous allouez un budget, nous sélectionnons les pièces une par une avec vous, en contact direct avec votre accompagnateur dédié.',
+    points: [
+      'Budget alloué selon vos objectifs',
+      'Chaque pièce validée avec vous avant achat',
+      'Un accompagnateur dédié, joignable en direct',
+      'Reporting complet du budget engagé',
+    ],
+    featured: false,
   },
 ];
 
@@ -255,21 +273,50 @@ export const B2BLanding: React.FC = () => {
               Tout ce dont un revendeur a besoin, <span className="font-semibold">au même endroit</span>
             </h2>
           </div>
-          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-            {PILLARS.map(({ id, icon: Icon, image, title, text }) => (
+          <div className="mt-14 grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {PILLARS.map(({ id, icon: Icon, tag, title, text, points, featured }) => (
               <div
                 key={id}
                 id={id === 'encheres' ? id : undefined}
-                className="scroll-mt-24 overflow-hidden border border-gray-200 bg-white"
+                className={`relative flex scroll-mt-24 flex-col rounded-3xl p-8 transition-all duration-300 hover:-translate-y-1 sm:p-10 ${
+                  featured
+                    ? 'bg-neutral-950 text-white shadow-2xl shadow-black/20'
+                    : 'border border-gray-200 bg-white shadow-sm hover:shadow-xl'
+                }`}
               >
-                <img src={image} alt="" loading="lazy" className="h-56 w-full object-cover" />
-                <div className="p-6">
-                  <div className="flex items-center gap-3">
-                    <Icon className="h-5 w-5 text-gray-900" />
-                    <h3 className="text-base font-semibold">{title}</h3>
+                <div className="flex items-start justify-between">
+                  <div
+                    className={`flex h-14 w-14 items-center justify-center rounded-2xl ${
+                      featured ? 'bg-white text-black' : 'bg-black text-white'
+                    }`}
+                  >
+                    <Icon className="h-7 w-7" />
                   </div>
-                  <p className="mt-3 text-sm leading-relaxed text-gray-600">{text}</p>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
+                      featured ? 'bg-white/10 text-white' : 'bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    {tag}
+                  </span>
                 </div>
+                <h3 className="mt-8 text-2xl font-semibold tracking-tight">{title}</h3>
+                <p className={`mt-3 text-sm leading-relaxed ${featured ? 'text-white/70' : 'text-gray-600'}`}>{text}</p>
+                <div className={`my-8 h-px ${featured ? 'bg-white/10' : 'bg-gray-100'}`} />
+                <ul className="flex-1 space-y-4">
+                  {points.map((p) => (
+                    <li key={p} className="flex items-start gap-3 text-sm">
+                      <span
+                        className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full ${
+                          featured ? 'bg-white text-black' : 'bg-black text-white'
+                        }`}
+                      >
+                        <Check className="h-3 w-3" strokeWidth={3} />
+                      </span>
+                      <span className={featured ? 'text-white/90' : 'text-gray-700'}>{p}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>
