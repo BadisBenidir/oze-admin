@@ -9,7 +9,7 @@
  *   VITE_B2B_PASS_DROPS_PRICE             remplace le prix par défaut (39,90 €)
  *   VITE_B2B_SUBSCRIPTION_PRICE           remplace le prix par défaut (69,90 €)
  *   VITE_B2B_SUBSCRIPTION_PERIOD          remplace "/ mois" (commun aux deux pass)
- *   VITE_B2B_WHATSAPP_NUMBER              numéro international sans + ni espaces, ex. 33612345678
+ *   VITE_B2B_WHATSAPP_NUMBER              remplace le numéro WhatsApp par défaut (international, ex. 33612345678)
  *                                         (Pass Boutiques ; sinon repli sur l'email)
  *   VITE_B2B_DISCORD_URL                  remplace l'invitation Discord par défaut
  */
@@ -17,7 +17,11 @@ const env = (key: string) => ((import.meta.env[key] as string | undefined) ?? ''
 
 export const PERIOD = env('VITE_B2B_SUBSCRIPTION_PERIOD') || '/ mois';
 export const DISCORD_URL = env('VITE_B2B_DISCORD_URL') || 'https://discord.gg/qVX3ueywBu';
-export const WHATSAPP_NUMBER = env('VITE_B2B_WHATSAPP_NUMBER').replace(/\D/g, '');
+// Numéro WhatsApp des agents (Pass Boutiques, « Parler à un agent ») : format wa.me et format affiché.
+export const WHATSAPP_NUMBER = (env('VITE_B2B_WHATSAPP_NUMBER') || '33743701734').replace(/\D/g, '');
+export const WHATSAPP_DISPLAY = WHATSAPP_NUMBER.startsWith('33')
+  ? `+33 ${WHATSAPP_NUMBER.slice(2).replace(/(\d)(?=(\d{2})+$)/g, '$1 ')}`
+  : `+${WHATSAPP_NUMBER}`;
 export const SUPPORT_EMAIL = 'contact@ozeparis.com';
 export const accessRequestUrl = (pass: string) =>
   `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Demande d'accès — ${pass} OZË Paris`)}`;

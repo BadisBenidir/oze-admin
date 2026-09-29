@@ -13,7 +13,7 @@ import encheresImg from './assets/encheres.webp';
 import logo from './assets/logo_oze_paris_b2b.png';
 import logoWhite from './assets/logo_oze_paris_b2b_white.png';
 import {
-  PERIOD, DISCORD_URL, WHATSAPP_NUMBER, SUPPORT_EMAIL, AGENT_URL, PLANS, signupUrl, type Plan, type SignupPlanId,
+  PERIOD, DISCORD_URL, WHATSAPP_NUMBER, WHATSAPP_DISPLAY, SUPPORT_EMAIL, AGENT_URL, PLANS, signupUrl, type Plan, type SignupPlanId,
 } from './plans';
 
 /**
@@ -335,7 +335,7 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
       </a>
       <p className={`mt-3 hidden text-center text-xs sm:block ${featured ? 'text-white/40' : 'text-gray-400'}`}>
         {agent
-          ? WHATSAPP_NUMBER ? 'Réponse rapide sur WhatsApp' : `Réponse sous 48h — ${SUPPORT_EMAIL}`
+          ? `Réponse sous 24h — ${WHATSAPP_NUMBER ? WHATSAPP_DISPLAY : SUPPORT_EMAIL}`
           : 'Paiement sécurisé par Stripe'}
       </p>
     </div>
