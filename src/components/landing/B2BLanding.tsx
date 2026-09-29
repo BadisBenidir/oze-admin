@@ -175,7 +175,7 @@ const WhatsAppIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
-  const { name, pitch, price, checkoutUrl, featured, badge, intro, features, agent } = plan;
+  const { name, pitch, price, featured, badge, intro, features, agent } = plan;
   // Les pass souscrivables passent d'abord par /inscription (infos du compte), qui redirige ensuite vers Stripe.
   const href = agent ? AGENT_URL : signupUrl(plan.id as SignupPlanId);
   const external = agent && !!WHATSAPP_NUMBER;
@@ -240,14 +240,14 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
           </>
         ) : (
           <>
-            {checkoutUrl ? `Choisir le ${name}` : 'Demander mon accès'} <ArrowRight className="h-4 w-4" />
+            {`Choisir le ${name}`} <ArrowRight className="h-4 w-4" />
           </>
         )}
       </a>
       <p className={`mt-2 text-center text-[11px] sm:mt-3 sm:text-xs ${featured ? 'text-white/40' : 'text-gray-400'}`}>
         {agent
           ? WHATSAPP_NUMBER ? 'Réponse rapide sur WhatsApp' : `Réponse sous 48h — ${SUPPORT_EMAIL}`
-          : checkoutUrl ? 'Paiement sécurisé par Stripe' : `Réponse sous 48h — ${SUPPORT_EMAIL}`}
+          : 'Paiement sécurisé par Stripe'}
       </p>
     </div>
   );

@@ -9,15 +9,22 @@
 //     (cancel_at_period_end) — l'accès est coupé par le webhook
 //     (customer.subscription.deleted) à l'échéance.
 //   - action "resume" : annule une résiliation programmée.
+//   - action "checkout" (+ plan) : réabonnement d'un abonné résilié, ou
+//     paiement jamais finalisé après l'inscription — renvoie l'URL d'une
+//     session Stripe sur le même revendeur (tout son espace est conservé).
 //
 // La base est mise à jour tout de suite (réponse immédiate dans l'interface),
 // puis confirmée par le webhook customer.subscription.updated.
 //
-// Secrets : STRIPE_SECRET_KEY, STRIPE_PRICE_REVENDEUR (id "price_..." du Pass Revendeur)
+// Secrets : STRIPE_SECRET_KEY, STRIPE_PRICE_DROPS, STRIPE_PRICE_REVENDEUR (ids "price_...")
 // Déploiement : `supabase functions deploy b2b-subscription`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
+import { createSubscriptionCheckout, isSubscriptionPlan, siteOrigin } from '../_shared/subscriptionCheckout.ts';
+
+/** Statuts Stripe d'un abonnement encore en cours (donc pas de réabonnement possible). */
+const ONGOING_STATUSES = new Set(['active', 'trialing', 'past_due']);
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -51,23 +58,62 @@ Deno.serve(async (req: Request) => {
     const { data: { user } } = await caller.auth.getUser();
     if (!user) return reply({ error: 'Non authentifié' }, 401);
 
-    const { action } = await req.json();
-    if (!['upgrade', 'cancel', 'resume'].includes(action)) return reply({ error: 'Action inconnue' }, 400);
+    const { action, plan } = await req.json();
+    if (!['upgrade', 'cancel', 'resume', 'checkout'].includes(action)) return reply({ error: 'Action inconnue' }, 400);
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: contact } = await admin
       .from('reseller_contacts')
-      .select('reseller_id, resellers!inner(id, account_type, status, subscription_plan, stripe_subscription_id)')
+      .select('reseller_id, resellers!inner(id, account_type, status, subscription_plan, subscription_status, stripe_subscription_id, stripe_customer_id)')
       .eq('profile_id', user.id)
       .maybeSingle();
     const reseller = contact && (Array.isArray(contact.resellers) ? contact.resellers[0] : contact.resellers);
 
-    if (!reseller || reseller.account_type !== 'subscriber' || !reseller.stripe_subscription_id) {
+    if (!reseller || reseller.account_type !== 'subscriber') {
       return reply({ error: 'Aucun abonnement associé à ce compte' }, 403);
     }
-    if (reseller.status !== 'active') return reply({ error: 'Votre abonnement n\'est plus actif' }, 403);
 
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
+
+    // Réabonnement (abonnement terminé) ou premier paiement jamais finalisé :
+    // nouvelle session Stripe sur le MÊME revendeur, activé par le webhook.
+    // Jamais pour une suspension décidée par l'admin (abonnement encore valide).
+    if (action === 'checkout') {
+      const subscriptionEnded = !reseller.subscription_status || !ONGOING_STATUSES.has(reseller.subscription_status);
+      const canCheckout =
+        reseller.status === 'pending' || (reseller.status === 'suspended' && subscriptionEnded);
+      if (!canCheckout) return reply({ error: 'Votre abonnement est déjà actif' }, 400);
+      if (!isSubscriptionPlan(plan)) return reply({ error: 'Pass inconnu' }, 400);
+
+      // Paiement déjà passé mais webhook pas encore traité (connexion juste
+      // après le paiement) : on n'ouvre surtout pas un second abonnement.
+      try {
+        const existing = await stripe.subscriptions.search({
+          query: `metadata['reseller_id']:'${reseller.id}' AND status:'active'`,
+          limit: 1,
+        });
+        if (existing.data.length > 0) {
+          return reply({ error: 'Votre paiement est en cours de validation : votre espace s\'ouvrira dans un instant, rechargez la page.' }, 409);
+        }
+      } catch (err) {
+        // Recherche Stripe indisponible : on n'empêche pas le réabonnement.
+        console.warn('[b2b-subscription] recherche d\'abonnement impossible :', err instanceof Error ? err.message : err);
+      }
+
+      const origin = siteOrigin(req);
+      const url = await createSubscriptionCheckout(stripe, {
+        plan,
+        resellerId: reseller.id,
+        email: user.email!,
+        customerId: reseller.stripe_customer_id,
+        successUrl: `${origin}/catalogue?abonnement=ok`,
+        cancelUrl: `${origin}/catalogue`,
+      });
+      return reply({ url });
+    }
+
+    if (!reseller.stripe_subscription_id) return reply({ error: 'Aucun abonnement associé à ce compte' }, 403);
+    if (reseller.status !== 'active') return reply({ error: 'Votre abonnement n\'est plus actif' }, 403);
     const current = await stripe.subscriptions.retrieve(reseller.stripe_subscription_id);
     let updated: Stripe.Subscription;
 

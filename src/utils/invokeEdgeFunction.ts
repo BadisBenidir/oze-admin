@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase';
 interface InvokeResult<T> {
   data: T | null;
   error: string | null;
+  /** Code machine optionnel renvoyé par l'Edge Function (`{ code, error }`). */
+  code?: string;
 }
 
 /**
@@ -23,18 +25,20 @@ export const invokeEdgeFunction = async <T = Record<string, unknown>>(
 
   if (error) {
     let message = error.message || 'Une erreur est survenue';
+    let code: string | undefined;
     const context = (error as unknown as { context?: Response }).context;
 
     if (context && typeof context.json === 'function') {
       try {
         const parsed = await context.json();
         message = parsed?.error || parsed?.message || message;
+        code = typeof parsed?.code === 'string' ? parsed.code : undefined;
       } catch {
         // corps non-JSON ou déjà consommé : on garde le message générique
       }
     }
 
-    return { data: null, error: message };
+    return { data: null, error: message, code };
   }
 
   if (data && typeof data === 'object' && 'error' in data && data.error) {

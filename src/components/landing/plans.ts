@@ -2,14 +2,11 @@
  * Offres du Club B2B et réglages Vercel associés, partagés entre la landing
  * (B2BLanding) et la page d'inscription (B2BSignup).
  *
- * Abonnement : aucun système d'abonnement n'existe encore dans l'app — chaque
- * pass passe par /inscription (infos du compte enregistrées dans
- * b2b_signup_requests) puis par un Stripe Payment Link configuré dans Vercel.
- * Sans lien configuré, la demande est quand même enregistrée et le visiteur
- * est recontacté, plutôt que de tomber sur un bouton mort.
- *   VITE_B2B_PASS_DROPS_CHECKOUT_URL      lien Stripe du Pass Drops
+ * Abonnement : chaque pass passe par /inscription, puis par une session
+ * Stripe Checkout ouverte côté serveur (Edge Function b2b-signup, prix Stripe
+ * STRIPE_PRICE_DROPS / STRIPE_PRICE_REVENDEUR côté Supabase) — voir 0167.
+ * Les prix affichés ici doivent correspondre à ceux configurés dans Stripe.
  *   VITE_B2B_PASS_DROPS_PRICE             remplace le prix par défaut (39,90 €)
- *   VITE_B2B_SUBSCRIPTION_CHECKOUT_URL    lien Stripe du Pass Revendeur
  *   VITE_B2B_SUBSCRIPTION_PRICE           remplace le prix par défaut (69,90 €)
  *   VITE_B2B_SUBSCRIPTION_PERIOD          remplace "/ mois" (commun aux deux pass)
  *   VITE_B2B_WHATSAPP_NUMBER              numéro international sans + ni espaces, ex. 33612345678
@@ -36,7 +33,6 @@ export type Plan = {
   name: string;
   pitch: string;
   price: string;
-  checkoutUrl: string;
   featured?: boolean;
   badge?: string;
   intro?: string;
@@ -50,7 +46,6 @@ export const PLANS: Plan[] = [
     name: 'Pass Drops',
     pitch: 'Pour acheter sur le catalogue et les drops, à l\'unité.',
     price: env('VITE_B2B_PASS_DROPS_PRICE') || '39,90 €',
-    checkoutUrl: env('VITE_B2B_PASS_DROPS_CHECKOUT_URL'),
     features: [
       { label: 'Drops & catalogue B2B, achat à l\'unité', included: true },
       { label: 'Certificats Entrupy disponibles', included: true },
@@ -64,7 +59,6 @@ export const PLANS: Plan[] = [
     name: 'Pass Revendeur',
     pitch: 'L\'accès complet à la plateforme pour les revendeurs.',
     price: env('VITE_B2B_SUBSCRIPTION_PRICE') || '69,90 €',
-    checkoutUrl: env('VITE_B2B_SUBSCRIPTION_CHECKOUT_URL'),
     featured: true,
     badge: 'Accès complet',
     features: [
@@ -80,7 +74,6 @@ export const PLANS: Plan[] = [
     name: 'Pass Boutiques',
     pitch: 'Pour les boutiques et gros volumes, avec une équipe à vos côtés.',
     price: '',
-    checkoutUrl: '',
     agent: true,
     intro: 'Tout le Pass Revendeur, plus :',
     features: [

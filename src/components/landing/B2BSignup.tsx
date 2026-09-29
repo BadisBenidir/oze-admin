@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft, Check, CreditCard, KeyRound, Mail, MailCheck, MapPin, Phone, Shield, User, UserPlus, X,
+  AlertCircle, ArrowLeft, Check, CreditCard, KeyRound, Lock, Mail, MapPin, Phone, Shield, User, UserPlus, X,
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 import { useGooglePlacesAutocomplete } from '../../hooks/useGooglePlacesAutocomplete';
 import logo from './assets/logo_oze_paris_b2b.png';
 import { PERIOD, PLANS, SUPPORT_EMAIL, type Plan, type SignupPlanId } from './plans';
@@ -12,18 +12,18 @@ import { PERIOD, PLANS, SUPPORT_EMAIL, type Plan, type SignupPlanId } from './pl
  * landing et le paiement Stripe. Même mise en page que la page de commande
  * du site principal (étapes, formulaire à gauche, récapitulatif collant à droite).
  *
- * Seulement l'identité et l'adresse de FACTURATION : le statut juridique et
+ * Seulement l'identité, le mot de passe (choisi ici : aucun email
+ * d'invitation) et l'adresse de FACTURATION : le statut juridique et
  * les infos d'entreprise se déclarent ensuite dans « Mon profil » (requis
  * pour acheter ou enchérir), l'adresse de livraison à chaque demande
  * d'expédition.
  *
- * À l'envoi : la demande est insérée dans b2b_signup_requests (id généré ici,
- * l'anonyme n'a pas le droit de relire la table), puis redirection vers le
- * Stripe Payment Link du pass avec client_reference_id = id de la demande et
- * l'email prérempli. Le compte est créé par le webhook après paiement (0167).
+ * À l'envoi : l'Edge Function b2b-signup refuse un email déjà utilisé, crée le
+ * compte (en attente) puis renvoie l'URL de la session Stripe ; le webhook
+ * active le compte une fois le paiement confirmé (0167).
  *
- * /inscription/merci : page de retour après paiement (à régler comme page de
- * confirmation de chaque Payment Link dans Stripe).
+ * /inscription/merci : retour après paiement ; ?paiement=annule : retour
+ * après abandon du paiement (le compte existe déjà, à finaliser en se connectant).
  */
 
 type FormData = {
@@ -35,11 +35,14 @@ type FormData = {
   billing_postal_code: string;
   billing_city: string;
   billing_country: string;
+  password: string;
+  password_confirm: string;
 };
 
 const EMPTY: FormData = {
   first_name: '', last_name: '', email: '', phone: '',
   billing_address: '', billing_postal_code: '', billing_city: '', billing_country: 'France',
+  password: '', password_confirm: '',
 };
 
 const COUNTRIES = ['France', 'Belgique', 'Suisse', 'Luxembourg', 'Monaco', 'Allemagne', 'Italie', 'Espagne', 'Royaume-Uni', 'Autre'];
@@ -64,6 +67,8 @@ const validate = (f: FormData, termsAccepted: boolean) => {
   if (!f.billing_address.trim()) e.billing_address = 'Adresse requise';
   if (!f.billing_postal_code.trim()) e.billing_postal_code = 'Code postal requis';
   if (!f.billing_city.trim()) e.billing_city = 'Ville requise';
+  if (f.password.length < 8) e.password = '8 caractères minimum';
+  if (f.password_confirm !== f.password) e.password_confirm = 'Les mots de passe ne correspondent pas';
   if (!termsAccepted) e.terms = 'Veuillez accepter les conditions générales de vente';
   return e;
 };
@@ -199,14 +204,9 @@ const SignupThanks: React.FC = () => {
           </div>
           <h1 className="mt-4 text-xl font-bold text-gray-900">Paiement confirmé, bienvenue !</h1>
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
-            Votre compte est en cours de création. Vous allez recevoir dans quelques minutes un email pour choisir
-            votre mot de passe et accéder à votre espace.
+            Votre compte est activé : connectez-vous avec l'email et le mot de passe choisis à l'inscription.
           </p>
           <div className="mx-auto mt-6 max-w-md space-y-3 text-left text-sm text-gray-700">
-            <p className="flex items-start gap-3">
-              <MailCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-900" />
-              Pensez à vérifier vos spams si l'email n'arrive pas.
-            </p>
             <p className="flex items-start gap-3">
               <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-900" />
               Une fois connecté, complétez votre statut juridique dans « Mon profil » : il est requis pour acheter.
@@ -236,7 +236,7 @@ const SignupForm: React.FC = () => {
   const [form, setForm] = useState<FormData>(() => {
     try {
       const raw = sessionStorage.getItem(DRAFT_KEY);
-      return raw ? { ...EMPTY, ...JSON.parse(raw) } : EMPTY;
+      return raw ? { ...EMPTY, ...JSON.parse(raw), password: '', password_confirm: '' } : EMPTY;
     } catch {
       return EMPTY;
     }
@@ -245,18 +245,21 @@ const SignupForm: React.FC = () => {
   const [errors, setErrors] = useState<ReturnType<typeof validate>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  // Compte d'abonné déjà existant pour cet email (non payé ou résilié) : on renvoie vers la connexion.
+  const [existingAccount, setExistingAccount] = useState(false);
+  const paymentCancelled = new URLSearchParams(window.location.search).get('paiement') === 'annule';
 
   const plan = SIGNUP_PLANS.find((p) => p.id === planId)!;
 
   useEffect(() => {
     document.title = `Inscription — ${plan.name} | OZË Paris B2B`;
-    window.history.replaceState({}, '', `/inscription?pass=${planId}`);
-  }, [planId, plan.name]);
+    window.history.replaceState({}, '', `/inscription?pass=${planId}${paymentCancelled ? '&paiement=annule' : ''}`);
+  }, [planId, plan.name, paymentCancelled]);
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+      // Jamais le mot de passe dans le brouillon.
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ ...form, password: '', password_confirm: '' }));
     } catch {
       // stockage indisponible (navigation privée) : pas de brouillon, sans gravité
     }
@@ -289,42 +292,38 @@ const SignupForm: React.FC = () => {
     }
 
     setSubmitting(true);
-    const id = crypto.randomUUID();
-    const trimmed = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v.trim()])) as FormData;
-    const email = trimmed.email.toLowerCase();
-    const { error } = await supabase.from('b2b_signup_requests').insert({
-      id,
+    setExistingAccount(false);
+    const trimmed = Object.fromEntries(
+      Object.entries(form).map(([k, v]) => [k, k.startsWith('password') ? v : v.trim()])
+    ) as FormData;
+    const { data, error, code } = await invokeEdgeFunction<{ url: string }>('b2b-signup', {
       plan: planId,
-      ...trimmed,
-      email,
-      terms_accepted_at: new Date().toISOString(),
+      first_name: trimmed.first_name,
+      last_name: trimmed.last_name,
+      email: trimmed.email.toLowerCase(),
+      phone: trimmed.phone,
+      billing_address: trimmed.billing_address,
+      billing_postal_code: trimmed.billing_postal_code,
+      billing_city: trimmed.billing_city,
+      billing_country: trimmed.billing_country,
+      password: trimmed.password,
+      terms_accepted: true,
     });
 
-    // Échec d'enregistrement avec un lien Stripe configuré : on laisse quand
-    // même payer (Stripe recueille l'email) plutôt que de bloquer la vente ;
-    // le compte sera alors à créer à la main. Sans lien, rien n'aurait été transmis.
-    if (error && !plan.checkoutUrl) {
-      setSubmitting(false);
-      setSubmitError(`L'enregistrement de vos informations a échoué. Réessayez ou écrivez-nous à ${SUPPORT_EMAIL}.`);
+    if (data?.url) {
+      window.location.href = data.url;
       return;
     }
 
-    if (plan.checkoutUrl) {
-      const url = new URL(plan.checkoutUrl);
-      if (!error) url.searchParams.set('client_reference_id', id);
-      url.searchParams.set('prefilled_email', email);
-      window.location.href = url.toString();
-      return;
-    }
-
-    // Pas encore de lien Stripe pour ce pass : demande enregistrée, on recontacte.
-    try {
-      sessionStorage.removeItem(DRAFT_KEY);
-    } catch {
-      // ignoré
-    }
     setSubmitting(false);
-    setDone(true);
+    if (code === 'existing_subscriber') {
+      setExistingAccount(true);
+    } else if (code === 'email_taken') {
+      setErrors((prev) => ({ ...prev, email: error || 'Cet email est déjà utilisé' }));
+      document.querySelector('[data-signup-form]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      setSubmitError(error || `L'inscription a échoué. Réessayez ou écrivez-nous à ${SUPPORT_EMAIL}.`);
+    }
   };
 
   return (
@@ -352,26 +351,25 @@ const SignupForm: React.FC = () => {
       </div>
 
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <Steps current={done ? 3 : 1} />
+        <Steps current={1} />
+
+        {paymentCancelled && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+            <div>
+              <p className="font-semibold">Paiement non finalisé</p>
+              <p className="mt-0.5 text-xs sm:text-sm">
+                Votre compte a bien été créé. Connectez-vous avec votre email et votre mot de passe pour finaliser votre
+                abonnement quand vous le souhaitez.
+              </p>
+              <a href="/connexion" className="mt-2 inline-block text-xs font-semibold underline sm:text-sm">Se connecter pour finaliser</a>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           {/* Formulaire */}
           <div className="lg:col-span-7" data-signup-form>
-            {done ? (
-              <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm sm:p-8">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-500 text-white">
-                  <Check className="h-6 w-6" />
-                </div>
-                <h2 className="mt-4 text-lg font-semibold text-gray-900">Demande bien reçue</h2>
-                <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
-                  Merci {form.first_name} ! Nous revenons vers vous sous 48h à <strong>{form.email}</strong> pour finaliser
-                  votre {plan.name} et activer votre accès.
-                </p>
-                <a href="/" className="mt-6 inline-flex items-center justify-center bg-black px-6 py-2.5 font-medium text-white hover:bg-gray-800">
-                  Retour à l'accueil
-                </a>
-              </div>
-            ) : (
               <form onSubmit={handleSubmit} noValidate className="space-y-5">
                 {/* 1. Vous */}
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -390,12 +388,35 @@ const SignupForm: React.FC = () => {
                       {(cls) => <input type="tel" className={cls} value={form.phone} onChange={set('phone')} placeholder="06 12 34 56 78" autoComplete="tel" />}
                     </Field>
                   </div>
+                  {existingAccount && (
+                    <div className="mx-4 mb-4 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-blue-900 sm:mx-5 sm:mb-5">
+                      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                      <p className="text-xs sm:text-sm">
+                        Vous avez déjà un compte avec cet email.{' '}
+                        <a href="/connexion" className="font-semibold underline">Connectez-vous</a> pour finaliser ou reprendre
+                        votre abonnement : vous retrouverez votre espace tel que vous l'avez laissé.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                {/* 2. Facturation */}
+                {/* 2. Mot de passe */}
+                <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <SectionHeader n={2} title="Votre mot de passe" subtitle="Pour vous connecter à votre espace dès le paiement validé." />
+                  <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:p-5">
+                    <Field label="Mot de passe" icon={Lock} error={errors.password}>
+                      {(cls) => <input type="password" className={cls} value={form.password} onChange={set('password')} placeholder="8 caractères minimum" autoComplete="new-password" />}
+                    </Field>
+                    <Field label="Confirmation" icon={Lock} error={errors.password_confirm}>
+                      {(cls) => <input type="password" className={cls} value={form.password_confirm} onChange={set('password_confirm')} placeholder="Retapez le mot de passe" autoComplete="new-password" />}
+                    </Field>
+                  </div>
+                </div>
+
+                {/* 3. Facturation */}
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                   <SectionHeader
-                    n={2}
+                    n={3}
                     title="Adresse de facturation"
                     subtitle="L'adresse de livraison se choisit ensuite, à chaque demande d'expédition."
                   />
@@ -459,22 +480,17 @@ const SignupForm: React.FC = () => {
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                         Enregistrement…
                       </>
-                    ) : plan.checkoutUrl ? (
+                    ) : (
                       <>
                         <CreditCard className="h-4 w-4" /> Continuer vers le paiement
                       </>
-                    ) : (
-                      'Envoyer ma demande'
                     )}
                   </button>
                   <p className="mt-2.5 text-center text-xs text-gray-500">
-                    {plan.checkoutUrl
-                      ? 'Vous allez être redirigé vers Stripe pour régler votre abonnement.'
-                      : `Nous revenons vers vous sous 48h — ${SUPPORT_EMAIL}`}
+                    Vous allez être redirigé vers Stripe pour régler votre abonnement.
                   </p>
                 </div>
               </form>
-            )}
           </div>
 
           {/* Récapitulatif */}
@@ -485,7 +501,7 @@ const SignupForm: React.FC = () => {
                   <h3 className="text-base font-semibold text-gray-900">Récapitulatif</h3>
                 </div>
                 <div className="p-4 sm:p-5">
-                  {!done && (
+                  {(
                     <div className="mb-4 grid grid-cols-2 gap-1.5 rounded-lg bg-gray-100 p-1">
                       {SIGNUP_PLANS.map((p) => (
                         <button

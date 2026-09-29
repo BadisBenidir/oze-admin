@@ -1,9 +1,10 @@
 // Abonnements Club B2B (Pass Drops / Pass Revendeur), voir 0167.
 //
 // Appelé par index.ts pour :
-//   - checkout.session.completed en mode "subscription" (Stripe Payment Link
-//     de la landing, client_reference_id = b2b_signup_requests.id) : crée le
-//     revendeur abonné, son compte de connexion et envoie l'invitation ;
+//   - checkout.session.completed en mode "subscription" avec
+//     metadata.type = 'b2b_subscription' (session ouverte par b2b-signup ou
+//     par b2b-subscription pour un réabonnement) : active le revendeur
+//     abonné déjà créé (metadata.reseller_id) et enregistre l'abonnement ;
 //   - customer.subscription.updated / customer.subscription.deleted : tient à
 //     jour pass, échéance et résiliation, et coupe l'accès à la fin.
 //
@@ -14,18 +15,17 @@
 // Secrets Supabase utilisés pour reconnaître le pass d'un abonnement :
 //   STRIPE_PRICE_DROPS, STRIPE_PRICE_REVENDEUR (ids de prix Stripe "price_...")
 
-import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 
 const LOG_PREFIX = '[b2b-stripe-webhook:subscription]';
-const INVITE_REDIRECT_TO = 'https://pro.ozeparis.com/accept-invite';
 
 type Plan = 'drops' | 'revendeur';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 /** Pass correspondant au prix de l'abonnement, ou null si prix inconnu. */
-export const planFromSubscription = (subscription: Stripe.Subscription): Plan | null => {
+const planFromSubscription = (subscription: Stripe.Subscription): Plan | null => {
   const priceId = subscription.items.data[0]?.price?.id;
   if (!priceId) return null;
   if (priceId === Deno.env.get('STRIPE_PRICE_REVENDEUR')) return 'revendeur';
@@ -42,24 +42,18 @@ const periodEnd = (subscription: Stripe.Subscription): string | null => {
 };
 
 /** Abonnement Stripe qui donne encore accès (past_due : Stripe retente le prélèvement). */
-const grantsAccess = (status: Stripe.Subscription.Status) =>
-  status === 'active' || status === 'trialing' || status === 'past_due';
+const grantsAccess = (status: string) => status === 'active' || status === 'trialing' || status === 'past_due';
 
-export const subscriptionColumns = (subscription: Stripe.Subscription, fallbackPlan: Plan | null) => ({
+const subscriptionColumns = (subscription: Stripe.Subscription, fallbackPlan: Plan | null) => ({
   subscription_plan: planFromSubscription(subscription) ?? fallbackPlan,
   subscription_status: subscription.status,
   subscription_current_period_end: periodEnd(subscription),
   subscription_cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
 });
 
-const markNeedsReview = async (admin: SupabaseClient, requestId: string, note: string, extra: Record<string, unknown> = {}) => {
-  console.error(`${LOG_PREFIX} Demande ${requestId} à traiter manuellement : ${note}`);
-  await admin.from('b2b_signup_requests').update({ status: 'needs_review', admin_notes: note, ...extra }).eq('id', requestId);
-};
-
 /**
- * Paiement d'un pass réussi : crée le revendeur abonné et son accès.
- * Idempotent : un nouvel envoi du même événement ne recrée rien.
+ * Paiement d'un pass réussi (inscription ou réabonnement) : active le
+ * revendeur abonné. Idempotent : un nouvel envoi du même événement ne change rien.
  */
 export async function handleSubscriptionCheckout(
   session: Stripe.Checkout.Session,
@@ -67,146 +61,55 @@ export async function handleSubscriptionCheckout(
   supabaseUrl: string,
   serviceRoleKey: string,
 ): Promise<Response> {
-  const admin = createClient(supabaseUrl, serviceRoleKey);
-  const requestId = session.client_reference_id;
+  const metadata = session.metadata || {};
+  const resellerId = metadata.reseller_id;
   const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
   const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
 
-  if (!requestId || !subscriptionId) {
-    // Abonnement souscrit sans passer par /inscription (lien Stripe partagé
-    // directement) : rien à rattacher automatiquement, visible dans Stripe.
-    console.error(`${LOG_PREFIX} Session ${session.id} sans client_reference_id ou abonnement — aucun compte créé`);
-    return json({ received: true, skipped: 'no_signup_request' });
+  if (metadata.type !== 'b2b_subscription' || !resellerId || !subscriptionId) {
+    // Abonnement Stripe sans rapport avec le Club B2B (ou créé à la main) : ignoré.
+    console.log(`${LOG_PREFIX} Session ${session.id} en mode abonnement hors Club B2B — ignorée`);
+    return json({ received: true, skipped: 'not_b2b_subscription' });
   }
 
-  const { data: request, error: requestError } = await admin
-    .from('b2b_signup_requests')
-    .select('*')
-    .eq('id', requestId)
+  const admin = createClient(supabaseUrl, serviceRoleKey);
+  const { data: reseller, error } = await admin
+    .from('resellers')
+    .select('id, account_type, stripe_subscription_id')
+    .eq('id', resellerId)
     .maybeSingle();
 
-  if (requestError) {
-    console.error(`${LOG_PREFIX} Lecture de la demande ${requestId} impossible: ${requestError.message}`);
-    return json({ error: requestError.message }, 500);
+  if (error) return json({ error: error.message }, 500);
+  if (!reseller || reseller.account_type !== 'subscriber') {
+    console.error(`${LOG_PREFIX} Revendeur abonné ${resellerId} introuvable (session ${session.id}) — paiement à rattacher à la main`);
+    return json({ received: true, skipped: 'unknown_reseller' });
   }
-  if (!request) {
-    console.error(`${LOG_PREFIX} Demande ${requestId} introuvable (session ${session.id})`);
-    return json({ received: true, skipped: 'unknown_signup_request' });
-  }
-  if (request.status === 'account_created') {
+  if (reseller.stripe_subscription_id === subscriptionId) {
     return json({ received: true, already_processed: true });
   }
 
-  const stripeRefs = { stripe_session_id: session.id, stripe_customer_id: customerId ?? null, stripe_subscription_id: subscriptionId };
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  const email = String(request.email).toLowerCase();
-  const fullName = `${request.first_name} ${request.last_name}`.trim();
+  const plan = metadata.plan === 'drops' || metadata.plan === 'revendeur' ? metadata.plan : null;
 
-  // Compte existant pour cet email ?
-  const { data: users, error: listError } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  if (listError) {
-    console.error(`${LOG_PREFIX} listUsers: ${listError.message}`);
-    return json({ error: listError.message }, 500);
-  }
-  const existingUser = users?.users.find((u) => u.email?.toLowerCase() === email);
-
-  if (existingUser) {
-    const { data: existingProfile } = await admin.from('profiles').select('role').eq('id', existingUser.id).maybeSingle();
-    const { data: existingContact } = await admin
-      .from('reseller_contacts').select('reseller_id').eq('profile_id', existingUser.id).maybeSingle();
-    if (existingProfile?.role === 'admin' || existingContact) {
-      await markNeedsReview(
-        admin,
-        requestId,
-        existingProfile?.role === 'admin'
-          ? 'Email déjà utilisé par un compte administrateur.'
-          : 'Email déjà rattaché à un compte revendeur existant : abonnement payé, à rattacher manuellement.',
-        stripeRefs,
-      );
-      return json({ received: true, needs_review: true });
-    }
-  }
-
-  // 1. Revendeur abonné, actif immédiatement.
-  const { data: reseller, error: resellerError } = await admin
+  // Réabonnement : même revendeur, donc statut juridique, préférences,
+  // commandes et solde sont conservés — seul l'abonnement est remplacé.
+  const { error: updateError } = await admin
     .from('resellers')
-    .insert({
-      company_name: fullName,
+    .update({
       status: 'active',
-      account_type: 'subscriber',
-      contact_email: email,
-      contact_phone: request.phone,
-      address: request.billing_address,
-      postal_code: request.billing_postal_code,
-      city: request.billing_city,
-      country: request.billing_country,
       stripe_customer_id: customerId ?? null,
       stripe_subscription_id: subscriptionId,
-      ...subscriptionColumns(subscription, request.plan as Plan),
+      ...subscriptionColumns(subscription, plan),
     })
-    .select('id')
-    .single();
+    .eq('id', resellerId);
 
-  if (resellerError || !reseller) {
-    // Doublon d'événement arrivé en parallèle : l'abonnement est déjà rattaché.
-    if (resellerError?.code === '23505') return json({ received: true, already_processed: true });
-    console.error(`${LOG_PREFIX} Création du revendeur (demande ${requestId}): ${resellerError?.message}`);
-    return json({ error: resellerError?.message }, 500);
+  if (updateError) {
+    console.error(`${LOG_PREFIX} Activation du revendeur ${resellerId}: ${updateError.message}`);
+    return json({ error: updateError.message }, 500);
   }
 
-  // 2. Compte de connexion : compte client existant du site public converti
-  //    (il garde son mot de passe), sinon invitation par email.
-  let userId: string;
-  let activatedAt: string | null = null;
-  let lastInvitedAt: string | null = null;
-  if (existingUser) {
-    userId = existingUser.id;
-    activatedAt = new Date().toISOString();
-  } else {
-    const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-      data: { first_name: request.first_name, last_name: request.last_name },
-      redirectTo: INVITE_REDIRECT_TO,
-    });
-    if (inviteError || !invited?.user) {
-      await admin.from('resellers').delete().eq('id', reseller.id);
-      console.error(`${LOG_PREFIX} Invitation ${email}: ${inviteError?.message}`);
-      return json({ error: inviteError?.message ?? 'invitation impossible' }, 500);
-    }
-    userId = invited.user.id;
-    lastInvitedAt = new Date().toISOString();
-  }
-
-  const { error: profileError } = await admin.from('profiles').upsert({
-    id: userId,
-    email,
-    first_name: request.first_name,
-    last_name: request.last_name,
-    phone: request.phone,
-    role: 'reseller',
-    activated_at: activatedAt,
-    last_invited_at: lastInvitedAt,
-  });
-  if (profileError) {
-    console.error(`${LOG_PREFIX} Profil ${email}: ${profileError.message}`);
-    return json({ error: profileError.message }, 500);
-  }
-
-  // Unique compte de l'abonné, jamais "principal" : pas de gestion d'équipe.
-  const { error: contactError } = await admin
-    .from('reseller_contacts')
-    .insert({ reseller_id: reseller.id, profile_id: userId, is_primary: false });
-  if (contactError) {
-    console.error(`${LOG_PREFIX} Contact ${email}: ${contactError.message}`);
-    return json({ error: contactError.message }, 500);
-  }
-
-  await admin
-    .from('b2b_signup_requests')
-    .update({ status: 'account_created', reseller_id: reseller.id, ...stripeRefs })
-    .eq('id', requestId);
-
-  console.log(`${LOG_PREFIX} Abonné créé : ${email} (${request.plan}), revendeur ${reseller.id}`);
-  return json({ received: true, reseller_id: reseller.id });
+  console.log(`${LOG_PREFIX} Abonné ${resellerId} activé (${plan}, abonnement ${subscriptionId})`);
+  return json({ received: true, reseller_id: resellerId });
 }
 
 /** Mise à jour / fin d'abonnement : synchronise le revendeur abonné. */
@@ -224,7 +127,8 @@ export async function handleSubscriptionChange(
     .maybeSingle();
 
   if (error) return json({ error: error.message }, 500);
-  // Abonnement pas (encore) rattaché : checkout.session.completed s'en charge.
+  // Abonnement pas (ou plus) rattaché — ex. ancien abonnement remplacé par un
+  // réabonnement : checkout.session.completed fait foi.
   if (!reseller) return json({ received: true, skipped: 'unknown_subscription' });
 
   const update: Record<string, unknown> = subscriptionColumns(subscription, reseller.subscription_plan as Plan | null);

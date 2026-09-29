@@ -1,5 +1,6 @@
 import React from 'react'
 import { useResellerAuth } from '../../hooks/useResellerAuth'
+import { SubscriptionGate } from './SubscriptionGate'
 
 interface ResellerProtectedRouteProps {
   children: React.ReactNode
@@ -20,7 +21,9 @@ export const ResellerProtectedRoute: React.FC<ResellerProtectedRouteProps> = ({ 
   }
 
   if (!isReseller) {
-    return (
+    // Abonné résilié ou inscrit sans paiement (0167) : page de réabonnement ;
+    // sinon l'écran habituel ci-dessous.
+    return <SubscriptionGate onSignOut={signOut} fallback={(
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-lg border border-gray-100 shadow-sm p-8 text-center">
           <h2 className="text-lg font-semibold text-gray-900 mb-2">
@@ -43,7 +46,7 @@ export const ResellerProtectedRoute: React.FC<ResellerProtectedRouteProps> = ({ 
           </button>
         </div>
       </div>
-    )
+    )} />
   }
 
   return <>{children}</>

@@ -3,93 +3,32 @@
 --
 -- Parcours :
 --   landing → /inscription?pass=drops|revendeur (visiteur non connecté :
---   identité + adresse de FACTURATION, jamais d'infos entreprise — le statut
---   juridique se déclare ensuite dans "Mon profil", comme tout sous-compte)
---   → insertion dans b2b_signup_requests
---   → Stripe Payment Link (client_reference_id = id de la demande)
+--   identité, mot de passe et adresse de FACTURATION, jamais d'infos
+--   entreprise — le statut juridique se déclare ensuite dans « Mon profil »,
+--   comme tout sous-compte)
+--   → Edge Function b2b-signup : refuse tout email déjà utilisé (revendeur,
+--     admin ou client du site principal : même base de comptes), crée le
+--     compte de connexion (mot de passe choisi, aucun email d'invitation) et
+--     un revendeur « abonné » (account_type = 'subscriber', status =
+--     'pending', unique contact is_primary = false : tableau de bord de
+--     sous-compte, sans équipe), puis ouvre une session Stripe Checkout.
 --   → webhook b2b-stripe-webhook (checkout.session.completed, mode
---     subscription) : crée automatiquement un revendeur "abonné"
---     (account_type = 'subscriber', status = 'active'), son unique compte
---     de connexion (is_primary = false : même tableau de bord qu'un
---     sous-compte, sans gestion d'équipe) et envoie l'invitation par email.
---   Les événements customer.subscription.updated/deleted tiennent ensuite
---   à jour le pass, l'échéance, la résiliation programmée — et coupent
---   l'accès (status = 'suspended') quand l'abonnement se termine.
+--     subscription, metadata.type = 'b2b_subscription') : passe le revendeur
+--     en 'active' et enregistre l'abonnement.
+--   Les événements customer.subscription.updated/deleted tiennent ensuite à
+--   jour le pass, l'échéance, la résiliation programmée — et coupent l'accès
+--   (status = 'suspended') quand l'abonnement se termine.
+--
+-- Réabonnement : un abonné résilié (ou inscrit sans avoir payé) qui se
+-- connecte voit une page dédiée (get_my_subscription_state ci-dessous, lisible
+-- même compte suspendu) et relance une session Stripe sur le MÊME revendeur :
+-- statut juridique, préférences, commandes et solde sont conservés.
 --
 -- Pass Drops : enchères et sourcing sur mesure non inclus. L'interface les
 -- affiche verrouillés (avec passage au Pass Revendeur), et la base refuse
 -- de toute façon une enchère ou la validation d'une mission (triggers
 -- ci-dessous), même appelées directement.
 -- ============================================================================
-
--- ----------------------------------------------------------------------------
--- Demandes d'inscription
--- ----------------------------------------------------------------------------
-create table if not exists public.b2b_signup_requests (
-  id uuid primary key default gen_random_uuid(),
-  created_at timestamptz not null default now(),
-  plan text not null check (plan in ('drops', 'revendeur')),
-  first_name text not null check (length(trim(first_name)) between 1 and 100),
-  last_name text not null check (length(trim(last_name)) between 1 and 100),
-  email text not null check (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' and length(email) <= 254),
-  phone text not null check (length(trim(phone)) between 6 and 30),
-  -- Adresse de FACTURATION (l'adresse de livraison se choisit à chaque demande d'expédition)
-  billing_address text not null check (length(trim(billing_address)) between 1 and 300),
-  billing_postal_code text not null check (length(trim(billing_postal_code)) between 1 and 20),
-  billing_city text not null check (length(trim(billing_city)) between 1 and 100),
-  billing_country text not null check (length(trim(billing_country)) between 1 and 60),
-  terms_accepted_at timestamptz not null,
-  status text not null default 'pending'
-    check (status in ('pending', 'account_created', 'needs_review', 'cancelled')),
-  stripe_session_id text,
-  stripe_customer_id text,
-  stripe_subscription_id text,
-  reseller_id uuid references public.resellers(id) on delete set null,
-  admin_notes text
-);
-
-create index if not exists b2b_signup_requests_created_at_idx
-  on public.b2b_signup_requests (created_at desc);
-create index if not exists b2b_signup_requests_status_idx
-  on public.b2b_signup_requests (status);
-
-alter table public.b2b_signup_requests enable row level security;
-
--- Visiteur (anon) ou connecté : insertion d'une nouvelle demande uniquement,
--- sans pouvoir forcer un statut, un rattachement ou des identifiants Stripe.
--- L'id est généré côté client : pas besoin de relire la ligne (aucun SELECT).
-drop policy if exists "b2b_signup_requests_public_insert" on public.b2b_signup_requests;
-create policy "b2b_signup_requests_public_insert"
-  on public.b2b_signup_requests
-  for insert
-  to anon, authenticated
-  with check (
-    status = 'pending'
-    and reseller_id is null
-    and admin_notes is null
-    and stripe_session_id is null
-    and stripe_customer_id is null
-    and stripe_subscription_id is null
-    and terms_accepted_at <= now() + interval '5 minutes'
-  );
-
-drop policy if exists "b2b_signup_requests_admin_select" on public.b2b_signup_requests;
-create policy "b2b_signup_requests_admin_select"
-  on public.b2b_signup_requests
-  for select
-  to authenticated
-  using (public.is_admin());
-
-drop policy if exists "b2b_signup_requests_admin_update" on public.b2b_signup_requests;
-create policy "b2b_signup_requests_admin_update"
-  on public.b2b_signup_requests
-  for update
-  to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
-
-grant insert on public.b2b_signup_requests to anon, authenticated;
-grant select, update on public.b2b_signup_requests to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- Revendeurs : entreprise (création par l'admin, inchangée) ou abonné
@@ -185,5 +124,49 @@ drop trigger if exists sourcing_missions_require_plan on public.b2b_sourcing_mis
 create trigger sourcing_missions_require_plan
   before update on public.b2b_sourcing_missions
   for each row execute function public.sourcing_missions_require_plan();
+
+notify pgrst, 'reload schema';
+
+-- ----------------------------------------------------------------------------
+-- État d'abonnement de l'utilisateur connecté, lisible même quand son
+-- revendeur n'est pas actif (la RLS de resellers passe par
+-- current_reseller_id(), qui ignore les comptes en attente ou suspendus) :
+-- sert à la page « abonnement résilié / à finaliser » et à ses infos grisées.
+-- ----------------------------------------------------------------------------
+create or replace function public.get_my_subscription_state()
+returns table (
+  reseller_id uuid,
+  account_type text,
+  status text,
+  subscription_plan text,
+  subscription_status text,
+  subscription_current_period_end timestamptz,
+  first_name text,
+  last_name text,
+  email text,
+  phone text,
+  billing_address text,
+  billing_postal_code text,
+  billing_city text,
+  billing_country text
+)
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select rs.id, rs.account_type, rs.status, rs.subscription_plan, rs.subscription_status,
+         rs.subscription_current_period_end,
+         p.first_name, p.last_name, p.email, coalesce(p.phone, rs.contact_phone),
+         rs.address, rs.postal_code, rs.city, rs.country
+  from public.reseller_contacts rc
+  join public.resellers rs on rs.id = rc.reseller_id
+  join public.profiles p on p.id = rc.profile_id
+  where rc.profile_id = auth.uid()
+  limit 1;
+$$;
+
+revoke all on function public.get_my_subscription_state() from public, anon;
+grant execute on function public.get_my_subscription_state() to authenticated;
 
 notify pgrst, 'reload schema';
