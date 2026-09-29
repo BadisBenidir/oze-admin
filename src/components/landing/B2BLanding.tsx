@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Globe, Euro,
+  ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Globe, Euro, UserRound,
 } from 'lucide-react';
 import {
   COMPANY_LEGAL_NAME, COMPANY_SIRET, COMPANY_RCS, COMPANY_VAT_NUMBER, COMPANY_ADDRESS,
@@ -247,8 +247,20 @@ export const B2BLanding: React.FC = () => {
           transparent ? 'border-b border-transparent bg-transparent' : 'border-b border-gray-100 bg-white'
         }`}
       >
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:h-20">
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Haut de page">
+        {/* Mobile : menu à gauche, logo centré, connexion à droite. Desktop : logo, nav, actions. */}
+        <div className="relative mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:h-20">
+          <button
+            className={`-ml-1 p-1 lg:hidden ${transparent ? 'text-white' : 'text-black'}`}
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label="Menu"
+          >
+            {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
+          <button
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            aria-label="Haut de page"
+            className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0"
+          >
             <img
               src={transparent ? logoWhite : logo}
               alt="OZË Paris — B2B Solutions"
@@ -283,11 +295,11 @@ export const B2BLanding: React.FC = () => {
             </button>
           </div>
           <button
-            className={`p-1 lg:hidden ${transparent ? 'text-white' : 'text-black'}`}
-            onClick={() => setMenuOpen((o) => !o)}
-            aria-label="Menu"
+            className={`-mr-1 p-1 lg:hidden ${transparent ? 'text-white' : 'text-black'}`}
+            onClick={goToLogin}
+            aria-label="Se connecter"
           >
-            {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            <UserRound className="h-6 w-6" />
           </button>
         </div>
         {menuOpen && (
