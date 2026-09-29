@@ -370,7 +370,7 @@ const SignupForm: React.FC = () => {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           {/* Formulaire */}
           <div className="lg:col-span-7" data-signup-form>
-              <form onSubmit={handleSubmit} noValidate className="space-y-5">
+              <form id="signup-form" onSubmit={handleSubmit} noValidate className="space-y-5">
                 {/* 1. Vous */}
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                   <SectionHeader n={1} title="Vos coordonnées" subtitle="Votre email sera votre identifiant de connexion." />
@@ -443,53 +443,6 @@ const SignupForm: React.FC = () => {
                     </Field>
                   </div>
                 </div>
-
-                {/* CGV + envoi */}
-                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-                  <label className="flex cursor-pointer items-start gap-3 text-xs text-gray-700 sm:text-sm">
-                    <input
-                      type="checkbox"
-                      checked={termsAccepted}
-                      onChange={(e) => {
-                        setTermsAccepted(e.target.checked);
-                        if (errors.terms) setErrors((prev) => ({ ...prev, terms: undefined }));
-                      }}
-                      className="mt-0.5 h-4 w-4 flex-shrink-0 accent-black"
-                    />
-                    <span>
-                      J'accepte les{' '}
-                      <a href="/cgv" target="_blank" rel="noopener noreferrer" className="font-medium underline hover:text-black">
-                        conditions générales de vente B2B
-                      </a>{' '}
-                      et l'abonnement mensuel sans engagement, résiliable à tout moment depuis mon profil.
-                    </span>
-                  </label>
-                  {errors.terms && <p className="mt-2 text-xs text-red-500">{errors.terms}</p>}
-
-                  {submitError && (
-                    <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{submitError}</div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="mt-5 flex w-full items-center justify-center gap-2 bg-black py-3 font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-60"
-                  >
-                    {submitting ? (
-                      <>
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                        Enregistrement…
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="h-4 w-4" /> S'abonner et payer — {plan.price} {PERIOD}
-                      </>
-                    )}
-                  </button>
-                  <p className="mt-2.5 text-center text-xs text-gray-500">
-                    Vous allez être redirigé vers Stripe pour régler votre abonnement.
-                  </p>
-                </div>
               </form>
           </div>
 
@@ -552,6 +505,54 @@ const SignupForm: React.FC = () => {
                       <span>{plan.price}</span>
                     </div>
                     <p className="text-xs text-gray-500">Puis {plan.price} {PERIOD}, résiliable à tout moment.</p>
+                  </div>
+
+                  {/* CGV + paiement, dans la même carte que le récapitulatif */}
+                  <div className="mt-5 border-t border-gray-100 pt-4">
+                    <label className="flex cursor-pointer items-start gap-3 text-xs text-gray-700 sm:text-sm">
+                      <input
+                        type="checkbox"
+                        checked={termsAccepted}
+                        onChange={(e) => {
+                          setTermsAccepted(e.target.checked);
+                          if (errors.terms) setErrors((prev) => ({ ...prev, terms: undefined }));
+                        }}
+                        className="mt-0.5 h-4 w-4 flex-shrink-0 accent-black"
+                      />
+                      <span>
+                        J'accepte les{' '}
+                        <a href="/cgv" target="_blank" rel="noopener noreferrer" className="font-medium underline hover:text-black">
+                          conditions générales de vente B2B
+                        </a>{' '}
+                        et l'abonnement mensuel sans engagement, résiliable à tout moment depuis mon profil.
+                      </span>
+                    </label>
+                    {errors.terms && <p className="mt-2 text-xs text-red-500">{errors.terms}</p>}
+
+                    {submitError && (
+                      <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{submitError}</div>
+                    )}
+
+                    <button
+                      type="submit"
+                      form="signup-form"
+                      disabled={submitting}
+                      className="mt-5 flex w-full items-center justify-center gap-2 bg-black py-3 font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-60"
+                    >
+                      {submitting ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          Enregistrement…
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="h-4 w-4" /> S'abonner et payer — {plan.price} {PERIOD}
+                        </>
+                      )}
+                    </button>
+                    <p className="mt-2.5 text-center text-xs text-gray-500">
+                      Vous allez être redirigé vers Stripe pour régler votre abonnement.
+                    </p>
                   </div>
                 </div>
               </div>
