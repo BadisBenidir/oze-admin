@@ -5,6 +5,7 @@ import {
 import {
   COMPANY_LEGAL_NAME, COMPANY_SIRET, COMPANY_RCS, COMPANY_VAT_NUMBER, COMPANY_ADDRESS,
 } from '../../config/legal';
+import heroImg from './assets/hero.webp';
 import clubImg from './assets/club.webp';
 import logo from './assets/logo_oze_paris_b2b.png';
 
@@ -12,7 +13,7 @@ import logo from './assets/logo_oze_paris_b2b.png';
  * Landing page publique de pro.ozeparis.com (visiteur non connecté sur "/",
  * voir App.tsx). Aucune donnée chargée : page 100 % statique.
  *
- * Hero sans photo pour l'instant (visuel à venir) : fond clair, texte centré.
+ * Hero : photo plein écran (assets/hero.webp), texte blanc centré.
  *
  * Abonnement : aucun système d'abonnement n'existe encore dans l'app — le
  * bouton pointe vers un Stripe Payment Link / Checkout configuré dans
@@ -30,11 +31,12 @@ const DISCORD_URL = (import.meta.env.VITE_B2B_DISCORD_URL as string | undefined)
 const SUPPORT_EMAIL = 'contact@ozeparis.com';
 const ACCESS_REQUEST_URL = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Demande d\'accès au Club B2B OZË Paris')}`;
 
+// Pas de lien « Tarifs » : le bouton « Rejoindre le Club B2B » du header y mène déjà.
 const NAV = [
+  { id: 'solutions', label: 'Solutions' },
   { id: 'drops', label: 'Drops' },
   { id: 'encheres', label: 'Enchères' },
   { id: 'sourcing', label: 'Sourcing' },
-  { id: 'tarifs', label: 'Tarifs' },
   { id: 'faq', label: 'FAQ' },
 ];
 
@@ -253,21 +255,24 @@ export const B2BLanding: React.FC = () => {
         )}
       </header>
 
-      {/* HERO — sans photo en attendant le visuel définitif */}
-      <section className="bg-neutral-50 pb-20 pt-36 sm:pb-28 sm:pt-44">
-        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
-          <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Espace professionnel</p>
-          <h1 className="mt-5 text-3xl font-light leading-tight tracking-tight text-gray-900 sm:text-5xl">
+      {/* HERO — photo plein écran, texte centré par-dessus */}
+      <section className="relative flex min-h-screen items-center overflow-hidden bg-neutral-900 pb-20 pt-32 sm:pt-36">
+        <img src={heroImg} alt="" className="absolute inset-0 h-full w-full object-cover object-[40%_center]" />
+        <div className="pointer-events-none absolute inset-0 bg-black/50" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
+        <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6">
+          <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/70">Espace professionnel</p>
+          <h1 className="mt-5 text-3xl font-light leading-tight tracking-tight text-white drop-shadow sm:text-5xl md:text-6xl">
             La plateforme de sourcing luxe pour les <span className="font-semibold">revendeurs et boutiques</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-gray-600 sm:text-lg">
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-white/85 drop-shadow sm:text-lg">
             Accédez à un inventaire exclusif de maroquinerie de seconde main en direct des maisons de vente japonaises,
             participez à nos sessions d'enchères privées et boostez vos marges.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <button
               onClick={() => scrollTo('tarifs')}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-10 py-4 text-base font-semibold text-white transition-colors hover:bg-gray-800 sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-10 py-4 text-base font-semibold text-black transition-colors hover:bg-gray-100 sm:w-auto"
             >
               Découvrir les offres <ArrowRight className="h-5 w-5" />
             </button>
@@ -283,17 +288,17 @@ export const B2BLanding: React.FC = () => {
               </a>
             )}
           </div>
-          <div className="mx-auto mt-14 grid max-w-xl grid-cols-3 divide-x divide-gray-200">
+          <div className="mx-auto mt-14 grid max-w-xl grid-cols-3 divide-x divide-white/25">
             {[
               { icon: ShieldCheck, value: '100 %', label: 'pièces authentifiées' },
               { icon: Globe, value: 'Japon', label: 'en direct des maisons de vente' },
               { icon: Euro, value: '0', label: 'minimum de commande' },
             ].map(({ icon: Icon, value, label }) => (
               <div key={label} className="px-2">
-                <div className="flex items-center justify-center gap-1.5 text-2xl font-light text-gray-900">
-                  <Icon className="h-5 w-5 text-gray-500" /> {value}
+                <div className="flex items-center justify-center gap-1.5 text-2xl font-light text-white">
+                  <Icon className="h-5 w-5 text-white/70" /> {value}
                 </div>
-                <p className="mt-1 text-xs text-gray-500">{label}</p>
+                <p className="mt-1 text-xs text-white/70">{label}</p>
               </div>
             ))}
           </div>
