@@ -138,19 +138,35 @@ const STEPS = [
 const FAQ = [
   {
     q: 'Comment l\'authenticité des pièces est-elle garantie ?',
-    a: 'Chaque pièce fait l\'objet d\'un contrôle d\'authenticité rigoureux avant sa mise en ligne. Vous pouvez en plus demander un certificat Entrupy : un certificat numérique d\'authenticité, infalsifiable, rattaché à la pièce.',
+    a: 'Chaque pièce passe par un triple contrôle : d\'abord directement dans les maisons de vente japonaises, avant la vente ; ensuite chez nos partenaires au Japon, qui nous les expédient ; enfin chez nous, dans nos locaux, à leur arrivée. Vous pouvez en plus demander un certificat Entrupy : un certificat numérique d\'authenticité, infalsifiable, rattaché à la pièce.',
   },
   {
-    q: 'Quels sont les délais de livraison ?',
-    a: 'Vos pièces achetées sont conservées sur votre compte : vous demandez l\'expédition quand vous le souhaitez, en regroupant plusieurs articles dans un seul colis. Les délais et modalités (point relais ou domicile) sont précisés lors de la demande d\'expédition.',
+    q: 'Comment se passent les livraisons ?',
+    a: 'Vos pièces partent directement du Japon jusqu\'à nos locaux, où nous les authentifions et les contrôlons. Une fois ce contrôle terminé, elles vous attendent sur votre compte : vous demandez la livraison quand vous le souhaitez, et la réglez à ce moment-là. Vous pouvez aussi attendre que d\'autres commandes arrivent chez nous pour demander un envoi groupé, en un seul colis.',
   },
   {
     q: 'Quels moyens de paiement sont acceptés ?',
     a: 'Carte bancaire (paiement sécurisé Stripe), solde de votre portefeuille B2B, ou une combinaison des deux. Une commande n\'est confirmée qu\'après encaissement effectif. Les lots remportés aux enchères sont à régler sous 24h.',
   },
   {
-    q: 'Quelles sont les conditions de retour et de litige ?',
-    a: 'Elles dépendent du statut déclaré. Pour un professionnel, la commande est ferme et toute non-conformité doit être signalée par écrit sous 48h ouvrées après livraison. Un particulier dispose d\'un droit de rétractation de 14 jours. Le détail figure dans nos conditions générales de vente.',
+    q: 'Que se passe-t-il si une pièce présente un défaut ?',
+    a: 'Si la pièce présente un défaut qui n\'était signalé ni sur les photos ni dans la description, le retour est entièrement à nos frais et le remboursement est immédiat, sur le solde de votre portefeuille. Un défaut visible sur les photos ou mentionné dans la description ne donne pas lieu à un retour.',
+  },
+  {
+    q: 'Comment fonctionnent les enchères ?',
+    a: 'Des sessions privées, réservées aux membres du Pass Revendeur, avec des lots dès 0 €. Vous pouvez enchérir au fil de l\'eau ou définir un montant maximum : nous surenchérissons alors automatiquement pour vous, du pas minimal, uniquement si nécessaire. Une enchère placée dans les dernières minutes prolonge le lot, pour que chacun puisse répondre. Un lot remporté est à régler sous 24h.',
+  },
+  {
+    q: 'Comment fonctionne le sourcing sur mesure ?',
+    a: 'Vous nous confiez un budget et les modèles que vous recherchez. Votre accompagnateur dédié, joignable en direct, repère les pièces et vous les soumet : vous validez chacune d\'elles avant achat. Tout est suivi dans votre espace, avec le détail du budget engagé.',
+  },
+  {
+    q: 'Faut-il être professionnel pour s\'inscrire ?',
+    a: 'Le Club s\'adresse aux revendeurs et aux boutiques. À votre premier achat, vous déclarez votre statut dans votre profil (particulier, entreprise individuelle ou société) : il détermine les mentions légales de vos factures.',
+  },
+  {
+    q: 'Puis-je changer de pass ou résilier ?',
+    a: 'Oui, les deux pass sont sans engagement. Vous pouvez passer du Pass Drops au Pass Revendeur à tout moment depuis votre profil : seule la différence au prorata du mois en cours est prélevée. En cas de résiliation, votre accès reste ouvert jusqu\'à la fin du mois payé, et vous retrouvez votre espace intact si vous vous réabonnez.',
   },
 ];
 
