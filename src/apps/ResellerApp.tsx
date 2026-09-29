@@ -20,6 +20,7 @@ import { WalletPage } from '../components/pages/reseller/WalletPage';
 import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
 import { CartBlockingModal } from '../components/pages/reseller/CartBlockingModal';
 import { Auctions } from '../components/pages/reseller/Auctions';
+import { PlanLockedScreen } from '../components/pages/reseller/Subscription';
 import { useResellerPresenceTracking } from '../hooks/useResellerPresenceTracking';
 import { Terms } from '../components/pages/reseller/Terms';
 import { ShoppingCart, Wallet, X } from 'lucide-react';
@@ -56,6 +57,7 @@ function ResellerApp() {
   const wallet = useWallet(profile?.id);
   const { notifications, markRead: markNotificationRead } = useResellerNotifications(profile?.id);
   const currentTab = activeTab || 'catalog';
+  const isDropsPlan = profile?.account_type === 'subscriber' && profile.subscription_plan === 'drops';
 
   // Présence temps réel + visiteur unique du jour (onglet admin
   // "Statistiques B2B") — no-op tant que `profile` n'est pas encore chargé.
@@ -212,10 +214,12 @@ function ResellerApp() {
       // faire planter le switch ou retomber silencieusement sur le catalogue.
       case 'shipments':
         return <MyOrders onOpenProduct={openProduct} onWalletChanged={wallet.refresh} onGoToProfile={() => navigateTo('profile')} />;
+      // Pass Drops (abonnés, 0167) : onglets visibles et cliquables, mais
+      // remplacés par l'écran de passage au Pass Revendeur.
       case 'sourcing':
-        return <SourcingSurMesure />;
+        return isDropsPlan ? <PlanLockedScreen feature="sourcing" /> : <SourcingSurMesure />;
       case 'auctions':
-        return <Auctions />;
+        return isDropsPlan ? <PlanLockedScreen feature="auctions" /> : <Auctions />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':

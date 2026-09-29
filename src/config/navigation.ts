@@ -3,6 +3,7 @@ import {
   Package,
   ShoppingCart,
   Users,
+  UserCheck,
   BarChart3,
   Plus,
   List,
@@ -104,6 +105,7 @@ export const navigationItems: MenuItem[] = [
     path: '/espace-b2b',
     subItems: [
       { id: 'resellers', label: 'Partenaires', path: '/espace-b2b/partenaires', icon: Users },
+      { id: 'subscribers', label: 'Abonnés', path: '/espace-b2b/abonnes', icon: UserCheck },
       { id: 'b2b-products', label: 'Produits B2B', path: '/espace-b2b/produits', icon: Package },
       { id: 'drops', label: 'Drops B2B', path: '/espace-b2b/drops', icon: Rocket },
       { id: 'sourcing', label: 'Sourcing sur mesure', path: '/espace-b2b/sourcing', icon: PackageSearch },

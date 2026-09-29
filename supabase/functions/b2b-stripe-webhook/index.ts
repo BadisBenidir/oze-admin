@@ -8,6 +8,8 @@
 // À configurer manuellement dans le dashboard Stripe :
 //   Endpoint URL : https://<project-ref>.supabase.co/functions/v1/b2b-stripe-webhook
 //   Événement    : checkout.session.completed
+//                  (+ customer.subscription.updated / .deleted pour les
+//                  abonnements Club B2B, voir subscriptions.ts)
 //   → copier le "Signing secret" dans le secret Supabase STRIPE_WEBHOOK_SECRET
 //
 // Déploiement : `supabase functions deploy b2b-stripe-webhook --no-verify-jwt`
@@ -19,6 +21,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
+import { handleSubscriptionChange, handleSubscriptionCheckout } from './subscriptions.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook]';
 
@@ -82,12 +85,39 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Abonnements Club B2B (voir subscriptions.ts) : suivi du pass, de
+  // l'échéance, de la résiliation et coupure de l'accès en fin d'abonnement.
+  if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+    try {
+      return await handleSubscriptionChange(
+        event.data.object as Stripe.Subscription,
+        event.type === 'customer.subscription.deleted',
+        supabaseUrl,
+        serviceRoleKey,
+      );
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Erreur non gérée abonnement (${event.id}):`, err instanceof Error ? err.stack || err.message : err);
+      return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Erreur inconnue' }), { status: 500 });
+    }
+  }
+
   if (event.type !== 'checkout.session.completed') {
     return new Response(JSON.stringify({ received: true }), { status: 200 });
   }
 
   const session = event.data.object as Stripe.Checkout.Session;
   const metadata = session.metadata || {};
+
+  // Souscription d'un pass depuis la landing (Payment Link) : aucune
+  // commande à confirmer, création du compte abonné.
+  if (session.mode === 'subscription') {
+    try {
+      return await handleSubscriptionCheckout(session, stripe, supabaseUrl, serviceRoleKey);
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Erreur non gérée souscription (session ${session.id}):`, err instanceof Error ? err.stack || err.message : err);
+      return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Erreur inconnue' }), { status: 500 });
+    }
+  }
 
   // Recharge de portefeuille : chemin totalement distinct de la confirmation
   // de commande ci-dessous — pas de produits, pas de commande, juste un

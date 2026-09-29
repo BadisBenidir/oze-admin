@@ -61,6 +61,14 @@ export interface ResellerProfile {
    * chaque commande (CartPage.tsx) sans re-timestamper ce champ. */
   terms_accepted_at: string | null
   terms_version: string | null
+  /** 'subscriber' (0167) : compte créé automatiquement après souscription d'un
+   * pass sur la landing — un seul login, tableau de bord de sous-compte. */
+  account_type: 'company' | 'subscriber'
+  /** Pass de l'abonné ; 'drops' n'inclut ni enchères ni sourcing (null pour une entreprise). */
+  subscription_plan: 'drops' | 'revendeur' | null
+  subscription_status: string | null
+  subscription_current_period_end: string | null
+  subscription_cancel_at_period_end: boolean
 }
 
 export interface LegalInfoInput {
@@ -142,6 +150,22 @@ export const useResellerAuth = () => {
         }
       }
 
+      // Infos d'abonnement (0167) lues à part : une erreur ici (colonnes
+      // absentes avant migration, etc.) ne doit jamais bloquer la connexion —
+      // on retombe alors sur un compte "entreprise" sans restriction.
+      const { data: subscription } = await supabase
+        .from('resellers')
+        .select('account_type, subscription_plan, subscription_status, subscription_current_period_end, subscription_cancel_at_period_end')
+        .eq('id', contact.reseller_id)
+        .maybeSingle()
+      const sub = (subscription || {}) as Partial<{
+        account_type: string
+        subscription_plan: 'drops' | 'revendeur' | null
+        subscription_status: string | null
+        subscription_current_period_end: string | null
+        subscription_cancel_at_period_end: boolean
+      }>
+
       return {
         profile: {
           id: data.id,
@@ -172,6 +196,11 @@ export const useResellerAuth = () => {
           legal_country: data.legal_country || null,
           terms_accepted_at: data.terms_accepted_at || null,
           terms_version: data.terms_version || null,
+          account_type: sub.account_type === 'subscriber' ? 'subscriber' : 'company',
+          subscription_plan: sub.subscription_plan || null,
+          subscription_status: sub.subscription_status || null,
+          subscription_current_period_end: sub.subscription_current_period_end || null,
+          subscription_cancel_at_period_end: Boolean(sub.subscription_cancel_at_period_end),
         },
         pendingReason: null,
       }

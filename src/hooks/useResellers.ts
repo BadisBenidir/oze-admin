@@ -22,6 +22,15 @@ export interface Reseller {
   created_at: string;
   updated_at: string;
   contacts_count: number;
+  /** 'subscriber' (0167) : créé automatiquement après souscription d'un pass
+   * sur la landing — listé à part (« Abonnés »). Absent avant la migration. */
+  account_type?: 'company' | 'subscriber';
+  subscription_plan?: 'drops' | 'revendeur' | null;
+  subscription_status?: string | null;
+  subscription_current_period_end?: string | null;
+  subscription_cancel_at_period_end?: boolean;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
 }
 
 export interface ResellerFormData {

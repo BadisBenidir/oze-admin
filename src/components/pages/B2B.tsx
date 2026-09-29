@@ -31,8 +31,10 @@ export const B2B: React.FC<B2BProps> = ({ activeSubTab }) => {
       return <GiftRewards />;
     case 'entrupy':
       return <EntrupyCertificates />;
+    case 'subscribers':
+      return <Resellers key="subscribers" accountType="subscriber" />;
     case 'resellers':
     default:
-      return <Resellers />;
+      return <Resellers key="companies" />;
   }
 };

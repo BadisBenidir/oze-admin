@@ -7,6 +7,7 @@ import { openServicePointPicker } from '../../../services/sendcloudService';
 import { ChronopostPickupPoint } from '../../../services/chronopostService';
 import { Building2, CheckCircle2, AlertCircle, Lock, Eye, EyeOff, Check, Circle, Truck, Package, MapPin, Scale } from 'lucide-react';
 import { isPlausiblePhone } from '../../../utils/phoneValidation';
+import { SubscriptionSection } from './Subscription';
 
 export const ResellerProfile: React.FC = () => {
   const { profile, updateLegalInfo } = useResellerAuth();
@@ -123,14 +124,18 @@ export const ResellerProfile: React.FC = () => {
     <div className="max-w-6xl mx-auto w-full px-4 py-8">
       <h3 className="text-lg font-semibold text-gray-900 mb-6">Mon profil</h3>
 
-      <Card className="mb-6">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm text-gray-700">
-            <Building2 className="h-4 w-4 text-gray-400" />
-            <span className="font-medium">{profile.company_name}</span>
-          </div>
-        </CardContent>
-      </Card>
+      {profile.account_type === 'subscriber' ? (
+        <SubscriptionSection profile={profile} />
+      ) : (
+        <Card className="mb-6">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <Building2 className="h-4 w-4 text-gray-400" />
+              <span className="font-medium">{profile.company_name}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <LegalStatusSection profile={profile} updateLegalInfo={updateLegalInfo} />
 

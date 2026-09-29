@@ -39,7 +39,19 @@ const statusBadge = (status: Reseller['status']) => {
   }
 };
 
-export const Resellers: React.FC = () => {
+const PLAN_LABEL: Record<string, string> = { drops: 'Pass Drops', revendeur: 'Pass Revendeur' };
+
+const formatShortDate = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+
+interface ResellersProps {
+  /** 'subscriber' : section « Abonnés » (comptes créés automatiquement après
+   * souscription d'un pass sur la landing, 0167) — sinon les entreprises. */
+  accountType?: 'company' | 'subscriber';
+}
+
+export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' }) => {
+  const isSubscribers = accountType === 'subscriber';
   const { isAdmin } = useAdminAuth();
   const {
     resellers,
@@ -86,7 +98,10 @@ export const Resellers: React.FC = () => {
     setInviteForm((f) => ({ ...f, password: generateSecurePassword() }));
   };
 
-  const filteredResellers = resellers.filter((r) => {
+  // Chaque section ne liste que son type de compte (account_type absent avant 0167 = entreprise).
+  const scopedResellers = resellers.filter((r) => (r.account_type ?? 'company') === accountType);
+
+  const filteredResellers = scopedResellers.filter((r) => {
     const matchesSearch =
       r.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (r.contact_email || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -94,8 +109,8 @@ export const Resellers: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const activeCount = resellers.filter((r) => r.status === 'active').length;
-  const pendingCount = resellers.filter((r) => r.status === 'pending').length;
+  const activeCount = scopedResellers.filter((r) => r.status === 'active').length;
+  const pendingCount = scopedResellers.filter((r) => r.status === 'pending').length;
 
   const handleDelete = async (reseller: Reseller) => {
     if (
@@ -244,9 +259,13 @@ export const Resellers: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Partenaires professionnels</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{isSubscribers ? 'Abonnés' : 'Partenaires professionnels'}</h3>
           <p className="text-sm text-gray-500">
-            {loading ? 'Chargement...' : `${filteredResellers.length} compte${filteredResellers.length > 1 ? 's' : ''} partenaire${filteredResellers.length > 1 ? 's' : ''} enregistré${filteredResellers.length > 1 ? 's' : ''}`}
+            {loading
+              ? 'Chargement...'
+              : isSubscribers
+                ? `${filteredResellers.length} abonné${filteredResellers.length > 1 ? 's' : ''} — comptes créés automatiquement après souscription d'un pass`
+                : `${filteredResellers.length} compte${filteredResellers.length > 1 ? 's' : ''} partenaire${filteredResellers.length > 1 ? 's' : ''} enregistré${filteredResellers.length > 1 ? 's' : ''}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -263,13 +282,15 @@ export const Resellers: React.FC = () => {
             <RefreshCw className="h-4 w-4" />
             <span className="hidden sm:inline">Actualiser</span>
           </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Nouveau compte pro</span>
-          </button>
+          {!isSubscribers && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Nouveau compte pro</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -307,15 +328,19 @@ export const Resellers: React.FC = () => {
       {!loading && !error && filteredResellers.length === 0 && (
         <div className="text-center py-12">
           <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun compte partenaire</h3>
-          <p className="text-gray-500 mb-6">Ajoutez votre premier compte partenaire</p>
-          <button
+          <h3 className="text-lg font-medium text-gray-900 mb-2">{isSubscribers ? 'Aucun abonné' : 'Aucun compte partenaire'}</h3>
+          <p className="text-gray-500 mb-6">
+            {isSubscribers
+              ? 'Les abonnés apparaissent ici automatiquement après leur paiement sur la page d’inscription.'
+              : 'Ajoutez votre premier compte partenaire'}
+          </p>
+          {!isSubscribers && <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
           >
             <Plus className="h-4 w-4" />
             <span>Créer un compte pro</span>
-          </button>
+          </button>}
         </div>
       )}
 
@@ -326,9 +351,9 @@ export const Resellers: React.FC = () => {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Entreprise</th>
+                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">{isSubscribers ? 'Abonné' : 'Entreprise'}</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden sm:table-cell">Statut</th>
-                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden lg:table-cell">Contacts</th>
+                    <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm hidden lg:table-cell">{isSubscribers ? 'Abonnement' : 'Contacts'}</th>
                     <th className="text-left py-3 px-4 md:px-6 font-medium text-gray-900 text-sm">Actions</th>
                   </tr>
                 </thead>
@@ -370,10 +395,22 @@ export const Resellers: React.FC = () => {
                         </td>
                         <td className="py-4 px-4 md:px-6 hidden sm:table-cell">{statusBadge(reseller.status)}</td>
                         <td className="py-4 px-4 md:px-6 hidden lg:table-cell">
-                          <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <Users className="h-4 w-4 text-gray-400" />
-                            {reseller.contacts_count}
-                          </div>
+                          {isSubscribers ? (
+                            <div className="text-sm">
+                              <p className="font-medium text-gray-900">{PLAN_LABEL[reseller.subscription_plan || ''] || '—'}</p>
+                              {reseller.subscription_current_period_end && (
+                                <p className={`text-xs ${reseller.subscription_cancel_at_period_end ? 'text-amber-700' : 'text-gray-500'}`}>
+                                  {reseller.subscription_cancel_at_period_end ? 'Résilié, fin le ' : 'Renouvellement le '}
+                                  {formatShortDate(reseller.subscription_current_period_end)}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <Users className="h-4 w-4 text-gray-400" />
+                              {reseller.contacts_count}
+                            </div>
+                          )}
                         </td>
                         <td className="py-4 px-4 md:px-6">
                           <div className="flex items-center space-x-1">
@@ -384,13 +421,13 @@ export const Resellers: React.FC = () => {
                             >
                               <Eye className="h-4 w-4" />
                             </button>
-                            <button
+                            {!isSubscribers && <button
                               onClick={() => openContactsModal(reseller)}
                               className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                               title="Gérer les contacts"
                             >
                               <UserPlus className="h-4 w-4" />
-                            </button>
+                            </button>}
                             <button
                               onClick={() => handleToggleStatus(reseller)}
                               className={`p-2 rounded-lg transition-colors ${
@@ -402,7 +439,7 @@ export const Resellers: React.FC = () => {
                             >
                               {reseller.status === 'active' ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                             </button>
-                            {reseller.status !== 'discovery' && (
+                            {!isSubscribers && reseller.status !== 'discovery' && (
                               <button
                                 onClick={() => handleSetDiscovery(reseller)}
                                 className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
