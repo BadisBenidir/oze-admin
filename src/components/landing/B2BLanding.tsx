@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Globe, Euro, UserRound, Mail,
+  Wallet, Percent,
 } from 'lucide-react';
 import {
   COMPANY_LEGAL_NAME, COMPANY_SIRET, COMPANY_RCS, COMPANY_VAT_NUMBER, COMPANY_ADDRESS,
@@ -146,7 +147,11 @@ const FAQ = [
   },
   {
     q: 'Quels moyens de paiement sont acceptés ?',
-    a: 'Carte bancaire (paiement sécurisé Stripe), solde de votre portefeuille B2B, ou une combinaison des deux. Une commande n\'est confirmée qu\'après encaissement effectif. Les lots remportés aux enchères sont à régler sous 24h.',
+    a: 'Carte bancaire (paiement sécurisé Stripe), solde de votre portefeuille B2B, ou une combinaison des deux. Le portefeuille se recharge par carte, avec 5 € offerts pour chaque tranche de 100 € rechargés. Une commande n\'est confirmée qu\'après encaissement effectif. Les lots remportés aux enchères sont à régler sous 24h.',
+  },
+  {
+    q: 'Y a-t-il des remises pour les commandes en volume ?',
+    a: 'Oui, elles s\'appliquent automatiquement : -5 % dès 5 articles et -10 % dès 10 articles dans une même commande. Elles se cumulent avec le bonus de recharge du portefeuille.',
   },
   {
     q: 'Que se passe-t-il si une pièce présente un défaut ?',
@@ -591,6 +596,57 @@ export const B2BLanding: React.FC = () => {
               </li>
             ))}
           </ol>
+        </div>
+      </section>
+
+      {/* AVANTAGES MEMBRES — mêmes règles que la plateforme : credit_wallet_topup
+          (+5 € par tranche complète de 100 €) et VolumeDiscountBanner (-5 % / -10 %) */}
+      <section className="bg-neutral-50 py-20 sm:py-24">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="text-center">
+            <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Avantages membres</p>
+            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
+              Plus vous achetez, <span className="font-semibold">plus vous économisez</span>
+            </h2>
+          </div>
+          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-black text-white">
+                <Wallet className="h-6 w-6" />
+              </div>
+              <h3 className="mt-6 text-xl font-semibold tracking-tight">Portefeuille rechargeable</h3>
+              <p className="mt-2 text-sm leading-relaxed text-gray-600">
+                Rechargez votre solde par carte et payez vos commandes, enchères et livraisons en un clic.
+              </p>
+              <div className="mt-6 flex items-end gap-3 rounded-2xl bg-neutral-50 p-5">
+                <span className="text-4xl font-semibold tracking-tight">+5 €</span>
+                <span className="pb-1 text-sm text-gray-600">offerts pour chaque tranche de 100 € rechargés</span>
+              </div>
+              <p className="mt-3 text-xs text-gray-500">Ex. : 300 € rechargés = 315 € crédités sur votre solde.</p>
+            </div>
+
+            <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-black text-white">
+                <Percent className="h-6 w-6" />
+              </div>
+              <h3 className="mt-6 text-xl font-semibold tracking-tight">Remises de volume</h3>
+              <p className="mt-2 text-sm leading-relaxed text-gray-600">
+                Appliquées automatiquement sur votre commande, selon le nombre d'articles.
+              </p>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                {[
+                  { count: '5 articles', off: '-5 %' },
+                  { count: '10 articles', off: '-10 %' },
+                ].map((t) => (
+                  <div key={t.count} className="rounded-2xl bg-neutral-50 p-5 text-center">
+                    <p className="text-4xl font-semibold tracking-tight">{t.off}</p>
+                    <p className="mt-1 text-sm text-gray-600">dès {t.count}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-gray-500">Cumulables avec le bonus du portefeuille.</p>
+            </div>
+          </div>
         </div>
       </section>
 
