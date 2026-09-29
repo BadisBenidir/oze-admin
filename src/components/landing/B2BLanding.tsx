@@ -339,12 +339,12 @@ const FaqItem: React.FC<{ q: string; a: string }> = ({ q, a }) => {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-4 py-5 text-left"
+        className="w-full flex items-center justify-between gap-3 py-3.5 text-left sm:gap-4 sm:py-5"
       >
-        <span className="text-base font-medium text-gray-900">{q}</span>
-        <ChevronDown className={`h-5 w-5 flex-shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="text-sm font-medium text-gray-900 sm:text-base">{q}</span>
+        <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-400 transition-transform sm:h-5 sm:w-5 ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && <p className="pb-5 text-sm leading-relaxed text-gray-600">{a}</p>}
+      {open && <p className="pb-3.5 text-xs leading-relaxed text-gray-600 sm:pb-5 sm:text-sm">{a}</p>}
     </div>
   );
 };
@@ -673,50 +673,59 @@ export const B2BLanding: React.FC = () => {
 
       {/* AVANTAGES MEMBRES — mêmes règles que la plateforme : credit_wallet_topup
           (+5 € par tranche complète de 100 €) et VolumeDiscountBanner (-5 % / -10 %) */}
-      <section className="bg-neutral-50 py-20 sm:py-24">
+      <section className="bg-neutral-50 py-12 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center">
-            <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Avantages membres</p>
-            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
+            <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-gray-500 sm:text-xs">Avantages membres</p>
+            <h2 className="mt-2 text-xl font-light tracking-tight sm:mt-3 sm:text-4xl">
               Plus vous achetez, <span className="font-semibold">plus vous économisez</span>
             </h2>
           </div>
-          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-black text-white">
-                <Wallet className="h-6 w-6" />
+          {/* Mobile : deux petites cartes côte à côte ; desktop : cartes détaillées */}
+          <div className="mt-6 grid grid-cols-2 gap-2.5 sm:mt-12 sm:gap-6">
+            <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm sm:rounded-3xl sm:p-8">
+              <div className="flex items-center gap-2 sm:block">
+                <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-black text-white sm:h-12 sm:w-12 sm:rounded-2xl">
+                  <Wallet className="h-3.5 w-3.5 sm:h-6 sm:w-6" />
+                </div>
+                <h3 className="text-xs font-semibold leading-tight tracking-tight sm:mt-6 sm:text-xl">Portefeuille rechargeable</h3>
               </div>
-              <h3 className="mt-6 text-xl font-semibold tracking-tight">Portefeuille rechargeable</h3>
-              <p className="mt-2 text-sm leading-relaxed text-gray-600">
+              <p className="mt-2 hidden text-sm leading-relaxed text-gray-600 sm:block">
                 Rechargez votre solde par carte et payez vos commandes, enchères et livraisons en un clic.
               </p>
-              <div className="mt-6 flex items-end gap-3 rounded-2xl bg-neutral-50 p-5">
-                <span className="text-4xl font-semibold tracking-tight">+5 €</span>
-                <span className="pb-1 text-sm text-gray-600">offerts pour chaque tranche de 100 € rechargés</span>
+              <div className="mt-2.5 rounded-xl bg-neutral-50 p-2.5 text-center sm:mt-6 sm:flex sm:items-end sm:gap-3 sm:rounded-2xl sm:p-5 sm:text-left">
+                <span className="block text-xl font-semibold tracking-tight sm:inline sm:text-4xl">+5 €</span>
+                <span className="block text-[10px] leading-tight text-gray-600 sm:inline sm:pb-1 sm:text-sm">
+                  offerts tous les 100 € rechargés
+                </span>
               </div>
-              <p className="mt-3 text-xs text-gray-500">Ex. : 300 € rechargés = 315 € crédités sur votre solde.</p>
+              <p className="mt-3 hidden text-xs text-gray-500 sm:block">Ex. : 300 € rechargés = 315 € crédités sur votre solde.</p>
             </div>
 
-            <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-black text-white">
-                <Percent className="h-6 w-6" />
+            <div className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm sm:rounded-3xl sm:p-8">
+              <div className="flex items-center gap-2 sm:block">
+                <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-black text-white sm:h-12 sm:w-12 sm:rounded-2xl">
+                  <Percent className="h-3.5 w-3.5 sm:h-6 sm:w-6" />
+                </div>
+                <h3 className="text-xs font-semibold leading-tight tracking-tight sm:mt-6 sm:text-xl">Remises de volume</h3>
               </div>
-              <h3 className="mt-6 text-xl font-semibold tracking-tight">Remises de volume</h3>
-              <p className="mt-2 text-sm leading-relaxed text-gray-600">
+              <p className="mt-2 hidden text-sm leading-relaxed text-gray-600 sm:block">
                 Appliquées automatiquement sur votre commande, selon le nombre d'articles.
               </p>
-              <div className="mt-6 grid grid-cols-2 gap-3">
+              <div className="mt-2.5 grid grid-cols-2 gap-1.5 sm:mt-6 sm:gap-3">
                 {[
-                  { count: '5 articles', off: '-5 %' },
-                  { count: '10 articles', off: '-10 %' },
+                  { count: '5 art.', countLong: '5 articles', off: '-5 %' },
+                  { count: '10 art.', countLong: '10 articles', off: '-10 %' },
                 ].map((t) => (
-                  <div key={t.count} className="rounded-2xl bg-neutral-50 p-5 text-center">
-                    <p className="text-4xl font-semibold tracking-tight">{t.off}</p>
-                    <p className="mt-1 text-sm text-gray-600">dès {t.count}</p>
+                  <div key={t.count} className="rounded-xl bg-neutral-50 p-2 text-center sm:rounded-2xl sm:p-5">
+                    <p className="text-base font-semibold tracking-tight sm:text-4xl">{t.off}</p>
+                    <p className="text-[10px] text-gray-600 sm:mt-1 sm:text-sm">
+                      dès <span className="sm:hidden">{t.count}</span><span className="hidden sm:inline">{t.countLong}</span>
+                    </p>
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-xs text-gray-500">Cumulables avec le bonus du portefeuille.</p>
+              <p className="mt-3 hidden text-xs text-gray-500 sm:block">Cumulables avec le bonus du portefeuille.</p>
             </div>
           </div>
         </div>
@@ -743,15 +752,15 @@ export const B2BLanding: React.FC = () => {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="scroll-mt-20 py-20 sm:py-24">
+      <section id="faq" className="scroll-mt-20 py-12 sm:py-24">
         <div className="mx-auto max-w-3xl px-4 sm:px-6">
           <div className="text-center">
-            <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Questions fréquentes</p>
-            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
+            <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-gray-500 sm:text-xs">Questions fréquentes</p>
+            <h2 className="mt-2 text-xl font-light tracking-tight sm:mt-3 sm:text-4xl">
               Achetez <span className="font-semibold">en confiance</span>
             </h2>
           </div>
-          <div className="mt-10 border-t border-gray-200">
+          <div className="mt-6 border-t border-gray-200 sm:mt-10">
             {FAQ.map((f) => <FaqItem key={f.q} q={f.q} a={f.a} />)}
           </div>
         </div>
