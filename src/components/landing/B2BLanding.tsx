@@ -263,37 +263,37 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
 
   return (
     <div
-      className={`relative flex flex-col rounded-2xl p-6 sm:rounded-3xl sm:p-8 ${
+      className={`relative flex flex-col rounded-2xl p-5 sm:rounded-3xl sm:p-8 ${
         featured ? 'bg-neutral-950 text-white shadow-2xl ring-1 ring-white/15 lg:-my-4 lg:py-12' : 'bg-white text-gray-900'
       }`}
     >
       {badge && (
-        <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-black shadow">
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white px-2.5 py-0.5 text-[10px] sm:px-3 sm:py-1 sm:text-[11px] font-semibold uppercase tracking-wider text-black shadow">
           {badge}
         </span>
       )}
-      <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${muted}`}>{name}</p>
-      <p className="mt-4 flex items-baseline gap-2">
-        <span className="text-3xl font-semibold tracking-tight sm:text-4xl">
+      <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] sm:text-xs ${muted}`}>{name}</p>
+      <p className="mt-2 flex items-baseline gap-2 sm:mt-4">
+        <span className="text-2xl font-semibold tracking-tight sm:text-4xl">
           {agent ? 'Sur devis' : price || 'Sur demande'}
         </span>
         {!agent && price && PERIOD && <span className={`text-sm ${muted}`}>{PERIOD}</span>}
       </p>
-      <p className={`mt-3 text-sm leading-relaxed ${featured ? 'text-white/70' : 'text-gray-600'}`}>{pitch}</p>
-      <div className={`my-6 h-px ${featured ? 'bg-white/10' : 'bg-gray-100'}`} />
-      {intro && <p className="mb-4 text-sm font-semibold">{intro}</p>}
-      <ul className="flex-1 space-y-3">
+      <p className={`mt-3 hidden text-sm leading-relaxed sm:block ${featured ? 'text-white/70' : 'text-gray-600'}`}>{pitch}</p>
+      <div className={`my-4 h-px sm:my-6 ${featured ? 'bg-white/10' : 'bg-gray-100'}`} />
+      {intro && <p className="mb-2.5 text-[13px] font-semibold sm:mb-4 sm:text-sm">{intro}</p>}
+      <ul className="flex-1 space-y-2 sm:space-y-3">
         {features.map((f) => (
           <li
             key={f.label}
-            className={`flex items-start gap-3 text-sm ${
+            className={`flex items-start gap-2.5 text-[13px] sm:gap-3 sm:text-sm ${
               f.included ? (featured ? 'text-white/90' : 'text-gray-700') : `${featured ? 'text-white/30' : 'text-gray-300'} line-through`
             }`}
           >
             {f.included ? (
-              <Check className={`mt-0.5 h-4 w-4 flex-shrink-0 ${featured ? 'text-white' : 'text-gray-900'}`} strokeWidth={2.5} />
+              <Check className={`mt-0.5 h-3.5 w-3.5 flex-shrink-0 sm:h-4 sm:w-4 ${featured ? 'text-white' : 'text-gray-900'}`} strokeWidth={2.5} />
             ) : (
-              <X className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 sm:h-4 sm:w-4" />
             )}
             {f.label}
           </li>
@@ -303,7 +303,7 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
         href={href}
         target={external ? '_blank' : undefined}
         rel={external ? 'noopener noreferrer' : undefined}
-        className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-colors ${
+        className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 sm:mt-8 sm:py-3.5 text-sm font-semibold transition-colors ${
           agent
             ? 'bg-[#25D366] text-white hover:bg-[#1EBE5A]'
             : featured
@@ -321,7 +321,7 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
           </>
         )}
       </a>
-      <p className={`mt-3 text-center text-xs ${featured ? 'text-white/40' : 'text-gray-400'}`}>
+      <p className={`mt-2 text-center text-[11px] sm:mt-3 sm:text-xs ${featured ? 'text-white/40' : 'text-gray-400'}`}>
         {agent
           ? WHATSAPP_NUMBER ? 'Réponse rapide sur WhatsApp' : `Réponse sous 48h — ${SUPPORT_EMAIL}`
           : checkoutUrl ? 'Paiement sécurisé par Stripe' : `Réponse sous 48h — ${SUPPORT_EMAIL}`}
@@ -670,7 +670,7 @@ export const B2BLanding: React.FC = () => {
           <p className="mx-auto mt-4 max-w-xl text-center text-sm text-white/70 sm:text-base">
             Trois formules selon votre activité : enchères, accès complet, ou accompagnement dédié pour les boutiques.
           </p>
-          <div className="mx-auto mt-12 grid max-w-6xl grid-cols-1 items-stretch gap-6 sm:mt-16 lg:grid-cols-3 lg:items-center">
+          <div className="mx-auto mt-10 grid max-w-6xl grid-cols-1 items-stretch gap-5 sm:mt-16 sm:gap-6 lg:grid-cols-3 lg:items-center">
             {PLANS.map((p) => <PlanCard key={p.id} plan={p} />)}
           </div>
         </div>
