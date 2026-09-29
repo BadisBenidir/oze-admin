@@ -35,7 +35,7 @@ const DISCORD_URL = (import.meta.env.VITE_B2B_DISCORD_URL as string | undefined)
 const SUPPORT_EMAIL = 'contact@ozeparis.com';
 const ACCESS_REQUEST_URL = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Demande d\'accès au Club B2B OZË Paris')}`;
 
-// Pas de lien « Tarifs » : le bouton « Rejoindre le Club B2B » du header y mène déjà.
+// Pas de lien « Tarifs » : le bouton « Rejoindre le Club » du header y mène déjà.
 const NAV = [
   { id: 'solutions', label: 'Solutions' },
   { id: 'drops', label: 'Drops' },
@@ -287,11 +287,11 @@ export const B2BLanding: React.FC = () => {
             </button>
             <button
               onClick={() => handleNav('tarifs')}
-              className={`px-5 py-2.5 text-sm font-medium transition-colors ${
+              className={`rounded-lg px-5 py-2.5 text-sm font-medium transition-colors ${
                 transparent ? 'bg-white text-black hover:bg-gray-100' : 'bg-black text-white hover:bg-gray-800'
               }`}
             >
-              Rejoindre le Club B2B
+              Rejoindre le Club
             </button>
           </div>
           <button
@@ -310,11 +310,11 @@ export const B2BLanding: React.FC = () => {
               </button>
             ))}
             <div className="mt-4 flex flex-col gap-3">
-              <button onClick={goToLogin} className="border border-gray-900 py-3 text-sm font-medium text-gray-900">
+              <button onClick={goToLogin} className="rounded-lg border border-gray-900 py-3 text-sm font-medium text-gray-900">
                 Se connecter
               </button>
-              <button onClick={() => handleNav('tarifs')} className="bg-black py-3 text-sm font-medium text-white">
-                Rejoindre le Club B2B
+              <button onClick={() => handleNav('tarifs')} className="rounded-lg bg-black py-3 text-sm font-medium text-white">
+                Rejoindre le Club
               </button>
             </div>
           </div>
@@ -359,13 +359,15 @@ export const B2BLanding: React.FC = () => {
             {[
               { icon: ShieldCheck, value: '100 %', label: 'pièces authentifiées' },
               { icon: Globe, value: 'Japon', label: 'en direct des maisons de vente' },
-              { icon: Euro, value: '0', label: 'minimum de commande' },
-            ].map(({ icon: Icon, value, label }) => (
+              { icon: Euro, value: '0', label: 'minimum de commande', iconAfter: true },
+            ].map(({ icon: Icon, value, label, iconAfter }) => (
               <div key={label} className="px-2">
-                <div className="flex items-center justify-center gap-1.5 text-2xl font-light text-white">
-                  <Icon className="h-5 w-5 text-white/70" /> {value}
+                <div className="flex items-center justify-center gap-1.5 text-2xl font-light leading-none text-white">
+                  {!iconAfter && <Icon className="h-5 w-5 translate-y-px text-white/70" />}
+                  {value}
+                  {iconAfter && <Icon className="h-5 w-5 translate-y-px text-white/70" />}
                 </div>
-                <p className="mt-1 text-xs text-white/70">{label}</p>
+                <p className="mt-2 text-xs text-white/70">{label}</p>
               </div>
             ))}
           </div>
