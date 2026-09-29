@@ -6,7 +6,6 @@ import {
   COMPANY_LEGAL_NAME, COMPANY_SIRET, COMPANY_RCS, COMPANY_VAT_NUMBER, COMPANY_ADDRESS,
 } from '../../config/legal';
 import clubImg from './assets/club.webp';
-import sourcingImg from './assets/sourcing.webp';
 import logo from './assets/logo_oze_paris_b2b.png';
 
 /**
@@ -32,11 +31,48 @@ const SUPPORT_EMAIL = 'contact@ozeparis.com';
 const ACCESS_REQUEST_URL = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Demande d\'accès au Club B2B OZË Paris')}`;
 
 const NAV = [
-  { id: 'solutions', label: 'Solutions' },
+  { id: 'drops', label: 'Drops' },
   { id: 'encheres', label: 'Enchères' },
   { id: 'sourcing', label: 'Sourcing' },
   { id: 'tarifs', label: 'Tarifs' },
   { id: 'faq', label: 'FAQ' },
+];
+
+// Sections détaillées (texte + aperçu). `image` : capture de la plateforme à ajouter
+// dans ./assets puis importer ; sans image, un emplacement vide est affiché.
+const FEATURES: {
+  id: string;
+  eyebrow: string;
+  title: string;
+  titleBold: string;
+  text: string;
+  cta: { label: string; href?: string };
+  image?: string;
+}[] = [
+  {
+    id: 'drops',
+    eyebrow: 'Drops & Catalogue',
+    title: 'Des arrivages réguliers,',
+    titleBold: 'à l\'unité',
+    text: 'Chaque drop met en ligne de nouvelles pièces sélectionnées, avec grade et état détaillés. Achetez à l\'unité, sans minimum : vos pièces restent sur votre compte et vous demandez une expédition groupée quand vous le souhaitez.',
+    cta: { label: 'Accéder au catalogue' },
+  },
+  {
+    id: 'encheres',
+    eyebrow: 'Enchères',
+    title: 'Des enchères privées,',
+    titleBold: 'dès 0 €',
+    text: 'Des sessions réservées aux membres, entre professionnels uniquement. Les lots démarrent à 0 € : c\'est le marché qui fixe le prix. Le calendrier des prochaines sessions est visible dans votre espace, et les lots remportés se règlent sous 24h.',
+    cta: { label: 'Participer aux enchères' },
+  },
+  {
+    id: 'sourcing',
+    eyebrow: 'Sourcing sur mesure',
+    title: 'Vos pièces cibles,',
+    titleBold: 'sourcées pour vous',
+    text: 'Vous nous confiez un budget et vos modèles cibles. Un accompagnateur dédié, joignable en direct, sélectionne avec vous chaque pièce, une par une, avant achat. Tout est suivi dans votre espace, avec un reporting complet du budget engagé.',
+    cta: { label: 'Lancer une mission', href: `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Mission de sourcing')}` },
+  },
 ];
 
 const PILLARS = [
@@ -277,7 +313,6 @@ export const B2BLanding: React.FC = () => {
             {PILLARS.map(({ id, icon: Icon, tag, title, text, points, featured }) => (
               <div
                 key={id}
-                id={id === 'encheres' ? id : undefined}
                 className={`relative flex scroll-mt-24 flex-col rounded-3xl p-8 transition-all duration-300 hover:-translate-y-1 sm:p-10 ${
                   featured
                     ? 'bg-neutral-950 text-white shadow-2xl shadow-black/20'
@@ -323,29 +358,52 @@ export const B2BLanding: React.FC = () => {
         </div>
       </section>
 
-      {/* SOURCING SUR MESURE */}
-      <section id="sourcing" className="scroll-mt-20 bg-neutral-50 py-20 sm:py-24">
-        <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-4 sm:px-6 lg:grid-cols-2">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Sourcing sur mesure</p>
-            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
-              Vos pièces cibles, <span className="font-semibold">sourcées pour vous</span>
-            </h2>
-            <p className="mt-6 text-base leading-relaxed text-gray-600">
-              Vous nous confiez un budget et vos modèles cibles. Un accompagnateur dédié, joignable en direct, sélectionne
-              avec vous chaque pièce, une par une, avant achat. Tout est suivi dans votre espace, avec un reporting
-              complet du budget engagé.
-            </p>
-            <a
-              href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Mission de sourcing')}`}
-              className="mt-8 inline-flex items-center gap-2 border border-gray-900 px-6 py-3 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-900 hover:text-white"
-            >
-              Lancer une mission <ArrowRight className="h-4 w-4" />
-            </a>
+      {/* DÉTAIL DES 3 SOLUTIONS (cibles des liens Drops / Enchères / Sourcing du header) */}
+      {FEATURES.map((f, i) => (
+        <section
+          key={f.id}
+          id={f.id}
+          className={`scroll-mt-20 py-20 sm:py-24 ${i % 2 === 0 ? 'bg-neutral-50' : 'bg-white'}`}
+        >
+          <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16">
+            <div className={i % 2 === 1 ? 'lg:order-2' : ''}>
+              <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">{f.eyebrow}</p>
+              <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
+                {f.title} <span className="font-semibold">{f.titleBold}</span>
+              </h2>
+              <p className="mt-6 text-base leading-relaxed text-gray-600">{f.text}</p>
+              {f.cta.href ? (
+                <a
+                  href={f.cta.href}
+                  className="mt-8 inline-flex items-center gap-2 rounded-xl bg-black px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+                >
+                  {f.cta.label} <ArrowRight className="h-4 w-4" />
+                </a>
+              ) : (
+                <button
+                  onClick={() => scrollTo('tarifs')}
+                  className="mt-8 inline-flex items-center gap-2 rounded-xl bg-black px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+                >
+                  {f.cta.label} <ArrowRight className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            {f.image ? (
+              <img
+                src={f.image}
+                alt={f.eyebrow}
+                loading="lazy"
+                className="w-full rounded-2xl border border-gray-200 object-cover shadow-xl"
+              />
+            ) : (
+              // Emplacement de la capture de la plateforme (à fournir) : renseigner `image` dans FEATURES.
+              <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 bg-white text-sm text-gray-400">
+                Aperçu {f.eyebrow.toLowerCase()} à venir
+              </div>
+            )}
           </div>
-          <img src={sourcingImg} alt="" loading="lazy" className="h-80 w-full object-cover sm:h-96" />
-        </div>
-      </section>
+        </section>
+      ))}
 
       {/* COMMENT ÇA MARCHE */}
       <section className="py-20 sm:py-24">
