@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check,
+  ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Globe, Euro,
 } from 'lucide-react';
 import {
   COMPANY_LEGAL_NAME, COMPANY_SIRET, COMPANY_RCS, COMPANY_VAT_NUMBER, COMPANY_ADDRESS,
@@ -25,10 +25,12 @@ import logo from './assets/logo_oze_paris_b2b.png';
  *   VITE_B2B_SUBSCRIPTION_CHECKOUT_URL  lien Stripe (https://buy.stripe.com/...)
  *   VITE_B2B_SUBSCRIPTION_PRICE         ex. "49 €" (sinon "Sur demande")
  *   VITE_B2B_SUBSCRIPTION_PERIOD        ex. "/ mois"
+ *   VITE_B2B_DISCORD_URL                invitation Discord (bouton masqué si absent)
  */
 const CHECKOUT_URL = (import.meta.env.VITE_B2B_SUBSCRIPTION_CHECKOUT_URL as string | undefined)?.trim() || '';
 const PRICE = (import.meta.env.VITE_B2B_SUBSCRIPTION_PRICE as string | undefined)?.trim() || '';
 const PERIOD = (import.meta.env.VITE_B2B_SUBSCRIPTION_PERIOD as string | undefined)?.trim() || '';
+const DISCORD_URL = (import.meta.env.VITE_B2B_DISCORD_URL as string | undefined)?.trim() || '';
 const SUPPORT_EMAIL = 'contact@ozeparis.com';
 const ACCESS_REQUEST_URL = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Demande d\'accès au Club B2B OZË Paris')}`;
 
@@ -104,6 +106,12 @@ const scrollTo = (id: string) => {
 const goToLogin = () => {
   window.location.href = '/connexion';
 };
+
+const DiscordIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+  </svg>
+);
 
 const SubscribeButton: React.FC<{ className?: string; label?: string }> = ({ className = '', label }) => (
   <a
@@ -196,35 +204,42 @@ export const B2BLanding: React.FC = () => {
         <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
           <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Espace professionnel</p>
           <h1 className="mt-5 text-3xl font-light leading-tight tracking-tight text-gray-900 sm:text-5xl">
-            La plateforme de sourcing luxe pour les <span className="font-semibold">revendeurs professionnels</span>
+            La plateforme de sourcing luxe pour les <span className="font-semibold">revendeurs et boutiques</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-gray-600 sm:text-lg">
-            Accédez à un inventaire exclusif de maroquinerie de seconde main vérifiée par Entrupy, participez à nos
-            sessions d'enchères privées et boostez vos marges.
+            Accédez à un inventaire exclusif de maroquinerie de seconde main en direct des maisons de vente japonaises,
+            participez à nos sessions d'enchères privées et boostez vos marges.
           </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <button
               onClick={() => scrollTo('tarifs')}
-              className="inline-flex w-full items-center justify-center gap-2 bg-black px-8 py-3.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-black px-10 py-4 text-base font-semibold text-white transition-colors hover:bg-gray-800 sm:w-auto"
             >
-              Découvrir les offres <ArrowRight className="h-4 w-4" />
+              Découvrir les offres <ArrowRight className="h-5 w-5" />
             </button>
-            <button
-              onClick={goToLogin}
-              className="w-full border border-gray-900 px-8 py-3.5 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-900 hover:text-white sm:w-auto"
-            >
-              Déjà membre ? Se connecter
-            </button>
+            {/* En dev, affiché même sans lien pour voir le rendu ; en prod, masqué tant que l'invitation n'est pas configurée */}
+            {(DISCORD_URL || import.meta.env.DEV) && (
+              <a
+                href={DISCORD_URL || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-full items-center justify-center gap-3 rounded-xl bg-[#5865F2] px-10 py-4 text-base font-semibold text-white transition-colors hover:bg-[#4752C4] sm:w-auto"
+              >
+                <DiscordIcon className="h-5 w-5" /> Rejoindre le Discord
+              </a>
+            )}
           </div>
           <div className="mx-auto mt-14 grid max-w-xl grid-cols-3 divide-x divide-gray-200">
             {[
-              { value: '100 %', label: 'pièces authentifiées' },
-              { value: '24h', label: 'pour régler un lot' },
-              { value: '0', label: 'minimum de commande' },
-            ].map((s) => (
-              <div key={s.label} className="px-2">
-                <div className="text-2xl font-light text-gray-900">{s.value}</div>
-                <p className="mt-1 text-xs text-gray-500">{s.label}</p>
+              { icon: ShieldCheck, value: '100 %', label: 'pièces authentifiées' },
+              { icon: Globe, value: 'Japon', label: 'en direct des maisons de vente' },
+              { icon: Euro, value: '0', label: 'minimum de commande' },
+            ].map(({ icon: Icon, value, label }) => (
+              <div key={label} className="px-2">
+                <div className="flex items-center justify-center gap-1.5 text-2xl font-light text-gray-900">
+                  <Icon className="h-5 w-5 text-gray-500" /> {value}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">{label}</p>
               </div>
             ))}
           </div>
