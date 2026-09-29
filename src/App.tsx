@@ -6,6 +6,8 @@ import { AcceptTeamInviteLink } from './components/auth/AcceptTeamInviteLink';
 import { supabase } from './lib/supabase';
 import AdminApp from './apps/AdminApp';
 import ResellerApp from './apps/ResellerApp';
+import { B2BLanding } from './components/landing/B2BLanding';
+import { Terms } from './components/pages/reseller/Terms';
 
 function App() {
   const { status, role } = useSessionRole();
@@ -36,6 +38,27 @@ function App() {
     );
   }
 
+  // Même build pour admin.ozeparis.com et pro.ozeparis.com : la vitrine
+  // publique (landing, CGV sans connexion) n'existe que côté revendeurs.
+  const isAdminHost = window.location.hostname.startsWith('admin.');
+
+  if (status === 'signed-out' && !isAdminHost) {
+    if (window.location.pathname === '/') {
+      return <B2BLanding />;
+    }
+    // Lien "CGV / Mentions légales" du pied de la landing : lisible sans compte.
+    if (window.location.pathname === '/cgv' || window.location.pathname === '/cgv/') {
+      return (
+        <div className="min-h-screen bg-gray-50">
+          <div className="max-w-4xl mx-auto px-4 pt-6">
+            <a href="/" className="text-sm text-gray-500 hover:text-gray-900">← Retour</a>
+          </div>
+          <Terms />
+        </div>
+      );
+    }
+  }
+
   if (status === 'signed-out') {
     // Vraie URL dédiée pour l'écran de connexion (voir useNavigation pour le
     // même principe appliqué aux onglets) — mémorise la page initialement
@@ -63,6 +86,11 @@ function App() {
   }
 
   if (role === 'reseller') {
+    // Revendeur connecté sur "/" (ex. lien vers la landing) : URL canonique
+    // du catalogue, avant que ResellerApp ne résolve l'onglet initial.
+    if (window.location.pathname === '/') {
+      window.history.replaceState({}, '', '/catalogue' + window.location.search);
+    }
     return <ResellerApp />;
   }
 
