@@ -23,8 +23,8 @@ import logoWhite from './assets/logo_oze_paris_b2b_white.png';
  * pass pointe vers un Stripe Payment Link / Checkout configuré dans Vercel.
  * Sans lien configuré, le bouton retombe sur une demande d'accès par email
  * plutôt que d'afficher un bouton mort.
- *   VITE_B2B_PASS_ENCHERES_CHECKOUT_URL   lien Stripe du Pass Enchères
- *   VITE_B2B_PASS_ENCHERES_PRICE          remplace le prix par défaut (39,90 €)
+ *   VITE_B2B_PASS_DROPS_CHECKOUT_URL      lien Stripe du Pass Drops
+ *   VITE_B2B_PASS_DROPS_PRICE             remplace le prix par défaut (39,90 €)
  *   VITE_B2B_SUBSCRIPTION_CHECKOUT_URL    lien Stripe du Pass Revendeur
  *   VITE_B2B_SUBSCRIPTION_PRICE           remplace le prix par défaut (69,90 €)
  *   VITE_B2B_SUBSCRIPTION_PERIOD          remplace "/ mois" (commun aux deux pass)
@@ -169,16 +169,16 @@ type Plan = {
 
 const PLANS: Plan[] = [
   {
-    id: 'encheres',
-    name: 'Pass Enchères',
-    pitch: 'Pour acheter aux enchères privées, entre professionnels.',
-    price: env('VITE_B2B_PASS_ENCHERES_PRICE') || '39,90 €',
-    checkoutUrl: env('VITE_B2B_PASS_ENCHERES_CHECKOUT_URL'),
+    id: 'drops',
+    name: 'Pass Drops',
+    pitch: 'Pour acheter sur le catalogue et les drops, à l\'unité.',
+    price: env('VITE_B2B_PASS_DROPS_PRICE') || '39,90 €',
+    checkoutUrl: env('VITE_B2B_PASS_DROPS_CHECKOUT_URL'),
     features: [
-      { label: 'Sessions d\'enchères privées, lots dès 0 €', included: true },
+      { label: 'Drops & catalogue B2B, achat à l\'unité', included: true },
       { label: 'Certificats Entrupy disponibles', included: true },
       { label: 'Expédition groupée quand vous voulez', included: true },
-      { label: 'Drops & catalogue B2B', included: false },
+      { label: 'Sessions d\'enchères privées', included: false },
       { label: 'Sourcing sur mesure', included: false },
     ],
   },
@@ -671,7 +671,7 @@ export const B2BLanding: React.FC = () => {
             </h2>
           </div>
           <p className="mx-auto mt-4 max-w-xl text-center text-sm text-white/70 sm:text-base">
-            Trois formules selon votre activité : enchères, accès complet, ou accompagnement dédié pour les boutiques.
+            Trois formules selon votre activité : drops, accès complet, ou accompagnement dédié pour les boutiques.
           </p>
           <div className="mx-auto mt-10 grid max-w-6xl grid-cols-1 items-stretch gap-5 sm:mt-16 sm:gap-6 lg:grid-cols-3 lg:items-center">
             {PLANS.map((p) => <PlanCard key={p.id} plan={p} />)}
