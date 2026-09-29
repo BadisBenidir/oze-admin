@@ -10,6 +10,28 @@ import { B2BLanding } from './components/landing/B2BLanding';
 import { B2BSignup } from './components/landing/B2BSignup';
 import { Terms } from './components/pages/reseller/Terms';
 
+// Aperçu privé de la landing avant son ouverture publique : ouvrir
+// https://pro.ozeparis.com/?apercu=club-yTMTeei l'active pour ce navigateur
+// (mémorisé, pour que /inscription et le retour de Stripe fonctionnent
+// aussi) ; ?apercu=off le retire. Ce n'est pas une protection forte (la clé
+// est dans le code livré au navigateur), juste de quoi garder la page
+// invisible du public. Inutile une fois VITE_B2B_LANDING_ENABLED = 'true'.
+const LANDING_PREVIEW_KEY = 'club-yTMTeei';
+const LANDING_PREVIEW_STORAGE = 'oze-landing-preview';
+
+const isLandingEnabled = (): boolean => {
+  if (import.meta.env.VITE_B2B_LANDING_ENABLED === 'true') return true;
+  try {
+    const param = new URLSearchParams(window.location.search).get('apercu');
+    if (param === LANDING_PREVIEW_KEY) localStorage.setItem(LANDING_PREVIEW_STORAGE, '1');
+    if (param === 'off') localStorage.removeItem(LANDING_PREVIEW_STORAGE);
+    return localStorage.getItem(LANDING_PREVIEW_STORAGE) === '1';
+  } catch {
+    // Stockage indisponible (navigation privée stricte) : aperçu seulement via l'URL.
+    return new URLSearchParams(window.location.search).get('apercu') === LANDING_PREVIEW_KEY;
+  }
+};
+
 function App() {
   const { status, role } = useSessionRole();
 
@@ -45,13 +67,15 @@ function App() {
 
   if (status === 'signed-out' && !isAdminHost) {
     // Landing masquée tant que VITE_B2B_LANDING_ENABLED !== 'true' (réglage
-    // Vercel) : "/" retombe alors sur l'écran de connexion, comme avant.
-    if (window.location.pathname === '/' && import.meta.env.VITE_B2B_LANDING_ENABLED === 'true') {
+    // Vercel) : "/" retombe alors sur l'écran de connexion, comme avant —
+    // sauf en aperçu privé (voir isLandingEnabled).
+    const landingEnabled = isLandingEnabled();
+    if (window.location.pathname === '/' && landingEnabled) {
       return <B2BLanding />;
     }
     // Inscription à un pass depuis la landing (infos du compte, puis Stripe),
     // et /inscription/merci, page de retour après paiement.
-    if (/^\/inscription(\/merci)?\/?$/.test(window.location.pathname) && import.meta.env.VITE_B2B_LANDING_ENABLED === 'true') {
+    if (/^\/inscription(\/merci)?\/?$/.test(window.location.pathname) && landingEnabled) {
       return <B2BSignup />;
     }
     // Lien "CGV / Mentions légales" du pied de la landing : lisible sans compte.
