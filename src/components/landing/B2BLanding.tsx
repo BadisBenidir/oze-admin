@@ -76,7 +76,8 @@ const FEATURES: {
     title: 'Vos pièces cibles,',
     titleBold: 'sourcées pour vous',
     text: 'Pour les budgets importants, un accompagnement de A à Z : vous fixez l\'enveloppe et les modèles recherchés, nous chassons les pièces et vous les validez une par une avant achat.',
-    cta: { label: 'Lancer une mission', href: `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Mission de sourcing')}` },
+    // Sans href : descend vers la section d'adhésion (#tarifs), comme les autres boutons.
+    cta: { label: 'Lancer une mission' },
     steps: [
       { title: 'Vous fixez le budget', text: 'Une enveloppe allouée, vos modèles cibles, vos critères de grade et d\'état.' },
       { title: 'On sélectionne avec vous', text: 'Chaque pièce repérée vous est proposée et validée une par une, avant achat.' },
@@ -645,14 +646,17 @@ export const B2BLanding: React.FC = () => {
                 <div className="mt-8">{cta}</div>
                 {f.layout === 'wide' && screenshot && <div className="mt-14">{screenshot}</div>}
                 {f.steps && (
-                  <ol className="mx-auto mt-14 grid max-w-5xl grid-cols-1 gap-6 text-left md:grid-cols-3">
+                  <ol className="mx-auto mt-8 grid max-w-5xl grid-cols-1 gap-2.5 text-left sm:mt-14 md:grid-cols-3 md:gap-6">
                     {f.steps.map((s, n) => (
-                      <li key={s.title} className="rounded-2xl border border-gray-200 bg-white p-8">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black text-sm font-semibold text-white">
+                      // Mobile : numéro à gauche du texte, carte compacte ; desktop : carte détaillée
+                      <li key={s.title} className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-3.5 md:block md:rounded-2xl md:p-8">
+                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-black text-xs font-semibold text-white md:h-10 md:w-10 md:text-sm">
                           {n + 1}
                         </span>
-                        <h3 className="mt-5 text-lg font-semibold">{s.title}</h3>
-                        <p className="mt-2 text-sm leading-relaxed text-gray-600">{s.text}</p>
+                        <div>
+                          <h3 className="text-sm font-semibold md:mt-5 md:text-lg">{s.title}</h3>
+                          <p className="mt-0.5 text-xs leading-relaxed text-gray-600 md:mt-2 md:text-sm">{s.text}</p>
+                        </div>
                       </li>
                     ))}
                   </ol>
@@ -664,20 +668,25 @@ export const B2BLanding: React.FC = () => {
       })}
 
       {/* COMMENT ÇA MARCHE */}
-      <section className="py-20 sm:py-24">
+      <section className="py-12 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center">
-            <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Comment ça marche</p>
-            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
+            <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-gray-500 sm:text-xs">Comment ça marche</p>
+            <h2 className="mt-2 text-xl font-light tracking-tight sm:mt-3 sm:text-4xl">
               Trois étapes, <span className="font-semibold">zéro friction</span>
             </h2>
           </div>
-          <ol className="mt-12 grid grid-cols-1 gap-8 text-center md:grid-cols-3">
+          {/* Mobile : numéro à gauche du texte ; desktop : trois colonnes centrées */}
+          <ol className="mt-6 grid grid-cols-1 gap-4 sm:mt-12 md:grid-cols-3 md:gap-8 md:text-center">
             {STEPS.map((s, i) => (
-              <li key={s.title}>
-                <span className="text-4xl font-extralight text-gray-300">0{i + 1}</span>
-                <h3 className="mt-3 text-base font-semibold">{s.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-gray-600">{s.text}</p>
+              <li key={s.title} className="flex items-start gap-3 md:block">
+                <span className="w-8 flex-shrink-0 text-2xl font-extralight leading-none text-gray-300 md:w-auto md:text-4xl">
+                  0{i + 1}
+                </span>
+                <div>
+                  <h3 className="text-sm font-semibold md:mt-3 md:text-base">{s.title}</h3>
+                  <p className="mt-0.5 text-xs leading-relaxed text-gray-600 md:mt-2 md:text-sm">{s.text}</p>
+                </div>
               </li>
             ))}
           </ol>
