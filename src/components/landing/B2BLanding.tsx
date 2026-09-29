@@ -183,7 +183,7 @@ const goToLogin = () => {
   window.location.href = '/connexion';
 };
 
-// Captures de cartes produits du catalogue (exemples), optimisées en webp ~16 Ko.
+// Photos de pièces du catalogue (exemples), recadrées en carrés identiques — webp ~14 Ko.
 const ARTICLE_IMAGES = Object.values(
   import.meta.glob<string>('./assets/articles/*.webp', { eager: true, import: 'default' })
 );
@@ -195,7 +195,7 @@ const ARTICLE_IMAGES = Object.values(
  */
 const ArticlesMarquee: React.FC = () => (
   <div
-    className="oze-marquee group relative mt-10 overflow-x-hidden motion-reduce:overflow-x-auto"
+    className="oze-marquee group relative mt-8 overflow-x-hidden motion-reduce:overflow-x-auto"
     style={{
       maskImage: 'linear-gradient(to right, transparent, black 6%, black 94%, transparent)',
       WebkitMaskImage: 'linear-gradient(to right, transparent, black 6%, black 94%, transparent)',
@@ -203,11 +203,11 @@ const ArticlesMarquee: React.FC = () => (
   >
     <style>{`
       @keyframes oze-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-      .oze-marquee-track { animation: oze-marquee 70s linear infinite; }
+      .oze-marquee-track { animation: oze-marquee 60s linear infinite; }
       .oze-marquee:hover .oze-marquee-track { animation-play-state: paused; }
       @media (prefers-reduced-motion: reduce) { .oze-marquee-track { animation: none; } }
     `}</style>
-    <div className="oze-marquee-track flex w-max gap-3 sm:gap-4">
+    <div className="oze-marquee-track flex w-max gap-2 sm:gap-3">
       {[...ARTICLE_IMAGES, ...ARTICLE_IMAGES].map((src, i) => (
         <img
           key={i}
@@ -216,7 +216,7 @@ const ArticlesMarquee: React.FC = () => (
           aria-hidden={i >= ARTICLE_IMAGES.length}
           loading="lazy"
           draggable={false}
-          className="h-56 w-auto flex-shrink-0 rounded-xl border border-gray-100 shadow-sm sm:h-64"
+          className="h-28 w-28 flex-shrink-0 rounded-xl object-cover sm:h-36 sm:w-36"
         />
       ))}
     </div>
@@ -548,16 +548,16 @@ export const B2BLanding: React.FC = () => {
       </section>
 
       {/* APERÇU DU CATALOGUE — bandeau défilant en boucle, une seule rangée */}
-      <section className="overflow-hidden border-y border-gray-100 bg-white py-14 sm:py-16">
+      <section className="overflow-hidden border-y border-gray-100 bg-white py-10 sm:py-12">
         <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
           <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Un aperçu du catalogue</p>
-          <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-3xl">
+          <h2 className="mt-2 text-xl font-light tracking-tight sm:text-2xl">
             Des pièces comme celles-ci, <span className="font-semibold">à chaque drop</span>
           </h2>
         </div>
         <ArticlesMarquee />
-        <p className="mt-6 px-4 text-center text-xs text-gray-400">
-          Exemples de pièces déjà proposées aux membres. Catalogue complet et prix à jour réservés aux abonnés.
+        <p className="mt-5 px-4 text-center text-xs text-gray-400">
+          Exemples de pièces déjà proposées aux membres. Catalogue complet et prix réservés aux abonnés.
         </p>
       </section>
 
