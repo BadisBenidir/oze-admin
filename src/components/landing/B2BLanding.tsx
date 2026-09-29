@@ -19,21 +19,29 @@ import logoWhite from './assets/logo_oze_paris_b2b_white.png';
  * Hero : photo plein écran (assets/hero.jpeg, originale non recompressée), texte blanc centré ;
  * header transparent sur la photo puis blanc au scroll, comme le site principal.
  *
- * Abonnement : aucun système d'abonnement n'existe encore dans l'app — le
- * bouton pointe vers un Stripe Payment Link / Checkout configuré dans
- * Vercel. Sans lien configuré, il retombe sur une demande d'accès par email
+ * Abonnement : aucun système d'abonnement n'existe encore dans l'app — chaque
+ * pass pointe vers un Stripe Payment Link / Checkout configuré dans Vercel.
+ * Sans lien configuré, le bouton retombe sur une demande d'accès par email
  * plutôt que d'afficher un bouton mort.
- *   VITE_B2B_SUBSCRIPTION_CHECKOUT_URL  lien Stripe (https://buy.stripe.com/...)
- *   VITE_B2B_SUBSCRIPTION_PRICE         ex. "49 €" (sinon "Sur demande")
- *   VITE_B2B_SUBSCRIPTION_PERIOD        ex. "/ mois"
- *   VITE_B2B_DISCORD_URL                invitation Discord (bouton masqué si absent)
+ *   VITE_B2B_PASS_ENCHERES_CHECKOUT_URL   lien Stripe du Pass Enchères
+ *   VITE_B2B_PASS_ENCHERES_PRICE          ex. "29 €" (sinon "Sur demande")
+ *   VITE_B2B_SUBSCRIPTION_CHECKOUT_URL    lien Stripe du Pass Revendeur
+ *   VITE_B2B_SUBSCRIPTION_PRICE           ex. "49 €" (sinon "Sur demande")
+ *   VITE_B2B_SUBSCRIPTION_PERIOD          ex. "/ mois" (commun aux deux pass)
+ *   VITE_B2B_WHATSAPP_NUMBER              numéro international sans + ni espaces, ex. 33612345678
+ *                                         (Pass Boutiques ; sinon repli sur l'email)
+ *   VITE_B2B_DISCORD_URL                  invitation Discord (bouton masqué si absent)
  */
-const CHECKOUT_URL = (import.meta.env.VITE_B2B_SUBSCRIPTION_CHECKOUT_URL as string | undefined)?.trim() || '';
-const PRICE = (import.meta.env.VITE_B2B_SUBSCRIPTION_PRICE as string | undefined)?.trim() || '';
-const PERIOD = (import.meta.env.VITE_B2B_SUBSCRIPTION_PERIOD as string | undefined)?.trim() || '';
-const DISCORD_URL = (import.meta.env.VITE_B2B_DISCORD_URL as string | undefined)?.trim() || '';
+const env = (key: string) => ((import.meta.env[key] as string | undefined) ?? '').trim();
+const PERIOD = env('VITE_B2B_SUBSCRIPTION_PERIOD');
+const DISCORD_URL = env('VITE_B2B_DISCORD_URL');
+const WHATSAPP_NUMBER = env('VITE_B2B_WHATSAPP_NUMBER').replace(/\D/g, '');
 const SUPPORT_EMAIL = 'contact@ozeparis.com';
-const ACCESS_REQUEST_URL = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Demande d\'accès au Club B2B OZË Paris')}`;
+const accessRequestUrl = (pass: string) =>
+  `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Demande d'accès — ${pass} OZË Paris`)}`;
+const AGENT_URL = WHATSAPP_NUMBER
+  ? `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Bonjour, je souhaite en savoir plus sur le Pass Boutiques OZË Paris.')}`
+  : accessRequestUrl('Pass Boutiques');
 
 // Pas de lien « Tarifs » : le bouton « Rejoindre le Club » du header y mène déjà.
 const NAV = [
@@ -146,12 +154,66 @@ const STEPS = [
   { title: 'Commandez, expédiez quand vous voulez', text: 'Vos pièces vous attendent : demandez une livraison groupée dès que vous le souhaitez.' },
 ];
 
-const BENEFITS = [
-  'Accès complet à la plateforme et aux drops',
-  'Participation aux sessions d\'enchères privées',
-  'Certificats Entrupy disponibles sur chaque pièce',
-  'Sourcing sur mesure sur demande',
-  'Support dédié',
+type Plan = {
+  id: string;
+  name: string;
+  pitch: string;
+  price: string;
+  checkoutUrl: string;
+  featured?: boolean;
+  badge?: string;
+  intro?: string;
+  features: { label: string; included: boolean }[];
+  agent?: boolean; // bouton « Contacter un agent » (WhatsApp) au lieu du paiement
+};
+
+const PLANS: Plan[] = [
+  {
+    id: 'encheres',
+    name: 'Pass Enchères',
+    pitch: 'Pour acheter aux enchères et faire sourcer vos pièces cibles.',
+    price: env('VITE_B2B_PASS_ENCHERES_PRICE'),
+    checkoutUrl: env('VITE_B2B_PASS_ENCHERES_CHECKOUT_URL'),
+    features: [
+      { label: 'Sessions d\'enchères privées, lots dès 0 €', included: true },
+      { label: 'Sourcing sur mesure', included: true },
+      { label: 'Certificats Entrupy disponibles', included: true },
+      { label: 'Expédition groupée quand vous voulez', included: true },
+      { label: 'Drops & catalogue B2B', included: false },
+    ],
+  },
+  {
+    id: 'revendeur',
+    name: 'Pass Revendeur',
+    pitch: 'L\'accès complet à la plateforme pour les revendeurs.',
+    price: env('VITE_B2B_SUBSCRIPTION_PRICE'),
+    checkoutUrl: env('VITE_B2B_SUBSCRIPTION_CHECKOUT_URL'),
+    featured: true,
+    badge: 'Accès complet',
+    features: [
+      { label: 'Drops & catalogue B2B, achat à l\'unité', included: true },
+      { label: 'Sessions d\'enchères privées, lots dès 0 €', included: true },
+      { label: 'Sourcing sur mesure', included: true },
+      { label: 'Certificats Entrupy disponibles', included: true },
+      { label: 'Expédition groupée quand vous voulez', included: true },
+    ],
+  },
+  {
+    id: 'boutiques',
+    name: 'Pass Boutiques',
+    pitch: 'Pour les boutiques et gros volumes, avec une équipe à vos côtés.',
+    price: '',
+    checkoutUrl: '',
+    agent: true,
+    intro: 'Tout le Pass Revendeur, plus :',
+    features: [
+      { label: 'Une équipe dédiée à votre boutique', included: true },
+      { label: 'Un agent joignable en direct sur WhatsApp', included: true },
+      { label: 'Sourcing en volume pour vos réassorts', included: true },
+      { label: 'Conditions tarifaires sur mesure', included: true },
+      { label: 'Plusieurs comptes pour votre équipe', included: true },
+    ],
+  },
 ];
 
 const FAQ = [
@@ -187,17 +249,86 @@ const DiscordIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-const SubscribeButton: React.FC<{ className?: string; label?: string }> = ({ className = '', label }) => (
-  <a
-    href={CHECKOUT_URL || ACCESS_REQUEST_URL}
-    target={CHECKOUT_URL ? '_blank' : undefined}
-    rel={CHECKOUT_URL ? 'noopener noreferrer' : undefined}
-    className={`inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-medium transition-colors ${className}`}
-  >
-    {label || (CHECKOUT_URL ? 'Rejoindre le Club B2B' : 'Demander mon accès')}
-    <ArrowRight className="h-4 w-4" />
-  </a>
+const WhatsAppIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
+  </svg>
 );
+
+const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
+  const { name, pitch, price, checkoutUrl, featured, badge, intro, features, agent } = plan;
+  const href = agent ? AGENT_URL : checkoutUrl || accessRequestUrl(name);
+  const external = agent ? !!WHATSAPP_NUMBER : !!checkoutUrl;
+  const muted = featured ? 'text-white/60' : 'text-gray-500';
+
+  return (
+    <div
+      className={`relative flex flex-col rounded-2xl p-6 sm:rounded-3xl sm:p-8 ${
+        featured ? 'bg-neutral-950 text-white shadow-2xl ring-1 ring-white/15 lg:-my-4 lg:py-12' : 'bg-white text-gray-900'
+      }`}
+    >
+      {badge && (
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-black shadow">
+          {badge}
+        </span>
+      )}
+      <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${muted}`}>{name}</p>
+      <p className="mt-4 flex items-baseline gap-2">
+        <span className="text-3xl font-semibold tracking-tight sm:text-4xl">
+          {agent ? 'Sur devis' : price || 'Sur demande'}
+        </span>
+        {!agent && price && PERIOD && <span className={`text-sm ${muted}`}>{PERIOD}</span>}
+      </p>
+      <p className={`mt-3 text-sm leading-relaxed ${featured ? 'text-white/70' : 'text-gray-600'}`}>{pitch}</p>
+      <div className={`my-6 h-px ${featured ? 'bg-white/10' : 'bg-gray-100'}`} />
+      {intro && <p className="mb-4 text-sm font-semibold">{intro}</p>}
+      <ul className="flex-1 space-y-3">
+        {features.map((f) => (
+          <li
+            key={f.label}
+            className={`flex items-start gap-3 text-sm ${
+              f.included ? (featured ? 'text-white/90' : 'text-gray-700') : `${featured ? 'text-white/30' : 'text-gray-300'} line-through`
+            }`}
+          >
+            {f.included ? (
+              <Check className={`mt-0.5 h-4 w-4 flex-shrink-0 ${featured ? 'text-white' : 'text-gray-900'}`} strokeWidth={2.5} />
+            ) : (
+              <X className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            )}
+            {f.label}
+          </li>
+        ))}
+      </ul>
+      <a
+        href={href}
+        target={external ? '_blank' : undefined}
+        rel={external ? 'noopener noreferrer' : undefined}
+        className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-colors ${
+          agent
+            ? 'bg-[#25D366] text-white hover:bg-[#1EBE5A]'
+            : featured
+              ? 'bg-white text-black hover:bg-gray-100'
+              : 'bg-black text-white hover:bg-gray-800'
+        }`}
+      >
+        {agent ? (
+          <>
+            <WhatsAppIcon className="h-5 w-5" /> Contacter un agent
+          </>
+        ) : (
+          <>
+            {checkoutUrl ? `Choisir le ${name}` : 'Demander mon accès'} <ArrowRight className="h-4 w-4" />
+          </>
+        )}
+      </a>
+      <p className={`mt-3 text-center text-xs ${featured ? 'text-white/40' : 'text-gray-400'}`}>
+        {agent
+          ? WHATSAPP_NUMBER ? 'Réponse rapide sur WhatsApp' : `Réponse sous 48h — ${SUPPORT_EMAIL}`
+          : checkoutUrl ? 'Paiement sécurisé par Stripe' : `Réponse sous 48h — ${SUPPORT_EMAIL}`}
+      </p>
+    </div>
+  );
+};
 
 const FaqItem: React.FC<{ q: string; a: string }> = ({ q, a }) => {
   const [open, setOpen] = useState(false);
@@ -536,23 +667,11 @@ export const B2BLanding: React.FC = () => {
               Le <span className="font-semibold">Club B2B</span> OZË Paris
             </h2>
           </div>
-          <div className="mx-auto mt-12 max-w-md bg-white p-8 sm:p-10">
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-gray-500">Pass revendeur</p>
-            <p className="mt-4 flex items-baseline gap-2">
-              <span className="text-4xl font-semibold tracking-tight">{PRICE || 'Sur demande'}</span>
-              {PRICE && PERIOD && <span className="text-sm text-gray-500">{PERIOD}</span>}
-            </p>
-            <ul className="mt-8 space-y-3">
-              {BENEFITS.map((b) => (
-                <li key={b} className="flex items-start gap-3 text-sm text-gray-700">
-                  <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-900" /> {b}
-                </li>
-              ))}
-            </ul>
-            <SubscribeButton className="mt-10 w-full bg-black text-white hover:bg-gray-800" />
-            <p className="mt-4 text-center text-xs text-gray-400">
-              {CHECKOUT_URL ? 'Paiement sécurisé par Stripe.' : `Réponse sous 48h — ${SUPPORT_EMAIL}`}
-            </p>
+          <p className="mx-auto mt-4 max-w-xl text-center text-sm text-white/70 sm:text-base">
+            Trois formules selon votre activité : enchères, accès complet, ou accompagnement dédié pour les boutiques.
+          </p>
+          <div className="mx-auto mt-12 grid max-w-6xl grid-cols-1 items-stretch gap-6 sm:mt-16 lg:grid-cols-3 lg:items-center">
+            {PLANS.map((p) => <PlanCard key={p.id} plan={p} />)}
           </div>
         </div>
       </section>
