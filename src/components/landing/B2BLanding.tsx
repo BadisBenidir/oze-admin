@@ -5,7 +5,7 @@ import {
 import {
   COMPANY_LEGAL_NAME, COMPANY_SIRET, COMPANY_RCS, COMPANY_VAT_NUMBER, COMPANY_ADDRESS,
 } from '../../config/legal';
-import heroImg from './assets/hero.webp';
+import heroImg from './assets/hero.jpeg';
 import clubImg from './assets/club.webp';
 import logo from './assets/logo_oze_paris_b2b.png';
 
@@ -13,7 +13,7 @@ import logo from './assets/logo_oze_paris_b2b.png';
  * Landing page publique de pro.ozeparis.com (visiteur non connecté sur "/",
  * voir App.tsx). Aucune donnée chargée : page 100 % statique.
  *
- * Hero : photo plein écran (assets/hero.webp), texte blanc centré.
+ * Hero : photo (assets/hero.jpeg, originale non recompressée) dans un cadre arrondi, texte blanc centré.
  *
  * Abonnement : aucun système d'abonnement n'existe encore dans l'app — le
  * bouton pointe vers un Stripe Payment Link / Checkout configuré dans
@@ -255,11 +255,12 @@ export const B2BLanding: React.FC = () => {
         )}
       </header>
 
-      {/* HERO — photo plein écran, texte centré par-dessus */}
-      <section className="relative flex min-h-screen items-center overflow-hidden bg-neutral-900 pb-20 pt-32 sm:pt-36">
-        <img src={heroImg} alt="" className="absolute inset-0 h-full w-full object-cover object-[40%_center]" />
-        <div className="pointer-events-none absolute inset-0 bg-black/50" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
+      {/* HERO — photo dans un cadre arrondi : la source ne fait que 1600 px, on évite de l'agrandir en pleine largeur */}
+      <section className="bg-white px-3 pb-6 pt-20 sm:px-4 lg:pt-24">
+        <div className="relative mx-auto flex min-h-[600px] max-w-7xl items-center overflow-hidden rounded-3xl bg-neutral-900 py-16 lg:h-[calc(100vh-7.5rem)] lg:max-h-[800px]">
+        <img src={heroImg} alt="" className="absolute inset-0 h-full w-full object-cover object-[40%_30%]" />
+        <div className="pointer-events-none absolute inset-0 bg-black/45" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/50" />
         <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6">
           <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/70">Espace professionnel</p>
           <h1 className="mt-5 text-3xl font-light leading-tight tracking-tight text-white drop-shadow sm:text-5xl md:text-6xl">
@@ -302,6 +303,7 @@ export const B2BLanding: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
         </div>
       </section>
 
