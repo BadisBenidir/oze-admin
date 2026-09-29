@@ -7,6 +7,8 @@ import {
 } from '../../config/legal';
 import heroImg from './assets/hero.jpeg';
 import clubImg from './assets/club.webp';
+import dropsImg from './assets/drops.webp';
+import encheresImg from './assets/encheres.webp';
 import logo from './assets/logo_oze_paris_b2b.png';
 import logoWhite from './assets/logo_oze_paris_b2b_white.png';
 
@@ -60,6 +62,7 @@ const FEATURES: {
     titleBold: 'à l\'unité',
     text: 'Chaque drop met en ligne de nouvelles pièces sélectionnées, avec grade et état détaillés. Achetez à l\'unité, sans minimum : vos pièces restent sur votre compte et vous demandez une expédition groupée quand vous le souhaitez.',
     cta: { label: 'Accéder au catalogue' },
+    image: dropsImg,
   },
   {
     id: 'encheres',
@@ -68,6 +71,7 @@ const FEATURES: {
     titleBold: 'dès 0 €',
     text: 'Des sessions réservées aux membres, entre professionnels uniquement. Les lots démarrent à 0 € : c\'est le marché qui fixe le prix. Le calendrier des prochaines sessions est visible dans votre espace, et les lots remportés se règlent sous 24h.',
     cta: { label: 'Participer aux enchères' },
+    image: encheresImg,
   },
   {
     id: 'sourcing',
