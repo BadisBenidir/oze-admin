@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Globe, Euro, UserRound,
+  ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Globe, Euro, UserRound, Mail,
 } from 'lucide-react';
 import {
   COMPANY_LEGAL_NAME, COMPANY_SIRET, COMPANY_RCS, COMPANY_VAT_NUMBER, COMPANY_ADDRESS,
@@ -631,21 +631,110 @@ export const B2BLanding: React.FC = () => {
       </section>
 
       {/* FOOTER */}
-      <footer className="border-t border-gray-200 bg-neutral-50 py-12">
-        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 sm:px-6 md:flex-row md:items-start md:justify-between">
-          <div>
-            <img src={logo} alt="OZË Paris — B2B Solutions" className="h-12 w-auto" />
-            <p className="mt-4 max-w-sm text-xs leading-relaxed text-gray-500">
-              {COMPANY_LEGAL_NAME} — SIRET {COMPANY_SIRET} — {COMPANY_RCS} — TVA {COMPANY_VAT_NUMBER} — {COMPANY_ADDRESS}
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 text-sm text-gray-600">
-            <a href="/cgv" className="transition-colors hover:text-black">Conditions générales de vente B2B</a>
-            <a href="/cgv" className="transition-colors hover:text-black">Mentions légales</a>
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="transition-colors hover:text-black">Contact support — {SUPPORT_EMAIL}</a>
+      <footer className="bg-neutral-950 text-white">
+        {/* Dernier appel à l'action */}
+        <div className="border-b border-white/10">
+          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-12 text-center sm:px-6 md:flex-row md:text-left">
+            <div>
+              <h2 className="text-2xl font-light tracking-tight sm:text-3xl">
+                Prêt à rejoindre le <span className="font-semibold">Club B2B</span> ?
+              </h2>
+              <p className="mt-2 text-sm text-white/60">Sans engagement, accès ouvert dès le paiement.</p>
+            </div>
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+              <button
+                onClick={() => scrollTo('tarifs')}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-black transition-colors hover:bg-gray-100"
+              >
+                Voir les offres <ArrowRight className="h-4 w-4" />
+              </button>
+              <a
+                href={AGENT_URL}
+                target={WHATSAPP_NUMBER ? '_blank' : undefined}
+                rel={WHATSAPP_NUMBER ? 'noopener noreferrer' : undefined}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/10"
+              >
+                {WHATSAPP_NUMBER ? <WhatsAppIcon className="h-4 w-4" /> : <Mail className="h-4 w-4" />} Parler à un agent
+              </a>
+            </div>
           </div>
         </div>
-        <p className="mx-auto mt-10 max-w-6xl px-4 text-xs text-gray-400 sm:px-6">© {new Date().getFullYear()} OZË Paris. Tous droits réservés.</p>
+
+        {/* Colonnes */}
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-10 px-4 py-12 sm:px-6 md:grid-cols-4">
+          <div className="col-span-2 md:col-span-1">
+            <img src={logoWhite} alt="OZË Paris — B2B Solutions" className="h-14 w-auto" />
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/60">
+              Maroquinerie de luxe de seconde main, en direct des maisons de vente japonaises, pour les revendeurs et
+              boutiques.
+            </p>
+            {DISCORD_URL && (
+              <a
+                href={DISCORD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Discord"
+                className="mt-5 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-[#5865F2]"
+              >
+                <DiscordIcon className="h-4 w-4" />
+              </a>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Le Club</p>
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {[...NAV.filter((n) => n.id !== 'faq'), { id: 'tarifs', label: 'Tarifs' }].map((n) => (
+                <li key={n.id}>
+                  <button onClick={() => scrollTo(n.id)} className="text-white/70 transition-colors hover:text-white">
+                    {n.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Informations</p>
+            <ul className="mt-4 space-y-2.5 text-sm">
+              <li><a href="/cgv" className="text-white/70 transition-colors hover:text-white">Conditions générales de vente</a></li>
+              <li><a href="/cgv" className="text-white/70 transition-colors hover:text-white">Mentions légales</a></li>
+              <li>
+                <button onClick={() => scrollTo('faq')} className="text-white/70 transition-colors hover:text-white">
+                  Questions fréquentes
+                </button>
+              </li>
+              <li><button onClick={goToLogin} className="text-white/70 transition-colors hover:text-white">Espace revendeur</button></li>
+            </ul>
+          </div>
+
+          <div className="col-span-2 md:col-span-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Contact</p>
+            <ul className="mt-4 space-y-2.5 text-sm">
+              <li>
+                <a href={`mailto:${SUPPORT_EMAIL}`} className="text-white/70 transition-colors hover:text-white">{SUPPORT_EMAIL}</a>
+              </li>
+              {WHATSAPP_NUMBER && (
+                <li>
+                  <a href={AGENT_URL} target="_blank" rel="noopener noreferrer" className="text-white/70 transition-colors hover:text-white">
+                    WhatsApp
+                  </a>
+                </li>
+              )}
+              <li className="text-white/50">{COMPANY_ADDRESS}</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Mentions légales */}
+        <div className="border-t border-white/10">
+          <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-6 text-xs text-white/40 sm:px-6 md:flex-row md:items-center md:justify-between">
+            <p>© {new Date().getFullYear()} OZË Paris. Tous droits réservés.</p>
+            <p>
+              {COMPANY_LEGAL_NAME} · SIRET {COMPANY_SIRET} · {COMPANY_RCS} · TVA {COMPANY_VAT_NUMBER}
+            </p>
+          </div>
+        </div>
       </footer>
     </div>
   );
