@@ -296,7 +296,7 @@ export const B2BLanding: React.FC = () => {
       {/* HERO — photo plein écran sous le header transparent, texte centré par-dessus */}
       <section>
         <div className="relative flex min-h-screen items-center overflow-hidden bg-neutral-900 pb-16 pt-28">
-        <img src={heroImg} alt="" className="absolute inset-0 h-full w-full object-cover object-[35%_30%]" />
+        <img src={heroImg} alt="" className="absolute inset-0 h-full w-full object-cover object-[40%_35%]" />
         <div className="pointer-events-none absolute inset-0 bg-black/45" />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/50" />
         <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6">
