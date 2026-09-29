@@ -1,27 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu,
-  ShieldCheck, X, Check, Eye,
+  ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check,
 } from 'lucide-react';
 import {
   COMPANY_LEGAL_NAME, COMPANY_SIRET, COMPANY_RCS, COMPANY_VAT_NUMBER, COMPANY_ADDRESS,
 } from '../../config/legal';
-import heroImg from './assets/hero.webp';
 import clubImg from './assets/club.webp';
 import sourcingImg from './assets/sourcing.webp';
 import catalogueImg from './assets/pillar-catalogue.webp';
 import encheresImg from './assets/pillar-encheres.webp';
 import logistiqueImg from './assets/pillar-logistique.webp';
-import logoWhite from './assets/logo-white.png';
-import logoBlack from './assets/logo-black.png';
+import logo from './assets/logo_oze_paris_b2b.png';
 
 /**
  * Landing page publique de pro.ozeparis.com (visiteur non connecté sur "/",
  * voir App.tsx). Aucune donnée chargée : page 100 % statique.
  *
- * Style et visuels repris du site principal (oze-storefront) : police
- * Cormorant Garamond, hero photo plein écran, header transparent qui passe
- * en blanc au scroll, boutons noirs/blancs à angles droits.
+ * Hero sans photo pour l'instant (visuel à venir) : fond clair, texte centré.
  *
  * Abonnement : aucun système d'abonnement n'existe encore dans l'app — le
  * bouton pointe vers un Stripe Payment Link / Checkout configuré dans
@@ -36,11 +31,6 @@ const PRICE = (import.meta.env.VITE_B2B_SUBSCRIPTION_PRICE as string | undefined
 const PERIOD = (import.meta.env.VITE_B2B_SUBSCRIPTION_PERIOD as string | undefined)?.trim() || '';
 const SUPPORT_EMAIL = 'contact@ozeparis.com';
 const ACCESS_REQUEST_URL = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Demande d\'accès au Club B2B OZË Paris')}`;
-
-// Police du site principal, chargée uniquement sur la landing (l'admin garde sa police système).
-const FONT_HREF = 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap';
-const SERIF = "font-['Cormorant_Garamond',serif]";
-const SANS = "font-['Inter',system-ui,sans-serif]";
 
 const NAV = [
   { id: 'solutions', label: 'Solutions' },
@@ -57,23 +47,20 @@ const PILLARS = [
     image: catalogueImg,
     title: 'Drops & Catalogue B2B',
     text: 'Nouveaux arrivages réguliers, sélection rigoureuse des grades et des états, achat à l\'unité sans quantité minimale imposée.',
-    highlight: 'Drops réguliers',
   },
   {
     id: 'encheres',
     icon: Gavel,
     image: encheresImg,
     title: 'Enchères B2B exclusives',
-    text: 'Sessions privées pour acquérir des pièces très demandées à des prix de départ compétitifs.',
-    highlight: 'Sessions privées',
+    text: 'Sessions privées réservées aux membres, avec des pièces très demandées mises en vente à partir de 0 €.',
   },
   {
-    id: 'entrupy',
-    icon: ShieldCheck,
+    id: 'sourcing-sur-mesure',
+    icon: PackageSearch,
     image: logistiqueImg,
-    title: 'Certification Entrupy & logistique',
-    text: 'Certificats d\'authenticité numériques infalsifiables et expéditions optimisées (Mondial Relay / Colissimo).',
-    highlight: '100 % authentifié',
+    title: 'Sourcing sur mesure',
+    text: 'Vous allouez un budget, nous sélectionnons les pièces une par une avec vous, en contact direct avec votre accompagnateur dédié.',
   },
 ];
 
@@ -123,7 +110,7 @@ const SubscribeButton: React.FC<{ className?: string; label?: string }> = ({ cla
     href={CHECKOUT_URL || ACCESS_REQUEST_URL}
     target={CHECKOUT_URL ? '_blank' : undefined}
     rel={CHECKOUT_URL ? 'noopener noreferrer' : undefined}
-    className={`inline-flex items-center justify-center gap-2 px-8 py-4 text-base font-medium transition-colors ${className}`}
+    className={`inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-medium transition-colors ${className}`}
   >
     {label || (CHECKOUT_URL ? 'Rejoindre le Club B2B' : 'Demander mon accès')}
     <ArrowRight className="h-4 w-4" />
@@ -137,42 +124,18 @@ const FaqItem: React.FC<{ q: string; a: string }> = ({ q, a }) => {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-4 py-6 text-left"
+        className="w-full flex items-center justify-between gap-4 py-5 text-left"
       >
-        <span className="text-lg sm:text-xl font-semibold text-gray-900">{q}</span>
-        <ChevronDown className={`h-5 w-5 flex-shrink-0 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="text-base font-medium text-gray-900">{q}</span>
+        <ChevronDown className={`h-5 w-5 flex-shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && <p className={`${SANS} pb-6 text-sm leading-relaxed text-gray-600`}>{a}</p>}
+      {open && <p className="pb-5 text-sm leading-relaxed text-gray-600">{a}</p>}
     </div>
   );
 };
 
 export const B2BLanding: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    if (document.querySelector(`link[href="${FONT_HREF}"]`)) return;
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = FONT_HREF;
-    document.head.appendChild(link);
-  }, []);
-
-  // Comme sur le site principal : header transparent sur le hero, blanc une fois le hero dépassé.
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > window.innerHeight - 80);
-    onScroll();
-    window.addEventListener('scroll', onScroll);
-    window.addEventListener('resize', onScroll);
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-    };
-  }, []);
-
-  const transparent = !scrolled && !menuOpen;
-  const navText = transparent ? 'text-white hover:text-gray-200' : 'text-black hover:text-gray-600';
 
   const handleNav = (id: string) => {
     setMenuOpen(false);
@@ -180,85 +143,47 @@ export const B2BLanding: React.FC = () => {
   };
 
   return (
-    <div className={`${SERIF} min-h-screen bg-white text-gray-900 antialiased`}>
+    <div className="min-h-screen bg-white text-gray-900 antialiased">
       {/* HEADER */}
-      <header
-        className={`fixed inset-x-0 top-0 z-40 transition-colors duration-300 ${
-          transparent ? 'bg-transparent' : 'bg-white border-b border-gray-100'
-        }`}
-      >
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="relative flex h-16 items-center lg:h-20">
-            <button
-              className={`lg:hidden -ml-2 p-2 transition-colors duration-300 ${transparent ? 'text-white' : 'text-black'}`}
-              onClick={() => setMenuOpen((o) => !o)}
-              aria-label="Menu"
-            >
-              {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+      <header className="fixed inset-x-0 top-0 z-40 border-b border-gray-100 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:h-20">
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Haut de page">
+            <img src={logo} alt="OZË Paris — B2B Solutions" className="h-10 w-auto lg:h-12" />
+          </button>
+          <nav className="hidden items-center gap-8 lg:flex">
+            {NAV.map((n) => (
+              <button key={n.id} onClick={() => handleNav(n.id)} className="text-sm text-gray-600 transition-colors hover:text-black">
+                {n.label}
+              </button>
+            ))}
+          </nav>
+          <div className="hidden items-center gap-3 lg:flex">
+            <button onClick={goToLogin} className="px-3 py-2 text-sm text-gray-700 transition-colors hover:text-black">
+              Se connecter
             </button>
-
-            <div className="absolute left-1/2 -translate-x-1/2 lg:static lg:mr-10 lg:flex lg:translate-x-0 lg:items-center">
-              <button
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                className="flex items-center gap-2 transition-opacity hover:opacity-80"
-                aria-label="Haut de page"
-              >
-                <img
-                  src={transparent ? logoWhite : logoBlack}
-                  alt="OZË Paris"
-                  className={`${transparent ? 'h-14' : 'h-10'} w-auto object-contain`}
-                />
-                <span className={`${SANS} text-[10px] font-medium tracking-[0.3em] ${transparent ? 'text-white/70' : 'text-gray-500'}`}>
-                  PRO
-                </span>
-              </button>
-            </div>
-
-            <nav className="hidden flex-1 items-center justify-center space-x-8 lg:flex">
-              {NAV.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => handleNav(n.id)}
-                  className={`${navText} font-medium uppercase transition-colors duration-300`}
-                >
-                  {n.label}
-                </button>
-              ))}
-            </nav>
-
-            <div className="ml-auto hidden items-center gap-4 lg:flex">
-              <button onClick={goToLogin} className={`${navText} font-medium transition-colors duration-300`}>
-                SE CONNECTER
-              </button>
-              <button
-                onClick={() => handleNav('tarifs')}
-                className={`px-5 py-2.5 font-medium transition-colors duration-300 ${
-                  transparent
-                    ? 'border-2 border-white text-white hover:bg-white hover:text-black'
-                    : 'bg-black text-white hover:bg-gray-900'
-                }`}
-              >
-                Rejoindre le Club
-              </button>
-            </div>
+            <button
+              onClick={() => handleNav('tarifs')}
+              className="bg-black px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+            >
+              Rejoindre le Club B2B
+            </button>
           </div>
+          <button className="p-1 text-black lg:hidden" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu">
+            {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
         </div>
         {menuOpen && (
           <div className="border-t border-gray-100 bg-white px-4 pb-6 pt-2 lg:hidden">
             {NAV.map((n) => (
-              <button
-                key={n.id}
-                onClick={() => handleNav(n.id)}
-                className="block w-full py-3 text-left text-lg font-medium uppercase text-black"
-              >
+              <button key={n.id} onClick={() => handleNav(n.id)} className="block w-full py-3 text-left text-gray-800">
                 {n.label}
               </button>
             ))}
             <div className="mt-4 flex flex-col gap-3">
-              <button onClick={goToLogin} className="border-2 border-black py-3 font-medium text-black">
+              <button onClick={goToLogin} className="border border-gray-900 py-3 text-sm font-medium text-gray-900">
                 Se connecter
               </button>
-              <button onClick={() => handleNav('tarifs')} className="bg-black py-3 font-medium text-white">
+              <button onClick={() => handleNav('tarifs')} className="bg-black py-3 text-sm font-medium text-white">
                 Rejoindre le Club B2B
               </button>
             </div>
@@ -266,91 +191,69 @@ export const B2BLanding: React.FC = () => {
         )}
       </header>
 
-      {/* HERO */}
-      <section className="relative min-h-screen overflow-hidden">
-        <div className="absolute inset-0 bg-gray-900">
-          <img src={heroImg} alt="" className="h-full w-full object-cover object-[70%_center]" />
-        </div>
-        {/* Dégradé gauche → transparent (desktop) / haut-bas (mobile) pour la lisibilité, comme le site principal */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/70 lg:hidden" />
-        <div
-          className="pointer-events-none absolute inset-0 hidden lg:block"
-          style={{ background: 'linear-gradient(to right, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.3) 40%, rgba(0,0,0,0) 65%)' }}
-        />
-        <div className="relative z-10 mx-auto max-w-7xl px-4 pb-16 pt-32 lg:px-8 lg:pt-40">
-          <div className="max-w-2xl">
-            <span className={`${SANS} text-sm font-medium uppercase tracking-wider text-[#F5F1E8]/90`}>
-              Espace professionnel
-            </span>
-            <h1 className="mt-4 mb-6 text-4xl font-light leading-tight text-[#FAF7F0] drop-shadow-sm md:text-5xl lg:text-6xl">
-              La plateforme de sourcing luxe
-              <span className="block font-bold text-white">pour les revendeurs.</span>
-            </h1>
-            <p className={`${SANS} mb-8 text-base leading-relaxed text-[#F5F1E8]/90 drop-shadow-sm sm:text-lg`}>
-              Accédez à un inventaire exclusif de maroquinerie de seconde main vérifiée par Entrupy, participez à nos
-              sessions d'enchères privées et boostez vos marges.
-            </p>
-            <div className="mb-12 flex flex-col gap-4 sm:flex-row">
-              <button
-                onClick={() => scrollTo('tarifs')}
-                className="flex items-center justify-center bg-black px-8 py-4 text-base font-medium text-white transition-colors hover:bg-gray-900"
-              >
-                Découvrir les offres
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </button>
-              <button
-                onClick={goToLogin}
-                className="flex items-center justify-center border-2 border-white px-8 py-4 text-base font-medium text-white transition-colors hover:bg-white hover:text-black"
-              >
-                Déjà membre ? Se connecter
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-4 sm:gap-6">
-              {[
-                { value: '100%', label: 'pièces authentifiées' },
-                { value: '24h', label: 'pour régler un lot' },
-                { value: '0', label: 'minimum de commande' },
-              ].map((s) => (
-                <div key={s.label} className="border-l-2 border-white pl-3 sm:pl-4">
-                  <div className="mb-1 text-2xl font-light text-white drop-shadow-sm">{s.value}</div>
-                  <p className={`${SANS} text-xs text-[#F5F1E8]/90 drop-shadow-sm sm:text-sm`}>{s.label}</p>
-                </div>
-              ))}
-            </div>
+      {/* HERO — sans photo en attendant le visuel définitif */}
+      <section className="bg-neutral-50 pb-20 pt-36 sm:pb-28 sm:pt-44">
+        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
+          <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Espace professionnel</p>
+          <h1 className="mt-5 text-3xl font-light leading-tight tracking-tight text-gray-900 sm:text-5xl">
+            La plateforme de sourcing luxe pour les <span className="font-semibold">revendeurs professionnels</span>
+          </h1>
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-gray-600 sm:text-lg">
+            Accédez à un inventaire exclusif de maroquinerie de seconde main vérifiée par Entrupy, participez à nos
+            sessions d'enchères privées et boostez vos marges.
+          </p>
+          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <button
+              onClick={() => scrollTo('tarifs')}
+              className="inline-flex w-full items-center justify-center gap-2 bg-black px-8 py-3.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 sm:w-auto"
+            >
+              Découvrir les offres <ArrowRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={goToLogin}
+              className="w-full border border-gray-900 px-8 py-3.5 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-900 hover:text-white sm:w-auto"
+            >
+              Déjà membre ? Se connecter
+            </button>
+          </div>
+          <div className="mx-auto mt-14 grid max-w-xl grid-cols-3 divide-x divide-gray-200">
+            {[
+              { value: '100 %', label: 'pièces authentifiées' },
+              { value: '24h', label: 'pour régler un lot' },
+              { value: '0', label: 'minimum de commande' },
+            ].map((s) => (
+              <div key={s.label} className="px-2">
+                <div className="text-2xl font-light text-gray-900">{s.value}</div>
+                <p className="mt-1 text-xs text-gray-500">{s.label}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* SOLUTIONS */}
-      <section id="solutions" className="scroll-mt-20 bg-white py-16 md:py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-16 text-center">
-            <h2 className="mb-4 text-3xl font-light text-gray-900 md:text-4xl">
-              Tout ce dont un revendeur a besoin, <span className="font-bold">au même endroit</span>
+      <section id="solutions" className="scroll-mt-20 py-20 sm:py-24">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Nos solutions</p>
+            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
+              Tout ce dont un revendeur a besoin, <span className="font-semibold">au même endroit</span>
             </h2>
-            <p className={`${SANS} mx-auto max-w-3xl text-lg text-gray-600`}>
-              Des pièces sélectionnées avec la même exigence que pour la boutique OZË Paris, réservées aux professionnels.
-            </p>
           </div>
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-            {PILLARS.map(({ id, icon: Icon, image, title, text, highlight }) => (
+          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
+            {PILLARS.map(({ id, icon: Icon, image, title, text }) => (
               <div
                 key={id}
                 id={id === 'encheres' ? id : undefined}
-                className="group scroll-mt-24 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-shadow duration-300 hover:shadow-md"
+                className="scroll-mt-24 overflow-hidden border border-gray-200 bg-white"
               >
-                <div className="relative h-64 overflow-hidden">
-                  <img src={image} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                  <div className="absolute left-4 top-4 flex h-12 w-12 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm">
-                    <Icon className="h-6 w-6 text-gray-900" />
+                <img src={image} alt="" loading="lazy" className="h-56 w-full object-cover" />
+                <div className="p-6">
+                  <div className="flex items-center gap-3">
+                    <Icon className="h-5 w-5 text-gray-900" />
+                    <h3 className="text-base font-semibold">{title}</h3>
                   </div>
-                </div>
-                <div className="p-6 sm:p-8">
-                  <h3 className="mb-3 text-2xl font-semibold text-gray-900">{title}</h3>
-                  <p className={`${SANS} mb-4 text-sm leading-relaxed text-gray-600`}>{text}</p>
-                  <span className={`${SANS} inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-800`}>
-                    {highlight}
-                  </span>
+                  <p className="mt-3 text-sm leading-relaxed text-gray-600">{text}</p>
                 </div>
               </div>
             ))}
@@ -358,78 +261,45 @@ export const B2BLanding: React.FC = () => {
         </div>
       </section>
 
-      {/* SOURCING SUR MESURE (mise en page « StoryPreview » du site principal) */}
-      <section id="sourcing" className="scroll-mt-20 bg-gray-50 py-16 md:py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2">
-            <div className="order-2 lg:order-1">
-              <span className={`${SANS} text-sm font-medium uppercase tracking-wider text-gray-800`}>
-                Sourcing sur mesure
-              </span>
-              <h2 className="mt-6 mb-6 text-3xl font-light leading-tight text-gray-900 md:text-4xl lg:text-5xl">
-                Vos pièces cibles,
-                <span className="block font-bold text-black">sourcées pour vous</span>
-              </h2>
-              <div className={`${SANS} space-y-6 leading-relaxed text-gray-700`}>
-                <p className="text-lg">
-                  Vous définissez votre budget et les modèles recherchés, nous sourçons directement pour vous.
-                </p>
-                <p>
-                  Chaque pièce trouvée est authentifiée, facturée sur votre avance et suivie dans votre espace, avec un
-                  reporting complet du budget engagé.
-                </p>
-              </div>
-              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-                <button
-                  onClick={() => scrollTo('tarifs')}
-                  className="flex items-center justify-center bg-gray-900 px-6 py-3 font-medium text-white transition-colors hover:bg-gray-800"
-                >
-                  Rejoindre le Club B2B
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </button>
-                <a
-                  href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Mission de sourcing')}`}
-                  className="flex items-center justify-center border border-gray-900 px-6 py-3 font-medium text-gray-900 transition-colors hover:bg-gray-900 hover:text-white"
-                >
-                  Nous écrire
-                </a>
-              </div>
-            </div>
-            <div className="relative order-1 lg:order-2">
-              <img
-                src={sourcingImg}
-                alt="Pièce de maroquinerie de luxe sourcée par OZË Paris"
-                loading="lazy"
-                className="h-96 w-full rounded-2xl object-cover shadow-2xl"
-              />
-              <div className="absolute -bottom-6 left-4 max-w-xs rounded-xl border border-gray-100 bg-white p-6 shadow-lg sm:-left-6">
-                <div className="mb-3 flex items-center">
-                  <Eye className="mr-2 h-5 w-5 text-gray-800" />
-                  <span className="font-semibold text-gray-900">Certification Entrupy</span>
-                </div>
-                <p className={`${SANS} text-xs leading-relaxed text-gray-600`}>
-                  Un certificat d'authenticité numérique et infalsifiable, disponible sur chaque pièce.
-                </p>
-              </div>
-            </div>
+      {/* SOURCING SUR MESURE */}
+      <section id="sourcing" className="scroll-mt-20 bg-neutral-50 py-20 sm:py-24">
+        <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-4 sm:px-6 lg:grid-cols-2">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Sourcing sur mesure</p>
+            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
+              Vos pièces cibles, <span className="font-semibold">sourcées pour vous</span>
+            </h2>
+            <p className="mt-6 text-base leading-relaxed text-gray-600">
+              Vous nous confiez un budget et vos modèles cibles. Un accompagnateur dédié, joignable en direct, sélectionne
+              avec vous chaque pièce, une par une, avant achat. Tout est suivi dans votre espace, avec un reporting
+              complet du budget engagé.
+            </p>
+            <a
+              href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Mission de sourcing')}`}
+              className="mt-8 inline-flex items-center gap-2 border border-gray-900 px-6 py-3 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-900 hover:text-white"
+            >
+              Lancer une mission <ArrowRight className="h-4 w-4" />
+            </a>
           </div>
+          <img src={sourcingImg} alt="" loading="lazy" className="h-80 w-full object-cover sm:h-96" />
         </div>
       </section>
 
       {/* COMMENT ÇA MARCHE */}
-      <section className="bg-white py-16 md:py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-12 text-center">
-            <h2 className="mb-4 text-3xl font-light text-gray-900 md:text-4xl">
-              Trois étapes, <span className="font-bold">zéro friction</span>
+      <section className="py-20 sm:py-24">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="text-center">
+            <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Comment ça marche</p>
+            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
+              Trois étapes, <span className="font-semibold">zéro friction</span>
             </h2>
           </div>
-          <ol className="grid grid-cols-1 gap-8 md:grid-cols-3">
+          <ol className="mt-12 grid grid-cols-1 gap-8 text-center md:grid-cols-3">
             {STEPS.map((s, i) => (
-              <li key={s.title} className="rounded-xl border border-gray-100 bg-white p-8 text-center shadow-sm">
-                <span className="text-5xl font-light text-gray-300">0{i + 1}</span>
-                <h3 className="mt-4 mb-3 text-xl font-semibold text-gray-900">{s.title}</h3>
-                <p className={`${SANS} text-sm leading-relaxed text-gray-600`}>{s.text}</p>
+              <li key={s.title}>
+                <span className="text-4xl font-extralight text-gray-300">0{i + 1}</span>
+                <h3 className="mt-3 text-base font-semibold">{s.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-gray-600">{s.text}</p>
               </li>
             ))}
           </ol>
@@ -437,30 +307,31 @@ export const B2BLanding: React.FC = () => {
       </section>
 
       {/* TARIFS */}
-      <section id="tarifs" className="relative scroll-mt-20 overflow-hidden py-16 md:py-24">
+      <section id="tarifs" className="relative scroll-mt-20 overflow-hidden py-20 sm:py-24">
         <img src={clubImg} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-black/60" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="absolute inset-0 bg-black/65" />
+        <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center">
-            <h2 className="text-3xl font-light text-white md:text-4xl lg:text-5xl">
-              Le <span className="font-bold">Club B2B</span> OZË Paris
+            <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/60">Adhésion</p>
+            <h2 className="mt-3 text-2xl font-light tracking-tight text-white sm:text-4xl">
+              Le <span className="font-semibold">Club B2B</span> OZË Paris
             </h2>
           </div>
-          <div className="mx-auto mt-12 max-w-md bg-white p-8 shadow-2xl sm:p-10">
-            <p className={`${SANS} text-sm font-medium uppercase tracking-wider text-gray-500`}>Pass revendeur</p>
+          <div className="mx-auto mt-12 max-w-md bg-white p-8 sm:p-10">
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-gray-500">Pass revendeur</p>
             <p className="mt-4 flex items-baseline gap-2">
-              <span className="text-5xl font-semibold">{PRICE || 'Sur demande'}</span>
-              {PRICE && PERIOD && <span className={`${SANS} text-sm text-gray-500`}>{PERIOD}</span>}
+              <span className="text-4xl font-semibold tracking-tight">{PRICE || 'Sur demande'}</span>
+              {PRICE && PERIOD && <span className="text-sm text-gray-500">{PERIOD}</span>}
             </p>
-            <ul className={`${SANS} mt-8 space-y-3`}>
+            <ul className="mt-8 space-y-3">
               {BENEFITS.map((b) => (
                 <li key={b} className="flex items-start gap-3 text-sm text-gray-700">
                   <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-900" /> {b}
                 </li>
               ))}
             </ul>
-            <SubscribeButton className="mt-10 w-full bg-black text-white hover:bg-gray-900" />
-            <p className={`${SANS} mt-4 text-center text-xs text-gray-400`}>
+            <SubscribeButton className="mt-10 w-full bg-black text-white hover:bg-gray-800" />
+            <p className="mt-4 text-center text-xs text-gray-400">
               {CHECKOUT_URL ? 'Paiement sécurisé par Stripe.' : `Réponse sous 48h — ${SUPPORT_EMAIL}`}
             </p>
           </div>
@@ -468,56 +339,36 @@ export const B2BLanding: React.FC = () => {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="scroll-mt-20 bg-gray-50 py-16 md:py-20">
+      <section id="faq" className="scroll-mt-20 py-20 sm:py-24">
         <div className="mx-auto max-w-3xl px-4 sm:px-6">
-          <div className="mb-10 text-center">
-            <h2 className="mb-4 text-3xl font-light text-gray-900 md:text-4xl">
-              Achetez <span className="font-bold">en confiance</span>
+          <div className="text-center">
+            <p className="text-xs font-medium uppercase tracking-[0.25em] text-gray-500">Questions fréquentes</p>
+            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-4xl">
+              Achetez <span className="font-semibold">en confiance</span>
             </h2>
-            <p className={`${SANS} text-lg text-gray-600`}>Les questions que se posent les revendeurs avant de nous rejoindre.</p>
           </div>
-          <div className="border-t border-gray-200">
+          <div className="mt-10 border-t border-gray-200">
             {FAQ.map((f) => <FaqItem key={f.q} q={f.q} a={f.a} />)}
           </div>
         </div>
       </section>
 
       {/* FOOTER */}
-      <footer className="relative overflow-hidden bg-gradient-to-b from-gray-900 to-black text-white">
-        <div className="pointer-events-none absolute inset-0 opacity-5">
-          <div className="absolute left-16 top-16 h-24 w-24 rotate-45 border border-white" />
-          <div className="absolute bottom-16 right-16 h-16 w-16 rotate-12 border border-white" />
-          <div className="absolute left-1/3 top-1/2 h-12 w-12 rotate-45 border border-white" />
-        </div>
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-12 md:grid-cols-3">
-            <div>
-              <h3 className="mb-6 text-2xl font-bold tracking-wider">OZË PARIS <span className="font-light">PRO</span></h3>
-              <p className={`${SANS} text-sm leading-relaxed text-gray-300`}>
-                La plateforme de sourcing luxe réservée aux revendeurs professionnels : drops, enchères privées et
-                sourcing sur mesure.
-              </p>
-            </div>
-            <div>
-              <h4 className={`${SANS} mb-6 text-lg font-semibold`}>Informations</h4>
-              <ul className={`${SANS} space-y-3 text-sm`}>
-                <li><a href="/cgv" className="text-gray-300 transition-colors hover:text-white">Conditions générales de vente B2B</a></li>
-                <li><a href="/cgv" className="text-gray-300 transition-colors hover:text-white">Mentions légales</a></li>
-                <li><button onClick={goToLogin} className="text-gray-300 transition-colors hover:text-white">Espace revendeur</button></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className={`${SANS} mb-6 text-lg font-semibold`}>Contact</h4>
-              <a href={`mailto:${SUPPORT_EMAIL}`} className={`${SANS} text-sm text-gray-300 transition-colors hover:text-white`}>
-                {SUPPORT_EMAIL}
-              </a>
-            </div>
+      <footer className="border-t border-gray-200 bg-neutral-50 py-12">
+        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 sm:px-6 md:flex-row md:items-start md:justify-between">
+          <div>
+            <img src={logo} alt="OZË Paris — B2B Solutions" className="h-12 w-auto" />
+            <p className="mt-4 max-w-sm text-xs leading-relaxed text-gray-500">
+              {COMPANY_LEGAL_NAME} — SIRET {COMPANY_SIRET} — {COMPANY_RCS} — TVA {COMPANY_VAT_NUMBER} — {COMPANY_ADDRESS}
+            </p>
           </div>
-          <div className={`${SANS} mt-12 border-t border-white/10 pt-8 text-xs text-gray-500`}>
-            <p>{COMPANY_LEGAL_NAME} — SIRET {COMPANY_SIRET} — {COMPANY_RCS} — TVA {COMPANY_VAT_NUMBER} — {COMPANY_ADDRESS}</p>
-            <p className="mt-2">© {new Date().getFullYear()} OZË Paris. Tous droits réservés.</p>
+          <div className="flex flex-col gap-2 text-sm text-gray-600">
+            <a href="/cgv" className="transition-colors hover:text-black">Conditions générales de vente B2B</a>
+            <a href="/cgv" className="transition-colors hover:text-black">Mentions légales</a>
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="transition-colors hover:text-black">Contact support — {SUPPORT_EMAIL}</a>
           </div>
         </div>
+        <p className="mx-auto mt-10 max-w-6xl px-4 text-xs text-gray-400 sm:px-6">© {new Date().getFullYear()} OZË Paris. Tous droits réservés.</p>
       </footer>
     </div>
   );
