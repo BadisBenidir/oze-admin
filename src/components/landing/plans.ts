@@ -26,7 +26,7 @@ export const SUPPORT_EMAIL = 'contact@ozeparis.com';
 export const accessRequestUrl = (pass: string) =>
   `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Demande d'accès — ${pass} OZË Paris`)}`;
 export const AGENT_URL = WHATSAPP_NUMBER
-  ? `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Bonjour, je souhaite en savoir plus sur le Pass Boutiques OZË Paris.')}`
+  ? `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Bonjour, je souhaite en savoir plus sur l\'une de vos solutions OZË PARIS.')}`
   : accessRequestUrl('Pass Boutiques');
 
 /** Pass souscrivables en ligne (valeurs de b2b_signup_requests.plan). */
