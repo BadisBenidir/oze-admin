@@ -24,16 +24,16 @@ import logoWhite from './assets/logo_oze_paris_b2b_white.png';
  * Sans lien configuré, le bouton retombe sur une demande d'accès par email
  * plutôt que d'afficher un bouton mort.
  *   VITE_B2B_PASS_ENCHERES_CHECKOUT_URL   lien Stripe du Pass Enchères
- *   VITE_B2B_PASS_ENCHERES_PRICE          ex. "29 €" (sinon "Sur demande")
+ *   VITE_B2B_PASS_ENCHERES_PRICE          remplace le prix par défaut (39,90 €)
  *   VITE_B2B_SUBSCRIPTION_CHECKOUT_URL    lien Stripe du Pass Revendeur
- *   VITE_B2B_SUBSCRIPTION_PRICE           ex. "49 €" (sinon "Sur demande")
- *   VITE_B2B_SUBSCRIPTION_PERIOD          ex. "/ mois" (commun aux deux pass)
+ *   VITE_B2B_SUBSCRIPTION_PRICE           remplace le prix par défaut (69,90 €)
+ *   VITE_B2B_SUBSCRIPTION_PERIOD          remplace "/ mois" (commun aux deux pass)
  *   VITE_B2B_WHATSAPP_NUMBER              numéro international sans + ni espaces, ex. 33612345678
  *                                         (Pass Boutiques ; sinon repli sur l'email)
  *   VITE_B2B_DISCORD_URL                  invitation Discord (bouton masqué si absent)
  */
 const env = (key: string) => ((import.meta.env[key] as string | undefined) ?? '').trim();
-const PERIOD = env('VITE_B2B_SUBSCRIPTION_PERIOD');
+const PERIOD = env('VITE_B2B_SUBSCRIPTION_PERIOD') || '/ mois';
 const DISCORD_URL = env('VITE_B2B_DISCORD_URL');
 const WHATSAPP_NUMBER = env('VITE_B2B_WHATSAPP_NUMBER').replace(/\D/g, '');
 const SUPPORT_EMAIL = 'contact@ozeparis.com';
@@ -171,22 +171,22 @@ const PLANS: Plan[] = [
   {
     id: 'encheres',
     name: 'Pass Enchères',
-    pitch: 'Pour acheter aux enchères et faire sourcer vos pièces cibles.',
-    price: env('VITE_B2B_PASS_ENCHERES_PRICE'),
+    pitch: 'Pour acheter aux enchères privées, entre professionnels.',
+    price: env('VITE_B2B_PASS_ENCHERES_PRICE') || '39,90 €',
     checkoutUrl: env('VITE_B2B_PASS_ENCHERES_CHECKOUT_URL'),
     features: [
       { label: 'Sessions d\'enchères privées, lots dès 0 €', included: true },
-      { label: 'Sourcing sur mesure', included: true },
       { label: 'Certificats Entrupy disponibles', included: true },
       { label: 'Expédition groupée quand vous voulez', included: true },
       { label: 'Drops & catalogue B2B', included: false },
+      { label: 'Sourcing sur mesure', included: false },
     ],
   },
   {
     id: 'revendeur',
     name: 'Pass Revendeur',
     pitch: 'L\'accès complet à la plateforme pour les revendeurs.',
-    price: env('VITE_B2B_SUBSCRIPTION_PRICE'),
+    price: env('VITE_B2B_SUBSCRIPTION_PRICE') || '69,90 €',
     checkoutUrl: env('VITE_B2B_SUBSCRIPTION_CHECKOUT_URL'),
     featured: true,
     badge: 'Accès complet',
@@ -279,6 +279,9 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
         </span>
         {!agent && price && PERIOD && <span className={`text-sm ${muted}`}>{PERIOD}</span>}
       </p>
+      {!agent && price && (
+        <p className={`mt-1 text-xs font-medium ${featured ? 'text-white/70' : 'text-gray-500'}`}>Sans engagement</p>
+      )}
       <p className={`mt-3 hidden text-sm leading-relaxed sm:block ${featured ? 'text-white/70' : 'text-gray-600'}`}>{pitch}</p>
       <div className={`my-4 h-px sm:my-6 ${featured ? 'bg-white/10' : 'bg-gray-100'}`} />
       {intro && <p className="mb-2.5 text-[13px] font-semibold sm:mb-4 sm:text-sm">{intro}</p>}
