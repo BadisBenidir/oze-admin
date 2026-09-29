@@ -43,7 +43,9 @@ function App() {
   const isAdminHost = window.location.hostname.startsWith('admin.');
 
   if (status === 'signed-out' && !isAdminHost) {
-    if (window.location.pathname === '/') {
+    // Landing masquée tant que VITE_B2B_LANDING_ENABLED !== 'true' (réglage
+    // Vercel) : "/" retombe alors sur l'écran de connexion, comme avant.
+    if (window.location.pathname === '/' && import.meta.env.VITE_B2B_LANDING_ENABLED === 'true') {
       return <B2BLanding />;
     }
     // Lien "CGV / Mentions légales" du pied de la landing : lisible sans compte.
