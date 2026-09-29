@@ -139,38 +139,47 @@ const STEPS = [
 const FAQ = [
   {
     q: 'Comment l\'authenticité des pièces est-elle garantie ?',
+    short: 'L\'authenticité est-elle garantie ?',
     a: 'Chaque pièce passe par un triple contrôle : d\'abord directement dans les maisons de vente japonaises, avant la vente ; ensuite chez nos partenaires au Japon, qui nous les expédient ; enfin chez nous, dans nos locaux, à leur arrivée. Vous pouvez en plus demander un certificat Entrupy : un certificat numérique d\'authenticité, infalsifiable, rattaché à la pièce.',
   },
   {
     q: 'Comment se passent les livraisons ?',
+    short: 'Comment se passent les livraisons ?',
     a: 'Vos pièces partent directement du Japon jusqu\'à nos locaux, où nous les authentifions et les contrôlons. Une fois ce contrôle terminé, elles vous attendent sur votre compte : vous demandez la livraison quand vous le souhaitez, et la réglez à ce moment-là. Vous pouvez aussi attendre que d\'autres commandes arrivent chez nous pour demander un envoi groupé, en un seul colis.',
   },
   {
     q: 'Quels moyens de paiement sont acceptés ?',
+    short: 'Quels moyens de paiement ?',
     a: 'Carte bancaire (paiement sécurisé Stripe), solde de votre portefeuille B2B, ou une combinaison des deux. Le portefeuille se recharge par carte, avec 5 € offerts pour chaque tranche de 100 € rechargés. Une commande n\'est confirmée qu\'après encaissement effectif. Les lots remportés aux enchères sont à régler sous 24h.',
   },
   {
     q: 'Y a-t-il des remises pour les commandes en volume ?',
+    short: 'Des remises sur le volume ?',
     a: 'Oui, elles s\'appliquent automatiquement : -5 % dès 5 articles et -10 % dès 10 articles dans une même commande. Elles se cumulent avec le bonus de recharge du portefeuille.',
   },
   {
     q: 'Que se passe-t-il si une pièce présente un défaut ?',
+    short: 'Et si une pièce a un défaut ?',
     a: 'Si la pièce présente un défaut qui n\'était signalé ni sur les photos ni dans la description, le retour est entièrement à nos frais et le remboursement est immédiat, sur le solde de votre portefeuille. Un défaut visible sur les photos ou mentionné dans la description ne donne pas lieu à un retour.',
   },
   {
     q: 'Comment fonctionnent les enchères ?',
+    short: 'Comment marchent les enchères ?',
     a: 'Des sessions privées, réservées aux membres du Pass Revendeur, avec des lots dès 0 €. Vous pouvez enchérir au fil de l\'eau ou définir un montant maximum : nous surenchérissons alors automatiquement pour vous, du pas minimal, uniquement si nécessaire. Une enchère placée dans les dernières minutes prolonge le lot, pour que chacun puisse répondre. Un lot remporté est à régler sous 24h.',
   },
   {
     q: 'Comment fonctionne le sourcing sur mesure ?',
+    short: 'Comment marche le sourcing ?',
     a: 'Vous nous confiez un budget et les modèles que vous recherchez. Votre accompagnateur dédié, joignable en direct, repère les pièces et vous les soumet : vous validez chacune d\'elles avant achat. Tout est suivi dans votre espace, avec le détail du budget engagé.',
   },
   {
     q: 'Faut-il être professionnel pour s\'inscrire ?',
+    short: 'Faut-il être professionnel ?',
     a: 'Le Club s\'adresse aux revendeurs et aux boutiques. À votre premier achat, vous déclarez votre statut dans votre profil (particulier, entreprise individuelle ou société) : il détermine les mentions légales de vos factures.',
   },
   {
     q: 'Puis-je changer de pass ou résilier ?',
+    short: 'Changer de pass ou résilier ?',
     a: 'Oui, les deux pass sont sans engagement. Vous pouvez passer du Pass Drops au Pass Revendeur à tout moment depuis votre profil : seule la différence au prorata du mois en cours est prélevée. En cas de résiliation, votre accès reste ouvert jusqu\'à la fin du mois payé, et vous retrouvez votre espace intact si vous vous réabonnez.',
   },
 ];
@@ -332,7 +341,8 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
   );
 };
 
-const FaqItem: React.FC<{ q: string; a: string }> = ({ q, a }) => {
+// `short` : version de la question affichée sur mobile, pensée pour tenir sur une ligne.
+const FaqItem: React.FC<{ q: string; short: string; a: string }> = ({ q, short, a }) => {
   const [open, setOpen] = useState(false);
   return (
     <div className="border-b border-gray-200">
@@ -341,7 +351,10 @@ const FaqItem: React.FC<{ q: string; a: string }> = ({ q, a }) => {
         aria-expanded={open}
         className="w-full flex items-center justify-between gap-3 py-3.5 text-left sm:gap-4 sm:py-5"
       >
-        <span className="text-sm font-medium text-gray-900 sm:text-base">{q}</span>
+        <span className="min-w-0 text-[13px] font-medium text-gray-900 sm:text-base">
+          <span className="block truncate sm:hidden">{short}</span>
+          <span className="hidden sm:inline">{q}</span>
+        </span>
         <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-400 transition-transform sm:h-5 sm:w-5 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && <p className="pb-3.5 text-xs leading-relaxed text-gray-600 sm:pb-5 sm:text-sm">{a}</p>}
@@ -761,7 +774,7 @@ export const B2BLanding: React.FC = () => {
             </h2>
           </div>
           <div className="mt-6 border-t border-gray-200 sm:mt-10">
-            {FAQ.map((f) => <FaqItem key={f.q} q={f.q} a={f.a} />)}
+            {FAQ.map((f) => <FaqItem key={f.q} q={f.q} short={f.short} a={f.a} />)}
           </div>
         </div>
       </section>
