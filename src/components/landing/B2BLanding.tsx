@@ -370,11 +370,11 @@ export const B2BLanding: React.FC = () => {
               Tout ce dont un revendeur a besoin, <span className="font-semibold">au même endroit</span>
             </h2>
           </div>
-          <div className="mt-14 grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="mt-10 grid grid-cols-1 gap-4 sm:mt-14 sm:gap-6 lg:grid-cols-3">
             {PILLARS.map(({ id, icon: Icon, tag, title, text, points, featured }) => (
               <div
                 key={id}
-                className={`relative flex scroll-mt-24 flex-col rounded-3xl p-8 transition-all duration-300 hover:-translate-y-1 sm:p-10 ${
+                className={`relative flex scroll-mt-24 flex-col rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 sm:rounded-3xl sm:p-10 ${
                   featured
                     ? 'bg-neutral-950 text-white shadow-2xl shadow-black/20'
                     : 'border border-gray-200 bg-white shadow-sm hover:shadow-xl'
@@ -382,32 +382,32 @@ export const B2BLanding: React.FC = () => {
               >
                 <div className="flex items-start justify-between">
                   <div
-                    className={`flex h-14 w-14 items-center justify-center rounded-2xl ${
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl sm:h-14 sm:w-14 sm:rounded-2xl ${
                       featured ? 'bg-white text-black' : 'bg-black text-white'
                     }`}
                   >
-                    <Icon className="h-7 w-7" />
+                    <Icon className="h-5 w-5 sm:h-7 sm:w-7" />
                   </div>
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
+                    className={`rounded-full px-2.5 py-1 text-[10px] sm:px-3 sm:text-xs font-semibold uppercase tracking-wider ${
                       featured ? 'bg-white/10 text-white' : 'bg-gray-100 text-gray-700'
                     }`}
                   >
                     {tag}
                   </span>
                 </div>
-                <h3 className="mt-8 text-2xl font-semibold tracking-tight">{title}</h3>
-                <p className={`mt-3 text-sm leading-relaxed ${featured ? 'text-white/70' : 'text-gray-600'}`}>{text}</p>
-                <div className={`my-8 h-px ${featured ? 'bg-white/10' : 'bg-gray-100'}`} />
-                <ul className="flex-1 space-y-4">
+                <h3 className="mt-4 text-lg font-semibold sm:mt-8 sm:text-2xl tracking-tight">{title}</h3>
+                <p className={`mt-3 hidden text-sm leading-relaxed sm:block ${featured ? 'text-white/70' : 'text-gray-600'}`}>{text}</p>
+                <div className={`my-4 h-px sm:my-8 ${featured ? 'bg-white/10' : 'bg-gray-100'}`} />
+                <ul className="flex-1 space-y-2.5 sm:space-y-4">
                   {points.map((p) => (
-                    <li key={p} className="flex items-start gap-3 text-sm">
+                    <li key={p} className="flex items-start gap-2.5 text-[13px] sm:gap-3 sm:text-sm">
                       <span
-                        className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full ${
+                        className={`mt-0.5 flex h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 items-center justify-center rounded-full ${
                           featured ? 'bg-white text-black' : 'bg-black text-white'
                         }`}
                       >
-                        <Check className="h-3 w-3" strokeWidth={3} />
+                        <Check className="h-2.5 w-2.5 sm:h-3 sm:w-3" strokeWidth={3} />
                       </span>
                       <span className={featured ? 'text-white/90' : 'text-gray-700'}>{p}</span>
                     </li>
