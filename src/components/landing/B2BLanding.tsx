@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Globe, Euro,
 } from 'lucide-react';
@@ -8,12 +8,14 @@ import {
 import heroImg from './assets/hero.jpeg';
 import clubImg from './assets/club.webp';
 import logo from './assets/logo_oze_paris_b2b.png';
+import logoWhite from './assets/logo_oze_paris_b2b_white.png';
 
 /**
  * Landing page publique de pro.ozeparis.com (visiteur non connecté sur "/",
  * voir App.tsx). Aucune donnée chargée : page 100 % statique.
  *
- * Hero : photo (assets/hero.jpeg, originale non recompressée) dans un cadre arrondi, texte blanc centré.
+ * Hero : photo plein écran (assets/hero.jpeg, originale non recompressée), texte blanc centré ;
+ * header transparent sur la photo puis blanc au scroll, comme le site principal.
  *
  * Abonnement : aucun système d'abonnement n'existe encore dans l'app — le
  * bouton pointe vers un Stripe Payment Link / Checkout configuré dans
@@ -200,6 +202,21 @@ const FaqItem: React.FC<{ q: string; a: string }> = ({ q, a }) => {
 
 export const B2BLanding: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  // Comme sur le site principal : header transparent sur la photo, blanc une fois le hero (plein écran) dépassé.
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > window.innerHeight - 80);
+    onScroll();
+    window.addEventListener('scroll', onScroll);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  const transparent = !scrolled && !menuOpen;
 
   const handleNav = (id: string) => {
     setMenuOpen(false);
@@ -209,30 +226,51 @@ export const B2BLanding: React.FC = () => {
   return (
     <div className="min-h-screen bg-white text-gray-900 antialiased">
       {/* HEADER */}
-      <header className="fixed inset-x-0 top-0 z-40 border-b border-gray-100 bg-white/95 backdrop-blur">
+      <header
+        className={`fixed inset-x-0 top-0 z-40 transition-colors duration-300 ${
+          transparent ? 'border-b border-transparent bg-transparent' : 'border-b border-gray-100 bg-white'
+        }`}
+      >
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:h-20">
           <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Haut de page">
-            <img src={logo} alt="OZË Paris — B2B Solutions" className="h-10 w-auto lg:h-12" />
+            <img
+              src={transparent ? logoWhite : logo}
+              alt="OZË Paris — B2B Solutions"
+              className="h-10 w-auto lg:h-12"
+            />
           </button>
           <nav className="hidden items-center gap-8 lg:flex">
             {NAV.map((n) => (
-              <button key={n.id} onClick={() => handleNav(n.id)} className="text-sm text-gray-600 transition-colors hover:text-black">
+              <button
+                key={n.id}
+                onClick={() => handleNav(n.id)}
+                className={`text-sm transition-colors ${transparent ? 'text-white/85 hover:text-white' : 'text-gray-600 hover:text-black'}`}
+              >
                 {n.label}
               </button>
             ))}
           </nav>
           <div className="hidden items-center gap-3 lg:flex">
-            <button onClick={goToLogin} className="px-3 py-2 text-sm text-gray-700 transition-colors hover:text-black">
+            <button
+              onClick={goToLogin}
+              className={`px-3 py-2 text-sm transition-colors ${transparent ? 'text-white/85 hover:text-white' : 'text-gray-700 hover:text-black'}`}
+            >
               Se connecter
             </button>
             <button
               onClick={() => handleNav('tarifs')}
-              className="bg-black px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+              className={`px-5 py-2.5 text-sm font-medium transition-colors ${
+                transparent ? 'bg-white text-black hover:bg-gray-100' : 'bg-black text-white hover:bg-gray-800'
+              }`}
             >
               Rejoindre le Club B2B
             </button>
           </div>
-          <button className="p-1 text-black lg:hidden" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu">
+          <button
+            className={`p-1 lg:hidden ${transparent ? 'text-white' : 'text-black'}`}
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label="Menu"
+          >
             {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
         </div>
@@ -255,12 +293,12 @@ export const B2BLanding: React.FC = () => {
         )}
       </header>
 
-      {/* HERO — photo dans un cadre arrondi : la source ne fait que 1600 px, on évite de l'agrandir en pleine largeur */}
-      <section className="bg-white px-3 pb-6 pt-20 sm:px-4 lg:pt-24">
-        <div className="relative mx-auto flex min-h-[600px] max-w-7xl items-center overflow-hidden rounded-3xl bg-neutral-900 py-16 lg:h-[calc(100vh-7.5rem)] lg:max-h-[800px]">
+      {/* HERO — photo plein écran sous le header transparent, texte centré par-dessus */}
+      <section>
+        <div className="relative flex min-h-screen items-center overflow-hidden bg-neutral-900 pb-16 pt-28">
         <img src={heroImg} alt="" className="absolute inset-0 h-full w-full object-cover object-[40%_30%]" />
         <div className="pointer-events-none absolute inset-0 bg-black/45" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/50" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/50" />
         <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6">
           <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/70">Espace professionnel</p>
           <h1 className="mt-5 text-3xl font-light leading-tight tracking-tight text-white drop-shadow sm:text-5xl md:text-6xl">
