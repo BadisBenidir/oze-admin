@@ -183,7 +183,8 @@ const goToLogin = () => {
   window.location.href = '/connexion';
 };
 
-// Photos de pièces du catalogue (exemples), recadrées en carrés identiques — webp ~14 Ko.
+// Cartes produits du catalogue (exemples), recadrées au bord de la carte et toutes
+// à la même taille (300×440) : photos, prix et grades tombent à la même hauteur.
 const ARTICLE_IMAGES = Object.values(
   import.meta.glob<string>('./assets/articles/*.webp', { eager: true, import: 'default' })
 );
@@ -216,7 +217,7 @@ const ArticlesMarquee: React.FC = () => (
           aria-hidden={i >= ARTICLE_IMAGES.length}
           loading="lazy"
           draggable={false}
-          className="h-28 w-28 flex-shrink-0 rounded-xl object-cover sm:h-36 sm:w-36"
+          className="h-48 w-auto flex-shrink-0 rounded-xl border border-gray-200 shadow-sm sm:h-60"
         />
       ))}
     </div>
@@ -244,34 +245,42 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
 
   return (
     <div
-      className={`relative flex flex-col rounded-2xl p-5 sm:rounded-3xl sm:p-8 ${
+      className={`relative flex flex-col rounded-2xl p-4 sm:rounded-3xl sm:p-8 ${
         featured ? 'bg-neutral-950 text-white shadow-2xl ring-1 ring-white/15 lg:-my-4 lg:py-12' : 'bg-white text-gray-900'
       }`}
     >
       {badge && (
-        <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white px-2.5 py-0.5 text-[10px] sm:px-3 sm:py-1 sm:text-[11px] font-semibold uppercase tracking-wider text-black shadow">
+        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-black shadow sm:-top-3 sm:px-3 sm:py-1 sm:text-[11px]">
           {badge}
         </span>
       )}
-      <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] sm:text-xs ${muted}`}>{name}</p>
-      <p className="mt-2 flex items-baseline gap-2 sm:mt-4">
-        <span className="text-2xl font-semibold tracking-tight sm:text-4xl">
-          {agent ? 'Sur devis' : price || 'Sur demande'}
-        </span>
-        {!agent && price && PERIOD && <span className={`text-sm ${muted}`}>{PERIOD}</span>}
-      </p>
+      {/* Mobile : nom et prix sur une seule ligne ; desktop : prix en grand sous le nom */}
+      <div className="flex items-baseline justify-between gap-3 sm:block">
+        <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] sm:text-xs ${muted}`}>{name}</p>
+        <p className="flex items-baseline gap-1.5 sm:mt-4 sm:gap-2">
+          <span className="text-xl font-semibold tracking-tight sm:text-4xl">
+            {agent ? 'Sur devis' : price || 'Sur demande'}
+          </span>
+          {!agent && price && PERIOD && <span className={`text-xs sm:text-sm ${muted}`}>{PERIOD}</span>}
+        </p>
+      </div>
       {!agent && price && (
-        <p className={`mt-1 text-xs font-medium ${featured ? 'text-white/70' : 'text-gray-500'}`}>Sans engagement</p>
+        <p className={`mt-0.5 text-right text-[11px] font-medium sm:mt-1 sm:text-left sm:text-xs ${featured ? 'text-white/70' : 'text-gray-500'}`}>
+          Sans engagement
+        </p>
       )}
       <p className={`mt-3 hidden text-sm leading-relaxed sm:block ${featured ? 'text-white/70' : 'text-gray-600'}`}>{pitch}</p>
-      <div className={`my-4 h-px sm:my-6 ${featured ? 'bg-white/10' : 'bg-gray-100'}`} />
-      {intro && <p className="mb-2.5 text-[13px] font-semibold sm:mb-4 sm:text-sm">{intro}</p>}
-      <ul className="flex-1 space-y-2 sm:space-y-3">
+      <div className={`my-3 h-px sm:my-6 ${featured ? 'bg-white/10' : 'bg-gray-100'}`} />
+      {intro && <p className="mb-2 text-xs font-semibold sm:mb-4 sm:text-sm">{intro}</p>}
+      <ul className="flex-1 space-y-1.5 sm:space-y-3">
         {features.map((f) => (
           <li
             key={f.label}
-            className={`flex items-start gap-2.5 text-[13px] sm:gap-3 sm:text-sm ${
-              f.included ? (featured ? 'text-white/90' : 'text-gray-700') : `${featured ? 'text-white/30' : 'text-gray-300'} line-through`
+            // Mobile : les exclusions sont résumées sur une ligne sous la liste, pas une ligne chacune.
+            className={`items-start gap-2 text-xs sm:gap-3 sm:text-sm ${
+              f.included
+                ? `flex ${featured ? 'text-white/90' : 'text-gray-700'}`
+                : `hidden sm:flex ${featured ? 'text-white/30' : 'text-gray-300'} line-through`
             }`}
           >
             {f.included ? (
@@ -283,11 +292,16 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
           </li>
         ))}
       </ul>
+      {features.some((f) => !f.included) && (
+        <p className={`mt-1.5 text-[11px] sm:hidden ${featured ? 'text-white/40' : 'text-gray-400'}`}>
+          Non inclus : {features.filter((f) => !f.included).map((f) => f.label.toLowerCase()).join(', ')}
+        </p>
+      )}
       <a
         href={href}
         target={external ? '_blank' : undefined}
         rel={external ? 'noopener noreferrer' : undefined}
-        className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 sm:mt-8 sm:py-3.5 text-sm font-semibold transition-colors ${
+        className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold transition-colors sm:mt-8 sm:px-6 sm:py-3.5 sm:text-sm ${
           agent
             ? 'bg-[#25D366] text-white hover:bg-[#1EBE5A]'
             : featured
@@ -297,7 +311,7 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
       >
         {agent ? (
           <>
-            <WhatsAppIcon className="h-5 w-5" /> Contacter un agent
+            <WhatsAppIcon className="h-4 w-4 sm:h-5 sm:w-5" /> Contacter un agent
           </>
         ) : (
           <>
@@ -305,7 +319,7 @@ const PlanCard: React.FC<{ plan: Plan }> = ({ plan }) => {
           </>
         )}
       </a>
-      <p className={`mt-2 text-center text-[11px] sm:mt-3 sm:text-xs ${featured ? 'text-white/40' : 'text-gray-400'}`}>
+      <p className={`mt-3 hidden text-center text-xs sm:block ${featured ? 'text-white/40' : 'text-gray-400'}`}>
         {agent
           ? WHATSAPP_NUMBER ? 'Réponse rapide sur WhatsApp' : `Réponse sous 48h — ${SUPPORT_EMAIL}`
           : 'Paiement sécurisé par Stripe'}
@@ -739,21 +753,21 @@ export const B2BLanding: React.FC = () => {
         </div>
       </section>
 
-      {/* FOOTER */}
+      {/* FOOTER — compact : appel à l'action, une ligne de liens, mentions légales */}
       <footer className="bg-neutral-950 text-white">
-        {/* Dernier appel à l'action */}
-        <div className="border-b border-white/10">
-          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-12 text-center sm:px-6 md:flex-row md:text-left">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          {/* Appel à l'action */}
+          <div className="flex flex-col items-center gap-4 border-b border-white/10 py-8 text-center md:flex-row md:justify-between md:text-left">
             <div>
-              <h2 className="text-2xl font-light tracking-tight sm:text-3xl">
+              <h2 className="text-lg font-light tracking-tight sm:text-2xl">
                 Prêt à rejoindre le <span className="font-semibold">Club B2B</span> ?
               </h2>
-              <p className="mt-2 text-sm text-white/60">Sans engagement, accès ouvert dès le paiement.</p>
+              <p className="mt-1 text-xs text-white/60 sm:text-sm">Sans engagement, accès ouvert dès le paiement.</p>
             </div>
-            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:gap-3">
               <button
                 onClick={() => scrollTo('tarifs')}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-black transition-colors hover:bg-gray-100"
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black transition-colors hover:bg-gray-100 sm:px-6 sm:py-3 sm:text-sm"
               >
                 Voir les offres <ArrowRight className="h-4 w-4" />
               </button>
@@ -761,86 +775,54 @@ export const B2BLanding: React.FC = () => {
                 href={AGENT_URL}
                 target={WHATSAPP_NUMBER ? '_blank' : undefined}
                 rel={WHATSAPP_NUMBER ? 'noopener noreferrer' : undefined}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/10"
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#25D366] px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#1EBE5A] sm:px-6 sm:py-3 sm:text-sm"
               >
-                {WHATSAPP_NUMBER ? <WhatsAppIcon className="h-4 w-4" /> : <Mail className="h-4 w-4" />} Parler à un agent
+                <WhatsAppIcon className="h-4 w-4" /> Parler à un agent
               </a>
             </div>
           </div>
-        </div>
 
-        {/* Colonnes */}
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-10 px-4 py-12 sm:px-6 md:grid-cols-4">
-          <div className="col-span-2 md:col-span-1">
-            <img src={logoWhite} alt="OZË Paris — B2B Solutions" className="h-14 w-auto" />
-            <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/60">
-              Maroquinerie de luxe de seconde main, en direct des maisons de vente japonaises, pour les revendeurs et
-              boutiques.
-            </p>
-            {DISCORD_URL && (
-              <a
-                href={DISCORD_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Discord"
-                className="mt-5 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-[#5865F2]"
-              >
-                <DiscordIcon className="h-4 w-4" />
-              </a>
-            )}
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Le Club</p>
-            <ul className="mt-4 space-y-2.5 text-sm">
-              {[...NAV.filter((n) => n.id !== 'faq'), { id: 'tarifs', label: 'Tarifs' }].map((n) => (
-                <li key={n.id}>
-                  <button onClick={() => scrollTo(n.id)} className="text-white/70 transition-colors hover:text-white">
-                    {n.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Informations</p>
-            <ul className="mt-4 space-y-2.5 text-sm">
-              <li><a href="/cgv" className="text-white/70 transition-colors hover:text-white">Conditions générales de vente</a></li>
-              <li><a href="/cgv" className="text-white/70 transition-colors hover:text-white">Mentions légales</a></li>
-              <li>
-                <button onClick={() => scrollTo('faq')} className="text-white/70 transition-colors hover:text-white">
-                  Questions fréquentes
-                </button>
-              </li>
-              <li><button onClick={goToLogin} className="text-white/70 transition-colors hover:text-white">Espace revendeur</button></li>
-            </ul>
-          </div>
-
-          <div className="col-span-2 md:col-span-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Contact</p>
-            <ul className="mt-4 space-y-2.5 text-sm">
-              <li>
-                <a href={`mailto:${SUPPORT_EMAIL}`} className="text-white/70 transition-colors hover:text-white">{SUPPORT_EMAIL}</a>
-              </li>
-              {WHATSAPP_NUMBER && (
-                <li>
-                  <a href={AGENT_URL} target="_blank" rel="noopener noreferrer" className="text-white/70 transition-colors hover:text-white">
-                    WhatsApp
+          {/* Logo + liens */}
+          <div className="flex flex-col gap-5 py-6 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center justify-between gap-4 md:justify-start">
+              <img src={logoWhite} alt="OZË Paris — B2B Solutions" className="h-10 w-auto" />
+              <div className="flex items-center gap-2">
+                {DISCORD_URL && (
+                  <a
+                    href={DISCORD_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Discord"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-[#5865F2]"
+                  >
+                    <DiscordIcon className="h-4 w-4" />
                   </a>
-                </li>
-              )}
-              <li className="text-white/50">{COMPANY_ADDRESS}</li>
-            </ul>
+                )}
+                <a
+                  href={`mailto:${SUPPORT_EMAIL}`}
+                  aria-label="Email"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+                >
+                  <Mail className="h-4 w-4" />
+                </a>
+              </div>
+            </div>
+            <nav className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-white/60 sm:text-sm">
+              {[...NAV.filter((n) => n.id !== 'faq'), { id: 'tarifs', label: 'Tarifs' }, { id: 'faq', label: 'FAQ' }].map((n) => (
+                <button key={n.id} onClick={() => scrollTo(n.id)} className="transition-colors hover:text-white">
+                  {n.label}
+                </button>
+              ))}
+              <a href="/cgv" className="transition-colors hover:text-white">CGV</a>
+              <button onClick={goToLogin} className="transition-colors hover:text-white">Espace revendeur</button>
+            </nav>
           </div>
-        </div>
 
-        {/* Mentions légales */}
-        <div className="border-t border-white/10">
-          <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-6 text-xs text-white/40 sm:px-6 md:flex-row md:items-center md:justify-between">
-            <p>© {new Date().getFullYear()} OZË Paris. Tous droits réservés.</p>
+          {/* Mentions légales */}
+          <div className="flex flex-col gap-1 border-t border-white/10 py-4 text-[11px] text-white/40 md:flex-row md:justify-between">
+            <p>© {new Date().getFullYear()} OZË Paris · {SUPPORT_EMAIL}</p>
             <p>
-              {COMPANY_LEGAL_NAME} · SIRET {COMPANY_SIRET} · {COMPANY_RCS} · TVA {COMPANY_VAT_NUMBER}
+              {COMPANY_LEGAL_NAME} · SIRET {COMPANY_SIRET} · {COMPANY_RCS} · TVA {COMPANY_VAT_NUMBER} · {COMPANY_ADDRESS}
             </p>
           </div>
         </div>
