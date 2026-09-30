@@ -65,14 +65,26 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
 
   // 'draft-b2b' (0130) : articles créés directement depuis Produits B2B,
   // liables à un lot d'enchère au même titre qu'un brouillon classique.
+  // Les articles déjà liés à un lot en cours ou adjugé (toutes sessions) restent
+  // en brouillon côté products : on les exclut ici. Un lot non vendu ou annulé
+  // libère l'article, qui peut être remis en vente dans une autre session.
   useEffect(() => {
     if (!isOpen) return;
-    supabase
-      .from('products')
-      .select('id, name, product_code, images, main_image_index, condition, brand:brands(name)')
-      .in('status', ['draft', 'draft-b2b'])
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setDraftProducts((data || []) as unknown as DraftProduct[]));
+    Promise.all([
+      supabase
+        .from('products')
+        .select('id, name, product_code, images, main_image_index, condition, brand:brands(name)')
+        .in('status', ['draft', 'draft-b2b'])
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('auction_items')
+        .select('product_id')
+        .not('product_id', 'is', null)
+        .in('status', ['active', 'sold']),
+    ]).then(([{ data: products }, { data: engaged }]) => {
+      const inAuction = new Set((engaged || []).map((i) => i.product_id as string));
+      setDraftProducts(((products || []) as unknown as DraftProduct[]).filter((p) => !inAuction.has(p.id)));
+    });
   }, [isOpen]);
 
   const filteredProducts = useMemo(() => {
