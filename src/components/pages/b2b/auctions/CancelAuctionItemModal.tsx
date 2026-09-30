@@ -73,6 +73,13 @@ export const CancelAuctionItemModal: React.FC<CancelAuctionItemModalProps> = ({ 
               </div>
             </div>
 
+            {!isPaid && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                Le montant dû est supprimé et, s'il n'a pas d'autre lot impayé en retard, le revendeur peut de nouveau
+                acheter et enchérir immédiatement.
+              </p>
+            )}
+
             <div>
               <label htmlFor="auction-cancel-reason" className="block text-sm font-medium text-gray-700 mb-2">Raison</label>
               <select

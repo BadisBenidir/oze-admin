@@ -375,7 +375,18 @@ export const AuctionsAdmin: React.FC = () => {
                                     ) : item.order_payment_status === 'paid' ? (
                                       paymentBadge(item)
                                     ) : item.payment_deadline && new Date(item.payment_deadline).getTime() <= Date.now() ? (
-                                      <Badge variant="danger">En retard</Badge>
+                                      // Lot impayé en retard : accès direct à l'annulation (même modale que ⊘),
+                                      // qui supprime le dû, lève la restriction (0166) et remet l'article en brouillon B2B.
+                                      <div className="flex items-center gap-1.5">
+                                        <Badge variant="danger">En retard</Badge>
+                                        <button
+                                          onClick={() => setCancellingItem(item)}
+                                          className="whitespace-nowrap rounded-md border border-red-200 bg-white px-2 py-0.5 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50"
+                                          title="Supprimer le montant dû, lever la restriction du revendeur et remettre l'article en brouillon B2B"
+                                        >
+                                          Annuler le dû
+                                        </button>
+                                      </div>
                                     ) : (
                                       <Badge variant="warning">
                                         En attente
