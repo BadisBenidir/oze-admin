@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Gavel, Rocket, ImageOff, LogIn, Lock, Images } from 'lucide-react';
+import { Gavel, Rocket, ImageOff, LogIn, Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ImageLightbox } from '../ui/ImageLightbox';
+import { isGrade } from '../../utils/productGrade';
 import logo from './assets/logo_oze_paris_b2b.png';
 
 /**
@@ -93,7 +94,8 @@ export const PreviewLinkPage: React.FC = () => {
   const token = getPreviewToken();
   const [data, setData] = useState<PreviewData | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'invalid' | 'error'>('loading');
-  const [lightbox, setLightbox] = useState<{ item: PreviewItem; index: number } | null>(null);
+  // Seule la photo principale de chaque pièce est montrée (zoom compris) : les autres restent réservées aux revendeurs connectés.
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -232,8 +234,8 @@ export const PreviewLinkPage: React.FC = () => {
                 <button
                   key={item.id}
                   type="button"
-                  disabled={item.images.length === 0}
-                  onClick={() => setLightbox({ item, index: Math.max(0, item.images.indexOf(img || '')) })}
+                  disabled={!img}
+                  onClick={() => img && setLightbox({ src: img, alt: item.name })}
                   className="group overflow-hidden rounded-xl bg-white text-left shadow-sm ring-1 ring-neutral-200 transition hover:shadow-md"
                 >
                   <div className="relative aspect-square bg-neutral-100">
@@ -246,12 +248,7 @@ export const PreviewLinkPage: React.FC = () => {
                     )}
                     {item.condition && (
                       <span className="absolute left-2 top-2 rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] font-semibold text-neutral-900">
-                        {item.condition}
-                      </span>
-                    )}
-                    {item.images.length > 1 && (
-                      <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] text-white">
-                        <Images className="h-3 w-3" /> {item.images.length}
+                        {isGrade(item.condition) ? `État ${item.condition}` : item.condition}
                       </span>
                     )}
                     {item.sold && (
@@ -287,11 +284,11 @@ export const PreviewLinkPage: React.FC = () => {
 
       {lightbox && (
         <ImageLightbox
-          images={lightbox.item.images}
-          index={lightbox.index}
-          onIndexChange={(index) => setLightbox({ item: lightbox.item, index })}
+          images={[lightbox.src]}
+          index={0}
+          onIndexChange={() => undefined}
           onClose={() => setLightbox(null)}
-          alt={lightbox.item.name}
+          alt={lightbox.alt}
         />
       )}
     </Shell>
