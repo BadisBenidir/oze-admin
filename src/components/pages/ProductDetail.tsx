@@ -25,8 +25,10 @@ import {
   ScanLine,
   AlertTriangle,
   ZoomIn,
-  Handshake
+  Handshake,
+  Image as ImageIcon
 } from 'lucide-react';
+import { ProductPosterModal } from '../products/ProductPosterModal';
 
 interface ProductDetailProps {
   productId: string;
@@ -46,6 +48,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showDirectSaleModal, setShowDirectSaleModal] = useState(false);
   const [statusUpdateSuccess, setStatusUpdateSuccess] = useState(false);
+  const [showPoster, setShowPoster] = useState(false);
 
   // Validation par scan (mise en ligne après lecture du code-barres)
   const [showScanModal, setShowScanModal] = useState(false);
@@ -291,6 +294,13 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                 Valider par scan
               </button>
             )}
+            <button
+              onClick={() => setShowPoster(true)}
+              className="flex items-center justify-center px-4 py-3 md:py-2 text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors touch-manipulation text-sm"
+            >
+              <ImageIcon className="h-4 w-4 mr-2" />
+              Créer une affiche
+            </button>
             {onEdit && (
               <button
                 onClick={() => onEdit(productId)}
@@ -662,6 +672,19 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
           onIndexChange={setCurrentImageIndex}
           onClose={() => setLightboxOpen(false)}
           alt={product.name}
+        />
+      )}
+
+      {showPoster && (
+        <ProductPosterModal
+          name={product.name}
+          brand={product.brand?.name}
+          conditionLabel={product.condition ? formatCondition(product.condition) : null}
+          price={product.sale_price}
+          originalPrice={(product as unknown as { original_price?: number | null }).original_price}
+          imageUrl={product.images[(product as unknown as { main_image_index?: number }).main_image_index ?? 0] || product.images[0]}
+          reference={product.b2b_reference || product.product_code}
+          onClose={() => setShowPoster(false)}
         />
       )}
 
