@@ -368,6 +368,11 @@ export const B2BLanding: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
+  // Titre d'onglet : sinon celui d'index.html ("Gestion", pensé pour l'admin).
+  useEffect(() => {
+    document.title = 'Club B2B';
+  }, []);
+
   // Comme sur le site principal : header transparent sur la photo, blanc une fois le hero (plein écran) dépassé.
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > window.innerHeight - 80);
