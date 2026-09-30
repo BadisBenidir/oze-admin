@@ -31,6 +31,9 @@ export const useWallet = (profileId: string | undefined) => {
   const [balance, setBalance] = useState<number>(0);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState(true);
+  // Échec de lecture du solde (session expirée, réseau...) : jamais affiché
+  // comme un solde à 0 — l'interface montre « — » et propose de réessayer.
+  const [error, setError] = useState<string | null>(null);
   const [cumulativePaid, setCumulativePaid] = useState<number>(0);
   const [giftsUnlocked, setGiftsUnlocked] = useState<number>(0);
   // Cumul payé au moment où le DERNIER cadeau a été accordé (0150) — la
@@ -61,7 +64,7 @@ export const useWallet = (profileId: string | undefined) => {
     }
 
     setLoading(true);
-    const [{ data: profileData }, { data: txData }, { data: paidData }, { data: giftsData }] = await Promise.all([
+    const [{ data: profileData, error: profileError }, { data: txData }, { data: paidData }, { data: giftsData }] = await Promise.all([
       supabase.from('profiles').select('wallet_balance, loyalty_gifts_unlocked, loyalty_progress_checkpoint').eq('id', profileId).single(),
       supabase
         .from('wallet_transactions')
@@ -76,17 +79,34 @@ export const useWallet = (profileId: string | undefined) => {
       supabase.from('b2b_gift_rewards').select('quantity, status').eq('profile_id', profileId).neq('status', 'shipped'),
     ]);
 
-    setBalance(Number(profileData?.wallet_balance ?? 0));
+    if (profileError || !profileData) {
+      console.error('Solde du portefeuille indisponible:', profileError);
+      setError(profileError?.message || 'Solde indisponible');
+      setLoading(false);
+      return;
+    }
+    setError(null);
+    setBalance(Number(profileData.wallet_balance ?? 0));
     setTransactions((txData || []) as WalletTransaction[]);
     setCumulativePaid((paidData || []).reduce((sum, row) => sum + Number(row.paid_amount ?? 0), 0));
-    setGiftsUnlocked(Number(profileData?.loyalty_gifts_unlocked ?? 0));
-    setProgressCheckpoint(Number(profileData?.loyalty_progress_checkpoint ?? 0));
+    setGiftsUnlocked(Number(profileData.loyalty_gifts_unlocked ?? 0));
+    setProgressCheckpoint(Number(profileData.loyalty_progress_checkpoint ?? 0));
     setPendingGiftCount((giftsData || []).reduce((sum, row) => sum + Number(row.quantity ?? 0), 0));
     setLoading(false);
   }, [profileId]);
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  // Retour sur l'onglet (ordinateur laissé ouvert, remboursement crédité
+  // entre-temps) : on relit le solde plutôt que d'afficher une valeur figée.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [refresh]);
 
   const topUp = async (amount: number): Promise<TopUpResult> => {
@@ -111,6 +131,7 @@ export const useWallet = (profileId: string | undefined) => {
 
   return {
     balance,
+    error,
     transactions,
     loading,
     refresh,

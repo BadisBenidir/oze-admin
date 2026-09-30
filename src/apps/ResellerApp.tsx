@@ -242,7 +242,7 @@ function ResellerApp() {
     >
       <Wallet className="h-3.5 w-3.5" />
       <span className="tabular-nums">
-        Solde : {wallet.balance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+        Solde : {wallet.error ? '—' : wallet.balance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
       </span>
     </button>
   );

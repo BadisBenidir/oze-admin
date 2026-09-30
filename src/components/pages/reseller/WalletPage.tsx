@@ -23,7 +23,7 @@ const isDebit = (tx: WalletTransaction) => tx.type === 'achat' || (tx.type === '
 
 export const WalletPage: React.FC = () => {
   const { profile } = useResellerAuth();
-  const { balance, transactions, loading, topUp, pendingGiftCount, loyaltyProgress } = useWallet(profile?.id);
+  const { balance, error: walletError, refresh: refreshWallet, transactions, loading, topUp, pendingGiftCount, loyaltyProgress } = useWallet(profile?.id);
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,8 +64,16 @@ export const WalletPage: React.FC = () => {
           <span>Solde disponible</span>
         </div>
         <p className="text-3xl font-semibold tabular-nums">
-          {loading ? '—' : balance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+          {loading || walletError ? '—' : balance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
         </p>
+        {walletError && !loading && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-200">
+            <span>Impossible de charger votre solde pour le moment.</span>
+            <button onClick={() => refreshWallet()} className="rounded-lg bg-white/15 px-3 py-1 font-medium text-white hover:bg-white/25">
+              Réessayer
+            </button>
+          </div>
+        )}
       </div>
 
       {pendingGiftCount > 0 && (
