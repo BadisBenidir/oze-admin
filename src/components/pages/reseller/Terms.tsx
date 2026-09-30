@@ -12,6 +12,9 @@ import {
   MEDIATOR_URL,
   CGV_VERSION,
 } from '../../../config/legal';
+import { PERIOD, PLANS } from '../../landing/plans';
+
+const passPrice = (id: 'drops' | 'revendeur') => PLANS.find((p) => p.id === id)?.price || '';
 
 type TermsTab = 'common' | 'individual' | 'sole_proprietorship' | 'company';
 
@@ -123,6 +126,60 @@ export const Terms: React.FC = () => {
                   dépend du statut du client, précisé à la section applicable ci-dessous.
                 </p>
               </Section>
+              <Section title="6. Abonnements Club B2B">
+                <p>
+                  <strong>6.1 Objet.</strong> L'accès au portail peut être souscrit en ligne sous la forme d'un abonnement
+                  (« pass ») : le <strong>Pass Drops</strong> ({passPrice('drops')} {PERIOD}) donne accès au catalogue B2B
+                  et aux drops, avec achat à l'unité ; le <strong>Pass Revendeur</strong> ({passPrice('revendeur')} {PERIOD})
+                  y ajoute les sessions d'enchères privées et le sourcing sur mesure. Le Pass Boutiques fait l'objet d'une
+                  offre sur devis. Le contenu détaillé de chaque pass est présenté sur la page d'inscription.
+                </p>
+                <p>
+                  <strong>6.2 Prix et paiement.</strong> Le prix est payable mensuellement et d'avance par carte bancaire
+                  (prestataire Stripe), TVA non applicable (article 293 B du CGI). L'abonnement est reconduit
+                  automatiquement chaque mois à sa date anniversaire, sauf résiliation. Une facture est émise à chaque
+                  échéance et reste consultable dans « Mon profil » → « Mon abonnement ».
+                </p>
+                <p>
+                  <strong>6.3 Durée et résiliation.</strong> L'abonnement est sans engagement et résiliable à tout moment
+                  depuis « Mon profil ». La résiliation prend effet à la fin de la période mensuelle déjà payée, jusqu'à
+                  laquelle l'accès est maintenu ; le mois entamé n'est pas remboursé.
+                </p>
+                <p>
+                  <strong>6.4 Changement de pass.</strong> Le passage du Pass Drops au Pass Revendeur est immédiat : la
+                  différence de prix est facturée au prorata des jours restants de la période en cours. Le passage du
+                  Pass Revendeur au Pass Drops prend effet à la prochaine échéance.
+                </p>
+                <p>
+                  <strong>6.5 Défaut de paiement.</strong> En cas d'échec d'un prélèvement, de nouvelles tentatives sont
+                  effectuées automatiquement et le client en est informé par email. À défaut de régularisation, l'accès
+                  est suspendu. Les commandes, le solde du portefeuille et les informations du client sont conservés ;
+                  l'accès est rétabli dès la souscription d'un nouveau pass.
+                </p>
+                <p>
+                  <strong>6.6 Droit de rétractation.</strong> Le client professionnel (EI, société) ne dispose d'aucun
+                  droit de rétractation sur l'abonnement. Le client particulier dispose d'un délai de 14 jours à compter
+                  de la souscription (voir l'onglet « Particuliers »).
+                </p>
+                <p>
+                  <strong>6.7 Retours non légitimes.</strong> Lorsqu'un article est retourné dans le délai de 14 jours au
+                  motif d'un défaut d'authenticité, d'un défaut non décrit dans l'annonce ou de tout autre motif mettant
+                  en cause la conformité de la pièce, et que ce motif se révèle infondé après vérification par OZË Paris
+                  (pièce authentique, défaut mentionné dans la description ou visible sur les photographies, usure
+                  conforme au grade annoncé), l'abonnement du client est suspendu à la fin du mois entamé et n'est pas
+                  renouvelé. Cette suspension ne prive pas le client particulier du remboursement qui lui est dû au titre
+                  de son droit de rétractation, dans les conditions de l'onglet « Particuliers ».
+                </p>
+                <p>
+                  <strong>6.8 Évolution des prix.</strong> Toute modification du prix d'un pass est notifiée par email au
+                  moins 30 jours avant son application ; le client peut résilier avant cette date sans frais.
+                </p>
+                <p>
+                  <strong>6.9 Usage du compte.</strong> Le compte est personnel. Le partage ou la revente de l'accès, la
+                  diffusion des contenus réservés ou toute fraude peuvent entraîner la suspension immédiate de l'accès,
+                  sans remboursement de la période en cours.
+                </p>
+              </Section>
             </>
           )}
 
@@ -139,6 +196,20 @@ export const Terms: React.FC = () => {
                   d'origine, non porté au-delà des vérifications usuelles, avec l'ensemble de ses accessoires et,
                   lorsqu'il en est équipé, son scellé de sécurité (tag) intact et non retiré. Un scellé retiré ou brisé
                   peut entraîner une dépréciation du remboursement à due proportion de la perte de valeur constatée.
+                </p>
+              </Section>
+              <Section title="Rétractation de l'abonnement Club B2B">
+                <p>
+                  Le client particulier dispose de <strong>14 jours calendaires</strong> à compter de la souscription d'un
+                  pass pour se rétracter, sans avoir à justifier de motif, par email à l'adresse contact@ozeparis.com. Ayant
+                  expressément demandé l'accès immédiat au service lors de son inscription, il reste redevable d'un montant
+                  proportionnel à la période écoulée jusqu'à la communication de sa décision (article L221-25 du Code de la
+                  consommation) ; le surplus lui est remboursé sous 14 jours.
+                </p>
+                <p>
+                  Les retours d'articles effectués dans ce même délai pour un motif qui se révèle infondé (authenticité,
+                  défaut non décrit) entraînent la suspension de l'abonnement à la fin du mois entamé, selon l'article 6.7
+                  des clauses communes.
                 </p>
               </Section>
               <Section title="Garanties légales">

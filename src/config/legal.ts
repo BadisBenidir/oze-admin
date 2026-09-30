@@ -8,7 +8,7 @@
 /** Identifie la version des CGV acceptée par un revendeur (profiles.terms_version) —
  * incrémenter (ex: date de révision) à chaque changement substantiel du texte,
  * pour pouvoir un jour redemander un consentement explicite après mise à jour. */
-export const CGV_VERSION = '2026-09-07';
+export const CGV_VERSION = '2026-09-30';
 
 // Source : annuaire-entreprises.data.gouv.fr (INSEE/INPI), fiche OZE PARIS.
 export const COMPANY_LEGAL_NAME = 'OZE PARIS, SAS';

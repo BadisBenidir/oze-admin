@@ -5,6 +5,7 @@ import {
 import { Analytics } from '@vercel/analytics/react';
 import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 import { supabase } from '../../lib/supabase';
+import { CGV_VERSION } from '../../config/legal';
 import { useGooglePlacesAutocomplete } from '../../hooks/useGooglePlacesAutocomplete';
 import logo from './assets/logo_oze_paris_b2b.png';
 import { LOGIN_URL, PERIOD, PLANS, SUPPORT_EMAIL, type Plan, type SignupPlanId } from './plans';
@@ -61,8 +62,8 @@ const readPlanFromUrl = (): SignupPlanId => {
   return pass === 'drops' ? 'drops' : 'revendeur';
 };
 
-const validate = (f: FormData, termsAccepted: boolean) => {
-  const e: Partial<Record<keyof FormData | 'terms', string>> = {};
+const validate = (f: FormData, termsAccepted: boolean, immediateAccess: boolean) => {
+  const e: Partial<Record<keyof FormData | 'terms' | 'immediate', string>> = {};
   if (!f.first_name.trim()) e.first_name = 'Prénom requis';
   if (!f.last_name.trim()) e.last_name = 'Nom requis';
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) e.email = 'Email invalide';
@@ -75,6 +76,7 @@ const validate = (f: FormData, termsAccepted: boolean) => {
   if (f.password.length < 8) e.password = '8 caractères minimum';
   if (f.password_confirm !== f.password) e.password_confirm = 'Les mots de passe ne correspondent pas';
   if (!termsAccepted) e.terms = 'Veuillez accepter les conditions générales de vente';
+  if (!immediateAccess) e.immediate = 'Veuillez confirmer la demande d\'accès immédiat';
   return e;
 };
 
@@ -318,6 +320,7 @@ const SignupForm: React.FC = () => {
     }
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [immediateAccess, setImmediateAccess] = useState(false);
   const [errors, setErrors] = useState<ReturnType<typeof validate>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -360,7 +363,7 @@ const SignupForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
-    const found = validate(form, termsAccepted);
+    const found = validate(form, termsAccepted, immediateAccess);
     setErrors(found);
     if (Object.values(found).some(Boolean)) {
       document.querySelector('[data-signup-form]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -384,6 +387,8 @@ const SignupForm: React.FC = () => {
       billing_country: trimmed.billing_country,
       password: trimmed.password,
       terms_accepted: true,
+      immediate_access_requested: true,
+      cgv_version: CGV_VERSION,
     });
 
     if (data?.url) {
@@ -617,6 +622,25 @@ const SignupForm: React.FC = () => {
                       </span>
                     </label>
                     {errors.terms && <p className="mt-2 text-xs text-red-500">{errors.terms}</p>}
+
+                    {/* Droit de rétractation des particuliers (L221-25 C. conso) : accès
+                        démarré avant la fin du délai de 14 jours à leur demande expresse. */}
+                    <label className="mt-3 flex cursor-pointer items-start gap-3 text-xs text-gray-700 sm:text-sm">
+                      <input
+                        type="checkbox"
+                        checked={immediateAccess}
+                        onChange={(e) => {
+                          setImmediateAccess(e.target.checked);
+                          if (errors.immediate) setErrors((prev) => ({ ...prev, immediate: undefined }));
+                        }}
+                        className="mt-0.5 h-4 w-4 flex-shrink-0 accent-black"
+                      />
+                      <span>
+                        Je demande l'accès immédiat à mon espace. Si je m'inscris en tant que particulier et exerce mon droit de
+                        rétractation dans les 14 jours, je paierai un montant proportionnel à la période déjà utilisée.
+                      </span>
+                    </label>
+                    {errors.immediate && <p className="mt-2 text-xs text-red-500">{errors.immediate}</p>}
 
                     {submitError && (
                       <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{submitError}</div>

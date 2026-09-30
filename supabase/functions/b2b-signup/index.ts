@@ -72,6 +72,8 @@ Deno.serve(async (req: Request) => {
   }
   if (password.length < 8) return reply({ error: 'Le mot de passe doit contenir au moins 8 caractères' }, 400);
   if (body.terms_accepted !== true) return reply({ error: 'Les conditions générales de vente doivent être acceptées' }, 400);
+  if (body.immediate_access_requested !== true) return reply({ error: 'La demande d\'accès immédiat doit être confirmée' }, 400);
+  const cgvVersion = text(body.cgv_version, 20) || 'inconnue';
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
@@ -185,7 +187,14 @@ Deno.serve(async (req: Request) => {
         country: countryCode(input.billing_country),
       },
       preferred_locales: ['fr'],
-      metadata: { reseller_id: reseller.id },
+      // Preuve des consentements donnés à l'inscription (CGV et demande
+      // d'accès immédiat, qui encadre le droit de rétractation des particuliers).
+      metadata: {
+        reseller_id: reseller.id,
+        cgv_version: cgvVersion,
+        cgv_accepted_at: new Date().toISOString(),
+        immediate_access_requested_at: new Date().toISOString(),
+      },
     });
     const url = await createSubscriptionCheckout(stripe, {
       plan,
