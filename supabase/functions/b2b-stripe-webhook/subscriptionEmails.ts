@@ -2,9 +2,12 @@
 // welcomeEmail.ts) :
 //   - relance d'une inscription dont le paiement n'a pas été finalisé
 //     (checkout.session.expired) ;
-//   - échec d'un prélèvement mensuel (invoice.payment_failed).
+//   - échec d'un prélèvement mensuel (invoice.payment_failed) ;
+//   - facture de chaque échéance payée (invoice.paid), PDF joint.
 // Même expéditeur et même service (Resend) que les autres emails ; jamais
 // bloquant pour le webhook.
+
+import { encode as base64Encode } from 'https://deno.land/std@0.190.0/encoding/base64.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook:emails]';
 const PRO_URL = 'https://pro.ozeparis.com';
@@ -36,7 +39,13 @@ const layout = (params: { title: string; paragraphs: string[]; cta: { label: str
   </div>
 </body></html>`;
 
-async function send(to: string, subject: string, html: string): Promise<void> {
+async function send(
+  to: string,
+  subject: string,
+  html: string,
+  attachments: { filename: string; content: string }[] = [],
+  copyToAdmin = true,
+): Promise<void> {
   const resendApiKey = Deno.env.get('RESEND_API_KEY');
   if (!resendApiKey) {
     console.warn(`${LOG_PREFIX} RESEND_API_KEY absent → « ${subject} » non envoyé à ${to}`);
@@ -48,9 +57,10 @@ async function send(to: string, subject: string, html: string): Promise<void> {
     body: JSON.stringify({
       from: 'OZE PARIS <nepasrepondre@ozeparis.com>',
       to: [to],
-      bcc: ['badis.ozeparis@gmail.com'],
+      ...(copyToAdmin ? { bcc: ['badis.ozeparis@gmail.com'] } : {}),
       subject,
       html,
+      ...(attachments.length ? { attachments } : {}),
     }),
   });
   if (!res.ok) console.error(`${LOG_PREFIX} Échec Resend (${to})`, res.status, await res.text());
@@ -99,3 +109,57 @@ export const sendPaymentFailedEmail = (params: {
       footerNote: `Vous pouvez aussi mettre à jour votre carte depuis <a href="${PRO_URL}/mon-profil" style="color:#111;">« Mon profil » → « Mon abonnement »</a>.`,
     }),
   );
+
+/**
+ * Facture d'une échéance payée (renouvellement mensuel, ou différence au
+ * prorata lors du passage au Pass Revendeur), PDF Stripe en pièce jointe.
+ * Pas de copie à l'admin : une facture par abonné et par mois.
+ */
+export async function sendSubscriptionInvoiceEmail(params: {
+  to: string;
+  firstName: string | null;
+  planName: string;
+  invoiceNumber: string | null;
+  amount: string;
+  periodLabel: string | null;
+  pdfUrl: string | null;
+  hostedUrl: string | null;
+  isPlanChange: boolean;
+}): Promise<void> {
+  const attachments: { filename: string; content: string }[] = [];
+  if (params.pdfUrl) {
+    try {
+      const pdf = await fetch(params.pdfUrl);
+      if (pdf.ok) {
+        attachments.push({
+          filename: `Facture-${params.invoiceNumber || 'OZE'}.pdf`,
+          content: base64Encode(new Uint8Array(await pdf.arrayBuffer())),
+        });
+      }
+    } catch (err) {
+      console.warn(`${LOG_PREFIX} PDF de facture non joint :`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  const what = params.isPlanChange
+    ? `la différence de prix liée à votre passage au <strong>${esc(params.planName)}</strong>`
+    : `votre <strong>${esc(params.planName)}</strong>${params.periodLabel ? ` pour ${esc(params.periodLabel)}` : ''}`;
+
+  await send(
+    params.to,
+    `Votre facture ${params.invoiceNumber ? `${params.invoiceNumber} ` : ''}— Club B2B OZË PARIS`,
+    layout({
+      title: 'Votre facture est disponible',
+      paragraphs: [
+        params.firstName ? `Bonjour ${esc(params.firstName)},` : 'Bonjour,',
+        `Merci ! Nous avons bien reçu votre paiement de <strong>${esc(params.amount)}</strong> pour ${what}.`,
+        `${attachments.length ? 'Votre facture est jointe à cet email. ' : ''}Toutes vos factures restent disponibles dans « Mon profil » → « Mon abonnement ».`,
+      ],
+      cta: params.hostedUrl
+        ? { label: 'Voir la facture en ligne', url: params.hostedUrl }
+        : { label: 'Accéder à mon espace', url: `${PRO_URL}/mon-profil` },
+    }),
+    attachments,
+    false,
+  );
+}

@@ -18,7 +18,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import { sendSubscriptionWelcomeEmail } from './welcomeEmail.ts';
-import { sendAbandonedSignupEmail, sendPaymentFailedEmail } from './subscriptionEmails.ts';
+import { sendAbandonedSignupEmail, sendPaymentFailedEmail, sendSubscriptionInvoiceEmail } from './subscriptionEmails.ts';
 import { syncStripeBillingIdentity } from '../_shared/stripeBilling.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook:subscription]';
@@ -298,6 +298,59 @@ export async function handleSubscriptionPaymentFailed(
     }
   } catch (err) {
     console.error(`${LOG_PREFIX} Email d'échec de paiement (${reseller.id}) :`, err instanceof Error ? err.message : err);
+  }
+  return json({ received: true });
+}
+
+/**
+ * Échéance payée (invoice.paid) : facture envoyée par email à l'abonné.
+ * La facture de la souscription elle-même (billing_reason
+ * 'subscription_create') part déjà avec l'email de bienvenue : seuls les
+ * renouvellements ('subscription_cycle') et les changements de pass facturés
+ * ('subscription_update', différence au prorata) sont envoyés ici. Une
+ * facture à 0 € (aucun montant réglé) n'est pas envoyée.
+ */
+export async function handleSubscriptionInvoicePaid(
+  invoice: Stripe.Invoice,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<Response> {
+  const reason = invoice.billing_reason;
+  if (reason !== 'subscription_cycle' && reason !== 'subscription_update') {
+    return json({ received: true, skipped: `billing_reason_${reason}` });
+  }
+  if (!invoice.amount_paid) return json({ received: true, skipped: 'zero_amount' });
+  const subscriptionId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
+  if (!subscriptionId) return json({ received: true, skipped: 'not_subscription' });
+
+  const admin = createClient(supabaseUrl, serviceRoleKey);
+  const { data: reseller } = await admin
+    .from('resellers')
+    .select('id, account_type, subscription_plan')
+    .eq('stripe_subscription_id', subscriptionId)
+    .maybeSingle();
+  if (!reseller || reseller.account_type !== 'subscriber') return json({ received: true, skipped: 'unknown_subscription' });
+
+  try {
+    const person = await subscriberContact(admin, reseller.id);
+    const to = person?.email || invoice.customer_email;
+    if (to) {
+      const line = invoice.lines?.data?.[0];
+      const periodStart = line?.period?.start ? new Date(line.period.start * 1000) : null;
+      await sendSubscriptionInvoiceEmail({
+        to,
+        firstName: person?.first_name ?? null,
+        planName: PLAN_LABEL[reseller.subscription_plan || ''] || 'abonnement Club B2B',
+        invoiceNumber: invoice.number ?? null,
+        amount: (invoice.amount_paid / 100).toLocaleString('fr-FR', { style: 'currency', currency: (invoice.currency || 'eur').toUpperCase() }),
+        periodLabel: periodStart ? periodStart.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : null,
+        pdfUrl: invoice.invoice_pdf ?? null,
+        hostedUrl: invoice.hosted_invoice_url ?? null,
+        isPlanChange: reason === 'subscription_update',
+      });
+    }
+  } catch (err) {
+    console.error(`${LOG_PREFIX} Email de facture (${reseller.id}) :`, err instanceof Error ? err.message : err);
   }
   return json({ received: true });
 }

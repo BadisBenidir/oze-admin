@@ -9,7 +9,7 @@
 //   Endpoint URL : https://<project-ref>.supabase.co/functions/v1/b2b-stripe-webhook
 //   Événement    : checkout.session.completed
 //                  (+ customer.subscription.updated / .deleted,
-//                  invoice.payment_failed et checkout.session.expired pour les
+//                  invoice.paid, invoice.payment_failed et checkout.session.expired pour les
 //                  abonnements Club B2B, voir subscriptions.ts)
 //   → copier le "Signing secret" dans le secret Supabase STRIPE_WEBHOOK_SECRET
 //
@@ -26,6 +26,7 @@ import {
   handleAbandonedSubscriptionCheckout,
   handleSubscriptionChange,
   handleSubscriptionCheckout,
+  handleSubscriptionInvoicePaid,
   handleSubscriptionPaymentFailed,
 } from './subscriptions.ts';
 
@@ -122,6 +123,16 @@ Deno.serve(async (req: Request) => {
       return await handleSubscriptionPaymentFailed(event.data.object as Stripe.Invoice, supabaseUrl, serviceRoleKey);
     } catch (err) {
       console.error(`${LOG_PREFIX} Erreur échec de paiement (${event.id}):`, err instanceof Error ? err.message : err);
+      return new Response(JSON.stringify({ received: true }), { status: 200 });
+    }
+  }
+
+  // Échéance d'abonnement payée : facture envoyée par email à l'abonné.
+  if (event.type === 'invoice.paid') {
+    try {
+      return await handleSubscriptionInvoicePaid(event.data.object as Stripe.Invoice, supabaseUrl, serviceRoleKey);
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Erreur facture payée (${event.id}):`, err instanceof Error ? err.message : err);
       return new Response(JSON.stringify({ received: true }), { status: 200 });
     }
   }
