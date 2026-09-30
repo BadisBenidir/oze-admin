@@ -76,7 +76,7 @@ export const ScheduleAnnouncement: React.FC<ScheduleAnnouncementProps> = ({
       {/* Halo décoratif */}
       <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/70 blur-3xl" />
 
-      <div className="relative flex flex-col gap-5 p-5 sm:p-7 md:flex-row md:items-stretch">
+      <div className="relative flex flex-col gap-5 p-5 sm:p-7 md:flex-row md:items-center">
         {/* Colonne gauche : annonce + chrono */}
         <div className="flex flex-shrink-0 flex-col justify-center">
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-stone-500">
@@ -113,14 +113,14 @@ export const ScheduleAnnouncement: React.FC<ScheduleAnnouncementProps> = ({
             le reste flouté et grisé, qui s'estompe vers le bord droit. */}
         {images.length > 0 && (
           <div className="relative min-w-0 flex-1">
-            <div className="flex h-36 gap-2 overflow-hidden [mask-image:linear-gradient(to_right,black_75%,transparent)] sm:h-48 sm:gap-3 md:h-full md:min-h-[12rem]">
+            <div className="flex gap-2 overflow-hidden [mask-image:linear-gradient(to_right,black_75%,transparent)] sm:gap-3">
               {netImages.map((src, i) => (
-                <div key={`net-${i}`} className="aspect-square h-full flex-shrink-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-stone-200">
+                <div key={`net-${i}`} className="h-36 w-36 flex-shrink-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-stone-200 sm:h-44 sm:w-44">
                   <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
                 </div>
               ))}
               {blurredImages.map((src, i) => (
-                <div key={`blur-${i}`} className="relative aspect-square h-full flex-shrink-0 overflow-hidden rounded-xl bg-stone-200 ring-1 ring-stone-200">
+                <div key={`blur-${i}`} className="relative h-36 w-36 flex-shrink-0 overflow-hidden rounded-xl bg-stone-200 ring-1 ring-stone-200 sm:h-44 sm:w-44">
                   <img src={src} alt="" loading="lazy" className="h-full w-full scale-110 object-cover opacity-60 blur-[8px] grayscale" />
                   {i === 0 && (
                     <div className="absolute inset-0 flex items-center justify-center">
