@@ -57,9 +57,9 @@ as $$
     coalesce((
       select array_agg(img)
       from (
-        select coalesce(p.images[coalesce(p.main_image_index, 0) + 1], p.images[1]) as img
+        select coalesce(p.images ->> coalesce(p.main_image_index, 0), p.images ->> 0) as img
         from pieces p
-        where coalesce(array_length(p.images, 1), 0) > 0
+        where jsonb_typeof(p.images) = 'array' and jsonb_array_length(p.images) > 0
         limit 4
       ) i
       where img is not null
