@@ -74,10 +74,11 @@ export const ScheduleAnnouncement: React.FC<ScheduleAnnouncementProps> = ({
   return (
     <div className="relative mb-6 overflow-hidden rounded-2xl bg-[#f5f1ea] text-stone-900 ring-1 ring-stone-200">
       {/* Halo décoratif */}
-      <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/70 blur-3xl" />
+      <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/70 blur-3xl" />
 
-      <div className="relative flex flex-col gap-4 p-5 sm:p-7 md:flex-row md:items-end md:justify-between">
-        <div>
+      <div className="relative flex flex-col gap-5 p-5 sm:p-7 md:flex-row md:items-stretch">
+        {/* Colonne gauche : annonce + chrono */}
+        <div className="flex flex-shrink-0 flex-col justify-center">
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-stone-500">
             <Icon className="h-3.5 w-3.5" /> {eyebrow}
           </div>
@@ -91,51 +92,49 @@ export const ScheduleAnnouncement: React.FC<ScheduleAnnouncementProps> = ({
             {pieceCount > 0 ? `${pieceCount} pièce${pieceCount > 1 ? 's' : ''}` : 'Pièces en préparation'}
             {brands.length > 0 && <span>· {brands.join(', ')}</span>}
           </p>
+
+          {done ? (
+            <p className="mt-4 inline-flex items-center self-start rounded-lg bg-stone-900 px-3 py-2 text-sm font-semibold text-white">
+              {isDrop ? 'Le drop est en ligne !' : 'La session commence !'}
+            </p>
+          ) : (
+            <div className="mt-4 flex gap-2 sm:gap-3">
+              {units.map((u) => (
+                <div key={u.l} className="min-w-[56px] rounded-xl bg-white px-2.5 py-2 text-center shadow-sm ring-1 ring-stone-200 sm:min-w-[68px]">
+                  <p className="text-xl font-semibold tabular-nums sm:text-3xl">{pad(u.v)}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-stone-400">{u.l}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {done ? (
-          <p className="inline-flex items-center self-start rounded-lg bg-stone-900 px-3 py-2 text-sm font-semibold text-white md:self-auto">
-            {isDrop ? 'Le drop est en ligne !' : 'La session commence !'}
-          </p>
-        ) : (
-          <div className="flex gap-2 sm:gap-3">
-            {units.map((u) => (
-              <div key={u.l} className="min-w-[56px] rounded-xl bg-white px-2.5 py-2 text-center shadow-sm ring-1 ring-stone-200 sm:min-w-[68px]">
-                <p className="text-xl font-semibold tabular-nums sm:text-3xl">{pad(u.v)}</p>
-                <p className="text-[10px] uppercase tracking-wider text-stone-400">{u.l}</p>
-              </div>
-            ))}
+        {/* Droite : grandes cases sur toute la hauteur — vitrine nette, puis
+            le reste flouté et grisé, qui s'estompe vers le bord droit. */}
+        {images.length > 0 && (
+          <div className="relative min-w-0 flex-1">
+            <div className="flex h-36 gap-2 overflow-hidden [mask-image:linear-gradient(to_right,black_75%,transparent)] sm:h-48 sm:gap-3 md:h-full md:min-h-[12rem]">
+              {netImages.map((src, i) => (
+                <div key={`net-${i}`} className="aspect-square h-full flex-shrink-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-stone-200">
+                  <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+                </div>
+              ))}
+              {blurredImages.map((src, i) => (
+                <div key={`blur-${i}`} className="relative aspect-square h-full flex-shrink-0 overflow-hidden rounded-xl bg-stone-200 ring-1 ring-stone-200">
+                  <img src={src} alt="" loading="lazy" className="h-full w-full scale-110 object-cover opacity-60 blur-[8px] grayscale" />
+                  {i === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-stone-700 shadow-sm">
+                        <Lock className="h-3.5 w-3.5" /> Révélé le jour J
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
-
-      {images.length > 0 && (
-        <div className="relative px-5 pb-5 sm:px-7 sm:pb-7">
-          <div className="flex items-end gap-2 overflow-hidden [mask-image:linear-gradient(to_right,black_80%,transparent)] sm:gap-3">
-            {netImages.map((src, i) => (
-              <div key={`net-${i}`} className="h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-stone-200 sm:h-44 sm:w-44">
-                <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
-              </div>
-            ))}
-            {blurredImages.map((src, i) => (
-              <div key={`blur-${i}`} className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-stone-200 sm:h-28 sm:w-28">
-                <img src={src} alt="" loading="lazy" className="h-full w-full scale-110 object-cover blur-[6px]" />
-                {i === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/20">
-                    <Lock className="h-4 w-4 text-stone-700" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          {blurredImages.length > 0 && (
-            <p className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
-              <Lock className="h-3 w-3" />
-              {netImages.length > 0 ? 'Le reste révélé le jour J' : 'Révélé le jour J'}
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 };
