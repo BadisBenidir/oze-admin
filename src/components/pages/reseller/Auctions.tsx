@@ -8,6 +8,7 @@ import { useMyAuctionPayments, OVERDUE_RESTRICTION_MESSAGE } from '../../../hook
 import { useWallet } from '../../../hooks/useWallet';
 import { AuctionCountdown } from './AuctionCountdown';
 import { AuctionItemDetailModal } from './AuctionItemDetailModal';
+import { ScheduleAnnouncement } from './ScheduleAnnouncement';
 import { AuctionPaymentsDue } from './AuctionPaymentsDue';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -309,6 +310,19 @@ export const Auctions: React.FC = () => {
           )}
         </p>
       </div>
+
+      {/* Affiche d'annonce de la prochaine session programmée (lots consultables plus bas) */}
+      {session?.status === 'upcoming' && (
+        <ScheduleAnnouncement
+          kind="auction"
+          title={session.title}
+          startsAt={session.starts_at}
+          pieceCount={items.length}
+          brands={Array.from(new Set(items.map((i) => i.brand).filter(Boolean))).slice(0, 4)}
+          images={items.map((i) => i.images?.[0]).filter((src): src is string => Boolean(src)).slice(0, 4)}
+          onStart={() => setTimeout(() => window.location.reload(), 3000)}
+        />
+      )}
 
       {error && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">

@@ -12,6 +12,16 @@ import { useB2BCart } from '../../../hooks/useB2BCart';
 // reflétait dans le badge/la page panier qu'après rechargement complet.
 import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
 import { DropPreviewBadge } from './DropPreviewBadge';
+import { ScheduleAnnouncement } from './ScheduleAnnouncement';
+
+interface NextDropAnnouncement {
+  drop_id: string;
+  title: string | null;
+  scheduled_at: string;
+  piece_count: number;
+  brands: string[];
+  preview_images: string[];
+}
 import {
   Search,
   ShoppingCart,
@@ -99,6 +109,19 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
     };
   }, []);
 
+  // Annonce du prochain drop programmé (0168) — silencieuse en cas d'erreur
+  // (fonction absente avant migration) : pas de bandeau, rien d'autre.
+  const [nextDrop, setNextDrop] = useState<NextDropAnnouncement | null>(null);
+  const loadNextDrop = async () => {
+    const { data, error } = await supabase.rpc('get_next_drop_announcement');
+    if (error) return;
+    const row = (Array.isArray(data) ? data[0] : data) as NextDropAnnouncement | undefined;
+    setNextDrop(row && row.scheduled_at ? row : null);
+  };
+  useEffect(() => {
+    loadNextDrop();
+  }, []);
+
   const toggleInList = (id: string, list: string[]) =>
     list.includes(id) ? list.filter((v) => v !== id) : [...list, id];
 
@@ -115,6 +138,24 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
 
   return (
     <div className="p-4 md:p-6">
+      {nextDrop && (
+        <ScheduleAnnouncement
+          kind="drop"
+          title={nextDrop.title}
+          startsAt={nextDrop.scheduled_at}
+          pieceCount={nextDrop.piece_count}
+          brands={nextDrop.brands}
+          images={nextDrop.preview_images}
+          onStart={() => {
+            // Le drop vient d'être publié : on recharge le catalogue puis l'annonce.
+            setTimeout(() => {
+              refreshRef.current();
+              loadNextDrop();
+            }, 5000);
+          }}
+        />
+      )}
+
       <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Catalogue</h3>
