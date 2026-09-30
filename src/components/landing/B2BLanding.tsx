@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import {
-  ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Globe, Euro, UserRound, Mail,
+  ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Users, Euro, UserRound, Mail,
   Wallet, Percent,
 } from 'lucide-react';
 import {
@@ -507,7 +507,7 @@ export const B2BLanding: React.FC = () => {
           <div className="mx-auto mt-14 grid max-w-xl grid-cols-3 divide-x divide-white/25">
             {[
               { icon: ShieldCheck, value: '100 %', label: 'pièces authentifiées' },
-              { icon: Globe, value: 'Japon', label: 'en direct des maisons de vente' },
+              { icon: Users, value: '+70', label: 'revendeurs déjà fournis' },
               { icon: Euro, value: '0', label: 'minimum de commande', iconAfter: true },
             ].map(({ icon: Icon, value, label, iconAfter }) => (
               <div key={label} className="px-2">
