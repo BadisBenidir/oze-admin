@@ -151,23 +151,6 @@ export async function drawPoster(
     ctx.restore();
   }
 
-  // Badge « Authentifié » sur la photo — coche dessinée (le glyphe ✓ manque dans
-  // certaines polices et s'afficherait en carré vide).
-  const badgeX = photoX + 28;
-  const badgeY = y + 28;
-  pill(ctx, '     AUTHENTIFIÉ', badgeX, badgeY, { filled: true, size: 22 });
-  ctx.save();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 3.5;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(badgeX + 22, badgeY + 22);
-  ctx.lineTo(badgeX + 29, badgeY + 29);
-  ctx.lineTo(badgeX + 42, badgeY + 15);
-  ctx.stroke();
-  ctx.restore();
-
   y += photoH + 48;
 
   // Marque

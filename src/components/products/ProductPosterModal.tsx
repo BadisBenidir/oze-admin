@@ -76,34 +76,45 @@ export const ProductPosterModal: React.FC<ProductPosterModalProps> = ({
 
   const fileName = `oze-${(reference || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${format}.png`;
 
-  const toBlob = () =>
-    new Promise<Blob | null>((resolve) => canvasRef.current?.toBlob((b) => resolve(b), 'image/png') ?? resolve(null));
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const download = async () => {
-    const blob = await toBlob();
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
+  // Tout se fait de façon synchrone à partir de l'aperçu déjà généré (data
+  // URL) : un `await` avant share()/click() fait perdre au navigateur le
+  // "geste utilisateur", et le partage (voire le téléchargement) est alors
+  // refusé sans rien afficher.
+  const previewFile = (): File | null => {
+    if (!preview) return null;
+    const bytes = atob(preview.split(',')[1]);
+    const buffer = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
+    return new File([buffer], fileName, { type: 'image/png' });
   };
 
-  const canShare = typeof navigator !== 'undefined' && 'canShare' in navigator;
-  const share = async () => {
-    const blob = await toBlob();
-    if (!blob) return;
-    const file = new File([blob], fileName, { type: 'image/png' });
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: name });
-      } catch {
-        // partage annulé par l'utilisateur
-      }
-    } else {
+  const download = () => {
+    if (!preview) return;
+    const a = document.createElement('a');
+    a.href = preview;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  const share = () => {
+    const file = previewFile();
+    if (!file) return;
+    setNotice(null);
+    if (!navigator.canShare?.({ files: [file] })) {
       download();
+      setNotice('Partage d\'image non pris en charge par ce navigateur : l\'affiche a été téléchargée.');
+      return;
     }
+    navigator.share({ files: [file], title: name }).catch((err: unknown) => {
+      if (err instanceof DOMException && err.name === 'AbortError') return; // partage annulé
+      download();
+      setNotice('Le partage a échoué : l\'affiche a été téléchargée à la place.');
+    });
   };
 
   return (
@@ -198,6 +209,7 @@ export const ProductPosterModal: React.FC<ProductPosterModalProps> = ({
                     <Share2 className="h-4 w-4" /> Partager
                   </button>
                 )}
+                {notice && <p className="text-center text-xs text-amber-700">{notice}</p>}
                 <p className="text-center text-[11px] text-gray-400">PNG {FORMATS[format].w} × {FORMATS[format].h} px</p>
               </div>
             </div>
