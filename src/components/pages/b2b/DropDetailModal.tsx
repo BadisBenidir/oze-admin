@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Package, ImageOff, Trash2 } from 'lucide-react';
+import { X, Package, ImageOff, Trash2, Star } from 'lucide-react';
 import { Drop } from '../../../hooks/useDrops';
 import { useDropProducts } from '../../../hooks/useDropProducts';
 
@@ -17,9 +17,13 @@ interface DropDetailModalProps {
   /** Refusé par admin_delete_drop si un article du drop a déjà été vendu —
    * l'erreur est alors affichée ici plutôt que de fermer la modale. */
   onDelete?: (dropId: string) => Promise<{ success: boolean; error?: string }>;
+  /** Pièces vitrine de l'annonce revendeur (max 4) — seulement pour un drop planifié. */
+  onSetFeatured?: (dropId: string, productIds: string[]) => Promise<{ success: boolean; error?: string }>;
 }
 
-export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose, otherDrops = [], onReassignProduct, onDelete }) => {
+const MAX_FEATURED = 4;
+
+export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose, otherDrops = [], onReassignProduct, onDelete, onSetFeatured }) => {
   // `drop` est dérivé en direct de la liste `drops` du parent (voir
   // B2BDrops.tsx) : product_ids se met à jour automatiquement après un
   // déplacement, ce qui redéclenche useDropProducts via sa dépendance sur
@@ -28,6 +32,8 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
   const [movingProductId, setMovingProductId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [featuredSaving, setFeaturedSaving] = useState(false);
+  const [featuredError, setFeaturedError] = useState<string | null>(null);
 
   if (!drop) return null;
 
@@ -52,6 +58,25 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
       return;
     }
     onClose();
+  };
+
+  const canFeature = Boolean(onSetFeatured) && drop.status === 'planifie';
+  const featured = (drop.featured_product_ids || []).filter((id) => drop.product_ids.includes(id));
+
+  const toggleFeatured = async (productId: string) => {
+    if (!onSetFeatured) return;
+    const next = featured.includes(productId)
+      ? featured.filter((id) => id !== productId)
+      : [...featured, productId];
+    if (next.length > MAX_FEATURED) {
+      setFeaturedError(`${MAX_FEATURED} pièces vitrine maximum — retire d'abord une étoile.`);
+      return;
+    }
+    setFeaturedError(null);
+    setFeaturedSaving(true);
+    const result = await onSetFeatured(drop.id, next);
+    setFeaturedSaving(false);
+    if (!result.success) setFeaturedError(result.error || 'Enregistrement impossible');
   };
 
   const totalPurchase = products.reduce((sum, p) => sum + (p.purchase_price || 0), 0);
@@ -95,6 +120,19 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">Erreur : {error}</div>
             )}
+            {canFeature && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 flex items-start gap-2">
+                <Star className="h-4 w-4 mt-0.5 flex-shrink-0 fill-amber-400 text-amber-500" />
+                <p>
+                  <span className="font-medium">Vitrine de l'annonce ({featured.length}/{MAX_FEATURED})</span> — clique sur l'étoile
+                  des pièces à montrer nettes dans l'annonce du prochain drop côté revendeurs.
+                  {featured.length === 0 && ' Sans choix, les 4 premières photos s\'affichent floutées.'}
+                </p>
+              </div>
+            )}
+            {featuredError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{featuredError}</div>
+            )}
 
             <div className="border border-gray-100 rounded-lg overflow-hidden">
               <table className="w-full">
@@ -129,6 +167,17 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
                         <tr key={p.id} className="border-b border-gray-50 last:border-b-0">
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-3">
+                              {canFeature && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleFeatured(p.id)}
+                                  disabled={featuredSaving}
+                                  title={featured.includes(p.id) ? 'Retirer de la vitrine' : 'Mettre en vitrine (annonce nette)'}
+                                  className="p-1 -ml-1 rounded hover:bg-amber-50 disabled:opacity-50 flex-shrink-0"
+                                >
+                                  <Star className={`h-4 w-4 ${featured.includes(p.id) ? 'fill-amber-400 text-amber-500' : 'text-gray-300'}`} />
+                                </button>
+                              )}
                               <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
                                 {image ? (
                                   <img src={image} alt={p.name} className="h-full w-full object-cover" />

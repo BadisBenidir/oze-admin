@@ -21,6 +21,8 @@ interface NextDropAnnouncement {
   piece_count: number;
   brands: string[];
   preview_images: string[];
+  /** true = pièces vitrine choisies par l'admin (0171), affichées nettes. */
+  images_revealed?: boolean;
 }
 import {
   Search,
@@ -146,6 +148,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
           pieceCount={nextDrop.piece_count}
           brands={nextDrop.brands}
           images={nextDrop.preview_images}
+          revealed={nextDrop.images_revealed}
           onStart={() => {
             // Le drop vient d'être publié : on recharge le catalogue puis l'annonce.
             setTimeout(() => {

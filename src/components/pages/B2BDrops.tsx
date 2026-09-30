@@ -91,7 +91,7 @@ const MergeDropModal: React.FC<MergeDropModalProps> = ({ source, otherDrops, onC
 
 export const B2BDrops: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { drops, loading, error, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop } = useDrops(isAdmin);
+  const { drops, loading, error, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop, setFeaturedProducts } = useDrops(isAdmin);
 
   const [showModal, setShowModal] = useState(false);
   const [editingDrop, setEditingDrop] = useState<Drop | null>(null);
@@ -364,6 +364,7 @@ export const B2BDrops: React.FC = () => {
         otherDrops={drops.filter((d) => d.id !== viewingDropId)}
         onReassignProduct={reassignDropProduct}
         onDelete={deleteDrop}
+        onSetFeatured={setFeaturedProducts}
       />
 
       {previewLinksDrop && (

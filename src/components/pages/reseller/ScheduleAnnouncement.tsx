@@ -5,7 +5,7 @@ import { CalendarClock, Gavel, Lock, Rocket } from 'lucide-react';
  * Affiche d'annonce d'un événement programmé côté revendeur : prochain drop
  * (Catalogue) ou prochaine session d'enchères (Enchères). Date, compte à
  * rebours en direct, nombre de pièces, marques et aperçu photo — flouté pour
- * un drop (teaser, rien n'est encore achetable), net pour des enchères dont
+ * un drop (teaser) sauf pièces vitrine choisies par l'admin, net pour des enchères dont
  * les lots sont déjà consultables plus bas.
  */
 
@@ -16,6 +16,8 @@ interface ScheduleAnnouncementProps {
   pieceCount: number;
   brands?: string[];
   images?: string[];
+  /** Drop : photos des pièces vitrine choisies par l'admin, affichées nettes (sinon teaser flouté). */
+  revealed?: boolean;
   /** Appelé une fois le compte à rebours terminé (ex. recharger le catalogue). */
   onStart?: () => void;
 }
@@ -39,7 +41,7 @@ const useCountdown = (target: number) => {
 };
 
 export const ScheduleAnnouncement: React.FC<ScheduleAnnouncementProps> = ({
-  kind, title, startsAt, pieceCount, brands = [], images = [], onStart,
+  kind, title, startsAt, pieceCount, brands = [], images = [], revealed = false, onStart,
 }) => {
   const target = new Date(startsAt).getTime();
   const { done, days, hours, minutes, seconds } = useCountdown(target);
@@ -50,6 +52,7 @@ export const ScheduleAnnouncement: React.FC<ScheduleAnnouncementProps> = ({
   }, [done]);
 
   const isDrop = kind === 'drop';
+  const blurred = isDrop && !revealed;
   const Icon = isDrop ? Rocket : Gavel;
   const eyebrow = isDrop ? 'Prochain drop' : 'Prochaine session d\'enchères';
   const date = new Date(startsAt);
@@ -109,11 +112,11 @@ export const ScheduleAnnouncement: React.FC<ScheduleAnnouncementProps> = ({
                   src={src}
                   alt=""
                   loading="lazy"
-                  className={`h-full w-full object-cover ${isDrop ? 'scale-110 blur-[6px] brightness-90' : ''}`}
+                  className={`h-full w-full object-cover ${blurred ? 'scale-110 blur-[6px] brightness-90' : ''}`}
                 />
               </div>
             ))}
-            {isDrop && (
+            {blurred && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <span className="flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider backdrop-blur-sm">
                   <Lock className="h-3.5 w-3.5" /> Révélé le jour J

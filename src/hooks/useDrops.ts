@@ -10,6 +10,8 @@ export interface Drop {
   created_by: string | null;
   created_at: string;
   published_at: string | null;
+  /** Jusqu'à 4 articles affichés nets dans l'annonce revendeur (0171) — null = teaser flouté. */
+  featured_product_ids: string[] | null;
 }
 
 export interface DropInput {
@@ -35,6 +37,8 @@ interface UseDropsResult {
   /** Supprime définitivement un drop — refusé par admin_delete_drop si l'un
    * de ses articles a déjà été vendu (voir 0088). */
   deleteDrop: (id: string) => Promise<{ success: boolean; error?: string }>;
+  /** Pièces vitrine de l'annonce (max 4, [] ou null = teaser flouté). */
+  setFeaturedProducts: (id: string, productIds: string[]) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
@@ -135,6 +139,16 @@ export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
     return { success: true };
   };
 
+  const setFeaturedProducts = async (id: string, productIds: string[]): Promise<{ success: boolean; error?: string }> => {
+    const { error: updateError } = await supabase
+      .from('drops')
+      .update({ featured_product_ids: productIds.length > 0 ? productIds.slice(0, 4) : null })
+      .eq('id', id);
+    if (updateError) return { success: false, error: updateError.message };
+    await fetchDrops();
+    return { success: true };
+  };
+
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
@@ -143,5 +157,5 @@ export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
     fetchDrops();
   }, [isAdmin, fetchDrops]);
 
-  return { drops, loading, error, refresh: fetchDrops, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop };
+  return { drops, loading, error, refresh: fetchDrops, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop, setFeaturedProducts };
 };
