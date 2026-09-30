@@ -201,10 +201,9 @@ export const Terms: React.FC = () => {
               <Section title="Rétractation de l'abonnement Club B2B">
                 <p>
                   Le client particulier dispose de <strong>14 jours calendaires</strong> à compter de la souscription d'un
-                  pass pour se rétracter, sans avoir à justifier de motif, par email à l'adresse contact@ozeparis.com. Ayant
-                  expressément demandé l'accès immédiat au service lors de son inscription, il reste redevable d'un montant
-                  proportionnel à la période écoulée jusqu'à la communication de sa décision (article L221-25 du Code de la
-                  consommation) ; le surplus lui est remboursé sous 14 jours.
+                  pass pour se rétracter, sans avoir à justifier de motif, par email à l'adresse contact@ozeparis.com.
+                  L'accès à l'espace est alors fermé et le montant payé pour le pass lui est remboursé dans un délai de
+                  14 jours à compter de la réception de sa décision.
                 </p>
                 <p>
                   Les retours d'articles effectués dans ce même délai pour un motif qui se révèle infondé (authenticité,

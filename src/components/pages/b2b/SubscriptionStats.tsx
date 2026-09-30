@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CalendarX, CreditCard, TrendingUp, UserX, Users } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import type { Reseller } from '../../../hooks/useResellers';
 import { PLANS } from '../../landing/plans';
+import { supabase } from '../../../lib/supabase';
 
 /**
  * Tableau de bord des abonnements Club B2B (section « Abonnés ») : abonnés
@@ -48,7 +49,20 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[] }> = ({ subsc
   const cancelling = paying.filter((r) => r.subscription_cancel_at_period_end);
   const downgrading = paying.filter((r) => r.subscription_pending_plan === 'drops');
   const pastDue = paying.filter((r) => r.subscription_status === 'past_due');
-  const neverPaid = subscribers.filter((r) => r.status === 'pending' && !r.subscription_status);
+  // Inscriptions jamais payées : en attente dans b2b_pending_signups (0175, aucun compte créé),
+  // plus les anciens comptes créés avant paiement par la première version de l'inscription.
+  const legacyNeverPaid = subscribers.filter((r) => r.status === 'pending' && !r.subscription_status).length;
+  const [pendingSignups, setPendingSignups] = useState(0);
+  useEffect(() => {
+    supabase
+      .from('b2b_pending_signups')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .then(({ count, error }) => {
+        if (!error) setPendingSignups(count ?? 0);
+      });
+  }, []);
+  const neverPaid = legacyNeverPaid + pendingSignups;
   const ended = subscribers.filter((r) => r.status === 'suspended' && !ONGOING.has(r.subscription_status || ''));
 
   const upcoming = [...cancelling, ...downgrading, ...pastDue]
@@ -112,7 +126,7 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[] }> = ({ subsc
             </p>
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">Inscriptions non payées</span>
-              <span className="font-semibold tabular-nums text-gray-900">{neverPaid.length}</span>
+              <span className="font-semibold tabular-nums text-gray-900">{neverPaid}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">Abonnements terminés</span>

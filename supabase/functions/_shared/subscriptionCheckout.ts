@@ -27,18 +27,26 @@ export async function createSubscriptionCheckout(
   stripe: Stripe,
   params: {
     plan: SubscriptionPlan;
-    resellerId: string;
+    /** Réabonnement : revendeur existant. Inscription : signupId (b2b_pending_signups), le compte n'existe pas encore. */
+    resellerId?: string;
+    signupId?: string;
     email: string;
     /** Client Stripe existant (réabonnement) : garde son historique et ses cartes. */
     customerId?: string | null;
     successUrl: string;
     cancelUrl: string;
   },
-): Promise<string> {
+): Promise<{ url: string; sessionId: string }> {
+  if (!params.resellerId && !params.signupId) throw new Error('resellerId ou signupId requis');
   const price = priceForPlan(params.plan);
   if (!price) throw new Error(`Prix Stripe non configuré pour le pass ${params.plan}`);
 
-  const metadata = { type: 'b2b_subscription', reseller_id: params.resellerId, plan: params.plan };
+  const metadata: Record<string, string> = {
+    type: 'b2b_subscription',
+    plan: params.plan,
+    ...(params.resellerId ? { reseller_id: params.resellerId } : {}),
+    ...(params.signupId ? { signup_id: params.signupId } : {}),
+  };
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     line_items: [{ price, quantity: 1 }],
@@ -55,7 +63,7 @@ export async function createSubscriptionCheckout(
     // Paiement non finalisé : la session expire au bout de 4 h, ce qui
     // déclenche la relance par email (checkout.session.expired).
     expires_at: Math.floor(Date.now() / 1000) + 4 * 60 * 60,
-    client_reference_id: params.resellerId,
+    client_reference_id: params.resellerId ?? params.signupId,
     metadata,
     subscription_data: { metadata },
     locale: 'fr',
@@ -64,5 +72,5 @@ export async function createSubscriptionCheckout(
     cancel_url: params.cancelUrl,
   });
   if (!session.url) throw new Error('Session Stripe sans URL');
-  return session.url;
+  return { url: session.url, sessionId: session.id };
 }

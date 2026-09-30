@@ -497,7 +497,7 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
             Statut juridique
           </h4>
           <p className="text-xs text-gray-500 mt-1">
-            Obligatoire : conditionne le droit de rétractation applicable et les mentions légales de vos factures.
+            Obligatoire : conditionne les mentions légales de vos factures.
           </p>
         </div>
 
@@ -508,9 +508,7 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
                 {LEGAL_STATUS_OPTIONS.find((o) => o.value === profile.legal_status)?.label}
               </p>
               {profile.legal_status === 'individual' ? (
-                <p className="text-xs text-gray-600">
-                  Bénéficie du droit légal de rétractation de 14 jours sur les ventes à distance applicables.
-                </p>
+                <p className="text-xs text-gray-600">Achats à titre personnel.</p>
               ) : (
                 <div className="text-xs text-gray-600 space-y-0.5">
                   <p>
@@ -575,12 +573,6 @@ const LegalStatusSection: React.FC<LegalStatusSectionProps> = ({ profile, update
               </button>
             ))}
           </div>
-
-          {legalStatus === 'individual' && (
-            <p className="text-xs text-blue-800 bg-blue-50 border border-blue-100 rounded-lg p-3">
-              Statut particulier : bénéficie du droit légal de rétractation de 14 jours sur les ventes à distance applicables.
-            </p>
-          )}
 
           {isPro && (
             <div className="space-y-3 pt-1">

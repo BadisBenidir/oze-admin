@@ -91,7 +91,8 @@ function App() {
     }
     // Retour de Stripe après paiement : page de remerciement neutre, affichée
     // sur n'importe quel domaine revendeur (Stripe peut y renvoyer depuis pro.*).
-    if (/^\/inscription\/merci\/?$/.test(window.location.pathname)) {
+    // Idem pour la reprise d'un paiement non finalisé (lien de l'email de relance).
+    if (/^\/inscription\/(merci|reprendre)\/?$/.test(window.location.pathname)) {
       return <B2BSignup />;
     }
     // Lien "CGV / Mentions légales" du pied de la landing : lisible sans compte.

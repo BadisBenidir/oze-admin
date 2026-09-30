@@ -67,8 +67,9 @@ async function send(
   else console.log(`${LOG_PREFIX} « ${subject} » envoyé à ${to}`);
 }
 
-/** Inscription commencée mais paiement jamais finalisé. */
-export const sendAbandonedSignupEmail = (to: string, firstName: string | null, planName: string) =>
+/** Inscription commencée mais paiement jamais finalisé (aucun compte créé) :
+ * le lien reprend le paiement de cette inscription, sans ressaisie. */
+export const sendAbandonedSignupEmail = (to: string, firstName: string | null, planName: string, resumeUrl: string) =>
   send(
     to,
     `Votre inscription au Club B2B n'est pas terminée`,
@@ -76,11 +77,10 @@ export const sendAbandonedSignupEmail = (to: string, firstName: string | null, p
       title: 'Il ne manque plus que le paiement',
       paragraphs: [
         firstName ? `Bonjour ${esc(firstName)},` : 'Bonjour,',
-        `Vous avez commencé votre inscription au <strong>${esc(planName)}</strong>, mais le paiement n'a pas été finalisé. Votre compte est créé et vous attend : connectez-vous avec l'email et le mot de passe choisis, puis validez votre pass en quelques secondes.`,
+        `Vous avez commencé votre inscription au <strong>${esc(planName)}</strong>, mais le paiement n'a pas été finalisé. Vos informations sont enregistrées : reprenez le paiement en un clic, votre espace sera créé dès sa validation.`,
         'Drops en avant-première, catalogue de pièces authentifiées, expédition groupée quand vous voulez : tout est prêt.',
       ],
-      cta: { label: 'Finaliser mon inscription', url: `${PRO_URL}/connexion?next=%2Fcatalogue` },
-      footerNote: 'Mot de passe oublié ? Cliquez sur « Mot de passe oublié ? » sur l\'écran de connexion.',
+      cta: { label: 'Finaliser mon inscription', url: resumeUrl },
     }),
   );
 

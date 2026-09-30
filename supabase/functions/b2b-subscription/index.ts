@@ -158,7 +158,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const origin = siteOrigin(req);
-      const url = await createSubscriptionCheckout(stripe, {
+      const { url } = await createSubscriptionCheckout(stripe, {
         plan,
         resellerId: reseller.id,
         email: user.email!,

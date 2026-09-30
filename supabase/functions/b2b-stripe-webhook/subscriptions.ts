@@ -20,6 +20,7 @@ import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import { sendSubscriptionWelcomeEmail } from './welcomeEmail.ts';
 import { sendAbandonedSignupEmail, sendPaymentFailedEmail, sendSubscriptionInvoiceEmail } from './subscriptionEmails.ts';
 import { syncStripeBillingIdentity } from '../_shared/stripeBilling.ts';
+import { finalizePendingSignup } from '../_shared/pendingSignup.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook:subscription]';
 
@@ -65,17 +66,36 @@ export async function handleSubscriptionCheckout(
   serviceRoleKey: string,
 ): Promise<Response> {
   const metadata = session.metadata || {};
-  const resellerId = metadata.reseller_id;
+  let resellerId = metadata.reseller_id;
   const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
   const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
 
-  if (metadata.type !== 'b2b_subscription' || !resellerId || !subscriptionId) {
+  if (metadata.type !== 'b2b_subscription' || (!resellerId && !metadata.signup_id) || !subscriptionId) {
     // Abonnement Stripe sans rapport avec le Club B2B (ou créé à la main) : ignoré.
     console.log(`${LOG_PREFIX} Session ${session.id} en mode abonnement hors Club B2B — ignorée`);
     return json({ received: true, skipped: 'not_b2b_subscription' });
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
+
+  // Nouvelle inscription (0175) : le compte n'existe pas encore, il est créé
+  // maintenant que le paiement est confirmé (ou l'a déjà été par la page de
+  // remerciement). Création en cours ailleurs → 500 : Stripe renverra l'événement.
+  if (!resellerId && metadata.signup_id) {
+    const created = await finalizePendingSignup(admin, metadata.signup_id);
+    if (created.status === 'busy') return json({ error: 'Création du compte en cours, réessai' }, 500);
+    if (created.status === 'not_found') {
+      console.error(`${LOG_PREFIX} Inscription ${metadata.signup_id} introuvable (session ${session.id}) — paiement à rattacher à la main`);
+      return json({ received: true, skipped: 'unknown_signup' });
+    }
+    resellerId = created.resellerId;
+    // L'abonnement porte désormais l'id du revendeur (recherches de b2b-subscription).
+    try {
+      await stripe.subscriptions.update(subscriptionId, { metadata: { ...metadata, reseller_id: resellerId } });
+    } catch (err) {
+      console.warn(`${LOG_PREFIX} Métadonnées de l'abonnement ${subscriptionId} :`, err instanceof Error ? err.message : err);
+    }
+  }
   const { data: reseller, error } = await admin
     .from('resellers')
     .select('id, account_type, stripe_subscription_id')
@@ -210,6 +230,8 @@ export async function handleSubscriptionChange(
 }
 
 const PLAN_LABEL: Record<string, string> = { drops: 'Pass Drops', revendeur: 'Pass Revendeur' };
+/** Reprise du paiement d'une inscription non finalisée (lien de l'email de relance). */
+const RESUME_URL = 'https://b2b.ozeparis.com/inscription/reprendre';
 
 /** Email + prénom du contact d'un revendeur abonné (un seul contact par abonné). */
 const subscriberContact = async (admin: ReturnType<typeof createClient>, resellerId: string) => {
@@ -234,28 +256,30 @@ export async function handleAbandonedSubscriptionCheckout(
   supabaseUrl: string,
   serviceRoleKey: string,
 ): Promise<Response> {
-  const resellerId = session.metadata?.reseller_id;
-  if (!resellerId) return json({ received: true, skipped: 'no_reseller' });
+  const signupId = session.metadata?.signup_id;
+  if (!signupId) return json({ received: true, skipped: 'no_signup' });
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
-  const { data: reseller } = await admin
-    .from('resellers')
-    .select('status, account_type, subscription_status, subscription_plan')
-    .eq('id', resellerId)
+  const { data: signup } = await admin
+    .from('b2b_pending_signups')
+    .select('id, email, first_name, plan, status, stripe_session_id')
+    .eq('id', signupId)
     .maybeSingle();
-  // Relance uniquement une première inscription jamais payée (pas un
-  // réabonnement abandonné, ni un compte activé entre-temps par une autre session).
-  if (!reseller || reseller.account_type !== 'subscriber' || reseller.status !== 'pending' || reseller.subscription_status) {
+  // Relance uniquement une inscription toujours non payée, et seulement pour sa
+  // dernière session (une reprise de paiement en a ouvert une nouvelle).
+  if (!signup || signup.status !== 'pending' || signup.stripe_session_id !== session.id) {
     return json({ received: true, skipped: 'not_pending' });
   }
 
   try {
-    const person = await subscriberContact(admin, resellerId);
-    const to = person?.email || session.customer_details?.email || session.customer_email;
-    const planName = PLAN_LABEL[session.metadata?.plan || reseller.subscription_plan || ''] || 'Club B2B';
-    if (to) await sendAbandonedSignupEmail(to, person?.first_name ?? null, planName);
+    await sendAbandonedSignupEmail(
+      signup.email,
+      signup.first_name ?? null,
+      PLAN_LABEL[signup.plan] || 'Club B2B',
+      `${RESUME_URL}?id=${signup.id}`,
+    );
   } catch (err) {
-    console.error(`${LOG_PREFIX} Relance inscription (${resellerId}) :`, err instanceof Error ? err.message : err);
+    console.error(`${LOG_PREFIX} Relance inscription (${signupId}) :`, err instanceof Error ? err.message : err);
   }
   return json({ received: true });
 }

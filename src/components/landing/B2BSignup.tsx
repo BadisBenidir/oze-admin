@@ -62,8 +62,8 @@ const readPlanFromUrl = (): SignupPlanId => {
   return pass === 'drops' ? 'drops' : 'revendeur';
 };
 
-const validate = (f: FormData, termsAccepted: boolean, immediateAccess: boolean) => {
-  const e: Partial<Record<keyof FormData | 'terms' | 'immediate', string>> = {};
+const validate = (f: FormData, termsAccepted: boolean) => {
+  const e: Partial<Record<keyof FormData | 'terms', string>> = {};
   if (!f.first_name.trim()) e.first_name = 'Prénom requis';
   if (!f.last_name.trim()) e.last_name = 'Nom requis';
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) e.email = 'Email invalide';
@@ -76,7 +76,6 @@ const validate = (f: FormData, termsAccepted: boolean, immediateAccess: boolean)
   if (f.password.length < 8) e.password = '8 caractères minimum';
   if (f.password_confirm !== f.password) e.password_confirm = 'Les mots de passe ne correspondent pas';
   if (!termsAccepted) e.terms = 'Veuillez accepter les conditions générales de vente';
-  if (!immediateAccess) e.immediate = 'Veuillez confirmer la demande d\'accès immédiat';
   return e;
 };
 
@@ -200,6 +199,10 @@ const SignupThanks: React.FC = () => {
   const [loginError, setLoginError] = useState<string | null>(null);
   // Ancien lien de retour sur b2b.ozeparis.com : la session doit s'ouvrir sur pro.*, on y renvoie.
   const onProDomain = !window.location.hostname.startsWith('b2b.');
+  // Le compte n'est créé qu'une fois le paiement confirmé (0175) : on attend
+  // qu'il existe avant de proposer la connexion (b2b-signup, action "status").
+  const sessionId = new URLSearchParams(window.location.search).get('session_id');
+  const [account, setAccount] = useState<'checking' | 'ready' | 'slow'>(sessionId ? 'checking' : 'ready');
 
   useEffect(() => {
     document.title = 'Bienvenue au Club B2B | OZË Paris';
@@ -209,6 +212,31 @@ const SignupThanks: React.FC = () => {
       // stockage indisponible : rien à nettoyer
     }
   }, []);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    let attempts = 0;
+    const check = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      const { data } = await invokeEdgeFunction<{ ready: boolean }>('b2b-signup', { action: 'status', session_id: sessionId });
+      if (cancelled) return;
+      if (data?.ready) {
+        setAccount('ready');
+        return;
+      }
+      if (attempts >= 45) {
+        setAccount('slow');
+        return;
+      }
+      setTimeout(check, 2000);
+    };
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,12 +261,21 @@ const SignupThanks: React.FC = () => {
             <Check className="h-6 w-6" />
           </div>
           <h1 className="mt-4 text-xl font-bold text-gray-900">Paiement confirmé, bienvenue !</h1>
-          <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
-            Un email de bienvenue avec votre facture vient de vous être envoyé.
-            {onProDomain ? ' Entrez votre mot de passe pour accéder à votre espace.' : ' Connectez-vous pour accéder à votre espace.'}
-          </p>
+          {account === 'checking' ? (
+            <div className="mx-auto mt-6 max-w-sm">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-900 border-t-transparent" />
+              <p className="mt-3 text-sm text-gray-600">Création de votre espace… cela prend quelques secondes.</p>
+            </div>
+          ) : (
+            <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
+              {account === 'slow'
+                ? 'Votre espace est en cours de création : si la connexion échoue, réessayez dans une minute.'
+                : 'Un email de bienvenue avec votre facture vient de vous être envoyé.'}
+              {onProDomain ? ' Entrez votre mot de passe pour accéder à votre espace.' : ' Connectez-vous pour accéder à votre espace.'}
+            </p>
+          )}
 
-          {onProDomain ? (
+          {account === 'checking' ? null : onProDomain ? (
             <form onSubmit={handleLogin} className="mx-auto mt-6 max-w-sm space-y-3 text-left">
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Email</label>
@@ -301,11 +338,69 @@ const SignupThanks: React.FC = () => {
   );
 };
 
+/** Lien de l'email de relance (/inscription/reprendre?id=…) : rouvre le
+ * paiement d'une inscription jamais payée, sans ressaisir le formulaire. */
+const SignupResume: React.FC = () => {
+  const [error, setError] = useState<string | null>(null);
+  const [code, setCode] = useState<string | undefined>();
+
+  useEffect(() => {
+    document.title = 'Finaliser mon inscription | OZË Paris';
+    const id = new URLSearchParams(window.location.search).get('id');
+    if (!id) {
+      setError('Lien incomplet. Recommencez votre inscription.');
+      return;
+    }
+    invokeEdgeFunction<{ url: string }>('b2b-signup', { action: 'resume', signup_id: id }).then(({ data, error: err, code: errCode }) => {
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setCode(errCode);
+      setError(err || 'Impossible de reprendre le paiement, réessayez.');
+    });
+  }, []);
+
+  const alreadyAccount = code === 'already_paid' || code === 'existing_subscriber' || code === 'email_taken';
+
+  return (
+    <div className="min-h-screen" style={PAGE_BG}>
+      <Header current="Paiement" />
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+        <Steps current={2} />
+        <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm sm:p-8">
+          {!error ? (
+            <>
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-900 border-t-transparent" />
+              <p className="mt-3 text-sm text-gray-600">Ouverture du paiement sécurisé…</p>
+            </>
+          ) : (
+            <>
+              <AlertCircle className="mx-auto h-8 w-8 text-amber-500" />
+              <p className="mt-3 text-sm text-gray-700">{error}</p>
+              <div className="mt-5 flex justify-center">
+                <a
+                  href={alreadyAccount ? LOGIN_URL : '/inscription'}
+                  className="inline-flex items-center justify-center bg-black px-6 py-2.5 text-sm font-medium text-white hover:bg-gray-800"
+                >
+                  {alreadyAccount ? 'Se connecter' : 'Recommencer mon inscription'}
+                </a>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const signupPath = window.location.pathname.replace(/\/$/, '');
+
 export const B2BSignup: React.FC = () => (
   <>
     {/* Vercel Web Analytics : mesure du tunnel inscription → paiement → remerciement */}
     <Analytics />
-    {window.location.pathname.replace(/\/$/, '') === '/inscription/merci' ? <SignupThanks /> : <SignupForm />}
+    {signupPath === '/inscription/merci' ? <SignupThanks /> : signupPath === '/inscription/reprendre' ? <SignupResume /> : <SignupForm />}
   </>
 );
 
@@ -320,7 +415,6 @@ const SignupForm: React.FC = () => {
     }
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
-  const [immediateAccess, setImmediateAccess] = useState(false);
   const [errors, setErrors] = useState<ReturnType<typeof validate>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -363,7 +457,7 @@ const SignupForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
-    const found = validate(form, termsAccepted, immediateAccess);
+    const found = validate(form, termsAccepted);
     setErrors(found);
     if (Object.values(found).some(Boolean)) {
       document.querySelector('[data-signup-form]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -387,7 +481,6 @@ const SignupForm: React.FC = () => {
       billing_country: trimmed.billing_country,
       password: trimmed.password,
       terms_accepted: true,
-      immediate_access_requested: true,
       cgv_version: CGV_VERSION,
     });
 
@@ -440,10 +533,9 @@ const SignupForm: React.FC = () => {
             <div>
               <p className="font-semibold">Paiement non finalisé</p>
               <p className="mt-0.5 text-xs sm:text-sm">
-                Votre compte a bien été créé. Connectez-vous avec votre email et votre mot de passe pour finaliser votre
-                abonnement quand vous le souhaitez.
+                Aucun paiement n'a été effectué et aucun compte n'a été créé. Vos informations sont conservées ci-dessous :
+                ressaisissez votre mot de passe et relancez le paiement quand vous le souhaitez.
               </p>
-              <a href={LOGIN_URL} className="mt-2 inline-block text-xs font-semibold underline sm:text-sm">Se connecter pour finaliser</a>
             </div>
           </div>
         )}
@@ -623,24 +715,6 @@ const SignupForm: React.FC = () => {
                     </label>
                     {errors.terms && <p className="mt-2 text-xs text-red-500">{errors.terms}</p>}
 
-                    {/* Droit de rétractation des particuliers (L221-25 C. conso) : accès
-                        démarré avant la fin du délai de 14 jours à leur demande expresse. */}
-                    <label className="mt-3 flex cursor-pointer items-start gap-3 text-xs text-gray-700 sm:text-sm">
-                      <input
-                        type="checkbox"
-                        checked={immediateAccess}
-                        onChange={(e) => {
-                          setImmediateAccess(e.target.checked);
-                          if (errors.immediate) setErrors((prev) => ({ ...prev, immediate: undefined }));
-                        }}
-                        className="mt-0.5 h-4 w-4 flex-shrink-0 accent-black"
-                      />
-                      <span>
-                        Je demande l'accès immédiat à mon espace. Si je m'inscris en tant que particulier et exerce mon droit de
-                        rétractation dans les 14 jours, je paierai un montant proportionnel à la période déjà utilisée.
-                      </span>
-                    </label>
-                    {errors.immediate && <p className="mt-2 text-xs text-red-500">{errors.immediate}</p>}
 
                     {submitError && (
                       <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{submitError}</div>
