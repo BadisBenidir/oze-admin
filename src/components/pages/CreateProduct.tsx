@@ -224,6 +224,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
   const B2B_STATUS_LABELS: Record<string, string> = {
     'draft-b2b': 'Brouillon (B2B)',
     'drop-b2b': 'Drop B2B',
+    'auction-b2b': 'Enchère',
     'for-sale-b2b': 'Revendeurs B2B uniquement',
     'reserved-b2b': 'Réservé (B2B)',
     'sold-b2b': 'Vendu (B2B)',
