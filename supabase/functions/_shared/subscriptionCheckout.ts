@@ -20,7 +20,7 @@ const DEFAULT_SITE = 'https://pro.ozeparis.com';
 /** Origine du site appelant (prod ou localhost en dev), jamais une origine arbitraire. */
 export const siteOrigin = (req: Request): string => {
   const origin = req.headers.get('Origin') || '';
-  return /^https:\/\/pro\.ozeparis\.com$|^http:\/\/localhost(:\d+)?$/.test(origin) ? origin : DEFAULT_SITE;
+  return /^https:\/\/(pro|b2b)\.ozeparis\.com$|^http:\/\/localhost(:\d+)?$/.test(origin) ? origin : DEFAULT_SITE;
 };
 
 export async function createSubscriptionCheckout(

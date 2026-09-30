@@ -91,3 +91,10 @@ export const PLANS: Plan[] = [
 ];
 
 export const signupUrl = (plan: SignupPlanId) => `/inscription?pass=${plan}`;
+
+/** Domaine public de la landing (b2b.ozeparis.com) — voir isLandingHost dans App.tsx. */
+export const isLandingHost = () => window.location.hostname.startsWith('b2b.');
+
+/** Connexion à l'espace pro : toujours sur pro.ozeparis.com depuis le domaine
+ * de la landing (même espace pour les abonnés que pour tous les revendeurs). */
+export const LOGIN_URL = isLandingHost() ? 'https://pro.ozeparis.com/connexion' : '/connexion';

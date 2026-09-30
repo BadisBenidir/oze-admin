@@ -5,7 +5,7 @@ import {
 import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 import { useGooglePlacesAutocomplete } from '../../hooks/useGooglePlacesAutocomplete';
 import logo from './assets/logo_oze_paris_b2b.png';
-import { PERIOD, PLANS, SUPPORT_EMAIL, type Plan, type SignupPlanId } from './plans';
+import { LOGIN_URL, PERIOD, PLANS, SUPPORT_EMAIL, type Plan, type SignupPlanId } from './plans';
 
 /**
  * Page d'inscription au Club B2B (/inscription?pass=drops|revendeur), entre la
@@ -213,7 +213,7 @@ const SignupThanks: React.FC = () => {
             </p>
           </div>
           <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-            <a href="/connexion" className="inline-flex items-center justify-center bg-black px-6 py-2.5 text-sm font-medium text-white hover:bg-gray-800">
+            <a href={LOGIN_URL} className="inline-flex items-center justify-center bg-black px-6 py-2.5 text-sm font-medium text-white hover:bg-gray-800">
               Se connecter
             </a>
             <a href={`mailto:${SUPPORT_EMAIL}`} className="inline-flex items-center justify-center border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
@@ -362,7 +362,7 @@ const SignupForm: React.FC = () => {
                 Votre compte a bien été créé. Connectez-vous avec votre email et votre mot de passe pour finaliser votre
                 abonnement quand vous le souhaitez.
               </p>
-              <a href="/connexion" className="mt-2 inline-block text-xs font-semibold underline sm:text-sm">Se connecter pour finaliser</a>
+              <a href={LOGIN_URL} className="mt-2 inline-block text-xs font-semibold underline sm:text-sm">Se connecter pour finaliser</a>
             </div>
           </div>
         )}
@@ -393,7 +393,7 @@ const SignupForm: React.FC = () => {
                       <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                       <p className="text-xs sm:text-sm">
                         Vous avez déjà un compte avec cet email.{' '}
-                        <a href="/connexion" className="font-semibold underline">Connectez-vous</a> pour finaliser ou reprendre
+                        <a href={LOGIN_URL} className="font-semibold underline">Connectez-vous</a> pour finaliser ou reprendre
                         votre abonnement : vous retrouverez votre espace tel que vous l'avez laissé.
                       </p>
                     </div>

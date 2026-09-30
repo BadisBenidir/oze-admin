@@ -8,18 +8,24 @@ import AdminApp from './apps/AdminApp';
 import ResellerApp from './apps/ResellerApp';
 import { B2BLanding } from './components/landing/B2BLanding';
 import { B2BSignup } from './components/landing/B2BSignup';
+import { isLandingHost } from './components/landing/plans';
 import { Terms } from './components/pages/reseller/Terms';
 
-// Aperçu privé de la landing avant son ouverture publique : ouvrir
-// https://pro.ozeparis.com/?apercu=club-yTMTeei l'active pour ce navigateur
-// (mémorisé, pour que /inscription et le retour de Stripe fonctionnent
-// aussi) ; ?apercu=off le retire. Ce n'est pas une protection forte (la clé
-// est dans le code livré au navigateur), juste de quoi garder la page
-// invisible du public. Inutile une fois VITE_B2B_LANDING_ENABLED = 'true'.
+// La landing publique et l'inscription vivent sur leur propre domaine,
+// b2b.ozeparis.com (même build, même projet Vercel) : pro.ozeparis.com reste
+// strictement l'espace de connexion des revendeurs, sans aucune landing.
+//   - b2b.*  : landing sur "/", inscription, remerciement ;
+//   - pro.*  : jamais de landing (écran de connexion comme avant) ;
+//   - autres (localhost, previews Vercel) : landing si VITE_B2B_LANDING_ENABLED
+//     = 'true', ou en aperçu privé via ?apercu=club-yTMTeei (mémorisé dans le
+//     navigateur, ?apercu=off pour le retirer). Clé visible dans le code livré :
+//     pas une protection, juste de quoi tester hors du domaine public.
 const LANDING_PREVIEW_KEY = 'club-yTMTeei';
 const LANDING_PREVIEW_STORAGE = 'oze-landing-preview';
 
 const isLandingEnabled = (): boolean => {
+  if (isLandingHost()) return true;
+  if (window.location.hostname.startsWith('pro.')) return false;
   if (import.meta.env.VITE_B2B_LANDING_ENABLED === 'true') return true;
   try {
     const param = new URLSearchParams(window.location.search).get('apercu');
@@ -66,16 +72,18 @@ function App() {
   const isAdminHost = window.location.hostname.startsWith('admin.');
 
   if (status === 'signed-out' && !isAdminHost) {
-    // Landing masquée tant que VITE_B2B_LANDING_ENABLED !== 'true' (réglage
-    // Vercel) : "/" retombe alors sur l'écran de connexion, comme avant —
-    // sauf en aperçu privé (voir isLandingEnabled).
+    // Landing et inscription : uniquement là où la landing est active (voir
+    // isLandingEnabled — jamais sur pro.ozeparis.com).
     const landingEnabled = isLandingEnabled();
     if (window.location.pathname === '/' && landingEnabled) {
       return <B2BLanding />;
     }
-    // Inscription à un pass depuis la landing (infos du compte, puis Stripe),
-    // et /inscription/merci, page de retour après paiement.
-    if (/^\/inscription(\/merci)?\/?$/.test(window.location.pathname) && landingEnabled) {
+    if (/^\/inscription\/?$/.test(window.location.pathname) && landingEnabled) {
+      return <B2BSignup />;
+    }
+    // Retour de Stripe après paiement : page de remerciement neutre, affichée
+    // sur n'importe quel domaine revendeur (Stripe peut y renvoyer depuis pro.*).
+    if (/^\/inscription\/merci\/?$/.test(window.location.pathname)) {
       return <B2BSignup />;
     }
     // Lien "CGV / Mentions légales" du pied de la landing : lisible sans compte.

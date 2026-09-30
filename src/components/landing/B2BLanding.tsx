@@ -13,7 +13,7 @@ import encheresImg from './assets/encheres.webp';
 import logo from './assets/logo_oze_paris_b2b.png';
 import logoWhite from './assets/logo_oze_paris_b2b_white.png';
 import {
-  PERIOD, DISCORD_URL, WHATSAPP_NUMBER, WHATSAPP_DISPLAY, SUPPORT_EMAIL, AGENT_URL, PLANS, signupUrl, type Plan, type SignupPlanId,
+  PERIOD, DISCORD_URL, WHATSAPP_NUMBER, WHATSAPP_DISPLAY, SUPPORT_EMAIL, AGENT_URL, PLANS, signupUrl, LOGIN_URL, type Plan, type SignupPlanId,
 } from './plans';
 
 /**
@@ -190,7 +190,7 @@ const scrollTo = (id: string) => {
 };
 
 const goToLogin = () => {
-  window.location.href = '/connexion';
+  window.location.href = LOGIN_URL;
 };
 
 // Cartes produits du catalogue (exemples), recadrées au bord de la carte et toutes
