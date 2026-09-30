@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { AlertCircle, ImageOff, Gavel, Trophy, TrendingDown, ChevronUp, ChevronDown } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, ImageOff, Gavel, Trophy, TrendingDown, ChevronUp, ChevronDown, Lock } from 'lucide-react';
 import { Card } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
@@ -261,6 +261,14 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
  * les revendeurs. Charte graphique alignée sur le reste du portail
  * (Card/Badge partagés, boutons sombres). Grille 2 colonnes dès mobile
  * (cartes compactes) jusqu'à 4 colonnes en desktop large. */
+/** Dévoilement des lots d'une session à venir : la veille de l'ouverture, à 20h. */
+const lotsRevealAt = (startsAt: string): Date => {
+  const d = new Date(startsAt);
+  d.setDate(d.getDate() - 1);
+  d.setHours(20, 0, 0, 0);
+  return d;
+};
+
 export const Auctions: React.FC = () => {
   const { profile, acceptTerms } = useResellerAuth();
   const { session, items, myBidItemIds, myMaxAmounts, loading, error, placeAutoBid } = useAuctionItems(true, profile?.id);
@@ -274,6 +282,17 @@ export const Auctions: React.FC = () => {
   const termsMissing = !legalStatusMissing && !profile?.terms_accepted_at;
   const isDiscovery = profile?.reseller_status === 'discovery';
   const canBid = !isDiscovery && !hasOverduePayment && Boolean(profile?.legal_status) && Boolean(profile?.terms_accepted_at);
+
+  // Session à venir : seul le bandeau d'annonce est visible ; la grille des
+  // lots n'apparaît que la veille de l'ouverture à 20h (heure locale).
+  const revealAt = session?.status === 'upcoming' ? lotsRevealAt(session.starts_at) : null;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!revealAt || revealAt.getTime() <= Date.now()) return;
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, [revealAt?.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lotsHidden = revealAt !== null && now < revealAt.getTime();
 
   const handleAcceptTerms = async () => {
     if (!termsCheckbox || acceptingTerms) return;
@@ -311,7 +330,7 @@ export const Auctions: React.FC = () => {
         </p>
       </div>
 
-      {/* Affiche d'annonce de la prochaine session programmée (lots consultables plus bas) */}
+      {/* Affiche d'annonce de la prochaine session programmée (lots dévoilés la veille à 20h) */}
       {session?.status === 'upcoming' && (
         <ScheduleAnnouncement
           kind="auction"
@@ -379,6 +398,20 @@ export const Auctions: React.FC = () => {
         <div className="text-center py-16 border border-dashed border-gray-200 rounded-lg">
           <Gavel className="h-10 w-10 text-gray-300 mx-auto mb-3" />
           <p className="text-sm text-gray-500">Aucune pièce n'a encore été ajoutée à cette session.</p>
+        </div>
+      ) : lotsHidden && revealAt ? (
+        <div className="text-center py-14 px-4 border border-dashed border-gray-200 rounded-lg">
+          <Lock className="h-8 w-8 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-900">
+            Le détail des {items.length} lots sera dévoilé{' '}
+            <span>
+              {revealAt.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </span>{' '}
+            à {revealAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h')}
+          </p>
+          <p className="text-sm text-gray-500 mt-1">
+            Vous pourrez alors consulter chaque pièce, son prix de départ, et préparer vos enchères avant l'ouverture.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
