@@ -42,7 +42,19 @@ export async function createSubscriptionCheckout(
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     line_items: [{ price, quantity: 1 }],
-    ...(params.customerId ? { customer: params.customerId } : { customer_email: params.email }),
+    ...(params.customerId
+      ? {
+          customer: params.customerId,
+          // Requis par tax_id_collection sur un client existant : le nom saisi
+          // (dénomination) et le n° de TVA sont enregistrés sur le client.
+          customer_update: { name: 'auto', address: 'auto' },
+        }
+      : { customer_email: params.email }),
+    // N° de TVA intracommunautaire facultatif, reporté sur les factures.
+    tax_id_collection: { enabled: true },
+    // Paiement non finalisé : la session expire au bout de 4 h, ce qui
+    // déclenche la relance par email (checkout.session.expired).
+    expires_at: Math.floor(Date.now() / 1000) + 4 * 60 * 60,
     client_reference_id: params.resellerId,
     metadata,
     subscription_data: { metadata },

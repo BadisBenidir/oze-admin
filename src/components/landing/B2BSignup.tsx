@@ -32,6 +32,7 @@ type FormData = {
   first_name: string;
   last_name: string;
   email: string;
+  email_confirm: string;
   phone: string;
   billing_address: string;
   billing_postal_code: string;
@@ -42,7 +43,7 @@ type FormData = {
 };
 
 const EMPTY: FormData = {
-  first_name: '', last_name: '', email: '', phone: '',
+  first_name: '', last_name: '', email: '', email_confirm: '', phone: '',
   billing_address: '', billing_postal_code: '', billing_city: '', billing_country: 'France',
   password: '', password_confirm: '',
 };
@@ -65,6 +66,8 @@ const validate = (f: FormData, termsAccepted: boolean) => {
   if (!f.first_name.trim()) e.first_name = 'Prénom requis';
   if (!f.last_name.trim()) e.last_name = 'Nom requis';
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) e.email = 'Email invalide';
+  // Double saisie : une faute de frappe ferait perdre l'accès au compte, l'email de bienvenue et les factures.
+  else if (f.email_confirm.trim().toLowerCase() !== f.email.trim().toLowerCase()) e.email_confirm = 'Les deux emails ne correspondent pas';
   if (f.phone.replace(/\D/g, '').length < 6) e.phone = 'Téléphone invalide';
   if (!f.billing_address.trim()) e.billing_address = 'Adresse requise';
   if (!f.billing_postal_code.trim()) e.billing_postal_code = 'Code postal requis';
@@ -456,6 +459,19 @@ const SignupForm: React.FC = () => {
                     </Field>
                     <Field label="Email" icon={Mail} error={errors.email}>
                       {(cls) => <input type="email" className={cls} value={form.email} onChange={set('email')} placeholder="vous@exemple.com" autoComplete="email" />}
+                    </Field>
+                    <Field label="Confirmez votre email" icon={Mail} error={errors.email_confirm}>
+                      {(cls) => (
+                        <input
+                          type="email"
+                          className={cls}
+                          value={form.email_confirm}
+                          onChange={set('email_confirm')}
+                          onPaste={(e) => e.preventDefault()}
+                          placeholder="Saisissez-le à nouveau"
+                          autoComplete="off"
+                        />
+                      )}
                     </Field>
                     <Field label="Téléphone" icon={Phone} error={errors.phone}>
                       {(cls) => <input type="tel" className={cls} value={form.phone} onChange={set('phone')} placeholder="06 12 34 56 78" autoComplete="tel" />}

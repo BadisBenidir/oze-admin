@@ -18,6 +18,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import { sendSubscriptionWelcomeEmail } from './welcomeEmail.ts';
+import { sendAbandonedSignupEmail, sendPaymentFailedEmail } from './subscriptionEmails.ts';
+import { syncStripeBillingIdentity } from '../_shared/stripeBilling.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook:subscription]';
 
@@ -116,11 +118,21 @@ export async function handleSubscriptionCheckout(
   try {
     const { data: contact } = await admin
       .from('reseller_contacts')
-      .select('profiles!inner(email, first_name)')
+      .select('profile_id, profiles!inner(email, first_name)')
       .eq('reseller_id', resellerId)
       .limit(1)
       .maybeSingle();
     const person = contact && (Array.isArray(contact.profiles) ? contact.profiles[0] : contact.profiles);
+
+    // Réabonnement d'un abonné qui a déjà déclaré son statut juridique : ses
+    // prochaines factures portent tout de suite sa dénomination, SIRET et TVA.
+    if (contact?.profile_id && customerId) {
+      try {
+        await syncStripeBillingIdentity(stripe, admin, contact.profile_id, customerId);
+      } catch (err) {
+        console.warn(`${LOG_PREFIX} Identité de facturation non synchronisée (${resellerId}) :`, err instanceof Error ? err.message : err);
+      }
+    }
     const to = person?.email || session.customer_details?.email || session.customer_email;
     if (to) {
       const invoiceId =
@@ -181,6 +193,111 @@ export async function handleSubscriptionChange(
     return json({ error: updateError.message }, 500);
   }
 
+  // Passage au Pass Drops programmé (b2b-subscription "downgrade") désormais
+  // appliqué : on efface le pass en attente. Requête séparée et tolérante
+  // (colonne 0174) : n'empêche jamais la synchronisation ci-dessus.
+  if (update.subscription_plan) {
+    const { error: pendingError } = await admin
+      .from('resellers')
+      .update({ subscription_pending_plan: null })
+      .eq('id', reseller.id)
+      .eq('subscription_pending_plan', update.subscription_plan);
+    if (pendingError) console.warn(`${LOG_PREFIX} subscription_pending_plan : ${pendingError.message}`);
+  }
+
   console.log(`${LOG_PREFIX} Abonnement ${subscription.id} → ${subscription.status}${deleted ? ' (terminé)' : ''}, pass ${update.subscription_plan}`);
+  return json({ received: true });
+}
+
+const PLAN_LABEL: Record<string, string> = { drops: 'Pass Drops', revendeur: 'Pass Revendeur' };
+
+/** Email + prénom du contact d'un revendeur abonné (un seul contact par abonné). */
+const subscriberContact = async (admin: ReturnType<typeof createClient>, resellerId: string) => {
+  const { data } = await admin
+    .from('reseller_contacts')
+    .select('profiles!inner(email, first_name)')
+    .eq('reseller_id', resellerId)
+    .limit(1)
+    .maybeSingle();
+  const person = data && (Array.isArray(data.profiles) ? data.profiles[0] : data.profiles);
+  return person as { email: string | null; first_name: string | null } | null;
+};
+
+/**
+ * Session d'inscription expirée sans paiement (checkout.session.expired) :
+ * relance par email tant que le compte est toujours en attente. Les
+ * sessions d'abonnement expirent au bout de quelques heures (voir
+ * createSubscriptionCheckout), la relance part donc le jour même.
+ */
+export async function handleAbandonedSubscriptionCheckout(
+  session: Stripe.Checkout.Session,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<Response> {
+  const resellerId = session.metadata?.reseller_id;
+  if (!resellerId) return json({ received: true, skipped: 'no_reseller' });
+
+  const admin = createClient(supabaseUrl, serviceRoleKey);
+  const { data: reseller } = await admin
+    .from('resellers')
+    .select('status, account_type, subscription_status, subscription_plan')
+    .eq('id', resellerId)
+    .maybeSingle();
+  // Relance uniquement une première inscription jamais payée (pas un
+  // réabonnement abandonné, ni un compte activé entre-temps par une autre session).
+  if (!reseller || reseller.account_type !== 'subscriber' || reseller.status !== 'pending' || reseller.subscription_status) {
+    return json({ received: true, skipped: 'not_pending' });
+  }
+
+  try {
+    const person = await subscriberContact(admin, resellerId);
+    const to = person?.email || session.customer_details?.email || session.customer_email;
+    const planName = PLAN_LABEL[session.metadata?.plan || reseller.subscription_plan || ''] || 'Club B2B';
+    if (to) await sendAbandonedSignupEmail(to, person?.first_name ?? null, planName);
+  } catch (err) {
+    console.error(`${LOG_PREFIX} Relance inscription (${resellerId}) :`, err instanceof Error ? err.message : err);
+  }
+  return json({ received: true });
+}
+
+/**
+ * Prélèvement d'une échéance refusé (invoice.payment_failed) : email au
+ * premier échec et au dernier essai (Stripe retente entre les deux).
+ */
+export async function handleSubscriptionPaymentFailed(
+  invoice: Stripe.Invoice,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<Response> {
+  const subscriptionId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
+  if (!subscriptionId) return json({ received: true, skipped: 'not_subscription' });
+
+  const finalAttempt = !invoice.next_payment_attempt;
+  if ((invoice.attempt_count ?? 0) > 1 && !finalAttempt) return json({ received: true, skipped: 'intermediate_attempt' });
+
+  const admin = createClient(supabaseUrl, serviceRoleKey);
+  const { data: reseller } = await admin
+    .from('resellers')
+    .select('id, account_type, subscription_plan')
+    .eq('stripe_subscription_id', subscriptionId)
+    .maybeSingle();
+  if (!reseller || reseller.account_type !== 'subscriber') return json({ received: true, skipped: 'unknown_subscription' });
+
+  try {
+    const person = await subscriberContact(admin, reseller.id);
+    const to = person?.email || invoice.customer_email;
+    if (to) {
+      await sendPaymentFailedEmail({
+        to,
+        firstName: person?.first_name ?? null,
+        planName: PLAN_LABEL[reseller.subscription_plan || ''] || 'abonnement Club B2B',
+        amount: ((invoice.amount_due ?? 0) / 100).toLocaleString('fr-FR', { style: 'currency', currency: (invoice.currency || 'eur').toUpperCase() }),
+        payUrl: invoice.hosted_invoice_url ?? null,
+        finalAttempt,
+      });
+    }
+  } catch (err) {
+    console.error(`${LOG_PREFIX} Email d'échec de paiement (${reseller.id}) :`, err instanceof Error ? err.message : err);
+  }
   return json({ received: true });
 }

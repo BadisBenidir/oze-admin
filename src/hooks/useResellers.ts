@@ -29,6 +29,8 @@ export interface Reseller {
   subscription_status?: string | null;
   subscription_current_period_end?: string | null;
   subscription_cancel_at_period_end?: boolean;
+  /** Pass programmé à la prochaine échéance (0174). */
+  subscription_pending_plan?: 'drops' | 'revendeur' | null;
   stripe_customer_id?: string | null;
   stripe_subscription_id?: string | null;
 }

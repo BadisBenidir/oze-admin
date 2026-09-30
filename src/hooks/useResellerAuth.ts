@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { CGV_VERSION } from '../config/legal'
+import { invokeEdgeFunction } from '../utils/invokeEdgeFunction'
 
 export interface ResellerProfile {
   id: string
@@ -246,6 +247,14 @@ export const useResellerAuth = () => {
     // statut juridique est fixé (voir 0115_invoices.sql), on rattrape les
     // factures de toutes les commandes déjà payées qui en manquaient.
     await supabase.rpc('backfill_missing_invoices_for_profile')
+    // Abonné Club B2B : dénomination, SIRET, TVA et siège reportés sur les
+    // prochaines factures d'abonnement Stripe. Sans attendre : un échec ne
+    // doit pas bloquer l'enregistrement du profil.
+    if (authState.profile?.account_type === 'subscriber') {
+      invokeEdgeFunction('b2b-subscription', { action: 'sync_billing' }).then(({ error: syncError }) => {
+        if (syncError) console.warn('Identité de facturation Stripe non synchronisée :', syncError)
+      })
+    }
     return { success: true }
   }
 

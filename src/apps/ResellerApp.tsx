@@ -313,6 +313,20 @@ function ResellerApp() {
         mobileExtra={mobileCartButton}
       >
         <ResellerNotificationsBanner notifications={notifications} onDismiss={markNotificationRead} />
+        {/* Abonné dont le prélèvement mensuel a échoué (Stripe retente) : accès maintenu, carte à mettre à jour. */}
+        {profile?.account_type === 'subscriber' && profile.subscription_status === 'past_due' && currentTab !== 'profile' && (
+          <div className="m-4 md:m-6 bg-red-50 border border-red-200 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-red-800">
+              Le paiement de votre abonnement a échoué. Mettez à jour votre carte pour éviter la suspension de votre accès.
+            </p>
+            <button
+              onClick={() => navigateTo('profile')}
+              className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+            >
+              Mettre à jour ma carte
+            </button>
+          </div>
+        )}
         {checkoutStatus === 'cancel' && (
           <div className="m-4 md:m-6 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
             <p className="text-sm text-amber-800">Paiement annulé — votre panier a été conservé.</p>

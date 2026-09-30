@@ -14,6 +14,13 @@
 //     session Stripe sur le même revendeur (tout son espace est conservé).
 //   - action "invoices" : liste de toutes ses factures Stripe (une par mois,
 //     plus les éventuelles différences au prorata), avec PDF et lien en ligne.
+//   - action "portal" : portail client Stripe (changer de carte, régler une
+//     échéance en échec). Le portail doit être activé une fois dans Stripe
+//     (Paramètres → Billing → Portail client).
+//   - action "downgrade" / "cancel_downgrade" : Pass Revendeur → Pass Drops
+//     à la prochaine échéance (planning Stripe), ou annulation de ce passage.
+//   - action "sync_billing" : reporte l'identité légale du profil (dénomination,
+//     SIRET, TVA, siège) sur le client Stripe, donc sur les prochaines factures.
 //
 // La base est mise à jour tout de suite (réponse immédiate dans l'interface),
 // puis confirmée par le webhook customer.subscription.updated.
@@ -24,6 +31,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import { createSubscriptionCheckout, isSubscriptionPlan, siteOrigin } from '../_shared/subscriptionCheckout.ts';
+import { syncStripeBillingIdentity } from '../_shared/stripeBilling.ts';
 
 /** Statuts Stripe d'un abonnement encore en cours (donc pas de réabonnement possible). */
 const ONGOING_STATUSES = new Set(['active', 'trialing', 'past_due']);
@@ -61,7 +69,9 @@ Deno.serve(async (req: Request) => {
     if (!user) return reply({ error: 'Non authentifié' }, 401);
 
     const { action, plan } = await req.json();
-    if (!['upgrade', 'cancel', 'resume', 'checkout', 'invoices'].includes(action)) return reply({ error: 'Action inconnue' }, 400);
+    if (!['upgrade', 'downgrade', 'cancel_downgrade', 'cancel', 'resume', 'checkout', 'invoices', 'portal', 'sync_billing'].includes(action)) {
+      return reply({ error: 'Action inconnue' }, 400);
+    }
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: contact } = await admin
@@ -100,6 +110,26 @@ Deno.serve(async (req: Request) => {
         if (invoices.length >= 120) break;
       }
       return reply({ invoices });
+    }
+
+    // Portail Stripe : changer de carte, régler une échéance en échec. Ouvert
+    // aussi à un abonné suspendu pour impayé (c'est justement là qu'il en a besoin).
+    if (action === 'portal') {
+      if (!reseller.stripe_customer_id) return reply({ error: 'Aucun moyen de paiement enregistré pour ce compte' }, 400);
+      const session = await stripe.billingPortal.sessions.create({
+        customer: reseller.stripe_customer_id,
+        return_url: `${siteOrigin(req)}/mon-profil`,
+        locale: 'fr',
+      });
+      return reply({ url: session.url });
+    }
+
+    // Identité légale (dénomination, SIRET, TVA, siège) reportée sur les
+    // factures Stripe, appelée après l'enregistrement du statut juridique.
+    if (action === 'sync_billing') {
+      if (!reseller.stripe_customer_id) return reply({ synced: false });
+      const synced = await syncStripeBillingIdentity(stripe, admin, user.id, reseller.stripe_customer_id);
+      return reply({ synced });
     }
 
     // Réabonnement (abonnement terminé) ou premier paiement jamais finalisé :
@@ -141,8 +171,56 @@ Deno.serve(async (req: Request) => {
 
     if (!reseller.stripe_subscription_id) return reply({ error: 'Aucun abonnement associé à ce compte' }, 403);
     if (reseller.status !== 'active') return reply({ error: 'Votre abonnement n\'est plus actif' }, 403);
-    const current = await stripe.subscriptions.retrieve(reseller.stripe_subscription_id);
+    let current = await stripe.subscriptions.retrieve(reseller.stripe_subscription_id);
     let updated: Stripe.Subscription;
+    const scheduleId = typeof current.schedule === 'string' ? current.schedule : current.schedule?.id;
+
+    // Passage au Pass Drops À L'ÉCHÉANCE : le mois déjà payé reste en Pass
+    // Revendeur, le pass Drops s'applique au renouvellement (planning Stripe).
+    // Le webhook customer.subscription.updated enregistre le nouveau pass le
+    // jour venu et efface subscription_pending_plan.
+    if (action === 'downgrade') {
+      if (reseller.subscription_plan !== 'revendeur') return reply({ error: 'Vous avez déjà le Pass Drops' }, 400);
+      if (current.cancel_at_period_end) return reply({ error: 'Votre abonnement est déjà résilié à l\'échéance' }, 400);
+      const dropsPrice = Deno.env.get('STRIPE_PRICE_DROPS');
+      if (!dropsPrice) return reply({ error: 'Configuration serveur manquante (prix Pass Drops)' }, 500);
+
+      const { error: pendingError } = await admin.from('resellers').update({ subscription_pending_plan: 'drops' }).eq('id', reseller.id);
+      if (pendingError) return reply({ error: pendingError.message }, 500);
+      try {
+        const schedule = scheduleId
+          ? await stripe.subscriptionSchedules.retrieve(scheduleId)
+          : await stripe.subscriptionSchedules.create({ from_subscription: current.id });
+        const phase = schedule.phases[schedule.phases.length - 1];
+        await stripe.subscriptionSchedules.update(schedule.id, {
+          end_behavior: 'release',
+          proration_behavior: 'none',
+          phases: [
+            {
+              items: [{ price: current.items.data[0].price.id, quantity: 1 }],
+              start_date: phase.start_date,
+              end_date: phase.end_date,
+            },
+            { items: [{ price: dropsPrice, quantity: 1 }], iterations: 1 },
+          ],
+        });
+      } catch (err) {
+        await admin.from('resellers').update({ subscription_pending_plan: null }).eq('id', reseller.id);
+        return reply({ error: `Changement de pass impossible : ${err instanceof Error ? err.message : 'erreur inconnue'}` }, 500);
+      }
+      return reply({ success: true, subscription_pending_plan: 'drops' });
+    }
+
+    // Toute autre action annule d'abord un passage au Pass Drops programmé
+    // (un planning Stripe empêcherait de modifier l'abonnement directement).
+    if (scheduleId) {
+      await stripe.subscriptionSchedules.release(scheduleId);
+      await admin.from('resellers').update({ subscription_pending_plan: null }).eq('id', reseller.id);
+      current = await stripe.subscriptions.retrieve(current.id);
+    }
+    if (action === 'cancel_downgrade') {
+      return reply({ success: true, subscription_pending_plan: null });
+    }
 
     if (action === 'upgrade') {
       if (reseller.subscription_plan !== 'drops') return reply({ error: 'Vous avez déjà le Pass Revendeur' }, 400);

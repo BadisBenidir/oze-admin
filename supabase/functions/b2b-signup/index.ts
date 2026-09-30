@@ -21,6 +21,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import { createSubscriptionCheckout, isSubscriptionPlan, siteOrigin } from '../_shared/subscriptionCheckout.ts';
+import { countryCode } from '../_shared/stripeBilling.ts';
 
 const PRO_SITE = 'https://pro.ozeparis.com';
 
@@ -171,10 +172,26 @@ Deno.serve(async (req: Request) => {
     // connexion de la page de remerciement, qui ouvre ensuite le catalogue.
     const proOrigin = origin.startsWith('http://localhost') ? origin : PRO_SITE;
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
+    // Client Stripe créé avec l'identité et l'adresse de facturation saisies :
+    // la facture du premier mois les porte (sinon Stripe n'aurait que l'email).
+    const customer = await stripe.customers.create({
+      email: input.email,
+      name: `${input.first_name} ${input.last_name}`,
+      phone: input.phone,
+      address: {
+        line1: input.billing_address,
+        postal_code: input.billing_postal_code,
+        city: input.billing_city,
+        country: countryCode(input.billing_country),
+      },
+      preferred_locales: ['fr'],
+      metadata: { reseller_id: reseller.id },
+    });
     const url = await createSubscriptionCheckout(stripe, {
       plan,
       resellerId: reseller.id,
       email: input.email,
+      customerId: customer.id,
       successUrl: `${proOrigin}/inscription/merci?email=${encodeURIComponent(input.email)}`,
       // Paiement abandonné : le compte existe, la page d'inscription l'explique
       // et renvoie vers la connexion pour finaliser.

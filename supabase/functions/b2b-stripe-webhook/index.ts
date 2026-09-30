@@ -8,7 +8,8 @@
 // À configurer manuellement dans le dashboard Stripe :
 //   Endpoint URL : https://<project-ref>.supabase.co/functions/v1/b2b-stripe-webhook
 //   Événement    : checkout.session.completed
-//                  (+ customer.subscription.updated / .deleted pour les
+//                  (+ customer.subscription.updated / .deleted,
+//                  invoice.payment_failed et checkout.session.expired pour les
 //                  abonnements Club B2B, voir subscriptions.ts)
 //   → copier le "Signing secret" dans le secret Supabase STRIPE_WEBHOOK_SECRET
 //
@@ -21,7 +22,12 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
-import { handleSubscriptionChange, handleSubscriptionCheckout } from './subscriptions.ts';
+import {
+  handleAbandonedSubscriptionCheckout,
+  handleSubscriptionChange,
+  handleSubscriptionCheckout,
+  handleSubscriptionPaymentFailed,
+} from './subscriptions.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook]';
 
@@ -66,6 +72,15 @@ Deno.serve(async (req: Request) => {
   // checkout.session.completed.
   if (event.type === 'checkout.session.expired') {
     const expiredSession = event.data.object as Stripe.Checkout.Session;
+    // Inscription Club B2B abandonnée au paiement : relance par email (subscriptions.ts).
+    if (expiredSession.mode === 'subscription' && expiredSession.metadata?.type === 'b2b_subscription') {
+      try {
+        return await handleAbandonedSubscriptionCheckout(expiredSession, supabaseUrl, serviceRoleKey);
+      } catch (err) {
+        console.error(`${LOG_PREFIX} Erreur relance inscription (${expiredSession.id}):`, err instanceof Error ? err.message : err);
+        return new Response(JSON.stringify({ received: true }), { status: 200 });
+      }
+    }
     try {
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
       const { data: refundResult, error: refundError } = await adminClient.rpc('refund_pending_wallet_debit', {
@@ -98,6 +113,16 @@ Deno.serve(async (req: Request) => {
     } catch (err) {
       console.error(`${LOG_PREFIX} Erreur non gérée abonnement (${event.id}):`, err instanceof Error ? err.stack || err.message : err);
       return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Erreur inconnue' }), { status: 500 });
+    }
+  }
+
+  // Échéance d'abonnement refusée : email à l'abonné (premier échec et dernier essai).
+  if (event.type === 'invoice.payment_failed') {
+    try {
+      return await handleSubscriptionPaymentFailed(event.data.object as Stripe.Invoice, supabaseUrl, serviceRoleKey);
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Erreur échec de paiement (${event.id}):`, err instanceof Error ? err.message : err);
+      return new Response(JSON.stringify({ received: true }), { status: 200 });
     }
   }
 

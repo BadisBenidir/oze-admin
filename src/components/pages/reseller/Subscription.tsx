@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertCircle, ArrowUpCircle, CalendarClock, Check, CreditCard, Download, ExternalLink, FileText, Gavel, Lock, PackageSearch } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
+import { supabase } from '../../../lib/supabase';
 import type { ResellerProfile } from '../../../hooks/useResellerAuth';
 import { PERIOD, PLANS } from '../../landing/plans';
 
@@ -17,7 +18,43 @@ const planPrice = (id: 'drops' | 'revendeur') => PLANS.find((p) => p.id === id)?
 const formatDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
 
-type Action = 'upgrade' | 'cancel' | 'resume';
+type Action = 'upgrade' | 'downgrade' | 'cancel_downgrade' | 'cancel' | 'resume';
+
+/** Portail client Stripe (changer de carte, régler une échéance en échec). */
+const usePaymentPortal = () => {
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const open = async () => {
+    setOpening(true);
+    setError(null);
+    const { data, error: err } = await invokeEdgeFunction<{ url: string }>('b2b-subscription', { action: 'portal' });
+    if (data?.url) {
+      window.location.href = data.url;
+      return;
+    }
+    setError(err || 'Impossible d\'ouvrir la gestion du paiement, réessayez.');
+    setOpening(false);
+  };
+  return { opening, error, open };
+};
+
+/** Pass programmé pour la prochaine échéance (0174), lu à part : sans la
+ * colonne (migration pas encore appliquée), simplement rien n'est affiché. */
+const usePendingPlan = (resellerId: string | null) => {
+  const [pendingPlan, setPendingPlan] = useState<'drops' | 'revendeur' | null>(null);
+  useEffect(() => {
+    if (!resellerId) return;
+    supabase
+      .from('resellers')
+      .select('subscription_pending_plan')
+      .eq('id', resellerId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!error) setPendingPlan((data?.subscription_pending_plan as 'drops' | 'revendeur' | null) ?? null);
+      });
+  }, [resellerId]);
+  return pendingPlan;
+};
 
 /** Appelle b2b-subscription puis recharge l'app : useResellerAuth n'est pas
  * partagé entre composants, un rechargement garantit que menu, écrans et
@@ -217,12 +254,17 @@ const InvoicesList: React.FC = () => {
 /** Section « Mon abonnement » du profil (abonnés uniquement). */
 export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ profile }) => {
   const { pending, error, run } = useSubscriptionAction();
+  const { opening: openingPortal, error: portalError, open: openPortal } = usePaymentPortal();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDowngrade, setConfirmDowngrade] = useState(false);
+  const pendingPlan = usePendingPlan(profile.account_type === 'subscriber' ? profile.reseller_id : null);
   const plan = profile.subscription_plan;
   if (profile.account_type !== 'subscriber' || !plan) return null;
 
   const endDate = formatDate(profile.subscription_current_period_end);
   const cancelling = profile.subscription_cancel_at_period_end;
+  const pastDue = profile.subscription_status === 'past_due';
+  const downgradeScheduled = pendingPlan === 'drops' && plan === 'revendeur';
 
   return (
     <Card className="mb-6">
@@ -237,7 +279,11 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
               {planPrice(plan)} {PERIOD} · sans engagement
             </p>
           </div>
-          {cancelling ? (
+          {pastDue ? (
+            <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700 ring-1 ring-red-200">
+              Paiement en échec
+            </span>
+          ) : cancelling ? (
             <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
               Résiliation programmée
             </span>
@@ -257,14 +303,89 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
           </p>
         )}
 
-        {error && (
+        {pastDue && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <p className="text-sm text-red-800">
+              Le dernier prélèvement de votre abonnement a été refusé. Mettez à jour votre carte pour éviter la suspension de votre accès :
+              une nouvelle tentative est faite automatiquement.
+            </p>
+            <button
+              onClick={openPortal}
+              disabled={openingPortal}
+              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              <CreditCard className="h-4 w-4" /> {openingPortal ? 'Ouverture…' : 'Mettre à jour ma carte'}
+            </button>
+          </div>
+        )}
+
+        {downgradeScheduled && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p className="text-sm text-gray-700">
+              Passage au <strong>Pass Drops</strong> ({planPrice('drops')} {PERIOD}) programmé{endDate ? <> le <strong>{endDate}</strong></> : ' à la prochaine échéance'}.
+              D'ici là, vous gardez l'accès complet.
+            </p>
+            <button
+              onClick={() => run('cancel_downgrade')}
+              disabled={pending !== null}
+              className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-800 ring-1 ring-gray-200 hover:bg-gray-100 disabled:opacity-50"
+            >
+              {pending === 'cancel_downgrade' ? 'Un instant…' : 'Garder le Pass Revendeur'}
+            </button>
+          </div>
+        )}
+
+        {(error || portalError) && (
           <p className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" /> {error}
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" /> {error || portalError}
           </p>
         )}
 
         <div className="flex flex-wrap items-start gap-3 border-t border-gray-100 pt-4">
           {plan === 'drops' && !cancelling && <UpgradeButton />}
+
+          <button
+            onClick={openPortal}
+            disabled={openingPortal}
+            className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-gray-800 ring-1 ring-gray-200 hover:bg-gray-50 disabled:opacity-50"
+          >
+            <CreditCard className="h-4 w-4" /> {openingPortal ? 'Ouverture…' : 'Gérer mon moyen de paiement'}
+          </button>
+
+          {plan === 'revendeur' && !cancelling && !downgradeScheduled && (
+            confirmDowngrade ? (
+              <div className="w-full space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <p className="text-sm text-gray-700">
+                  Vous passerez au Pass Drops ({planPrice('drops')} {PERIOD}) à votre prochain renouvellement
+                  {endDate ? <> le <strong>{endDate}</strong></> : ''}. Jusque-là, vous gardez les enchères et le sourcing sur mesure ;
+                  ensuite, seuls le catalogue et les drops restent inclus.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => run('downgrade')}
+                    disabled={pending !== null}
+                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    {pending === 'downgrade' ? 'Un instant…' : 'Confirmer le passage au Pass Drops'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDowngrade(false)}
+                    disabled={pending !== null}
+                    className="rounded-lg bg-white px-4 py-2 text-sm text-gray-700 ring-1 ring-gray-200 hover:bg-gray-100"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDowngrade(true)}
+                className="rounded-lg px-4 py-2.5 text-sm text-gray-600 underline-offset-2 hover:text-gray-900 hover:underline"
+              >
+                Passer au Pass Drops
+              </button>
+            )
+          )}
 
           {cancelling ? (
             <button

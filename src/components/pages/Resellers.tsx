@@ -9,6 +9,7 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { ResellerDetail } from './ResellerDetail';
 import { ResellerFormModal } from './ResellerFormModal';
 import { InviteLinkPanel } from '../reseller/InviteLinkPanel';
+import { SubscriptionStats } from './b2b/SubscriptionStats';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   Building2,
@@ -293,6 +294,8 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
           )}
         </div>
       </div>
+
+      {isSubscribers && !loading && <SubscriptionStats subscribers={scopedResellers} />}
 
       {/* Filtres */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
