@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Gavel, Plus, AlertCircle, Trophy, Radio, CheckCircle2, Trash2, ImageOff,
-  Ticket, Receipt, Clock, Zap, TrendingUp, Pencil, Ban,
+  Ticket, Receipt, Clock, Zap, TrendingUp, Pencil, Ban, Link2,
 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
@@ -14,6 +14,7 @@ import { AuctionSessionFormModal } from './auctions/AuctionSessionFormModal';
 import { AuctionItemFormModal } from './auctions/AuctionItemFormModal';
 import { GrantAuctionAccessModal } from './auctions/GrantAuctionAccessModal';
 import { CancelAuctionItemModal } from './auctions/CancelAuctionItemModal';
+import { PreviewLinksModal } from './PreviewLinksModal';
 import { AuctionCountdown } from '../reseller/AuctionCountdown';
 
 type AdminAuctionSection = 'sessions' | 'access' | 'results';
@@ -68,6 +69,7 @@ export const AuctionsAdmin: React.FC = () => {
   const [showItemModal, setShowItemModal] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [previewLinksSession, setPreviewLinksSession] = useState<AuctionSession | null>(null);
 
   const { items, loading: itemsLoading, error: itemsError, addItem, removeItem, generateOrder, cancelItem } = useAdminAuctionItems(selectedSessionId);
   const [cancellingItem, setCancellingItem] = useState<AdminAuctionItem | null>(null);
@@ -229,6 +231,16 @@ export const AuctionsAdmin: React.FC = () => {
                         >
                           <CheckCircle2 className="h-3 w-3" />
                           Clôturer
+                        </button>
+                      )}
+                      {s.status !== 'closed' && (
+                        <button
+                          onClick={() => setPreviewLinksSession(s)}
+                          title="Liens d'avant-première (Discord)"
+                          className="flex items-center gap-1 px-2.5 py-1 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium"
+                        >
+                          <Link2 className="h-3 w-3" />
+                          Aperçu
                         </button>
                       )}
                       <button
@@ -669,6 +681,14 @@ export const AuctionsAdmin: React.FC = () => {
         sessions={sessions}
         onGrant={grantAccess}
       />
+
+      {previewLinksSession && (
+        <PreviewLinksModal
+          target={{ kind: 'auction', id: previewLinksSession.id }}
+          title={previewLinksSession.title}
+          onClose={() => setPreviewLinksSession(null)}
+        />
+      )}
 
       {successToast && <Toast message={successToast} onDismiss={() => setSuccessToast('')} />}
     </div>

@@ -5,7 +5,8 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useDrops, Drop } from '../../hooks/useDrops';
 import { CreateDropModal } from './b2b/CreateDropModal';
 import { DropDetailModal } from './b2b/DropDetailModal';
-import { Rocket, Plus, AlertCircle, Package, Pencil, Ban, Eye, GitMerge, X, Trash2 } from 'lucide-react';
+import { PreviewLinksModal } from './b2b/PreviewLinksModal';
+import { Rocket, Plus, AlertCircle, Package, Pencil, Ban, Eye, GitMerge, X, Trash2, Link2 } from 'lucide-react';
 
 const statusBadge = (status: Drop['status']) => {
   switch (status) {
@@ -104,6 +105,8 @@ export const B2BDrops: React.FC = () => {
   // d'article depuis la modale met à jour product_ids immédiatement, sans
   // avoir à la refermer/rouvrir.
   const viewingDrop = drops.find((d) => d.id === viewingDropId) || null;
+  const [previewLinksDropId, setPreviewLinksDropId] = useState<string | null>(null);
+  const previewLinksDrop = drops.find((d) => d.id === previewLinksDropId) || null;
 
   const handleCreate = () => {
     setEditingDrop(null);
@@ -221,6 +224,13 @@ export const B2BDrops: React.FC = () => {
                         title="Voir le détail"
                       >
                         <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setPreviewLinksDropId(drop.id)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Liens d'avant-première (Discord)"
+                      >
+                        <Link2 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleEdit(drop)}
@@ -355,6 +365,15 @@ export const B2BDrops: React.FC = () => {
         onReassignProduct={reassignDropProduct}
         onDelete={deleteDrop}
       />
+
+      {previewLinksDrop && (
+        <PreviewLinksModal
+          target={{ kind: 'drop', id: previewLinksDrop.id }}
+          title={previewLinksDrop.title || 'Drop sans nom'}
+          productIds={previewLinksDrop.product_ids}
+          onClose={() => setPreviewLinksDropId(null)}
+        />
+      )}
 
       {mergingDrop && (
         <MergeDropModal

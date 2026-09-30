@@ -8,6 +8,7 @@ import AdminApp from './apps/AdminApp';
 import ResellerApp from './apps/ResellerApp';
 import { B2BLanding } from './components/landing/B2BLanding';
 import { B2BSignup } from './components/landing/B2BSignup';
+import { PreviewLinkPage, getPreviewToken } from './components/landing/PreviewLinkPage';
 import { isLandingHost } from './components/landing/plans';
 import { Terms } from './components/pages/reseller/Terms';
 
@@ -54,6 +55,13 @@ function App() {
   // s'afficher avant toute vérification de session.
   if (window.location.pathname === '/invite/team') {
     return <AcceptTeamInviteLink />;
+  }
+
+  // Lien d'avant-première d'un drop / d'une session d'enchères (voir
+  // PreviewLinksModal / get_preview_link) — public, posté sur Discord :
+  // s'affiche de la même façon connecté ou non, sur tous les domaines.
+  if (getPreviewToken()) {
+    return <PreviewLinkPage />;
   }
 
   if (status === 'loading') {
