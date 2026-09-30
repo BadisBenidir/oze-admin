@@ -53,7 +53,7 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
   const [grade, setGrade] = useState(GRADES[1]);
   const [imageUrl, setImageUrl] = useState('');
   const [images, setImages] = useState<string[]>([]);
-  const [startPrice, setStartPrice] = useState('');
+  const [startPrice, setStartPrice] = useState('0');
   const [minIncrement, setMinIncrement] = useState('5');
   const [reservePrice, setReservePrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -89,7 +89,7 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
     setGrade(GRADES[1]);
     setImageUrl('');
     setImages([]);
-    setStartPrice('');
+    setStartPrice('0');
     setMinIncrement('5');
     setReservePrice('');
     setProductSearch('');
