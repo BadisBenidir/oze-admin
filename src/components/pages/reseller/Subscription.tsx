@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { AlertCircle, ArrowUpCircle, CalendarClock, Check, CreditCard, Gavel, Lock, PackageSearch } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, ArrowUpCircle, CalendarClock, Check, CreditCard, Download, ExternalLink, FileText, Gavel, Lock, PackageSearch } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 import type { ResellerProfile } from '../../../hooks/useResellerAuth';
@@ -122,6 +122,98 @@ export const PlanLockedScreen: React.FC<{ feature: 'auctions' | 'sourcing' }> = 
   );
 };
 
+interface SubscriptionInvoice {
+  id: string;
+  number: string | null;
+  created: string;
+  period_start: string | null;
+  period_end: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  hosted_invoice_url: string | null;
+  invoice_pdf: string | null;
+}
+
+const monthLabel = (iso: string) =>
+  new Date(iso).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+/** Toutes les factures Stripe de l'abonnement (b2b-subscription, action "invoices"). */
+const InvoicesList: React.FC = () => {
+  const [invoices, setInvoices] = useState<SubscriptionInvoice[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    invokeEdgeFunction<{ invoices: SubscriptionInvoice[] }>('b2b-subscription', { action: 'invoices' }).then(({ data, error: err }) => {
+      if (cancelled) return;
+      if (err) setError(err);
+      setInvoices(data?.invoices ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="border-t border-gray-100 pt-4">
+      <h5 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+        <FileText className="h-4 w-4 text-gray-400" /> Mes factures
+      </h5>
+      {invoices === null ? (
+        <div className="space-y-2">
+          {[0, 1].map((i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-gray-100" />)}
+        </div>
+      ) : error ? (
+        <p className="text-sm text-red-700">Impossible de charger vos factures : {error}</p>
+      ) : invoices.length === 0 ? (
+        <p className="text-sm text-gray-500">Aucune facture pour l'instant.</p>
+      ) : (
+        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
+          {invoices.map((inv) => (
+            <li key={inv.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium capitalize text-gray-900">{monthLabel(inv.period_start || inv.created)}</p>
+                <p className="text-xs text-gray-500">
+                  {inv.number ? `N° ${inv.number} · ` : ''}
+                  {new Date(inv.created).toLocaleDateString('fr-FR')}
+                  {inv.status !== 'paid' && <span className="ml-1 font-medium text-amber-700">· en attente de paiement</span>}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold tabular-nums text-gray-900">
+                  {inv.amount.toLocaleString('fr-FR', { style: 'currency', currency: inv.currency.toUpperCase() })}
+                </span>
+                {inv.invoice_pdf && (
+                  <a
+                    href={inv.invoice_pdf}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <Download className="h-3.5 w-3.5" /> PDF
+                  </a>
+                )}
+                {inv.hosted_invoice_url && (
+                  <a
+                    href={inv.hosted_invoice_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Voir la facture en ligne"
+                    className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-700"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+
 /** Section « Mon abonnement » du profil (abonnés uniquement). */
 export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ profile }) => {
   const { pending, error, run } = useSubscriptionAction();
@@ -214,6 +306,8 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
             </button>
           )}
         </div>
+
+        <InvoicesList />
       </CardContent>
     </Card>
   );

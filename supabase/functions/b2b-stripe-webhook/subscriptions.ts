@@ -17,6 +17,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
+import { sendSubscriptionWelcomeEmail } from './welcomeEmail.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook:subscription]';
 
@@ -109,6 +110,39 @@ export async function handleSubscriptionCheckout(
   }
 
   console.log(`${LOG_PREFIX} Abonné ${resellerId} activé (${plan}, abonnement ${subscriptionId})`);
+
+  // Email de bienvenue + facture : jamais bloquant pour l'activation (le
+  // compte est déjà actif, un échec d'envoi est seulement logué).
+  try {
+    const { data: contact } = await admin
+      .from('reseller_contacts')
+      .select('profiles!inner(email, first_name)')
+      .eq('reseller_id', resellerId)
+      .limit(1)
+      .maybeSingle();
+    const person = contact && (Array.isArray(contact.profiles) ? contact.profiles[0] : contact.profiles);
+    const to = person?.email || session.customer_details?.email || session.customer_email;
+    if (to) {
+      const invoiceId =
+        (typeof session.invoice === 'string' ? session.invoice : session.invoice?.id) ??
+        (typeof subscription.latest_invoice === 'string' ? subscription.latest_invoice : subscription.latest_invoice?.id) ??
+        null;
+      await sendSubscriptionWelcomeEmail({
+        stripe,
+        to,
+        firstName: person?.first_name ?? null,
+        plan: subscriptionColumns(subscription, plan).subscription_plan,
+        invoiceId,
+        // Un ancien abonnement était rattaché : c'est un réabonnement.
+        returning: Boolean(reseller.stripe_subscription_id),
+      });
+    } else {
+      console.warn(`${LOG_PREFIX} Aucun email pour l'abonné ${resellerId} — bienvenue non envoyé`);
+    }
+  } catch (err) {
+    console.error(`${LOG_PREFIX} Email de bienvenue (${resellerId}) :`, err instanceof Error ? err.message : err);
+  }
+
   return json({ received: true, reseller_id: resellerId });
 }
 

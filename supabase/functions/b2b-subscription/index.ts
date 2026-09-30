@@ -12,6 +12,8 @@
 //   - action "checkout" (+ plan) : réabonnement d'un abonné résilié, ou
 //     paiement jamais finalisé après l'inscription — renvoie l'URL d'une
 //     session Stripe sur le même revendeur (tout son espace est conservé).
+//   - action "invoices" : liste de toutes ses factures Stripe (une par mois,
+//     plus les éventuelles différences au prorata), avec PDF et lien en ligne.
 //
 // La base est mise à jour tout de suite (réponse immédiate dans l'interface),
 // puis confirmée par le webhook customer.subscription.updated.
@@ -59,7 +61,7 @@ Deno.serve(async (req: Request) => {
     if (!user) return reply({ error: 'Non authentifié' }, 401);
 
     const { action, plan } = await req.json();
-    if (!['upgrade', 'cancel', 'resume', 'checkout'].includes(action)) return reply({ error: 'Action inconnue' }, 400);
+    if (!['upgrade', 'cancel', 'resume', 'checkout', 'invoices'].includes(action)) return reply({ error: 'Action inconnue' }, 400);
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: contact } = await admin
@@ -74,6 +76,31 @@ Deno.serve(async (req: Request) => {
     }
 
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
+
+    // Toutes les factures de l'abonné (un mois = une facture), y compris après
+    // résiliation : consultables et téléchargeables depuis « Mon profil ».
+    if (action === 'invoices') {
+      if (!reseller.stripe_customer_id) return reply({ invoices: [] });
+      const invoices = [];
+      for await (const inv of stripe.invoices.list({ customer: reseller.stripe_customer_id, limit: 100 })) {
+        if (inv.status === 'draft' || inv.status === 'void') continue;
+        const line = inv.lines?.data?.[0];
+        invoices.push({
+          id: inv.id,
+          number: inv.number,
+          created: new Date(inv.created * 1000).toISOString(),
+          period_start: line?.period?.start ? new Date(line.period.start * 1000).toISOString() : null,
+          period_end: line?.period?.end ? new Date(line.period.end * 1000).toISOString() : null,
+          amount: (inv.status === 'paid' ? inv.amount_paid : inv.amount_due) / 100,
+          currency: inv.currency,
+          status: inv.status,
+          hosted_invoice_url: inv.hosted_invoice_url,
+          invoice_pdf: inv.invoice_pdf,
+        });
+        if (invoices.length >= 120) break;
+      }
+      return reply({ invoices });
+    }
 
     // Réabonnement (abonnement terminé) ou premier paiement jamais finalisé :
     // nouvelle session Stripe sur le MÊME revendeur, activé par le webhook.

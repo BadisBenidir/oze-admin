@@ -22,6 +22,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import { createSubscriptionCheckout, isSubscriptionPlan, siteOrigin } from '../_shared/subscriptionCheckout.ts';
 
+const PRO_SITE = 'https://pro.ozeparis.com';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -163,12 +165,17 @@ Deno.serve(async (req: Request) => {
 
     // 3. Paiement.
     const origin = siteOrigin(req);
+    // Retour de paiement toujours sur pro.ozeparis.com (hors dev local) : la
+    // session de connexion doit être ouverte sur le domaine de l'espace pro
+    // (une session b2b.* n'y serait pas visible). L'email pré-remplit la
+    // connexion de la page de remerciement, qui ouvre ensuite le catalogue.
+    const proOrigin = origin.startsWith('http://localhost') ? origin : PRO_SITE;
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
     const url = await createSubscriptionCheckout(stripe, {
       plan,
       resellerId: reseller.id,
       email: input.email,
-      successUrl: `${origin}/inscription/merci`,
+      successUrl: `${proOrigin}/inscription/merci?email=${encodeURIComponent(input.email)}`,
       // Paiement abandonné : le compte existe, la page d'inscription l'explique
       // et renvoie vers la connexion pour finaliser.
       cancelUrl: `${origin}/inscription?pass=${plan}&paiement=annule`,

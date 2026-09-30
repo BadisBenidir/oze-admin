@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
+import { supabase } from '../../lib/supabase';
 import { useGooglePlacesAutocomplete } from '../../hooks/useGooglePlacesAutocomplete';
 import logo from './assets/logo_oze_paris_b2b.png';
 import { LOGIN_URL, PERIOD, PLANS, SUPPORT_EMAIL, type Plan, type SignupPlanId } from './plans';
@@ -183,8 +184,18 @@ const Steps: React.FC<{ current: number }> = ({ current }) => {
 
 const PAGE_BG = { background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)' };
 
-/** Retour de Stripe après paiement : le compte est créé par le webhook. */
+/** Retour de Stripe après paiement (sur pro.ozeparis.com, email en ?email=) :
+ * connexion immédiate avec le mot de passe choisi, puis ouverture de l'espace
+ * pro. /catalogue?abonnement=ok attend l'activation par le webhook (voir
+ * SubscriptionGate) avant d'afficher le catalogue. */
 const SignupThanks: React.FC = () => {
+  const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email') || '');
+  const [password, setPassword] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  // Ancien lien de retour sur b2b.ozeparis.com : la session doit s'ouvrir sur pro.*, on y renvoie.
+  const onProDomain = !window.location.hostname.startsWith('b2b.');
+
   useEffect(() => {
     document.title = 'Bienvenue au Club B2B | OZË Paris';
     try {
@@ -193,6 +204,19 @@ const SignupThanks: React.FC = () => {
       // stockage indisponible : rien à nettoyer
     }
   }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSigningIn(true);
+    setLoginError(null);
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) {
+      setLoginError('Email ou mot de passe incorrect.');
+      setSigningIn(false);
+      return;
+    }
+    window.location.replace('/catalogue?abonnement=ok');
+  };
 
   return (
     <div className="min-h-screen" style={PAGE_BG}>
@@ -205,19 +229,64 @@ const SignupThanks: React.FC = () => {
           </div>
           <h1 className="mt-4 text-xl font-bold text-gray-900">Paiement confirmé, bienvenue !</h1>
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
-            Votre compte est activé : connectez-vous avec l'email et le mot de passe choisis à l'inscription.
+            Un email de bienvenue avec votre facture vient de vous être envoyé.
+            {onProDomain ? ' Entrez votre mot de passe pour accéder à votre espace.' : ' Connectez-vous pour accéder à votre espace.'}
           </p>
+
+          {onProDomain ? (
+            <form onSubmit={handleLogin} className="mx-auto mt-6 max-w-sm space-y-3 text-left">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  className="w-full border border-gray-300 px-3 py-2.5 text-sm focus:border-gray-900 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Mot de passe choisi à l'inscription</label>
+                <input
+                  type="password"
+                  required
+                  autoFocus={Boolean(email)}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="w-full border border-gray-300 px-3 py-2.5 text-sm focus:border-gray-900 focus:outline-none"
+                />
+              </div>
+              {loginError && (
+                <p className="flex items-start gap-2 text-sm text-red-700">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" /> {loginError}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={signingIn}
+                className="w-full bg-black px-6 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {signingIn ? 'Connexion…' : 'Accéder à mon espace'}
+              </button>
+            </form>
+          ) : (
+            <div className="mt-6 flex justify-center">
+              <a href={LOGIN_URL} className="inline-flex items-center justify-center bg-black px-6 py-2.5 text-sm font-medium text-white hover:bg-gray-800">
+                Se connecter
+              </a>
+            </div>
+          )}
+
           <div className="mx-auto mt-6 max-w-md space-y-3 text-left text-sm text-gray-700">
             <p className="flex items-start gap-3">
               <User className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-900" />
               Une fois connecté, complétez votre statut juridique dans « Mon profil » : il est requis pour acheter.
             </p>
           </div>
-          <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-            <a href={LOGIN_URL} className="inline-flex items-center justify-center bg-black px-6 py-2.5 text-sm font-medium text-white hover:bg-gray-800">
-              Se connecter
-            </a>
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="inline-flex items-center justify-center border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          <div className="mt-6 flex justify-center">
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-sm text-gray-500 underline-offset-2 hover:text-gray-900 hover:underline">
               Une question ? {SUPPORT_EMAIL}
             </a>
           </div>
