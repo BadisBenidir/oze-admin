@@ -1,16 +1,18 @@
 -- ============================================================================
 -- Pièces "vitrine" d'un drop : jusqu'à 4 articles choisis par l'admin (fiche
--- du drop), affichés NETS dans l'annonce du prochain drop côté revendeur.
--- Sans choix, l'annonce garde le teaser : les 4 premières photos, floutées.
+-- du drop), affichés NETS et en grand dans l'annonce du prochain drop côté
+-- revendeur, suivis sur toute la largeur du bandeau par d'autres pièces du
+-- drop, floutées (teaser). Sans choix : uniquement des photos floutées.
 --
--- get_next_drop_announcement (0168) gagne la colonne images_revealed —
--- changement du type de retour, d'où le drop function préalable.
+-- get_next_drop_announcement (0168) : preview_images = photos nettes puis
+-- floutées (16 max), nouvelle colonne revealed_count = nombre de photos
+-- nettes en tête — changement du type de retour, d'où le drop function.
 -- ============================================================================
 
 alter table public.drops add column if not exists featured_product_ids uuid[];
 
 comment on column public.drops.featured_product_ids is
-  'Jusqu''à 4 articles du drop affichés nets dans l''annonce revendeur (null = teaser flouté des 4 premières photos).';
+  'Jusqu''à 4 articles du drop affichés nets dans l''annonce revendeur (null = uniquement le teaser flouté).';
 
 drop function if exists public.get_next_drop_announcement();
 
@@ -22,7 +24,7 @@ returns table (
   piece_count integer,
   brands text[],
   preview_images text[],
-  images_revealed boolean
+  revealed_count integer
 )
 language sql
 security definer
@@ -52,19 +54,33 @@ as $$
     cross join lateral unnest(nd.featured_product_ids) with ordinality as f(pid, pos)
     join pieces pc on pc.id = f.pid
   ),
-  shown as (
-    select * from (
-      select coalesce(p.images ->> coalesce(p.main_image_index, 0), p.images ->> 0) as img, p.pos as rank
-      from featured p
-      where (select count(*) from featured) > 0
-      union all
-      select coalesce(p.images ->> coalesce(p.main_image_index, 0), p.images ->> 0) as img, p.ord as rank
-      from pieces p
-      where (select count(*) from featured) = 0
+  -- Photos nettes : les pièces vitrine (4 max), dans l'ordre du choix.
+  revealed as (
+    select img, pos as rank
+    from (
+      select coalesce(f.images ->> coalesce(f.main_image_index, 0), f.images ->> 0) as img, f.pos
+      from featured f
     ) s
     where img is not null
-    order by rank
+    order by pos
     limit 4
+  ),
+  -- Photos floutées à la suite : les autres pièces du drop (12 max).
+  teased as (
+    select img, 1000 + ord as rank
+    from (
+      select coalesce(p.images ->> coalesce(p.main_image_index, 0), p.images ->> 0) as img, p.ord
+      from pieces p
+      where not exists (select 1 from featured f where f.id = p.id)
+    ) s
+    where img is not null
+    order by ord
+    limit 12
+  ),
+  shown as (
+    select * from revealed
+    union all
+    select * from teased
   )
   select
     nd.id,
@@ -83,7 +99,7 @@ as $$
       ) x
     ), array[]::text[]),
     coalesce((select array_agg(img order by rank) from shown), array[]::text[]),
-    exists (select 1 from featured)
+    (select count(*)::integer from revealed)
   from next_drop nd;
 $$;
 

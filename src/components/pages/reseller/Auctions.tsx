@@ -319,7 +319,7 @@ export const Auctions: React.FC = () => {
           startsAt={session.starts_at}
           pieceCount={items.length}
           brands={Array.from(new Set(items.map((i) => i.brand).filter(Boolean))).slice(0, 4)}
-          images={items.map((i) => i.images?.[0]).filter((src): src is string => Boolean(src)).slice(0, 4)}
+          images={items.map((i) => i.images?.[0]).filter((src): src is string => Boolean(src)).slice(0, 16)}
           onStart={() => setTimeout(() => window.location.reload(), 3000)}
         />
       )}

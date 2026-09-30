@@ -125,8 +125,8 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
                 <Star className="h-4 w-4 mt-0.5 flex-shrink-0 fill-amber-400 text-amber-500" />
                 <p>
                   <span className="font-medium">Vitrine de l'annonce ({featured.length}/{MAX_FEATURED})</span> — clique sur l'étoile
-                  des pièces à montrer nettes dans l'annonce du prochain drop côté revendeurs.
-                  {featured.length === 0 && ' Sans choix, les 4 premières photos s\'affichent floutées.'}
+                  des pièces à montrer nettes et en grand dans l'annonce du prochain drop (les autres suivent, floutées).
+                  {featured.length === 0 && ' Sans choix, les photos s\'affichent toutes floutées.'}
                 </p>
               </div>
             )}
