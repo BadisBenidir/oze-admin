@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle, ArrowLeft, Check, CreditCard, KeyRound, Lock, Mail, MapPin, Phone, Shield, User, UserPlus, X,
 } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 import { useGooglePlacesAutocomplete } from '../../hooks/useGooglePlacesAutocomplete';
 import logo from './assets/logo_oze_paris_b2b.png';
@@ -226,10 +227,13 @@ const SignupThanks: React.FC = () => {
   );
 };
 
-export const B2BSignup: React.FC = () => {
-  if (window.location.pathname.replace(/\/$/, '') === '/inscription/merci') return <SignupThanks />;
-  return <SignupForm />;
-};
+export const B2BSignup: React.FC = () => (
+  <>
+    {/* Vercel Web Analytics : mesure du tunnel inscription → paiement → remerciement */}
+    <Analytics />
+    {window.location.pathname.replace(/\/$/, '') === '/inscription/merci' ? <SignupThanks /> : <SignupForm />}
+  </>
+);
 
 const SignupForm: React.FC = () => {
   const [planId, setPlanId] = useState<SignupPlanId>(readPlanFromUrl);

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import {
   ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Globe, Euro, UserRound, Mail,
   Wallet, Percent,
@@ -388,6 +389,8 @@ export const B2BLanding: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white text-gray-900 antialiased">
+      {/* Vercel Web Analytics : visites de la landing uniquement (l'admin et l'espace pro ne sont pas mesurés) */}
+      <Analytics />
       {/* HEADER */}
       <header
         className={`fixed inset-x-0 top-0 z-40 transition-colors duration-300 ${
