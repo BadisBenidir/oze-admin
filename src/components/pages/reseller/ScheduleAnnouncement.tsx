@@ -113,14 +113,14 @@ export const ScheduleAnnouncement: React.FC<ScheduleAnnouncementProps> = ({
             le reste flouté et grisé, qui s'estompe vers le bord droit. */}
         {images.length > 0 && (
           <div className="relative min-w-0 flex-1">
-            <div className="flex gap-2 overflow-hidden [mask-image:linear-gradient(to_right,black_75%,transparent)] sm:gap-3">
+            <div className="flex items-center gap-2 overflow-hidden [mask-image:linear-gradient(to_right,black_80%,transparent)] sm:gap-3">
               {netImages.map((src, i) => (
-                <div key={`net-${i}`} className="h-36 w-36 flex-shrink-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-stone-200 sm:h-44 sm:w-44">
+                <div key={`net-${i}`} className="h-40 w-40 flex-shrink-0 overflow-hidden rounded-xl bg-white shadow-md ring-1 ring-stone-200 sm:h-56 sm:w-56">
                   <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
                 </div>
               ))}
               {blurredImages.map((src, i) => (
-                <div key={`blur-${i}`} className="relative h-36 w-36 flex-shrink-0 overflow-hidden rounded-xl bg-stone-200 ring-1 ring-stone-200 sm:h-44 sm:w-44">
+                <div key={`blur-${i}`} className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-stone-200 ring-1 ring-stone-200 sm:h-40 sm:w-40">
                   <img src={src} alt="" loading="lazy" className="h-full w-full scale-110 object-cover opacity-60 blur-[8px] grayscale" />
                   {i === 0 && (
                     <div className="absolute inset-0 flex items-center justify-center">
