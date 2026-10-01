@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Package, ImageOff, Trash2, Star } from 'lucide-react';
+import { X, Package, ImageOff, Trash2, Star, Lock, Unlock } from 'lucide-react';
 import { Drop } from '../../../hooks/useDrops';
 import { useDropProducts } from '../../../hooks/useDropProducts';
 
@@ -19,11 +19,13 @@ interface DropDetailModalProps {
   onDelete?: (dropId: string) => Promise<{ success: boolean; error?: string }>;
   /** Pièces vitrine de l'annonce revendeur (max 4) — seulement pour un drop planifié. */
   onSetFeatured?: (dropId: string, productIds: string[]) => Promise<{ success: boolean; error?: string }>;
+  /** Interdit / autorise l'annulation en libre-service des articles du drop (0176). */
+  onSetLockCancellation?: (dropId: string, locked: boolean) => Promise<{ success: boolean; error?: string }>;
 }
 
 const MAX_FEATURED = 4;
 
-export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose, otherDrops = [], onReassignProduct, onDelete, onSetFeatured }) => {
+export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose, otherDrops = [], onReassignProduct, onDelete, onSetFeatured, onSetLockCancellation }) => {
   // `drop` est dérivé en direct de la liste `drops` du parent (voir
   // B2BDrops.tsx) : product_ids se met à jour automatiquement après un
   // déplacement, ce qui redéclenche useDropProducts via sa dépendance sur
@@ -34,6 +36,7 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [featuredSaving, setFeaturedSaving] = useState(false);
   const [featuredError, setFeaturedError] = useState<string | null>(null);
+  const [lockSaving, setLockSaving] = useState(false);
 
   if (!drop) return null;
 
@@ -119,6 +122,31 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
             )}
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">Erreur : {error}</div>
+            )}
+            {onSetLockCancellation && (
+              <div className={`rounded-lg border p-3 flex flex-wrap items-center justify-between gap-3 ${drop.lock_reseller_cancellation ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+                <p className={`text-sm flex items-start gap-2 ${drop.lock_reseller_cancellation ? 'text-red-800' : 'text-gray-700'}`}>
+                  {drop.lock_reseller_cancellation ? <Lock className="h-4 w-4 mt-0.5 flex-shrink-0" /> : <Unlock className="h-4 w-4 mt-0.5 flex-shrink-0 text-gray-400" />}
+                  <span>
+                    <span className="font-medium">Annulation par les revendeurs : {drop.lock_reseller_cancellation ? 'interdite' : 'autorisée'}</span>
+                    {drop.lock_reseller_cancellation
+                      ? ' — les articles de ce drop ne peuvent plus être annulés depuis l\'espace revendeur (vous pouvez toujours les annuler depuis l\'admin).'
+                      : ' — à interdire avant de solder les pièces restantes, pour éviter annulation puis rachat moins cher.'}
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  disabled={lockSaving}
+                  onClick={async () => {
+                    setLockSaving(true);
+                    await onSetLockCancellation(drop.id, !drop.lock_reseller_cancellation);
+                    setLockSaving(false);
+                  }}
+                  className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-gray-800 ring-1 ring-gray-200 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  {lockSaving ? 'Un instant…' : drop.lock_reseller_cancellation ? 'Autoriser l\'annulation' : 'Interdire l\'annulation'}
+                </button>
+              </div>
             )}
             {canFeature && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 flex items-start gap-2">

@@ -17,6 +17,9 @@
 // n'importe quel revendeur pourrait annuler n'importe quelle commande en
 // devinant un UUID, ou passé le délai autorisé.
 //
+// Exception : les articles d'un drop dont l'annulation est verrouillée
+// (drops.lock_reseller_cancellation, 0176) ne sont jamais annulables ici.
+//
 // Déploiement : `supabase functions deploy cancel-my-b2b-order-item`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -106,6 +109,28 @@ Deno.serve(async (req: Request) => {
       targetIds = item_ids;
     } else {
       targetIds = activeItems.map((i) => i.id);
+    }
+
+    // Articles d'un drop verrouillé (drops.lock_reseller_cancellation, 0176) :
+    // pas d'annulation en libre-service — sinon un revendeur pourrait annuler
+    // puis racheter la même pièce une fois soldée. L'admin peut toujours annuler.
+    const { data: targetProducts } = await adminClient
+      .from('order_items')
+      .select('product_id')
+      .in('id', targetIds);
+    const targetProductIds = (targetProducts || []).map((i) => i.product_id).filter(Boolean);
+    if (targetProductIds.length > 0) {
+      const { data: lockedDrops } = await adminClient
+        .from('drops')
+        .select('title')
+        .eq('lock_reseller_cancellation', true)
+        .overlaps('product_ids', targetProductIds);
+      if (lockedDrops && lockedDrops.length > 0) {
+        const names = lockedDrops.map((d) => d.title || 'drop').join(', ');
+        return json({
+          error: `Les articles du ${names} ne peuvent pas être annulés. Pour toute question, contactez OZË Paris.`,
+        }, 400);
+      }
     }
 
     const cancellingWholeOrder = targetIds.length === activeItems.length;

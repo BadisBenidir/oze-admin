@@ -12,6 +12,8 @@ export interface Drop {
   published_at: string | null;
   /** Jusqu'à 4 articles affichés nets dans l'annonce revendeur (0171) — null = teaser flouté. */
   featured_product_ids: string[] | null;
+  /** true = les revendeurs ne peuvent pas annuler eux-mêmes les articles de ce drop (0176). */
+  lock_reseller_cancellation?: boolean;
 }
 
 export interface DropInput {
@@ -39,6 +41,8 @@ interface UseDropsResult {
   deleteDrop: (id: string) => Promise<{ success: boolean; error?: string }>;
   /** Pièces vitrine de l'annonce (max 4, [] ou null = teaser flouté). */
   setFeaturedProducts: (id: string, productIds: string[]) => Promise<{ success: boolean; error?: string }>;
+  /** Interdit / autorise l'annulation en libre-service des articles du drop. */
+  setLockCancellation: (id: string, locked: boolean) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
@@ -149,6 +153,13 @@ export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
     return { success: true };
   };
 
+  const setLockCancellation = async (id: string, locked: boolean): Promise<{ success: boolean; error?: string }> => {
+    const { error: updateError } = await supabase.from('drops').update({ lock_reseller_cancellation: locked }).eq('id', id);
+    if (updateError) return { success: false, error: updateError.message };
+    await fetchDrops();
+    return { success: true };
+  };
+
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
@@ -157,5 +168,5 @@ export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
     fetchDrops();
   }, [isAdmin, fetchDrops]);
 
-  return { drops, loading, error, refresh: fetchDrops, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop, setFeaturedProducts };
+  return { drops, loading, error, refresh: fetchDrops, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop, setFeaturedProducts, setLockCancellation };
 };
