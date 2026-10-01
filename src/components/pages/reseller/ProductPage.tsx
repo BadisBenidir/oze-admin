@@ -6,6 +6,7 @@ import { useB2BCart } from '../../../hooks/useB2BCart';
 import { supabase } from '../../../lib/supabase';
 import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
 import { DropPreviewBadge } from './DropPreviewBadge';
+import { ImageLightbox } from '../../ui/ImageLightbox';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -13,7 +14,6 @@ import {
   ImageOff,
   ShoppingCart,
   Check,
-  X,
   Tag,
   AlertTriangle,
   ZoomIn,
@@ -58,7 +58,8 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
   const { product, loading, error, refresh } = useB2BProduct(productId, isReseller);
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  // Visionneuse plein écran : photos de la pièce ou photos des défauts.
+  const [lightbox, setLightbox] = useState<{ kind: 'main' | 'defects'; index: number } | null>(null);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   // Verrou anti-reset (3 min) : interroge get_item_add_lock pour CET article
@@ -183,7 +184,17 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
           <div className="bg-gray-100 rounded-lg overflow-hidden">
             <div className="relative h-80 md:h-96 flex items-center justify-center">
               {images.length > 0 ? (
-                <img src={images[activeIndex]} alt={product.name} className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setLightbox({ kind: 'main', index: activeIndex })}
+                  className="group relative h-full w-full cursor-zoom-in"
+                  title="Agrandir"
+                >
+                  <img src={images[activeIndex]} alt={product.name} className="w-full h-full object-cover" />
+                  <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs text-white opacity-80 group-hover:opacity-100">
+                    <ZoomIn className="h-3.5 w-3.5" /> Agrandir
+                  </span>
+                </button>
               ) : (
                 <ImageOff className="h-12 w-12 text-gray-300" />
               )}
@@ -236,7 +247,7 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
                     {defectImages.map((img, i) => (
                       <button
                         key={i}
-                        onClick={() => setZoomedImage(img)}
+                        onClick={() => setLightbox({ kind: 'defects', index: i })}
                         className="relative h-20 w-20 rounded-md overflow-hidden border border-red-200 group"
                       >
                         <img src={img} alt="Défaut" className="w-full h-full object-cover" />
@@ -365,13 +376,18 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
         </div>
       </div>
 
-      {zoomedImage && (
-        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-6" onClick={() => setZoomedImage(null)}>
-          <button onClick={() => setZoomedImage(null)} className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white hover:bg-white/20">
-            <X className="h-5 w-5" />
-          </button>
-          <img src={zoomedImage} alt="Défaut agrandi" className="max-w-full max-h-full rounded-lg object-contain" onClick={(e) => e.stopPropagation()} />
-        </div>
+      {lightbox && (
+        <ImageLightbox
+          images={lightbox.kind === 'main' ? images : defectImages}
+          index={lightbox.index}
+          onIndexChange={(index) => {
+            setLightbox({ ...lightbox, index });
+            // Garde la photo principale de la fiche synchronisée avec la visionneuse.
+            if (lightbox.kind === 'main') setActiveIndex(index);
+          }}
+          onClose={() => setLightbox(null)}
+          alt={lightbox.kind === 'main' ? product.name : `${product.name} — défaut`}
+        />
       )}
     </div>
   );
