@@ -11,12 +11,13 @@ import { ProductLabel } from '../products/ProductLabel';
 import { ProductScannerPage } from '../products/ProductScannerPage';
 import { PendingProductsPage } from '../products/PendingProductsPage';
 import { LiveAuctionPage } from '../products/LiveAuctionPage';
+import { ProductExportModal } from '../products/ProductExportModal';
 import { useCategories, Category } from '../../hooks/useCategories';
 import { useBrands, Brand } from '../../hooks/useBrands';
 import { useProducts, ProductFilters } from '../../hooks/useProducts';
 import { useDashboardStats } from '../../hooks/useDashboardStats';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-import { Plus, Edit, Trash2, Eye, Package, AlertCircle, TrendingUp, Tag } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Package, AlertCircle, TrendingUp, Tag, Download } from 'lucide-react';
 
 interface ProductsProps {
   activeSubTab: string;
@@ -89,6 +90,7 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
 
   // État pour la page de création de produit
   const [showCreateProduct, setShowCreateProduct] = useState(false)
+  const [showExport, setShowExport] = useState(false)
   
   // État pour la page de détail de produit
   const [showProductDetail, setShowProductDetail] = useState(false)
@@ -977,15 +979,26 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
               {loadingProducts ? 'Chargement...' : `${totalProducts} produit${totalProducts > 1 ? 's' : ''} (page ${currentPageProducts}/${totalPagesProducts})`}
             </p>
           </div>
-          <button 
-            onClick={handleCreateProduct}
-            className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Nouveau Produit</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowExport(true)}
+              className="flex items-center space-x-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              <span>Exporter</span>
+            </button>
+            <button 
+              onClick={handleCreateProduct}
+              className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Nouveau Produit</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      {showExport && <ProductExportModal brands={brands} onClose={() => setShowExport(false)} />}
 
       {/* Message d'erreur */}
       {errorProducts && (
