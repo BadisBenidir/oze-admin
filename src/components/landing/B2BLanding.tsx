@@ -65,8 +65,8 @@ const FEATURES: {
     layout: 'split',
     eyebrow: 'Enchères',
     title: 'Des enchères privées,',
-    titleBold: 'dès 0 €',
-    text: 'Des sessions réservées aux membres, entre professionnels uniquement. Les lots démarrent à 0 € : c\'est le marché qui fixe le prix. Le calendrier des prochaines sessions est visible dans votre espace, et les lots remportés se règlent sous 24h.',
+    titleBold: 'dès 0€',
+    text: 'Des sessions réservées aux membres, entre professionnels uniquement. Les lots démarrent à 0€ : c\'est le marché qui fixe le prix. Le calendrier des prochaines sessions est visible dans votre espace, et les lots remportés se règlent sous 24h.',
     cta: { label: 'Participer aux enchères' },
     image: encheresImg,
   },
@@ -105,11 +105,11 @@ const PILLARS = [
   {
     id: 'encheres',
     icon: Gavel,
-    tag: 'Dès 0 €',
+    tag: 'Dès 0€',
     title: 'Enchères B2B exclusives',
-    text: 'Sessions privées réservées aux membres, avec des pièces très demandées mises en vente à partir de 0 €.',
+    text: 'Sessions privées réservées aux membres, avec des pièces très demandées mises en vente à partir de 0€.',
     points: [
-      'Prix de départ à 0 € sur les lots',
+      'Prix de départ à 0€ sur les lots',
       'Sessions privées, entre professionnels uniquement',
       'Calendrier des prochaines sessions dans votre espace',
       'Lots remportés à régler sous 24h',
@@ -167,7 +167,7 @@ const FAQ = [
   {
     q: 'Comment fonctionnent les enchères ?',
     short: 'Comment marchent les enchères ?',
-    a: 'Des sessions privées, réservées aux membres du Pass Revendeur, avec des lots dès 0 €. Vous pouvez enchérir au fil de l\'eau ou définir un montant maximum : nous surenchérissons alors automatiquement pour vous, du pas minimal, uniquement si nécessaire. Une enchère placée dans les dernières minutes prolonge le lot, pour que chacun puisse répondre. Un lot remporté est à régler sous 24h.',
+    a: 'Des sessions privées, réservées aux membres du Pass Revendeur, avec des lots dès 0€. Vous pouvez enchérir au fil de l\'eau ou définir un montant maximum : nous surenchérissons alors automatiquement pour vous, du pas minimal, uniquement si nécessaire. Une enchère placée dans les dernières minutes prolonge le lot, pour que chacun puisse répondre. Un lot remporté est à régler sous 24h.',
   },
   {
     q: 'Comment fonctionne le sourcing sur mesure ?',
