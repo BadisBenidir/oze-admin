@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { archivedNotice } from '../../services/productDeletionService';
+import { archivedNotice, setProductArchived } from '../../services/productDeletionService';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { CategoryModal } from '../ui/CategoryModal';
@@ -17,7 +17,7 @@ import { useBrands, Brand } from '../../hooks/useBrands';
 import { useProducts, ProductFilters } from '../../hooks/useProducts';
 import { useDashboardStats } from '../../hooks/useDashboardStats';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-import { Plus, Edit, Trash2, Eye, Package, AlertCircle, TrendingUp, Tag, Download } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Package, AlertCircle, TrendingUp, Tag, Download, Archive, ArchiveRestore } from 'lucide-react';
 
 interface ProductsProps {
   activeSubTab: string;
@@ -199,6 +199,21 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
       } catch (error) {
         alert(`Suppression impossible : ${error instanceof Error ? error.message : 'erreur inconnue'}`)
       }
+    }
+  }
+
+  // Archivage manuel (0177) : possible même si l'article est dans une commande
+  // en cours — seule la fiche produit change, la commande reste intacte.
+  const handleToggleArchive = async (id: string, productName: string, isArchived: boolean) => {
+    const message = isArchived
+      ? `Désarchiver "${productName}" ? Il repassera en brouillon.`
+      : `Archiver "${productName}" ?\n\nIl sera retiré du stock, des paniers et des statistiques. Si l'article fait partie d'une commande, celle-ci reste intacte.`
+    if (!confirm(message)) return
+    try {
+      await setProductArchived(id, !isArchived)
+      refreshProducts()
+    } catch (error) {
+      alert(`${isArchived ? 'Désarchivage' : 'Archivage'} impossible : ${error instanceof Error ? error.message : 'erreur inconnue'}`)
     }
   }
 
@@ -463,6 +478,7 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
                         'sourced-b2b': '🎯 Sourcing sur mesure',
                         'drop-b2b': 'Drop B2B',
                         'auction-b2b': 'Enchère',
+                        'archived': 'Archivé',
                         'for-sale-online': 'En vente en ligne',
                         'for-sale-other-platform': 'Autre plateforme',
                         'for-sale-b2b': 'Revendeurs B2B',
@@ -1008,7 +1024,7 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
         </div>
       )}
 
-{/* Search and Filters */}      <div className="mb-4 md:mb-6 space-y-4">        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">          <div className="relative w-full md:max-w-md">            <input              type="text"              placeholder="Rechercher par nom, SKU ou référence fournisseur..."              value={filters.search || ''}              onChange={(e) => setFilters({ ...filters, search: e.target.value || undefined })}              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"            />            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">              <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />              </svg>            </div>          </div>          <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-3">            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"              value={filters.categoryId || ''}              onChange={(e) => setFilters({ ...filters, categoryId: e.target.value || undefined })}            >              <option value="">Toutes catégories</option>              {categories.map((category) => (                <option key={category.id} value={category.id}>{category.name}</option>              ))}            </select>            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"              value={filters.status || ''}              onChange={(e) => setFilters({ ...filters, status: e.target.value || undefined })}            >              <option value="">Tous statuts</option>              <option value="draft">Brouillon</option>              <option value="draft-b2b">Brouillon (B2B)</option>              <option value="sourced-b2b">🎯 Sourcing sur mesure</option>              <option value="drop-b2b">Drop B2B</option>              <option value="auction-b2b">Enchère</option>              <option value="for-sale-online">En vente en ligne</option>              <option value="for-sale-other-platform">Autre plateforme</option>              <option value="for-sale-b2b">Revendeurs B2B</option>              <option value="for-auction-live">Live enchères</option>              <option value="sold-online">Vendu en ligne</option>              <option value="sold-other-platform">Vendu ailleurs</option>              <option value="sold-display">Vendu - Affiché</option>              <option value="sold-auction">Vendu (live)</option>              <option value="cadeau">🎁 Cadeau fidélité (en attente)</option>              <option value="cadeau-attribue">🎁 Cadeau attribué</option>              <option value="cadeau-livre">🎁 Cadeau livré</option>            </select>            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm md:col-span-1 col-span-2"              value={filters.sortBy || 'recent'}              onChange={(e) => setFilters({ ...filters, sortBy: e.target.value as ProductFilters['sortBy'] })}            >              <option value="recent">Récent</option>              <option value="oldest">Plus ancien</option>              <option value="price-asc">Prix croissant</option>              <option value="price-desc">Prix décroissant</option>            </select>            <select className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm hidden md:block">              <option>20 par page</option>              <option>50 par page</option>              <option>100 par page</option>            </select>          </div>        </div>      </div>      <Card>
+{/* Search and Filters */}      <div className="mb-4 md:mb-6 space-y-4">        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">          <div className="relative w-full md:max-w-md">            <input              type="text"              placeholder="Rechercher par nom, SKU ou référence fournisseur..."              value={filters.search || ''}              onChange={(e) => setFilters({ ...filters, search: e.target.value || undefined })}              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"            />            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">              <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />              </svg>            </div>          </div>          <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-3">            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"              value={filters.categoryId || ''}              onChange={(e) => setFilters({ ...filters, categoryId: e.target.value || undefined })}            >              <option value="">Toutes catégories</option>              {categories.map((category) => (                <option key={category.id} value={category.id}>{category.name}</option>              ))}            </select>            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm"              value={filters.status || ''}              onChange={(e) => setFilters({ ...filters, status: e.target.value || undefined })}            >              <option value="">Tous statuts</option>              <option value="draft">Brouillon</option>              <option value="draft-b2b">Brouillon (B2B)</option>              <option value="sourced-b2b">🎯 Sourcing sur mesure</option>              <option value="drop-b2b">Drop B2B</option>              <option value="auction-b2b">Enchère</option>              <option value="archived">Archivé</option>              <option value="for-sale-online">En vente en ligne</option>              <option value="for-sale-other-platform">Autre plateforme</option>              <option value="for-sale-b2b">Revendeurs B2B</option>              <option value="for-auction-live">Live enchères</option>              <option value="sold-online">Vendu en ligne</option>              <option value="sold-other-platform">Vendu ailleurs</option>              <option value="sold-display">Vendu - Affiché</option>              <option value="sold-auction">Vendu (live)</option>              <option value="cadeau">🎁 Cadeau fidélité (en attente)</option>              <option value="cadeau-attribue">🎁 Cadeau attribué</option>              <option value="cadeau-livre">🎁 Cadeau livré</option>            </select>            <select              className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm md:col-span-1 col-span-2"              value={filters.sortBy || 'recent'}              onChange={(e) => setFilters({ ...filters, sortBy: e.target.value as ProductFilters['sortBy'] })}            >              <option value="recent">Récent</option>              <option value="oldest">Plus ancien</option>              <option value="price-asc">Prix croissant</option>              <option value="price-desc">Prix décroissant</option>            </select>            <select className="px-3 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none text-sm hidden md:block">              <option>20 par page</option>              <option>50 par page</option>              <option>100 par page</option>            </select>          </div>        </div>      </div>      <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto -mx-4 md:mx-0">
             <table className="w-full">
@@ -1121,6 +1137,7 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
                            product.status === 'sourced-b2b' ? '🎯 Sourcing sur mesure' :
                            product.status === 'drop-b2b' ? 'Drop B2B' :
                            product.status === 'auction-b2b' ? 'Enchère' :
+                           (product.status as string) === 'archived' ? 'Archivé' :
                            product.status === 'for-sale-online' ? 'En vente' :
                            product.status === 'for-sale-other-platform' ? 'Autre plateforme' :
                            product.status === 'for-sale-b2b' ? 'Revendeurs B2B' :
@@ -1165,7 +1182,14 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
                           >
                             <Edit className="h-4 w-4" />
                           </button>
-                          <button 
+                          <button
+                            onClick={() => handleToggleArchive(product.id, product.name, (product.status as string) === 'archived')}
+                            className="p-2 md:p-1 text-gray-400 hover:text-amber-600 transition-colors touch-manipulation min-h-[44px] md:min-h-0 flex items-center justify-center"
+                            title={(product.status as string) === 'archived' ? 'Désarchiver' : 'Archiver'}
+                          >
+                            {(product.status as string) === 'archived' ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+                          </button>
+                          <button
                             onClick={() => handleDeleteProduct(product.id, product.name)}
                             className="p-2 md:p-1 text-gray-400 hover:text-red-600 transition-colors touch-manipulation min-h-[44px] md:min-h-0 flex items-center justify-center hidden sm:flex"
                             title="Supprimer"

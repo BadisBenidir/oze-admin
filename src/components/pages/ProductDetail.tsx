@@ -191,6 +191,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
       case 'sourced-b2b': return '🎯 Sourcing sur mesure';
       case 'drop-b2b': return 'Drop B2B';
       case 'auction-b2b': return 'Enchère';
+      case 'archived': return 'Archivé';
       case 'for-sale-online': return 'À vendre en ligne';
       case 'for-sale-other-platform': return 'À vendre sur autre plateforme';
       case 'for-sale-b2b': return 'Revendeurs B2B uniquement';

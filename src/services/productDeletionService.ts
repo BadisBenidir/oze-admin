@@ -19,3 +19,16 @@ export const deleteProductAdmin = async (productId: string): Promise<DeleteProdu
 
 export const archivedNotice = (name: string) =>
   `« ${name} » est lié à une ancienne commande ou à un cadeau : il a été archivé à la place (historique conservé, retiré du stock et des statistiques).`;
+
+/** Archive (ou désarchive) un produit via admin_set_product_archived (0177) —
+ * possible même s'il est dans une commande en cours : seule la fiche produit
+ * change de statut, la commande reste intacte. */
+export const setProductArchived = async (
+  productId: string,
+  archived: boolean,
+): Promise<{ status: string; inActiveOrder: boolean }> => {
+  const { data, error } = await supabase.rpc('admin_set_product_archived', { p_product_id: productId, p_archived: archived });
+  if (error) throw new Error(error.message);
+  const result = (data || {}) as { status?: string; in_active_order?: boolean };
+  return { status: result.status || '', inActiveOrder: Boolean(result.in_active_order) };
+};
