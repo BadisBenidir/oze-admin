@@ -3,9 +3,10 @@ import * as XLSX from 'xlsx';
 import { Download, X, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Brand } from '../../hooks/useBrands';
+import { generateProductListPdf } from '../../utils/generateProductListPdf';
 
 /**
- * Export de la liste des articles (Excel ou CSV) depuis « Liste des Produits » :
+ * Export de la liste des articles (Excel, CSV ou PDF) depuis « Liste des Produits » :
  * période de création, statuts et marque au choix ; une ligne par article
  * avec ses références (OZË, B2B, fournisseur), marque, titre, état, statut
  * et prix. Lecture par paquets de 1000 (limite de l'API) pour tout exporter.
@@ -103,7 +104,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
   const [to, setTo] = useState(() => presetRange('month').to);
   const [statuses, setStatuses] = useState<Set<string>>(new Set(ALL_STATUSES));
   const [brandId, setBrandId] = useState('');
-  const [format, setFormat] = useState<'xlsx' | 'csv'>('xlsx');
+  const [format, setFormat] = useState<'xlsx' | 'csv' | 'pdf'>('xlsx');
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState<number | null>(null);
@@ -215,7 +216,37 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
       ws['!cols'] = header.map((h) => ({ wch: Math.max(12, h.length + 2) }));
       const period = from || to ? `du_${from || 'debut'}_au_${to || 'aujourdhui'}` : 'tous';
       const fileBase = `articles_${period}`;
-      if (format === 'csv') {
+      if (format === 'pdf') {
+        const frDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('fr-FR');
+        const periodLabel = from && to
+          ? `du ${frDate(from)} au ${frDate(to)}`
+          : from ? `depuis le ${frDate(from)}` : to ? `jusqu'au ${frDate(to)}` : 'depuis le début';
+        // Statuts : « tous », des groupes entiers (« en stock, vendus »), sinon la liste détaillée.
+        const fullGroups = STATUS_GROUPS.filter((g) => g.statuses.every((st) => statuses.has(st)));
+        const onlyFullGroups = [...statuses].every((st) => fullGroups.some((g) => g.statuses.includes(st)));
+        const statusLabel = statuses.size === ALL_STATUSES.length
+          ? 'tous les statuts'
+          : onlyFullGroups
+            ? fullGroups.map((g) => g.label.toLowerCase()).join(', ')
+            : [...statuses].map((st) => STATUS_LABELS[st] || st).join(', ');
+        const brandLabel = brandId ? brands.find((b) => b.id === brandId)?.name || 'marque choisie' : 'toutes les marques';
+        await generateProductListPdf({
+          rows: rows.map((r) => ({
+            date: new Date(r.created_at).toLocaleDateString('fr-FR'),
+            supplierRef: r.source_reference || '',
+            platform: r.source_platform || '',
+            brand: r.brand?.name || '',
+            title: r.name,
+            condition: formatCondition(r.condition),
+            status: STATUS_LABELS[r.status] || r.status,
+            purchasePrice: r.purchase_price,
+            salePrice: r.sale_price,
+          })),
+          periodLabel,
+          filtersLabel: `${statusLabel} · ${brandLabel}`,
+          fileName: `${fileBase}.pdf`,
+        });
+      } else if (format === 'csv') {
         // Point-virgule + BOM : ouverture directe et correcte dans Excel (version française).
         const csv = XLSX.utils.sheet_to_csv(ws, { FS: ';' });
         const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
@@ -351,7 +382,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
               <div className="text-sm text-gray-700">
                 <span className="mb-1 block font-medium">Format</span>
                 <div className="flex gap-2">
-                  {([['xlsx', 'Excel (.xlsx)'], ['csv', 'CSV']] as const).map(([f, label]) => (
+                  {([['xlsx', 'Excel (.xlsx)'], ['csv', 'CSV'], ['pdf', 'PDF']] as const).map(([f, label]) => (
                     <button
                       key={f}
                       onClick={() => setFormat(f)}
