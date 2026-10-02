@@ -3,7 +3,8 @@ import { X, AlertCircle, Plus, Trash2, Search, Package, ImageOff } from 'lucide-
 import { supabase } from '../../../../lib/supabase';
 import { AuctionItemInput } from '../../../../hooks/useAdminAuctionItems';
 
-const GRADES = ['Grade A', 'Grade B', 'Grade C'];
+const GRADES = ['Grade S', 'Grade A', 'Grade AB', 'Grade B', 'Grade BC', 'Grade C', 'Grade D'];
+const DEFAULT_GRADE = 'Grade B';
 
 interface DraftProduct {
   id: string;
@@ -15,16 +16,21 @@ interface DraftProduct {
   brand: { name: string } | null;
 }
 
-/** Le grade à 3 paliers des enchères est plus grossier que le vocabulaire
- * complet de products.condition (grades lettrés S/A/AB/B/BC/C/D + libellés
- * texte neuf/excellent/very-good/good/fair, voir productGrade.ts) — mappage
- * de repli raisonnable, jamais montré à l'admin comme un choix à valider
- * puisque la fiche liée porte déjà sa vraie description/état complets. */
+/** Grade d'un lot recopié tel quel depuis products.condition (grades lettrés
+ * S/A/AB/B/BC/C/D, voir productGrade.ts) — plus d'arrondi à 3 paliers, qui
+ * affichait par ex. « Grade C » pour une pièce BC. Les anciens libellés texte
+ * (neuf/excellent/very-good/good/fair) sont convertis vers le grade équivalent. */
 const conditionToAuctionGrade = (condition: string | null): string => {
   switch (condition) {
-    case 'S': case 'A': case 'neuf': case 'excellent':
+    case 'S': case 'A': case 'AB': case 'B': case 'BC': case 'C': case 'D':
+      return `Grade ${condition}`;
+    case 'neuf':
+      return 'Grade S';
+    case 'excellent':
       return 'Grade A';
-    case 'BC': case 'C': case 'D': case 'fair':
+    case 'very-good':
+      return 'Grade AB';
+    case 'fair':
       return 'Grade C';
     default:
       return 'Grade B';
@@ -50,7 +56,7 @@ interface AuctionItemFormModalProps {
 export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOpen, onClose, onSubmit, existingProductIds }) => {
   const [title, setTitle] = useState('');
   const [brand, setBrand] = useState('');
-  const [grade, setGrade] = useState(GRADES[1]);
+  const [grade, setGrade] = useState(DEFAULT_GRADE);
   const [imageUrl, setImageUrl] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [startPrice, setStartPrice] = useState('0');
@@ -98,7 +104,7 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
   const reset = () => {
     setTitle('');
     setBrand('');
-    setGrade(GRADES[1]);
+    setGrade(DEFAULT_GRADE);
     setImageUrl('');
     setImages([]);
     setStartPrice('0');
@@ -136,7 +142,7 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
     setLinkedProduct(null);
     setTitle('');
     setBrand('');
-    setGrade(GRADES[1]);
+    setGrade(DEFAULT_GRADE);
     setImages([]);
   };
 
