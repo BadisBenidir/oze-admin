@@ -42,6 +42,12 @@ export interface SourcingMission {
   items_count: number;
   /** Marge brute théorique = advance_amount - allocated_cost_budget (calculée côté client, simple soustraction). */
   gross_margin: number;
+  /** Pièces non annulées ayant un prix revendeur connu (imposé ou calculé) — même règle que la fiche mission. */
+  priced_items_count: number;
+  /** Total facturé au revendeur sur ces pièces (prix imposé, sinon calcul automatique). */
+  billed_amount: number;
+  /** Coût d'achat total des pièces non annulées. */
+  items_cost_amount: number;
   /** Nom de l'entreprise — toujours présent (vue globale et onglet fiche revendeur). */
   company_name: string;
   /** Sous-compte précis ayant demandé la mission, si renseigné (voir 0090). */
@@ -60,10 +66,16 @@ export interface SourcingMission {
  */
 export const getSourcingMissionMetrics = (mission: SourcingMission) => {
   const isCompleted = mission.status === 'completed';
+  // Dès qu'une pièce a un prix revendeur, la marge est celle des pièces
+  // réellement sourcées (facturé - coût d'achat), exactement comme dans la
+  // fiche mission : un prix modifié à la main se répercute ici aussi.
+  const margin = mission.priced_items_count > 0
+    ? mission.billed_amount - mission.items_cost_amount
+    : isCompleted ? mission.advance_amount - mission.consumed_cost_amount : mission.gross_margin;
   return {
     isCompleted,
     remaining: isCompleted ? 0 : mission.remaining_cost_budget,
-    margin: isCompleted ? mission.advance_amount - mission.consumed_cost_amount : mission.gross_margin,
+    margin,
     overBudget: !isCompleted && mission.remaining_cost_budget < 0,
   };
 };
@@ -149,6 +161,45 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
         totalsByMission = new Map((totalsData || []).map((t: Totals) => [t.mission_id, t]));
       }
 
+      // Pièces de chaque mission : marge réelle calculée comme dans la fiche
+      // (SourcingMissionDetailModal) — prix imposé (custom_reseller_price)
+      // sinon floor(coût × (1 + marge par défaut de la mission)).
+      type ItemRow = { mission_id: string; cost_price: number | null; custom_reseller_price: number | null; status: string };
+      const itemsByMission = new Map<string, ItemRow[]>();
+      if (missionIds.length > 0) {
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('b2b_sourcing_items')
+          .select('mission_id, cost_price, custom_reseller_price, status')
+          .in('mission_id', missionIds)
+          .neq('status', 'cancelled');
+        if (itemsError) throw new Error(itemsError.message);
+        for (const item of (itemsData || []) as ItemRow[]) {
+          const list = itemsByMission.get(item.mission_id) || [];
+          list.push(item);
+          itemsByMission.set(item.mission_id, list);
+        }
+      }
+      const pricing = (row: Row) => {
+        const advance = Number(row.advance_amount);
+        const defaultMarginPercent = advance > 0 ? ((advance - Number(row.allocated_cost_budget)) / advance) * 100 : null;
+        let billed = 0;
+        let cost = 0;
+        let priced = 0;
+        for (const item of itemsByMission.get(row.id) || []) {
+          cost += Number(item.cost_price) || 0;
+          const price = item.custom_reseller_price != null
+            ? Number(item.custom_reseller_price)
+            : item.cost_price != null && defaultMarginPercent != null
+              ? Math.floor(Number(item.cost_price) * (1 + defaultMarginPercent / 100))
+              : null;
+          if (price != null) {
+            billed += price;
+            priced += 1;
+          }
+        }
+        return { billed_amount: billed, items_cost_amount: cost, priced_items_count: priced };
+      };
+
       setMissions(
         rows.map((row) => {
           const totals = totalsByMission.get(row.id);
@@ -160,6 +211,7 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
             remaining_cost_budget: totals ? Number(totals.remaining_cost_budget) : Number(row.allocated_cost_budget),
             items_count: totals?.items_count || 0,
             gross_margin: Number(row.advance_amount) - Number(row.allocated_cost_budget),
+            ...pricing(row),
           };
         })
       );
