@@ -16,6 +16,11 @@ const TITLES: Record<string, string> = {
 
 export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMenuToggle }) => {
   const { profile, signOut } = useResellerAuth();
+  // Identité masquée par l'admin (reseller_contacts.hide_identity, 0181) :
+  // ni nom, ni email, ni entreprise dans l'en-tête (captures, partage d'écran).
+  const hidden = Boolean(profile?.hide_identity);
+  const displayName = hidden ? 'Mon compte' : profile ? `${profile.first_name} ${profile.last_name}` : 'Revendeur';
+  const displayEmail = hidden ? '' : profile?.email;
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   return (
@@ -31,7 +36,7 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
             </button>
           </div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">{TITLES[activeTab] || 'Portail Revendeur'}</h1>
-          {profile && (
+          {profile && !profile.hide_identity && (
             <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
               <Building2 className="h-3 w-3" /> {profile.company_name}
             </p>
@@ -47,8 +52,8 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
               <User className="h-4 w-4 text-white" />
             </div>
             <div className="text-sm hidden sm:block">
-              <p className="font-medium text-gray-900">{profile ? `${profile.first_name} ${profile.last_name}` : 'Revendeur'}</p>
-              <p className="text-gray-500">{profile?.email}</p>
+              <p className="font-medium text-gray-900">{displayName}</p>
+              <p className="text-gray-500">{displayEmail}</p>
             </div>
             <ChevronDown className="h-4 w-4 text-gray-400" />
           </button>
@@ -59,8 +64,8 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
                 <div className="py-1">
                   <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-sm font-medium text-gray-900">{profile ? `${profile.first_name} ${profile.last_name}` : 'Revendeur'}</p>
-                    <p className="text-xs text-gray-500">{profile?.email}</p>
+                    <p className="text-sm font-medium text-gray-900">{displayName}</p>
+                    <p className="text-xs text-gray-500">{displayEmail}</p>
                   </div>
                   <button
                     onClick={() => {

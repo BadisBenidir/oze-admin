@@ -14,7 +14,7 @@ import { SourcingMissionsTab } from './b2b/SourcingMissionsTab';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
-  Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, X, Search,
+  Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, X, Search, EyeOff,
 } from 'lucide-react';
 import type { B2BOrder } from '../../hooks/useB2BOrders';
 
@@ -80,7 +80,18 @@ const orderStatusBadge = (status: string) => {
 
 export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack, onResellerUpdated }) => {
   const { isAdmin } = useAdminAuth();
-  const { fetchContacts, resetContactPassword, updateContactEmail, updateContactProfile } = useResellers(false);
+  const { fetchContacts, resetContactPassword, updateContactEmail, updateContactProfile, updateContactHideIdentity } = useResellers(false);
+
+  // Masquer le nom, l'email et l'entreprise dans l'en-tête de l'espace de ce compte (0181).
+  const toggleHideIdentity = async (contact: ResellerContact) => {
+    const next = !contact.hide_identity;
+    setContacts((prev) => prev.map((c) => (c.id === contact.id ? { ...c, hide_identity: next } : c)));
+    const result = await updateContactHideIdentity(contact.id, next);
+    if (!result.success) {
+      setContacts((prev) => prev.map((c) => (c.id === contact.id ? { ...c, hide_identity: !next } : c)));
+      alert(`Modification impossible : ${result.error || 'erreur inconnue'}`);
+    }
+  };
 
   // Copie locale pour refléter immédiatement une édition sans devoir
   // recharger toute la liste des revendeurs depuis le parent.
@@ -426,6 +437,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <Badge variant={c.is_primary ? 'info' : 'default'}>{c.is_primary ? 'Principal' : 'Membre'}</Badge>
                             {legalStatusBadge(c.legal_status)}
+                            {c.hide_identity && <Badge variant="default">Identité masquée</Badge>}
                           </div>
                         </td>
                         <td className="py-3 px-4 md:px-6">
@@ -456,6 +468,13 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                               title="Voir le portefeuille de ce membre"
                             >
                               <Wallet className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => toggleHideIdentity(c)}
+                              className={`p-2 rounded-lg transition-colors ${c.hide_identity ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' : 'text-gray-400 hover:text-amber-600 hover:bg-amber-50'}`}
+                              title={c.hide_identity ? "Afficher à nouveau le nom et l'email dans l'en-tête de son espace" : "Masquer le nom et l'email dans l'en-tête de son espace"}
+                            >
+                              <EyeOff className="h-4 w-4" />
                             </button>
                             <button
                               onClick={() => openResetModal(c)}

@@ -67,6 +67,8 @@ export interface ResellerContact {
   /** Accès en lecture seule aux drops encore planifiés (0129) — jamais un
    * droit d'achat, voir b2b_catalog / cart_items_guard_purchasable. */
   can_preview_drops: boolean;
+  /** Nom, email et entreprise masqués dans l'en-tête de l'espace revendeur (0181). */
+  hide_identity: boolean;
   created_at: string;
   first_name: string;
   last_name: string;
@@ -128,6 +130,7 @@ interface UseResellersResult {
   updateContactEmail: (profileId: string, newEmail: string) => Promise<{ success: boolean; error?: string }>;
   updateContactProfile: (profileId: string, data: ContactProfileUpdate) => Promise<{ success: boolean; error?: string }>;
   updateContactCanPreviewDrops: (contactId: string, value: boolean) => Promise<{ success: boolean; error?: string }>;
+  updateContactHideIdentity: (contactId: string, value: boolean) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useResellers = (isAuthenticated: boolean = false): UseResellersResult => {
@@ -266,7 +269,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     const { data, error: fetchError } = await supabase
       .from('reseller_contacts')
       .select(`
-        id, reseller_id, profile_id, is_primary, can_preview_drops, created_at,
+        id, reseller_id, profile_id, is_primary, can_preview_drops, hide_identity, created_at,
         profiles!inner(
           first_name, last_name, email, phone, address, city, postal_code, country, wallet_balance,
           legal_status, legal_entity_name, siret, vat_number, legal_form, legal_address, legal_city, legal_postal_code, legal_country
@@ -285,6 +288,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       profile_id: string;
       is_primary: boolean;
       can_preview_drops: boolean;
+      hide_identity: boolean;
       created_at: string;
       profiles: {
         first_name: string; last_name: string; email: string; wallet_balance: number;
@@ -300,6 +304,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       profile_id: c.profile_id,
       is_primary: c.is_primary,
       can_preview_drops: c.can_preview_drops,
+      hide_identity: Boolean(c.hide_identity),
       created_at: c.created_at,
       first_name: c.profiles.first_name,
       last_name: c.profiles.last_name,
@@ -397,6 +402,13 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     }
   };
 
+  /** Masque / affiche le nom, l'email et l'entreprise dans l'en-tête de l'espace revendeur (0181). */
+  const updateContactHideIdentity = async (contactId: string, value: boolean): Promise<{ success: boolean; error?: string }> => {
+    const { error: updateError } = await supabase.from('reseller_contacts').update({ hide_identity: value }).eq('id', contactId);
+    if (updateError) return { success: false, error: updateError.message };
+    return { success: true };
+  };
+
   const removeContact = async (contactId: string): Promise<{ success: boolean; error?: string }> => {
     const { error } = await invokeEdgeFunction('delete-reseller-contact', { contact_id: contactId });
     if (error) {
@@ -431,5 +443,6 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     updateContactEmail,
     updateContactProfile,
     updateContactCanPreviewDrops,
+    updateContactHideIdentity,
   };
 };

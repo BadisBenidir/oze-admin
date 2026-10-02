@@ -19,6 +19,8 @@ export interface ResellerProfile {
   reseller_status: 'pending' | 'active' | 'suspended' | 'deleted' | 'discovery'
   /** Contact principal de l'entreprise : seul rôle autorisé à gérer les autres comptes de son équipe */
   is_primary: boolean
+  /** Nom, email et entreprise masqués dans l'en-tête (réglé par l'admin, 0181). */
+  hide_identity: boolean
   /**
    * Coordonnées INDIVIDUELLES de ce contact (saisies à l'activation du
    * compte via /accept-invite, modifiables ensuite dans "Mon profil") —
@@ -119,7 +121,7 @@ export const useResellerAuth = () => {
           legal_address, legal_city, legal_postal_code, legal_country,
           terms_accepted_at, terms_version,
           reseller_contacts!inner(
-            reseller_id, is_primary,
+            reseller_id, is_primary, hide_identity,
             resellers!inner(company_name, status)
           )
         `)
@@ -178,6 +180,7 @@ export const useResellerAuth = () => {
           company_name: reseller.company_name,
           reseller_status: reseller.status,
           is_primary: Boolean(contact.is_primary),
+          hide_identity: Boolean(contact.hide_identity),
           phone: data.phone || null,
           address: data.address || null,
           postal_code: data.postal_code || null,
