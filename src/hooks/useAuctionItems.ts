@@ -40,7 +40,16 @@ export interface AuctionItem {
   material?: string | null;
   colors?: string[] | null;
   serial_number?: string | null;
+  /** Ordre d'affichage choisi par l'admin (0180) ; absent avant la migration. */
+  position?: number | null;
+  created_at?: string;
 }
+
+/** Ordre d'affichage : position choisie par l'admin, puis date d'ajout. */
+export const sortAuctionItems = <T extends { position?: number | null; created_at?: string }>(list: T[]): T[] =>
+  [...list].sort((a, b) =>
+    (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER)
+    || (a.created_at || '').localeCompare(b.created_at || ''));
 
 /**
  * Session d'enchères en cours ou à venir + ses lots, avec mise à jour
@@ -104,7 +113,7 @@ export const useAuctionItems = (enabled: boolean, profileId?: string | null) => 
         .eq('session_id', sessionData.id)
         .order('created_at', { ascending: true });
       if (itemsError) throw new Error(itemsError.message);
-      setItems(itemsData || []);
+      setItems(sortAuctionItems(itemsData || []));
 
       if (profileId) {
         const { data: bidsData, error: bidsError } = await supabase

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Gavel, Plus, AlertCircle, Trophy, Radio, CheckCircle2, Trash2, ImageOff,
-  Ticket, Receipt, Clock, Zap, TrendingUp, Pencil, Ban, Link2,
+  Ticket, Receipt, Clock, Zap, TrendingUp, Pencil, Ban, Link2, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
@@ -71,7 +71,12 @@ export const AuctionsAdmin: React.FC = () => {
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [previewLinksSession, setPreviewLinksSession] = useState<AuctionSession | null>(null);
 
-  const { items, loading: itemsLoading, error: itemsError, addItem, removeItem, generateOrder, cancelItem } = useAdminAuctionItems(selectedSessionId);
+  const { items, loading: itemsLoading, error: itemsError, addItem, removeItem, generateOrder, cancelItem, moveItem } = useAdminAuctionItems(selectedSessionId);
+
+  const handleMoveItem = async (id: string, direction: -1 | 1) => {
+    const result = await moveItem(id, direction);
+    if (!result.success) alert(`Impossible de changer l'ordre : ${result.error || 'erreur inconnue'}`);
+  };
   const [cancellingItem, setCancellingItem] = useState<AdminAuctionItem | null>(null);
   const countedItems = useMemo(() => items.filter((i) => i.status !== 'cancelled'), [items]);
   const { grants, loading: grantsLoading, error: grantsError, grantAccess } = useAdminAuctionAccess(isAdmin);
@@ -305,13 +310,35 @@ export const AuctionsAdmin: React.FC = () => {
                           ) : items.length === 0 ? (
                             <tr><td colSpan={8} className="py-6 text-center text-sm text-gray-500">Aucune pièce sur cette session.</td></tr>
                           ) : (
-                            items.map((item) => {
+                            items.map((item, index) => {
                               const extended = new Date(item.ends_at).getTime() > new Date(selectedSession.ends_at).getTime();
                               const profit = item.product_purchase_price != null ? item.current_price - item.product_purchase_price : null;
                               return (
                                 <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
                                   <td className="py-2.5 px-3">
                                     <div className="flex items-center gap-2.5">
+                                      {/* Ordre d'affichage côté revendeurs (0180) */}
+                                      <div className="flex flex-col items-center flex-shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMoveItem(item.id, -1)}
+                                          disabled={index === 0}
+                                          title="Monter"
+                                          className="p-0.5 text-gray-400 hover:text-gray-900 disabled:opacity-20 disabled:cursor-not-allowed"
+                                        >
+                                          <ChevronUp className="h-3.5 w-3.5" />
+                                        </button>
+                                        <span className="text-[10px] font-medium text-gray-400 tabular-nums">{index + 1}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMoveItem(item.id, 1)}
+                                          disabled={index === items.length - 1}
+                                          title="Descendre"
+                                          className="p-0.5 text-gray-400 hover:text-gray-900 disabled:opacity-20 disabled:cursor-not-allowed"
+                                        >
+                                          <ChevronDown className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
                                       <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                                         {item.images?.[0] ? <img src={item.images[0]} alt="" className="h-full w-full object-cover" /> : <ImageOff className="h-4 w-4 text-gray-400" />}
                                       </div>

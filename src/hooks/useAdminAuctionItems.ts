@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { sortAuctionItems } from './useAuctionItems';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 
 export interface AdminAuctionItem {
@@ -23,6 +24,8 @@ export interface AdminAuctionItem {
   product_name: string | null;
   product_purchase_price: number | null;
   created_at: string;
+  /** Ordre d'affichage dans la session (0180). */
+  position?: number | null;
   order_id: string | null;
   payment_deadline: string | null;
   order_payment_status: 'pending' | 'paid' | null;
@@ -110,7 +113,7 @@ export const useAdminAuctionItems = (sessionId: string | null) => {
         .eq('session_id', sessionId)
         .order('created_at', { ascending: true });
       if (fetchError) throw new Error(fetchError.message);
-      setItems(((data || []) as unknown as Row[]).map(mapRow));
+      setItems(sortAuctionItems(((data || []) as unknown as Row[]).map(mapRow)));
     } catch (err) {
       console.error('Erreur lors du chargement des lots:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
@@ -212,5 +215,27 @@ export const useAdminAuctionItems = (sessionId: string | null) => {
     return { success: true, ...(data || {}) };
   };
 
-  return { items, loading, error, refresh: fetchItems, addItem, removeItem, updateStartPrice, linkProduct, generateOrder, cancelItem };
+  /** Monte / descend un lot d'un rang dans l'ordre d'affichage (positions renumérotées 1..n). */
+  const moveItem = async (id: string, direction: -1 | 1): Promise<{ success: boolean; error?: string }> => {
+    const ordered = sortAuctionItems(items);
+    const index = ordered.findIndex((i) => i.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= ordered.length) return { success: true };
+    const next = [...ordered];
+    [next[index], next[target]] = [next[target], next[index]];
+    setItems(next.map((item, i) => ({ ...item, position: i + 1 })));
+    const changed = next
+      .map((item, i) => ({ id: item.id, position: i + 1, before: item.position }))
+      .filter((c) => c.position !== c.before);
+    for (const c of changed) {
+      const { error: updateError } = await supabase.from('auction_items').update({ position: c.position }).eq('id', c.id);
+      if (updateError) {
+        await fetchItems();
+        return { success: false, error: updateError.message };
+      }
+    }
+    return { success: true };
+  };
+
+  return { items, loading, error, refresh: fetchItems, addItem, removeItem, updateStartPrice, linkProduct, generateOrder, cancelItem, moveItem };
 };
