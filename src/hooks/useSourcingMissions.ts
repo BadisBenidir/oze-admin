@@ -72,11 +72,20 @@ export const getSourcingMissionMetrics = (mission: SourcingMission) => {
   const margin = mission.priced_items_count > 0
     ? mission.billed_amount - mission.items_cost_amount
     : isCompleted ? mission.advance_amount - mission.consumed_cost_amount : mission.gross_margin;
+  // Enveloppe d'achat effective : l'avance moins la marge réellement prise.
+  // Une marge réduite (prix revendeur baissés) rend d'autant plus d'enveloppe
+  // au client — ex. avance 5000 €, marge 735,68 € → enveloppe 4264,32 €.
+  // (Le prix calculé automatiquement des pièces garde, lui, le barème
+  // d'origine allocated_cost_budget, pour ne pas varier en cascade.)
+  const hasPricedItems = mission.priced_items_count > 0;
+  const envelope = hasPricedItems ? mission.advance_amount - margin : mission.allocated_cost_budget;
+  const remaining = isCompleted ? 0 : hasPricedItems ? envelope - mission.items_cost_amount : mission.remaining_cost_budget;
   return {
     isCompleted,
-    remaining: isCompleted ? 0 : mission.remaining_cost_budget,
+    envelope,
+    remaining,
     margin,
-    overBudget: !isCompleted && mission.remaining_cost_budget < 0,
+    overBudget: !isCompleted && remaining < 0,
   };
 };
 

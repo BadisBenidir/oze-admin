@@ -63,14 +63,14 @@ export const B2BSourcing: React.FC = () => {
   // Totaux hors missions annulées — jamais réellement disponibles à consommer.
   const activeMissions = missions.filter((m) => m.status !== 'cancelled');
   const totalAdvance = activeMissions.reduce((sum, m) => sum + m.advance_amount, 0);
-  const totalCostBudget = activeMissions.reduce((sum, m) => sum + m.allocated_cost_budget, 0);
+  const totalCostBudget = activeMissions.reduce((sum, m) => sum + getSourcingMissionMetrics(m).envelope, 0);
   const totalConsumed = activeMissions.reduce((sum, m) => sum + m.consumed_cost_amount, 0);
   // Une mission terminée n'a plus d'enveloppe "restante" à engager — seules
   // les missions encore actives comptent pour ce total (voir
   // getSourcingMissionMetrics).
   const totalRemaining = activeMissions
     .filter((m) => m.status === 'active')
-    .reduce((sum, m) => sum + m.remaining_cost_budget, 0);
+    .reduce((sum, m) => sum + getSourcingMissionMetrics(m).remaining, 0);
   // Marge réelle pour les missions terminées (avance - dépense réelle),
   // marge théorique pour les missions encore actives (avance - enveloppe).
   const totalMargin = activeMissions.reduce((sum, m) => sum + getSourcingMissionMetrics(m).margin, 0);
@@ -212,7 +212,7 @@ export const B2BSourcing: React.FC = () => {
                     </tr>
                   ) : (
                     filteredMissions.map((mission) => {
-                      const { remaining, margin, overBudget } = getSourcingMissionMetrics(mission);
+                      const { remaining, margin, overBudget, envelope } = getSourcingMissionMetrics(mission);
                       return (
                         <tr
                           key={mission.id}
@@ -234,7 +234,7 @@ export const B2BSourcing: React.FC = () => {
                           </td>
                           <td className="py-2.5 px-3 text-right text-sm text-gray-900 tabular-nums whitespace-nowrap">{mission.advance_amount.toFixed(0)} €</td>
                           <td className="py-2.5 px-3 hidden md:table-cell text-right text-sm text-gray-600 tabular-nums whitespace-nowrap">
-                            {mission.consumed_cost_amount.toFixed(0)} / {mission.allocated_cost_budget.toFixed(0)} €
+                            {mission.consumed_cost_amount.toFixed(0)} / {envelope.toFixed(0)} €
                           </td>
                           <td className={`py-2.5 px-3 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${overBudget ? 'text-red-600' : 'text-gray-900'}`}>
                             {remaining.toFixed(0)} €

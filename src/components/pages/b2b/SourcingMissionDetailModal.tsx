@@ -144,6 +144,9 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     ? (mission.advance_amount > 0 ? Math.min(totalBilled / mission.advance_amount, 1) : 0)
     : (mission.allocated_cost_budget > 0 ? Math.min(totalSpent / mission.allocated_cost_budget, 1) : 0);
   const overBudget = remainingAfter < 0;
+  // Enveloppe d'achat effective (même règle que getSourcingMissionMetrics) :
+  // l'avance moins la marge réellement prise sur les pièces.
+  const effectiveEnvelope = hasPricedItems ? mission.advance_amount - marginReal : mission.allocated_cost_budget;
   // La marge "forfait" n'est vraie que si l'avance est conservée en entier.
   const flatMargin = mission.advance_amount - totalSpent;
   const flatMarginPercent = mission.advance_amount > 0 ? (flatMargin / mission.advance_amount) * 100 : null;
@@ -336,7 +339,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Enveloppe d'achat</p>
-                  <p className="text-sm font-semibold text-gray-900">{mission.allocated_cost_budget.toFixed(2)} €</p>
+                  <p className="text-sm font-semibold text-gray-900">{effectiveEnvelope.toFixed(2)} €</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Dépensé (achats)</p>
@@ -591,7 +594,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
         onClose={() => setShowAddModal(false)}
         onSubmit={handleAddItem}
         onSubmitBatch={handleAddItems}
-        remainingCostBudget={mission.remaining_cost_budget}
+        remainingCostBudget={hasPricedItems ? effectiveEnvelope - totalSpent : mission.remaining_cost_budget}
         existingProductIds={
           new Set(activeItems.filter((i) => i.product_id).map((i) => i.product_id as string))
         }

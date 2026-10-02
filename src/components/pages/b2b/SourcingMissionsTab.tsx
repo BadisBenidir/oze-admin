@@ -80,8 +80,8 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
       ) : (
         <div className="space-y-3">
           {missions.map((mission) => {
-            const consumedRatio = mission.allocated_cost_budget > 0 ? Math.min(mission.consumed_cost_amount / mission.allocated_cost_budget, 1) : 0;
-            const { margin, overBudget } = getSourcingMissionMetrics(mission);
+            const { margin, overBudget, envelope } = getSourcingMissionMetrics(mission);
+            const consumedRatio = envelope > 0 ? Math.min(mission.consumed_cost_amount / envelope, 1) : 0;
             return (
               <Card key={mission.id} hover onClick={() => setViewingMission(mission)} className="cursor-pointer">
                 <CardContent className="p-4">
@@ -108,7 +108,7 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
                     />
                   </div>
                   <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>{mission.consumed_cost_amount.toFixed(2)} € / {mission.allocated_cost_budget.toFixed(2)} € sourcés</span>
+                    <span>{mission.consumed_cost_amount.toFixed(2)} € / {envelope.toFixed(2)} € sourcés</span>
                     <span className={overBudget ? 'text-red-600 font-medium' : margin < 0 ? 'text-red-600 font-medium' : ''}>
                       Marge {margin.toFixed(2)} €
                     </span>
