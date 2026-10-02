@@ -438,6 +438,9 @@ Deno.serve(async (req: Request) => {
       },
       success_url: `${origin}/?b2b_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?b2b_checkout=cancel`,
+      // 30 min (minimum Stripe) : en paiement mixte, le solde réservé est
+      // rendu au plus tard à l'expiration (webhook checkout.session.expired).
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     });
 
     // Paiement mixte : débite le solde MAINTENANT que la session existe (le

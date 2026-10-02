@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useWallet, WalletTransaction } from '../../../hooks/useWallet';
+import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 import { Wallet, PlusCircle, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, AlertCircle, Loader2, Gift, Sparkles } from 'lucide-react';
 
 const PRESET_AMOUNTS = [100, 500];
@@ -24,6 +25,27 @@ const isDebit = (tx: WalletTransaction) => tx.type === 'achat' || (tx.type === '
 export const WalletPage: React.FC = () => {
   const { profile } = useResellerAuth();
   const { balance, error: walletError, refresh: refreshWallet, transactions, loading, topUp, pendingGiftCount, loyaltyProgress } = useWallet(profile?.id);
+
+  // Solde réservé par un paiement mixte non terminé (débit « en attente »).
+  const reservedAmount = transactions
+    .filter((tx) => tx.type === 'achat' && tx.status === 'pending')
+    .reduce((sum, tx) => sum + Math.abs(Number(tx.amount) || 0), 0);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseMessage, setReleaseMessage] = useState<string | null>(null);
+  const handleRelease = async () => {
+    setReleasing(true);
+    setReleaseMessage(null);
+    const { data, error: err } = await invokeEdgeFunction<{ released: number; still_processing: number }>('release-pending-wallet-debits', {});
+    setReleasing(false);
+    if (err) {
+      setReleaseMessage(`Impossible pour le moment : ${err}`);
+      return;
+    }
+    if (data?.still_processing) {
+      setReleaseMessage('Ce paiement vient d\'être validé : il est en cours de traitement.');
+    }
+    refreshWallet();
+  };
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +97,28 @@ export const WalletPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Paiement mixte (solde + carte) commencé mais pas terminé : la part du
+          solde est réservée jusqu'à la fin du paiement carte. */}
+      {reservedAmount > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">
+            {reservedAmount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € réservés pour un paiement non terminé
+          </p>
+          <p className="mt-1 text-sm text-amber-800">
+            Vous avez commencé un paiement « solde + carte » sans le finaliser. Ce montant vous est rendu automatiquement
+            sous 30 minutes, ou tout de suite ci-dessous (le paiement en cours sera annulé).
+          </p>
+          {releaseMessage && <p className="mt-2 text-sm font-medium text-amber-900">{releaseMessage}</p>}
+          <button
+            onClick={handleRelease}
+            disabled={releasing}
+            className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+          >
+            {releasing ? 'Un instant…' : 'Annuler ce paiement et récupérer mon solde'}
+          </button>
+        </div>
+      )}
 
       {pendingGiftCount > 0 && (
         <div className="w-full rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-yellow-50 px-4 py-4 flex items-center gap-3">

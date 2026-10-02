@@ -10,6 +10,7 @@ import { ResellerDetail } from './ResellerDetail';
 import { ResellerFormModal } from './ResellerFormModal';
 import { InviteLinkPanel } from '../reseller/InviteLinkPanel';
 import { SubscriptionStats } from './b2b/SubscriptionStats';
+import { PendingWalletDebitsButton } from './b2b/PendingWalletDebitsButton';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   Building2,
@@ -295,6 +296,7 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
         </div>
       </div>
 
+      {!isSubscribers && <PendingWalletDebitsButton />}
       {isSubscribers && !loading && <SubscriptionStats subscribers={scopedResellers} />}
 
       {/* Filtres */}

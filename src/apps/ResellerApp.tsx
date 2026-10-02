@@ -23,6 +23,7 @@ import { Auctions } from '../components/pages/reseller/Auctions';
 import { PlanLockedScreen } from '../components/pages/reseller/Subscription';
 import { useResellerPresenceTracking } from '../hooks/useResellerPresenceTracking';
 import { Terms } from '../components/pages/reseller/Terms';
+import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 import { ShoppingCart, Wallet, X } from 'lucide-react';
 
 // Deux routes "réelles" (URL adressables) hors du système d'onglets : la
@@ -137,6 +138,11 @@ function ResellerApp() {
 
       if (status === 'success') {
         setPendingCartClear(true);
+      }
+      // Retour arrière depuis Stripe : en paiement mixte, le solde réservé
+      // pour ce paiement est rendu tout de suite (session Stripe expirée).
+      if (status === 'cancel') {
+        invokeEdgeFunction('release-pending-wallet-debits', {}).then(() => wallet.refresh());
       }
     }
 
