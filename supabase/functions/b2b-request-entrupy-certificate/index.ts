@@ -74,7 +74,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: items, error: itemsError } = await adminClient
       .from('order_items')
-      .select('id, product_snapshot, entrupy_requested, fulfillment_status, order:orders!inner(reseller_id, order_channel, placed_by_profile_id)')
+      .select('id, product_snapshot, entrupy_requested, fulfillment_status, order:orders!inner(reseller_id, order_channel, placed_by_profile_id, payment_status)')
       .in('id', item_ids)
       .eq('status', 'active');
     if (itemsError) return json({ error: itemsError.message }, 500);
@@ -84,11 +84,14 @@ Deno.serve(async (req: Request) => {
         it.entrupy_requested === false &&
         !['delivery_requested', 'shipped'].includes(it.fulfillment_status) &&
         it.order?.order_channel === 'b2b' &&
+        // Commande réglée uniquement : sur un lot d'enchère pas encore payé,
+        // le certificat (payé à part) serait aussi ajouté au reste à payer.
+        it.order?.payment_status === 'paid' &&
         it.order?.reseller_id === resellerId &&
         (it.order?.placed_by_profile_id === user.id || isPrimary)
     );
     if (eligible.length !== item_ids.length) {
-      return json({ error: 'Certains articles ne sont plus éligibles pour un ajout de certificat Entrupy (déjà certifiés ou livraison déjà demandée)' }, 409);
+      return json({ error: 'Certains articles ne sont pas éligibles à un certificat Entrupy (commande pas encore réglée, déjà certifiés ou livraison déjà demandée)' }, 409);
     }
 
     const cost = eligible.length * ENTRUPY_CERTIFICATE_PRICE;

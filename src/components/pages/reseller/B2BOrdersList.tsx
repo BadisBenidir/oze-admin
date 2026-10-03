@@ -77,9 +77,11 @@ const shipmentStatusBadge = (status: ShipmentSummary['status']) => {
 
 /** Un certificat ne peut plus être ajouté dès que la livraison de l'article a
  * été demandée — au-delà, le colis est déjà en préparation/parti et l'ajout
- * n'a plus de sens opérationnel. */
-const canRequestEntrupy = (item: MyB2BOrderItem) =>
-  item.status === 'active' && !item.entrupy_requested &&
+ * n'a plus de sens opérationnel. Et jamais sur une commande pas encore payée
+ * (lot d'enchère à régler) : le certificat, payé à part, s'ajouterait au
+ * montant restant à payer de la commande. */
+const canRequestEntrupy = (item: MyB2BOrderItem, orderPaid: boolean) =>
+  orderPaid && item.status === 'active' && !item.entrupy_requested &&
   !['delivery_requested', 'label_created', 'shipped', 'delivered'].includes(item.fulfillment_status);
 
 // `orders.shipping_address` est stocké dans la forme assemblée par
@@ -480,7 +482,7 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                         )}
                                       </div>
                                     )}
-                                    {canRequestEntrupy(item) && (
+                                    {canRequestEntrupy(item, viewingOrder.payment_status === 'paid') && (
                                       <div className="mt-1.5">
                                         <button
                                           type="button"
