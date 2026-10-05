@@ -26,9 +26,11 @@ import {
   AlertTriangle,
   ZoomIn,
   Handshake,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Download
 } from 'lucide-react';
 import { ProductPosterModal } from '../products/ProductPosterModal';
+import { downloadProductPhotos } from '../../utils/downloadProductPhotos';
 
 interface ProductDetailProps {
   productId: string;
@@ -49,6 +51,24 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
   const [showDirectSaleModal, setShowDirectSaleModal] = useState(false);
   const [statusUpdateSuccess, setStatusUpdateSuccess] = useState(false);
   const [showPoster, setShowPoster] = useState(false);
+  // Téléchargement de toutes les photos en ZIP : progression « 3/16 » pendant la préparation.
+  const [photosProgress, setPhotosProgress] = useState<string | null>(null);
+  const handleDownloadPhotos = async () => {
+    if (!product) return;
+    setPhotosProgress('0/…');
+    try {
+      const result = await downloadProductPhotos({
+        images: product.images,
+        defectImages: product.defect_images || [],
+        baseName: product.reference || product.product_code || product.name,
+        onProgress: (done, total) => setPhotosProgress(`${done}/${total}`),
+      });
+      if (result.downloaded === 0) alert("Aucune photo n'a pu être téléchargée.");
+      else if (result.failed > 0) alert(`${result.failed} photo(s) n'ont pas pu être téléchargées ; les autres sont dans le fichier.`);
+    } finally {
+      setPhotosProgress(null);
+    }
+  };
 
   // Validation par scan (mise en ligne après lecture du code-barres)
   const [showScanModal, setShowScanModal] = useState(false);
@@ -303,6 +323,17 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
               <ImageIcon className="h-4 w-4 mr-2" />
               Créer une affiche
             </button>
+            {(product.images.length > 0 || (product.defect_images?.length ?? 0) > 0) && (
+              <button
+                onClick={handleDownloadPhotos}
+                disabled={photosProgress !== null}
+                title="Toutes les photos de l'article (et des défauts) dans un fichier ZIP"
+                className="flex items-center justify-center px-4 py-3 md:py-2 text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors touch-manipulation text-sm disabled:opacity-60"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {photosProgress ? `Préparation ${photosProgress}…` : 'Télécharger les photos'}
+              </button>
+            )}
             {onEdit && (
               <button
                 onClick={() => onEdit(productId)}
