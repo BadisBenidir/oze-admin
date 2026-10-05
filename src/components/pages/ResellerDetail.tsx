@@ -13,6 +13,7 @@ import { ResellerContactEditModal } from './b2b/ResellerContactEditModal';
 import { SourcingMissionsTab } from './b2b/SourcingMissionsTab';
 import { SubscriberOverview } from './b2b/SubscriberOverview';
 import { generateSecurePassword } from '../../utils/generatePassword';
+import { whatsappUrl } from '../../utils/whatsapp';
 import {
   ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
   Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, X, Search, EyeOff, Phone, CreditCard,
@@ -277,7 +278,10 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
           )}
           {currentReseller.contact_phone && (
             <a
-              href={`tel:${currentReseller.contact_phone.replace(/[^0-9+]/g, '')}`}
+              href={whatsappUrl(currentReseller.contact_phone) || `tel:${currentReseller.contact_phone}`}
+              target="_blank"
+              rel="noreferrer"
+              title="Ouvrir la discussion WhatsApp"
               className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1 mt-0.5"
             >
               <Phone className="h-3.5 w-3.5" /> {currentReseller.contact_phone}

@@ -12,6 +12,7 @@ import { InviteLinkPanel } from '../reseller/InviteLinkPanel';
 import { SubscriptionStats } from './b2b/SubscriptionStats';
 import { PendingWalletDebitsButton } from './b2b/PendingWalletDebitsButton';
 import { generateSecurePassword } from '../../utils/generatePassword';
+import { whatsappUrl } from '../../utils/whatsapp';
 import {
   Building2,
   Plus,
@@ -399,10 +400,12 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
                               )}
                               {reseller.contact_phone && (
                                 <a
-                                  href={`tel:${reseller.contact_phone.replace(/[^\d+]/g, '')}`}
+                                  href={whatsappUrl(reseller.contact_phone) || `tel:${reseller.contact_phone}`}
+                                  target="_blank"
+                                  rel="noreferrer"
                                   onClick={(e) => e.stopPropagation()}
                                   className="text-xs md:text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1"
-                                  title="Appeler"
+                                  title="Ouvrir la discussion WhatsApp"
                                 >
                                   <Phone className="h-3 w-3" /> {reseller.contact_phone}
                                 </a>

@@ -6,6 +6,7 @@ import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import type { Reseller, ResellerContact } from '../../../hooks/useResellers';
 import { PERIOD, PLANS } from '../../landing/plans';
+import { whatsappUrl } from '../../../utils/whatsapp';
 
 /**
  * Onglet « Profil & abonnement » de la fiche d'un abonné Club B2B (compte
@@ -74,7 +75,7 @@ export const SubscriberOverview: React.FC<SubscriberOverviewProps> = ({
                 {email ? <a href={`mailto:${email}`} className="hover:underline">{email}</a> : '—'}
               </Row>
               <Row icon={Phone} label="Téléphone">
-                {phone ? <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="hover:underline">{phone}</a> : '—'}
+                {phone ? <a href={whatsappUrl(phone) || `tel:${phone}`} target="_blank" rel="noreferrer" title="Ouvrir la discussion WhatsApp" className="hover:underline">{phone}</a> : '—'}
               </Row>
               <Row icon={MapPin} label="Adresse de facturation">{billing || '—'}</Row>
               <Row icon={Scale} label="Statut juridique">
