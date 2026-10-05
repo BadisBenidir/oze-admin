@@ -11,10 +11,11 @@ import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { WalletAdjustModal } from './b2b/WalletAdjustModal';
 import { ResellerContactEditModal } from './b2b/ResellerContactEditModal';
 import { SourcingMissionsTab } from './b2b/SourcingMissionsTab';
+import { SubscriberOverview } from './b2b/SubscriberOverview';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import {
   ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
-  Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, X, Search, EyeOff,
+  Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, X, Search, EyeOff, Phone, CreditCard,
 } from 'lucide-react';
 import type { B2BOrder } from '../../hooks/useB2BOrders';
 
@@ -214,6 +215,9 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   };
 
   const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
+  // Abonné Club B2B (0167) : un seul compte, jamais de sous-comptes — fiche dédiée.
+  const isSubscriber = currentReseller.account_type === 'subscriber';
+  const subscriberContact = contacts[0] || null;
 
   const openResetModal = (contact: ResellerContact) => {
     setResettingContact(contact);
@@ -260,7 +264,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
         className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-6 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Retour aux revendeurs
+        {isSubscriber ? 'Retour aux abonnés' : 'Retour aux revendeurs'}
       </button>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
@@ -270,6 +274,14 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
             <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
               <Mail className="h-3.5 w-3.5" /> {currentReseller.contact_email}
             </p>
+          )}
+          {currentReseller.contact_phone && (
+            <a
+              href={`tel:${currentReseller.contact_phone.replace(/[^0-9+]/g, '')}`}
+              className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1 mt-0.5"
+            >
+              <Phone className="h-3.5 w-3.5" /> {currentReseller.contact_phone}
+            </a>
           )}
         </div>
         <div className="flex items-center gap-3">
@@ -285,18 +297,40 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-              <Users className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Sous-comptes</p>
-              <p className="text-xl font-semibold text-gray-900">{contactsLoading ? '—' : contacts.length}</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isSubscriber ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4 mb-6`}>
+        {isSubscriber ? (
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <CreditCard className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Abonnement</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {currentReseller.subscription_plan === 'revendeur' ? 'Pass Revendeur' : currentReseller.subscription_plan === 'drops' ? 'Pass Drops' : '—'}
+                </p>
+                {currentReseller.subscription_current_period_end && (
+                  <p className="text-xs text-gray-500">
+                    {currentReseller.subscription_cancel_at_period_end ? 'Fin le ' : 'Renouvellement le '}
+                    {new Date(currentReseller.subscription_current_period_end).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <Users className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Sous-comptes</p>
+                <p className="text-xl font-semibold text-gray-900">{contactsLoading ? '—' : contacts.length}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
@@ -319,6 +353,19 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
             </div>
           </CardContent>
         </Card>
+        {isSubscriber && (
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
+                <Wallet className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Solde portefeuille</p>
+                <p className="text-xl font-semibold text-gray-900">{subscriberContact ? `${subscriberContact.wallet_balance.toFixed(2)} €` : '—'}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Tabs */}
@@ -329,7 +376,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
             activeTab === 'team' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          Structure & Sous-comptes
+          {isSubscriber ? 'Profil & abonnement' : 'Structure & Sous-comptes'}
         </button>
         <button
           onClick={() => setActiveTab('orders')}
@@ -357,7 +404,19 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
         </button>
       </div>
 
-      {activeTab === 'team' && (
+      {activeTab === 'team' && isSubscriber && (
+        <SubscriberOverview
+          reseller={currentReseller}
+          contact={subscriberContact}
+          onEdit={() => subscriberContact && setEditingContact(subscriberContact)}
+          onViewOrders={() => setActiveTab('orders')}
+          onViewWallet={() => { if (subscriberContact) setSelectedContactId(subscriberContact.id); setActiveTab('wallet'); }}
+          onToggleHideIdentity={() => subscriberContact && toggleHideIdentity(subscriberContact)}
+          onResetPassword={() => subscriberContact && openResetModal(subscriberContact)}
+        />
+      )}
+
+      {activeTab === 'team' && !isSubscriber && (
         <Card>
           <CardContent className="p-0">
             {contactsError && (
