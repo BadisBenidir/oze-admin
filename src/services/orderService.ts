@@ -301,6 +301,13 @@ class OrderService {
       .not('paid_at', 'is', null);
     const sourcingRevenue = (closedMissions || []).reduce((sum, m) => sum + Number(m.advance_amount || 0), 0);
 
+    // Abonnements Club B2B payés (0185), comme en Comptabilité. Lecture
+    // tolérante : table absente avant la migration.
+    const { data: subscriptionPayments } = await supabase
+      .from('b2b_subscription_payments')
+      .select('amount');
+    const subscriptionRevenue = (subscriptionPayments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
         // ... après avoir récupéré les orders
     const { count: productCount } = await supabase
       .from('products')
@@ -318,8 +325,8 @@ class OrderService {
     const webRevenue = ordersRevenue;
     const externalRevenue = 0;
     // CA global = commandes (web + B2B) + ventes Live enchères (hors site)
-    // + missions de sourcing clôturées sans commande.
-    const totalRevenue = ordersRevenue + auctionRevenue + sourcingRevenue;
+    // + missions de sourcing clôturées sans commande + abonnements Club B2B.
+    const totalRevenue = ordersRevenue + auctionRevenue + sourcingRevenue + subscriptionRevenue;
 
     const averageOrderValue = totalOrders > 0 ? ordersRevenue / totalOrders : 0;
 

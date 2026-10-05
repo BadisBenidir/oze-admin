@@ -54,11 +54,19 @@ export interface AccountingGiftReward {
   created_at: string;
 }
 
+/** Paiement d'un abonnement Club B2B (pass mensuel, 0185) — 100 % de marge. */
+export interface AccountingSubscriptionPayment {
+  amount: number;
+  paid_at: string;
+  plan: string | null;
+}
+
 export interface AccountingRawData {
   orders: AccountingOrder[];
   liveSales: AccountingLiveSale[];
   sourcingAdvances: AccountingSourcingAdvance[];
   giftRewards: AccountingGiftReward[];
+  subscriptionPayments: AccountingSubscriptionPayment[];
 }
 
 /** Prédicat "encaissé" partagé avec useSalesJournalExport.ts / Accounting.tsx
@@ -80,7 +88,7 @@ export const isOrderPaid = (o: Pick<AccountingOrder, 'payment_status' | 'status'
  * en mémoire plutôt que de refaire une requête par sélection de période ou
  * de comparaison, ce qui rend le changement de période instantané. */
 export const useAccountingRawData = (isAdmin: boolean = false) => {
-  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [] });
+  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [], subscriptionPayments: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -204,7 +212,15 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         }
       }
 
-      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [] });
+      // Abonnements Club B2B (0185) : lecture tolérante (table absente avant la migration).
+      const { data: subsData, error: subsError } = await supabase
+        .from('b2b_subscription_payments')
+        .select('amount, paid_at, plan');
+      const subscriptionPayments: AccountingSubscriptionPayment[] = subsError
+        ? []
+        : (subsData || []).map((p) => ({ amount: Number(p.amount) || 0, paid_at: p.paid_at as string, plan: (p.plan as string) ?? null }));
+
+      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments });
     } catch (err) {
       console.error('Erreur lors du chargement des données comptables:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');

@@ -1,4 +1,4 @@
-import { AccountingOrder, AccountingLiveSale, AccountingRawData, isOrderPaid } from '../hooks/useAccountingRawData';
+import { AccountingOrder, AccountingLiveSale, AccountingRawData, AccountingSubscriptionPayment, isOrderPaid } from '../hooks/useAccountingRawData';
 import { DateRange, isWithinRange, monthKey } from './accountingPeriods';
 
 export interface ChannelTotals {
@@ -54,6 +54,21 @@ export const computeLiveTotals = (liveSales: AccountingLiveSale[], range: DateRa
   };
 };
 
+/** CA des abonnements Club B2B (pass) sur une plage — aucun coût d'achat. */
+export const computeSubscriptionTotals = (payments: AccountingSubscriptionPayment[], range: DateRange): ChannelTotals => {
+  const scoped = payments.filter((p) => isWithinRange(p.paid_at, range));
+  if (scoped.length === 0) return EMPTY_TOTALS;
+  const revenue = scoped.reduce((sum, p) => sum + p.amount, 0);
+  return {
+    revenue,
+    cogs: 0,
+    margin: revenue,
+    marginRate: revenue > 0 ? 100 : null,
+    count: scoped.length,
+    averageBasket: revenue / scoped.length,
+  };
+};
+
 export const combineTotals = (...parts: ChannelTotals[]): ChannelTotals => {
   const revenue = parts.reduce((s, p) => s + p.revenue, 0);
   const cogs = parts.reduce((s, p) => s + p.cogs, 0);
@@ -74,6 +89,7 @@ export interface MonthlyChannelRow {
   web: number;
   b2b: number;
   live: number;
+  subscriptions: number;
   total: number;
   cogs: number;
   margin: number;
@@ -97,7 +113,7 @@ export const computeMonthlySeries = (data: AccountingRawData, months: number): M
     if (key >= COMPANY_ACTIVITY_START_MONTH) keys.push(key);
   }
 
-  const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, total: 0, cogs: 0, margin: 0 }]));
+  const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, subscriptions: 0, total: 0, cogs: 0, margin: 0 }]));
 
   data.orders.filter(isOrderPaid).forEach((o) => {
     const key = monthKey(o.created_at);
@@ -120,6 +136,14 @@ export const computeMonthlySeries = (data: AccountingRawData, months: number): M
     row.total += p.sale_price;
     row.cogs += p.purchase_price || 0;
     row.margin += p.sale_price - (p.purchase_price || 0);
+  });
+
+  (data.subscriptionPayments || []).forEach((p) => {
+    const row = rows.get(monthKey(p.paid_at));
+    if (!row) return;
+    row.subscriptions += p.amount;
+    row.total += p.amount;
+    row.margin += p.amount;
   });
 
   return keys.map((k) => rows.get(k)!);

@@ -8,12 +8,12 @@ import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
 import { AccountingRawData } from '../../../hooks/useAccountingRawData';
 import { AccountingPeriod, isWithinRange, monthKeyLabel } from '../../../utils/accountingPeriods';
-import { computeChannelTotals, computeLiveTotals, combineTotals, computeMonthlySeries } from '../../../utils/accountingCalc';
+import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, combineTotals, computeMonthlySeries } from '../../../utils/accountingCalc';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 const pct = (current: number, previous: number): number | null => (previous ? ((current - previous) / Math.abs(previous)) * 100 : null);
 
-const CHANNEL_COLORS = { web: '#2563eb', b2b: '#7c3aed', live: '#d97706' };
+const CHANNEL_COLORS = { web: '#2563eb', b2b: '#7c3aed', live: '#d97706', subscriptions: '#059669' };
 
 interface DashboardGlobalTabProps {
   data: AccountingRawData;
@@ -25,7 +25,8 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     const web = computeChannelTotals(data.orders, 'web', period.range);
     const b2b = computeChannelTotals(data.orders, 'b2b', period.range);
     const live = computeLiveTotals(data.liveSales, period.range);
-    return { web, b2b, live, global: combineTotals(web, b2b, live) };
+    const subscriptions = computeSubscriptionTotals(data.subscriptionPayments, period.range);
+    return { web, b2b, live, subscriptions, global: combineTotals(web, b2b, live, subscriptions) };
   }, [data, period.range]);
 
   const mom = useMemo(() => {
@@ -33,7 +34,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     const web = computeChannelTotals(data.orders, 'web', period.momRange);
     const b2b = computeChannelTotals(data.orders, 'b2b', period.momRange);
     const live = computeLiveTotals(data.liveSales, period.momRange);
-    return combineTotals(web, b2b, live);
+    return combineTotals(web, b2b, live, computeSubscriptionTotals(data.subscriptionPayments, period.momRange));
   }, [data, period.momRange]);
 
   const yoy = useMemo(() => {
@@ -41,7 +42,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     const web = computeChannelTotals(data.orders, 'web', period.yoyRange);
     const b2b = computeChannelTotals(data.orders, 'b2b', period.yoyRange);
     const live = computeLiveTotals(data.liveSales, period.yoyRange);
-    return combineTotals(web, b2b, live);
+    return combineTotals(web, b2b, live, computeSubscriptionTotals(data.subscriptionPayments, period.yoyRange));
   }, [data, period.yoyRange]);
 
   const monthly = useMemo(() => computeMonthlySeries(data, 12), [data]);
@@ -51,6 +52,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
       { name: 'B2C', value: current.web.revenue, color: CHANNEL_COLORS.web },
       { name: 'B2B', value: current.b2b.revenue, color: CHANNEL_COLORS.b2b },
       { name: 'Lives', value: current.live.revenue, color: CHANNEL_COLORS.live },
+      { name: 'Abonnements', value: current.subscriptions.revenue, color: CHANNEL_COLORS.subscriptions },
     ].filter((d) => d.value > 0),
     [current]
   );
@@ -120,7 +122,8 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                 <Legend />
                 <Bar dataKey="web" stackId="ca" name="CA B2C" fill={CHANNEL_COLORS.web} radius={[0, 0, 0, 0]} />
                 <Bar dataKey="b2b" stackId="ca" name="CA B2B" fill={CHANNEL_COLORS.b2b} />
-                <Bar dataKey="live" stackId="ca" name="CA Lives" fill={CHANNEL_COLORS.live} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="live" stackId="ca" name="CA Lives" fill={CHANNEL_COLORS.live} />
+                <Bar dataKey="subscriptions" stackId="ca" name="CA Abonnements" fill={CHANNEL_COLORS.subscriptions} radius={[4, 4, 0, 0]} />
                 <Line type="monotone" dataKey="cogs" name="Coût d'achat" stroke="#dc2626" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="margin" name="Marge brute" stroke="#16a34a" strokeWidth={2} dot={false} />
               </ComposedChart>
@@ -171,6 +174,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA B2C</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA B2B</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA Lives</th>
+                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA Abonnements</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA Total</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Coût d'achat</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Marge brute</th>
@@ -189,6 +193,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.web)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.b2b)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.live)}</td>
+                      <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.subscriptions)}</td>
                       <td className="py-2.5 px-4 text-right text-sm font-medium text-gray-900 tabular-nums">{EUR(m.total)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.cogs)}</td>
                       <td className={`py-2.5 px-4 text-right text-sm font-medium tabular-nums ${m.margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>{EUR(m.margin)}</td>

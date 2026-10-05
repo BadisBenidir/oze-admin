@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, CalendarX, CreditCard, TrendingUp, UserX, Users } from 'lucide-react';
+import { AlertTriangle, CalendarX, CreditCard, RefreshCw, TrendingUp, UserX, Users } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import type { Reseller } from '../../../hooks/useResellers';
 import { PLANS } from '../../landing/plans';
@@ -63,6 +63,20 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[] }> = ({ subsc
       });
   }, []);
   const neverPaid = legacyNeverPaid + pendingSignups;
+
+  // Rattrapage du CA des abonnements (0185) : relit chez Stripe les factures
+  // payées des abonnés. Le webhook enregistre ensuite chaque nouveau paiement.
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const syncPayments = async () => {
+    setSyncing(true);
+    setSyncMessage(null);
+    const { data, error } = await supabase.functions.invoke('sync-subscription-payments');
+    setSyncing(false);
+    setSyncMessage(error || data?.error
+      ? `Échec : ${data?.error || error?.message}`
+      : `${data.recorded} paiement${data.recorded > 1 ? 's' : ''} enregistré${data.recorded > 1 ? 's' : ''} (${data.subscribers} abonné${data.subscribers > 1 ? 's' : ''})`);
+  };
   const ended = subscribers.filter((r) => r.status === 'suspended' && !ONGOING.has(r.subscription_status || ''));
 
   const upcoming = [...cancelling, ...downgrading, ...pastDue]
@@ -133,6 +147,18 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[] }> = ({ subsc
               <span className="font-semibold tabular-nums text-gray-900">{ended.length}</span>
             </div>
             <p className="text-xs text-gray-500">Les inscriptions non payées reçoivent une relance automatique par email.</p>
+            <div className="border-t border-gray-100 pt-3">
+              <button
+                type="button"
+                onClick={syncPayments}
+                disabled={syncing}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-gray-900 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                Synchroniser les paiements (CA)
+              </button>
+              {syncMessage && <p className="mt-1 text-xs text-gray-500">{syncMessage}</p>}
+            </div>
           </CardContent>
         </Card>
       </div>
