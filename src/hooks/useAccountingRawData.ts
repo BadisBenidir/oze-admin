@@ -153,7 +153,58 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         created_at: m.created_at,
       }));
 
-      setData({ orders, liveSales, sourcingAdvances, giftRewards: giftsRes.data || [] });
+      // Missions de sourcing clôturées par l'admin SANS validation du revendeur
+      // (donc sans commande) : comptées comme une vente B2B à leur date de
+      // clôture (completed_at, 0184) — l'avance encaissée en CA, le coût
+      // d'achat des pièces sourcées en coût. Sans ça, elles disparaissaient
+      // des chiffres (ni CA, ni avance en cours). Lecture séparée et
+      // tolérante : avant la migration 0184, rien n'est ajouté.
+      const closedMissionOrders: AccountingOrder[] = [];
+      const { data: closedMissions, error: closedError } = await supabase
+        .from('b2b_sourcing_missions')
+        .select('id, reference, title, reseller_id, advance_amount, completed_at, resellers(company_name)')
+        .eq('status', 'completed')
+        .is('order_id', null)
+        .not('paid_at', 'is', null)
+        .not('completed_at', 'is', null);
+      if (!closedError && closedMissions && closedMissions.length > 0) {
+        type ClosedMission = { id: string; reference: string | null; title: string | null; reseller_id: string; advance_amount: number; completed_at: string; resellers: { company_name: string } | null };
+        const missions = closedMissions as unknown as ClosedMission[];
+        const { data: missionItems } = await supabase
+          .from('b2b_sourcing_items')
+          .select('id, mission_id, cost_price, status, product:products(name)')
+          .in('mission_id', missions.map((m) => m.id))
+          .neq('status', 'cancelled');
+        type MissionItem = { id: string; mission_id: string; cost_price: number | null; product: { name: string } | null };
+        for (const m of missions) {
+          const items = ((missionItems || []) as unknown as MissionItem[]).filter((i) => i.mission_id === m.id);
+          closedMissionOrders.push({
+            id: `sourcing-${m.id}`,
+            order_number: m.reference || m.title || 'Sourcing',
+            order_channel: 'b2b',
+            status: 'confirmed',
+            payment_status: 'paid',
+            total_amount: Number(m.advance_amount) || 0,
+            shipping_cost: 0,
+            created_at: m.completed_at,
+            email: '',
+            customer_name: null,
+            reseller_id: m.reseller_id,
+            company_name: m.resellers?.company_name || null,
+            requester_name: null,
+            order_items: items.map((i) => ({
+              id: i.id,
+              line_total: 0,
+              quantity: 1,
+              status: 'active' as const,
+              product_snapshot: { name: i.product?.name || 'Pièce sourcée', purchase_price: Number(i.cost_price) || 0 },
+              product: null,
+            })),
+          });
+        }
+      }
+
+      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [] });
     } catch (err) {
       console.error('Erreur lors du chargement des données comptables:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
