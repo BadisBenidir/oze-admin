@@ -25,6 +25,7 @@ import {
   UserPlus,
   Search,
   Mail,
+  Phone,
   Glasses,
 } from 'lucide-react';
 
@@ -106,7 +107,8 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
   const filteredResellers = scopedResellers.filter((r) => {
     const matchesSearch =
       r.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (r.contact_email || '').toLowerCase().includes(searchTerm.toLowerCase());
+      (r.contact_email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (r.contact_phone || '').replace(/\s/g, '').includes(searchTerm.replace(/\s/g, ''));
     const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -394,6 +396,16 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
                                 <p className="text-xs md:text-sm text-gray-500 flex items-center gap-1">
                                   <Mail className="h-3 w-3" /> {reseller.contact_email}
                                 </p>
+                              )}
+                              {reseller.contact_phone && (
+                                <a
+                                  href={`tel:${reseller.contact_phone.replace(/[^\d+]/g, '')}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-xs md:text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1"
+                                  title="Appeler"
+                                >
+                                  <Phone className="h-3 w-3" /> {reseller.contact_phone}
+                                </a>
                               )}
                             </div>
                           </div>
