@@ -24,6 +24,7 @@ import bcrypt from 'npm:bcryptjs@2.4.3';
 import { createSubscriptionCheckout, isSubscriptionPlan, siteOrigin, type SubscriptionPlan } from '../_shared/subscriptionCheckout.ts';
 import { countryCode } from '../_shared/stripeBilling.ts';
 import { finalizePendingSignup } from '../_shared/pendingSignup.ts';
+import { handleSubscriptionCheckout } from '../b2b-stripe-webhook/subscriptions.ts';
 
 const PRO_SITE = 'https://pro.ozeparis.com';
 /** Au-delà, un lien de reprise de paiement n'est plus accepté (nouvelle inscription requise). */
@@ -99,17 +100,43 @@ Deno.serve(async (req: Request) => {
       .eq('stripe_session_id', sessionId)
       .maybeSingle();
     if (!signup) return reply({ ready: false, paid: false });
-    if (signup.status === 'completed') return reply({ ready: true, paid: true });
+    // Compte déjà créé : on s'assure seulement qu'il est activé (webhook en retard ou en échec).
+    if (signup.status === 'completed') {
+      const { data: done } = await admin.from('b2b_pending_signups').select('reseller_id').eq('id', signup.id).maybeSingle();
+      const { data: reseller } = done?.reseller_id
+        ? await admin.from('resellers').select('status').eq('id', done.reseller_id).maybeSingle()
+        : { data: null };
+      if (reseller?.status === 'pending') {
+        try {
+          const paidSession = await stripe.checkout.sessions.retrieve(sessionId);
+          if (paidSession.status === 'complete') await handleSubscriptionCheckout(paidSession, stripe, supabaseUrl, serviceRoleKey);
+        } catch (err) {
+          console.error('[b2b-signup] status → activation :', err instanceof Error ? err.message : err);
+        }
+      }
+      return reply({ ready: true, paid: true });
+    }
 
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     const paid = session.status === 'complete' && (session.payment_status === 'paid' || session.payment_status === 'no_payment_required');
     if (!paid) return reply({ ready: false, paid: false });
     try {
       const result = await finalizePendingSignup(admin, signup.id);
-      return reply({ ready: result.status === 'completed', paid: true });
+      // Activation de l'abonnement (même traitement que le webhook, idempotent :
+      // ne fait rien si l'abonnement est déjà enregistré). Évite qu'un compte
+      // créé ici reste « en attente » si le webhook est en retard ou a échoué.
+      if (result.status === 'completed') {
+        const { data: reseller } = await admin.from('resellers').select('status').eq('id', result.resellerId).maybeSingle();
+        if (reseller?.status === 'pending') {
+          await handleSubscriptionCheckout(session, stripe, supabaseUrl, serviceRoleKey);
+        }
+      }
+      return reply({ ready: result.status === 'completed', paid: true, step: result.status });
     } catch (err) {
-      console.error('[b2b-signup] status → création du compte :', err instanceof Error ? err.message : err);
-      return reply({ ready: false, paid: true });
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[b2b-signup] status → création du compte :', message);
+      // Étape en échec renvoyée (sans donnée sensible) pour le diagnostic.
+      return reply({ ready: false, paid: true, step: 'error', detail: message });
     }
   }
 

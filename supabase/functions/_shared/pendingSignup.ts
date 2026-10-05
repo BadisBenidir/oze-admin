@@ -45,14 +45,28 @@ export async function finalizePendingSignup(admin: SupabaseClient, signupId: str
 
   // Verrou : un seul appel crée le compte (webhook et page de remerciement
   // peuvent arriver en même temps). Un verrou trop ancien est repris.
+  // Deux requêtes simples (un filtre .or() combiné échouait silencieusement :
+  // aucun verrou n'était jamais pris, donc aucun compte jamais créé).
   const staleBefore = new Date(Date.now() - STALE_CLAIM_MS).toISOString();
-  const { data: claimed } = await admin
+  const claim = { status: 'processing', claimed_at: new Date().toISOString() };
+  let { data: claimed, error: claimError } = await admin
     .from('b2b_pending_signups')
-    .update({ status: 'processing', claimed_at: new Date().toISOString() })
+    .update(claim)
     .eq('id', signupId)
-    .or(`status.eq.pending,and(status.eq.processing,claimed_at.lt."${staleBefore}")`)
+    .eq('status', 'pending')
     .select('id')
     .maybeSingle();
+  if (!claimed && !claimError) {
+    ({ data: claimed, error: claimError } = await admin
+      .from('b2b_pending_signups')
+      .update(claim)
+      .eq('id', signupId)
+      .eq('status', 'processing')
+      .lt('claimed_at', staleBefore)
+      .select('id')
+      .maybeSingle());
+  }
+  if (claimError) throw new Error(`verrou de l'inscription : ${claimError.message}`);
   if (!claimed) return { status: 'busy' };
 
   try {
