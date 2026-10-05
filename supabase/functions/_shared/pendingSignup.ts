@@ -58,15 +58,23 @@ export async function finalizePendingSignup(admin: SupabaseClient, signupId: str
   try {
     // 1. Compte de connexion (ou compte déjà créé lors d'un essai interrompu).
     let profileId = row.profile_id;
+    // Compte créé par CE parcours (maintenant ou lors d'un essai interrompu) :
+    // c'est lui qui reçoit le mot de passe choisi à l'inscription. Jamais un
+    // compte qui existait déjà avant (son mot de passe n'est pas touché).
+    let ownAccount = Boolean(row.profile_id);
     if (!profileId) {
+      // createUser({ password_hash }) est refusé par ce projet (0183) : compte
+      // créé avec un mot de passe temporaire aléatoire, remplacé juste après.
+      const tempPassword = `${crypto.randomUUID()}${crypto.randomUUID()}`;
       const { data: created, error: createError } = await admin.auth.admin.createUser({
         email: row.email,
-        password_hash: row.password_hash,
+        password: tempPassword,
         email_confirm: true,
         user_metadata: { first_name: row.first_name, last_name: row.last_name },
-      } as Parameters<typeof admin.auth.admin.createUser>[0]);
+      });
       if (created?.user) {
         profileId = created.user.id;
+        ownAccount = true;
       } else if (createError && /already|exists|registered/i.test(createError.message)) {
         const { data: existing } = await admin
           .from('profiles')
@@ -79,6 +87,15 @@ export async function finalizePendingSignup(admin: SupabaseClient, signupId: str
         throw new Error(`création du compte : ${createError?.message}`);
       }
       await admin.from('b2b_pending_signups').update({ profile_id: profileId }).eq('id', signupId);
+    }
+
+    // Mot de passe choisi à l'inscription (haché bcrypt) posé sur le compte créé.
+    if (ownAccount) {
+      const { error: hashError } = await admin.rpc('set_auth_user_password_hash', {
+        p_user_id: profileId,
+        p_password_hash: row.password_hash,
+      });
+      if (hashError) throw new Error(`mot de passe : ${hashError.message}`);
     }
 
     // 2. Profil revendeur.
