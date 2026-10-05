@@ -289,6 +289,18 @@ class OrderService {
 
     const auctionRevenue = auctionSales?.reduce((sum, p) => sum + Number(p.sale_price || 0), 0) || 0;
 
+    // Sourcing sur mesure clôturé par l'admin sans validation du revendeur
+    // (donc sans commande) : l'avance encaissée compte dans le CA, comme en
+    // Comptabilité (useAccountingRawData). Une mission validée l'est déjà via
+    // sa commande ; une mission en cours reste une avance, pas du CA.
+    const { data: closedMissions } = await supabase
+      .from('b2b_sourcing_missions')
+      .select('advance_amount')
+      .eq('status', 'completed')
+      .is('order_id', null)
+      .not('paid_at', 'is', null);
+    const sourcingRevenue = (closedMissions || []).reduce((sum, m) => sum + Number(m.advance_amount || 0), 0);
+
         // ... après avoir récupéré les orders
     const { count: productCount } = await supabase
       .from('products')
@@ -305,8 +317,9 @@ class OrderService {
     const ordersRevenue = orders?.reduce((sum, order) => sum + Number(order.total_amount), 0) || 0;
     const webRevenue = ordersRevenue;
     const externalRevenue = 0;
-    // CA global = commandes (web) + ventes Live enchères (hors site).
-    const totalRevenue = ordersRevenue + auctionRevenue;
+    // CA global = commandes (web + B2B) + ventes Live enchères (hors site)
+    // + missions de sourcing clôturées sans commande.
+    const totalRevenue = ordersRevenue + auctionRevenue + sourcingRevenue;
 
     const averageOrderValue = totalOrders > 0 ? ordersRevenue / totalOrders : 0;
 
