@@ -243,6 +243,25 @@ const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ item, onClose }
               <p className="font-medium text-gray-900">{item.product_name}</p>
               {item.product_reference && <p className="text-xs text-gray-400 font-mono">{item.product_reference}</p>}
             </div>
+            {/* Référence fournisseur : l'info la plus utile pour retrouver la pièce chez le fournisseur. */}
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-gray-900 bg-gray-50 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  Référence fournisseur{item.supplier_platform ? ` · ${item.supplier_platform}` : ''}
+                </p>
+                <p className="font-mono text-base font-semibold text-gray-900 break-all">{item.supplier_reference || '—'}</p>
+              </div>
+              {item.supplier_reference && (
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(item.supplier_reference as string)}
+                  className="flex-shrink-0 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                  title="Copier la référence fournisseur"
+                >
+                  Copier
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2.5 text-sm">
@@ -593,6 +612,11 @@ export const EntrupyCertificates: React.FC = () => {
                             <div className="min-w-0">
                               <p className="font-medium truncate max-w-[180px]">{item.product_name}</p>
                               {item.product_reference && <p className="text-xs text-gray-400 font-mono">{item.product_reference}</p>}
+                              {item.supplier_reference && (
+                                <p className="text-xs text-gray-700 font-mono" title="Référence fournisseur">
+                                  Fourn. {item.supplier_reference}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </td>

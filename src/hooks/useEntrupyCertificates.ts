@@ -10,6 +10,9 @@ export interface EntrupyCertificateItem {
   product_created_at: string;
   product_name: string;
   product_reference: string | null;
+  /** Référence fournisseur (Aucnet / EcoRing…) de la fiche produit — la plus utile pour retrouver la pièce. */
+  supplier_reference: string | null;
+  supplier_platform: string | null;
   product_image: string | null;
   /** Toutes les photos du produit (pas seulement la principale) — pour la
    * visionneuse en grand de la modale de détail. */
@@ -44,7 +47,7 @@ type Row = {
   quantity: number;
   unit_price: number;
   line_total: number;
-  product: { created_at: string } | null;
+  product: { created_at: string; source_reference: string | null; source_platform: string | null } | null;
   product_snapshot: { name?: string; reference?: string; product_code?: string; images?: string[]; main_image_index?: number } | null;
   order: {
     id: string;
@@ -56,7 +59,7 @@ type Row = {
 };
 
 const SELECT_COLUMNS =
-  'id, entrupy_status, entrupy_cert_url, entrupy_pdf_path, entrupy_completed_at, entrupy_requested_at, quantity, unit_price, line_total, product_snapshot, product:products(created_at), ' +
+  'id, entrupy_status, entrupy_cert_url, entrupy_pdf_path, entrupy_completed_at, entrupy_requested_at, quantity, unit_price, line_total, product_snapshot, product:products(created_at, source_reference, source_platform), ' +
   'order:orders!inner(id, order_number, created_at, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email))';
 
 const mapRow = (row: Row): EntrupyCertificateItem => {
@@ -69,6 +72,8 @@ const mapRow = (row: Row): EntrupyCertificateItem => {
     product_created_at: row.product?.created_at || '',
     product_name: row.product_snapshot?.name || 'Article',
     product_reference: row.product_snapshot?.reference || row.product_snapshot?.product_code || null,
+    supplier_reference: row.product?.source_reference || null,
+    supplier_platform: row.product?.source_platform || null,
     product_image: row.product_snapshot?.images?.[row.product_snapshot?.main_image_index ?? 0] || row.product_snapshot?.images?.[0] || null,
     product_images: row.product_snapshot?.images || [],
     quantity: row.quantity,
