@@ -157,7 +157,7 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
         .select(
           'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), ' +
           'placed_by:profiles!placed_by_profile_id(first_name, last_name, email), ' +
-          'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg), shipment:shipments(delivery_type, parcel_point))'
+          'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg), shipment:shipments!order_items_shipment_id_fkey(delivery_type, parcel_point))'
         )
         .eq('order_channel', 'b2b');
 
