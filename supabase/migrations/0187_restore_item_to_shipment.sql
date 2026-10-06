@@ -22,7 +22,7 @@ where n.type = 'delivery_request_cancelled'
   and n.message like 'Les articles suivants ne sont pas encore arrivés%'
   and p.id = oi.product_id
   and coalesce(p.b2b_reference, p.reference, p.product_code) = it->>'reference'
-  and oi.fulfillment_status = 'ordered'
+  and oi.fulfillment_status in ('ordered', 'received', 'ready_to_ship')
   and oi.shipment_id is null
   and oi.status = 'active'
   and oi.removed_from_shipment_id is null;
