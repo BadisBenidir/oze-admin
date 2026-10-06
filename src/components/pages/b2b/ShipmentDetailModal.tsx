@@ -164,6 +164,31 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     onGenerated();
   };
 
+  // Article de la demande pas encore reçu : retiré de la demande et remis
+  // « reçu » (en attente côté revendeur), comme « Remettre en attente » de la
+  // Vue Réception. Sans remboursement. Si c'était le dernier article, la
+  // demande est supprimée par le RPC : on ferme la fenêtre.
+  const handleRevertPendingItem = async (itemId: string) => {
+    if (!window.confirm("Remettre cet article en attente ? Il sera retiré de cette demande de livraison et pourra être redemandé plus tard (aucun remboursement).")) {
+      return;
+    }
+    setRevertError(null);
+    setRevertingId(itemId);
+    const { data, error } = await supabase.rpc('admin_revert_item_to_received', { p_item_ids: [itemId] });
+    setRevertingId(null);
+    if (error) {
+      setRevertError(error.message);
+      return;
+    }
+    if ((data?.updated_count || 0) === 0) {
+      setRevertError("Cet article n'a pas pu être remis en attente.");
+      return;
+    }
+    const wasLast = shipment.pendingItems.length === 1 && shipment.shippedItems.length === 0;
+    onGenerated();
+    if (wasLast) onClose();
+  };
+
   // Annule le(s) bordereau(x) chez Sendcloud puis remet la demande "En
   // attente" (Edge Function cancel-shipment-labels, voir 0160).
   const handleCancelLabels = async () => {
@@ -377,6 +402,8 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                   parcelPointCountry={guessRelayCountry(shipment.parcel_point)}
                   onGenerated={onGenerated}
                   onCancelItem={(itemId) => { setCancelItemIds([itemId]); setShowCancelItems(true); }}
+                  onRevertItem={handleRevertPendingItem}
+                  revertingItemId={revertingId}
                 />
                 <div className="flex justify-end flex-wrap gap-2 mt-3">
                   <button

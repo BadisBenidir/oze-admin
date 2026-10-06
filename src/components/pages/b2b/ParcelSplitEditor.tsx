@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye, BadgeCheck, X, PackageX } from 'lucide-react';
+import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye, BadgeCheck, X, PackageX, Undo2 } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { useGenerateShipmentLabels, ParcelResult, CarrierOverride } from '../../../hooks/useGenerateShipmentLabels';
@@ -24,12 +24,16 @@ interface ParcelSplitEditorProps {
   /** Annuler cet article seul (article non reçu) — ouvre la modale
    * d'annulation avec l'article présélectionné. */
   onCancelItem?: (itemId: string) => void;
+  /** Retirer cet article de la demande (pas encore reçu) : il repasse
+   * « reçu » / en attente chez le revendeur, sans remboursement. */
+  onRevertItem?: (itemId: string) => void;
+  revertingItemId?: string | null;
 }
 
 const itemRef = (item: AdminShipmentItem) =>
   item.product?.b2b_reference || item.product?.reference || item.product?.product_code || '—';
 
-export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, deliveryType, parcelPointNetwork, parcelPointCountry, onGenerated, onCancelItem }) => {
+export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, deliveryType, parcelPointNetwork, parcelPointCountry, onGenerated, onCancelItem, onRevertItem, revertingItemId }) => {
   const { generate } = useGenerateShipmentLabels();
   const { download: downloadLabel, downloadingUrl } = useDownloadShipmentLabel();
   const [parcels, setParcels] = useState<ParcelDraft[]>([{ items: items.map((i) => i.id) }]);
@@ -235,6 +239,17 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                                   className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 hover:underline"
                                 >
                                   <PackageX className="h-3 w-3" /> Annuler
+                                </button>
+                              )}
+                              {onRevertItem && (
+                                <button
+                                  type="button"
+                                  onClick={() => onRevertItem(item.id)}
+                                  disabled={revertingItemId === item.id}
+                                  title="Article pas encore reçu : le retirer de cette demande et le remettre en attente"
+                                  className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-800 hover:underline disabled:opacity-50"
+                                >
+                                  <Undo2 className="h-3 w-3" /> Remettre en attente
                                 </button>
                               )}
                             </div>
