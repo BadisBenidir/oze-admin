@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban, PackageX, Combine } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban, PackageX, Combine, RotateCcw } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipment, AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { ParcelSplitEditor } from './ParcelSplitEditor';
@@ -20,7 +20,13 @@ interface ShipmentDetailModalProps {
   activeShipments?: AdminShipment[];
 }
 
-const itemRef = (item: AdminShipmentItem) =>
+interface RemovedItem {
+  id: string;
+  fulfillment_status: string;
+  product: Pick<NonNullable<AdminShipmentItem['product']>, 'name' | 'images' | 'main_image_index' | 'product_code' | 'reference' | 'b2b_reference' | 'brand'> | null;
+}
+
+const itemRef = (item: Pick<AdminShipmentItem, 'product'> | RemovedItem) =>
   item.product?.b2b_reference || item.product?.reference || item.product?.product_code || '—';
 
 // Même heuristique que generate-b2b-shipment-labels/index.ts::toCountryCode :
@@ -142,8 +148,45 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     setMergeNotice(null);
   }, [shipment?.id]);
   const [cancelLabelsError, setCancelLabelsError] = useState<string | null>(null);
+  // Articles retirés de cette demande car pas encore reçus (0186/0187),
+  // tant qu'ils ne sont rattachés à aucune autre demande.
+  const [removedItems, setRemovedItems] = useState<RemovedItem[]>([]);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const loadRemovedItems = useCallback(async (shipmentId: string) => {
+    const { data, error } = await supabase
+      .from('order_items')
+      .select('id, fulfillment_status, product:products(name, images, main_image_index, product_code, reference, b2b_reference, brand:brands(name))')
+      .eq('removed_from_shipment_id', shipmentId)
+      .is('shipment_id', null)
+      .eq('status', 'active');
+    setRemovedItems(error ? [] : ((data || []) as unknown as RemovedItem[]));
+  }, []);
+  useEffect(() => {
+    if (shipment?.id) loadRemovedItems(shipment.id);
+    else setRemovedItems([]);
+  }, [shipment, loadRemovedItems]);
 
   if (!shipment) return null;
+
+  const handleRestoreItem = async (itemId: string) => {
+    if (!window.confirm("Article retrouvé ? Il sera remis dans cette demande de livraison (le revendeur est prévenu).")) {
+      return;
+    }
+    setRevertError(null);
+    setRestoringId(itemId);
+    const { data, error } = await supabase.rpc('admin_restore_items_to_shipment', { p_item_ids: [itemId] });
+    setRestoringId(null);
+    if (error) {
+      setRevertError(error.message);
+      return;
+    }
+    if ((data?.updated_count || 0) === 0) {
+      setRevertError("Cet article n'a pas pu être remis dans la demande.");
+      return;
+    }
+    await loadRemovedItems(shipment.id);
+    onGenerated();
+  };
 
   const handleRevertShippedItem = async (itemId: string) => {
     if (!window.confirm("Annuler cette expédition ? L'article redeviendra 'reçu' côté réception, même si un bordereau a déjà été généré pour lui.")) {
@@ -432,6 +475,50 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
             {revertError && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                 <p className="text-sm text-red-700">{revertError}</p>
+              </div>
+            )}
+
+            {removedItems.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-800">
+                  <Undo2 className="h-3.5 w-3.5" />
+                  {removedItems.length} article{removedItems.length > 1 ? 's' : ''} retiré{removedItems.length > 1 ? 's' : ''} (pas encore reçu{removedItems.length > 1 ? 's' : ''})
+                </p>
+                <ul className="divide-y divide-amber-100">
+                  {removedItems.map((item) => {
+                    const image = item.product?.images?.[item.product.main_image_index] || item.product?.images?.[0];
+                    return (
+                      <li key={item.id} className="flex items-center gap-3 py-2">
+                        {image ? (
+                          <img src={image} alt={item.product?.name || 'Article'} className="h-9 w-9 flex-shrink-0 rounded-lg border border-amber-100 object-cover" />
+                        ) : (
+                          <div className="h-9 w-9 flex-shrink-0 rounded-lg bg-amber-100" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-900">{item.product?.name || 'Article'}</p>
+                          <p className="text-xs text-gray-600">
+                            {item.product?.brand?.name && <span>{item.product.brand.name} · </span>}
+                            Réf. {itemRef(item)}
+                          </p>
+                        </div>
+                        {(shipment.status === 'requested' || shipment.status === 'preparing') && (
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreItem(item.id)}
+                            disabled={restoringId === item.id}
+                            title="Article retrouvé : le remettre dans cette demande"
+                            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" /> Remettre dans la demande
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-1 text-xs text-amber-700">
+                  Une fois remis, l'article apparaît dans les articles en attente d'étiquette{shipment.status === 'preparing' ? ' (nouveau colis)' : ''}.
+                </p>
               </div>
             )}
 
