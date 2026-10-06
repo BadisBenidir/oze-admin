@@ -8,7 +8,9 @@
 -- à aucune autre demande, avec « Remettre dans la demande ».
 -- ============================================================================
 
-alter table public.order_items add column if not exists removed_from_shipment_id uuid references public.shipments (id) on delete set null;
+-- Sans clé étrangère : un 2e lien order_items -> shipments rend ambigus les
+-- embeds PostgREST existants (voir 0188).
+alter table public.order_items add column if not exists removed_from_shipment_id uuid;
 create index if not exists order_items_removed_from_shipment_idx on public.order_items (removed_from_shipment_id) where removed_from_shipment_id is not null;
 
 -- Rattrapage : articles déjà retirés via 0186 (retrouvés par la notification
