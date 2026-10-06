@@ -25,7 +25,7 @@ interface ParcelSplitEditorProps {
    * d'annulation avec l'article présélectionné. */
   onCancelItem?: (itemId: string) => void;
   /** Retirer cet article de la demande (pas encore reçu) : il repasse
-   * « reçu » / en attente chez le revendeur, sans remboursement. */
+   * « en acheminement », sans remboursement (0186). */
   onRevertItem?: (itemId: string) => void;
   revertingItemId?: string | null;
 }

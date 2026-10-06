@@ -164,17 +164,21 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     onGenerated();
   };
 
-  // Article de la demande pas encore reçu : retiré de la demande et remis
-  // « reçu » (en attente côté revendeur), comme « Remettre en attente » de la
-  // Vue Réception. Sans remboursement. Si c'était le dernier article, la
-  // demande est supprimée par le RPC : on ferme la fenêtre.
+  // Article de la demande pas encore reçu à l'atelier : retiré de la demande
+  // et remis « en acheminement » (0186) — il devra être réceptionné puis
+  // pointé prêt avant d'être redemandé. Le revendeur est prévenu. Le dernier
+  // article d'une demande passe par « Annuler la demande ».
   const handleRevertPendingItem = async (itemId: string) => {
-    if (!window.confirm("Remettre cet article en attente ? Il sera retiré de cette demande de livraison et pourra être redemandé plus tard (aucun remboursement).")) {
+    if (shipment.pendingItems.length === 1 && shipment.shippedItems.length === 0) {
+      setRevertError("C'est le dernier article de la demande : utilisez « Annuler la demande » (remboursement des frais de port possible).");
+      return;
+    }
+    if (!window.confirm("Article pas encore reçu ? Il sera retiré de cette demande et repassera « en acheminement » : le revendeur ne pourra le redemander qu'une fois l'article réceptionné et pointé prêt (il sera prévenu).")) {
       return;
     }
     setRevertError(null);
     setRevertingId(itemId);
-    const { data, error } = await supabase.rpc('admin_revert_item_to_received', { p_item_ids: [itemId] });
+    const { data, error } = await supabase.rpc('admin_return_requested_items_to_transit', { p_item_ids: [itemId] });
     setRevertingId(null);
     if (error) {
       setRevertError(error.message);
@@ -184,9 +188,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
       setRevertError("Cet article n'a pas pu être remis en attente.");
       return;
     }
-    const wasLast = shipment.pendingItems.length === 1 && shipment.shippedItems.length === 0;
     onGenerated();
-    if (wasLast) onClose();
   };
 
   // Annule le(s) bordereau(x) chez Sendcloud puis remet la demande "En
