@@ -517,7 +517,9 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                   })}
                 </ul>
                 <p className="mt-1 text-xs text-amber-700">
-                  Une fois remis, l'article apparaît dans les articles en attente d'étiquette{shipment.status === 'preparing' ? ' (nouveau colis)' : ''}.
+                  {shipment.parcels.some((p) => p.status === 'label_created')
+                    ? "Une fois remis, l'article rejoint le colis déjà étiqueté (même bordereau)."
+                    : "Une fois remis, l'article apparaît dans les articles en attente d'étiquette."}
                 </p>
               </div>
             )}

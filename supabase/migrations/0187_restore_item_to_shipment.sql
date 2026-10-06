@@ -111,10 +111,12 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- Remettre dans sa demande un article retiré puis retrouvé. Il redevient un
--- article de la demande en attente d'étiquette (nouveau colis si la demande a
--- déjà un bordereau). La seconde notification « arrivé à l'atelier » est
--- annulée, et le revendeur est prévenu que l'article part avec sa demande.
+-- Remettre dans sa demande un article retiré puis retrouvé :
+--   - la demande a déjà un bordereau pas encore remis au transporteur :
+--     l'article rejoint CE colis (même bordereau, aucun nouveau colis) ;
+--   - sinon : il redevient un article de la demande en attente d'étiquette.
+-- La seconde notification « arrivé à l'atelier » est annulée, et le revendeur
+-- est prévenu que l'article part avec sa demande.
 -- ----------------------------------------------------------------------------
 create or replace function public.admin_restore_items_to_shipment(p_item_ids uuid[])
 returns jsonb
@@ -126,6 +128,7 @@ declare
   v_shipment record;
   v_items jsonb;
   v_item_ids uuid[];
+  v_parcel_id uuid;
 begin
   if not public.is_admin() then
     raise exception 'Accès refusé';
@@ -160,13 +163,21 @@ begin
       continue;
     end if;
 
+    -- Colis déjà étiqueté mais pas encore remis au transporteur.
+    select id into v_parcel_id
+    from public.shipment_parcels
+    where shipment_id = v_shipment.id and status = 'label_created'
+    order by parcel_index
+    limit 1;
+
     update public.order_items
-    set fulfillment_status = 'delivery_requested',
+    set fulfillment_status = case when v_parcel_id is not null then 'label_created' else 'delivery_requested' end,
         received_at = coalesce(received_at, now()),
         ready_to_ship_at = coalesce(ready_to_ship_at, now()),
         delivery_requested_at = now(),
+        label_created_at = case when v_parcel_id is not null then now() else null end,
         shipment_id = v_shipment.id,
-        parcel_id = null,
+        parcel_id = v_parcel_id,
         redelivery_notice_profile_id = null,
         removed_from_shipment_id = null
     where id = any(v_item_ids);
@@ -187,7 +198,7 @@ begin
   end loop;
 
   return jsonb_build_object('updated_count', (
-    select count(*) from public.order_items where id = any(p_item_ids) and fulfillment_status = 'delivery_requested'
+    select count(*) from public.order_items where id = any(p_item_ids) and fulfillment_status in ('delivery_requested', 'label_created')
   ));
 end;
 $$;
