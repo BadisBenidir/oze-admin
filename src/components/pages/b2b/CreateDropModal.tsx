@@ -11,6 +11,7 @@ interface DraftProduct {
   images: string[];
   main_image_index: number;
   brand: { name: string } | null;
+  status?: string;
 }
 
 interface CreateDropModalProps {
@@ -66,14 +67,17 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
         // liste. 'draft-b2b' (0130) : articles créés directement depuis
         // Produits B2B, éligibles aux drops au même titre qu'un 'draft' classique.
         const preselected = addOnly ? [] : editingDrop?.product_ids || [];
-        const [{ data, error }, { data: sourcedItems, error: sourcedError }] = await Promise.all([
+        // Drop déjà publié (addOnly) : aussi les pièces mises en ligne à la
+        // main ('for-sale-b2b', 0190), hors pièces déjà dans un autre drop.
+        const statuses = addOnly ? 'draft,draft-b2b,for-sale-b2b' : 'draft,draft-b2b';
+        const [{ data, error }, { data: sourcedItems, error: sourcedError }, { data: activeDrops }] = await Promise.all([
           supabase
             .from('products')
-            .select('id, name, product_code, sale_price, images, main_image_index, brand:brands(name)')
+            .select('id, name, product_code, sale_price, images, main_image_index, status, brand:brands(name)')
             .or(
               preselected.length > 0
-                ? `status.in.(draft,draft-b2b),id.in.(${preselected.join(',')})`
-                : 'status.in.(draft,draft-b2b)'
+                ? `status.in.(${statuses}),id.in.(${preselected.join(',')})`
+                : `status.in.(${statuses})`
             )
             .order('created_at', { ascending: false }),
           // Exclut aussi tout article déjà engagé dans une mission de
@@ -83,12 +87,16 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
           // filtre ci-dessus, ce check est une deuxième barrière au cas où
           // le statut aurait dérivé.
           supabase.from('b2b_sourcing_items').select('product_id').not('product_id', 'is', null).neq('status', 'cancelled'),
+          addOnly
+            ? supabase.from('drops').select('product_ids').in('status', ['planifie', 'publie'])
+            : Promise.resolve({ data: [] as { product_ids: string[] }[] }),
         ]);
 
         if (error) throw new Error(error.message);
         if (sourcedError) throw new Error(sourcedError.message);
 
         const sourcedProductIds = new Set((sourcedItems || []).map((i) => i.product_id));
+        for (const d of activeDrops || []) for (const id of d.product_ids || []) sourcedProductIds.add(id);
         setProducts(((data || []) as unknown as DraftProduct[]).filter((p) => !sourcedProductIds.has(p.id)));
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Erreur de chargement des articles');
@@ -171,7 +179,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
               {addOnly ? (
                 <p className="text-sm text-gray-500">
-                  Ce drop est déjà publié : les pièces choisies sont ajoutées au drop et mises en vente B2B immédiatement.
+                  Ce drop est déjà publié : les pièces choisies sont ajoutées au drop et mises en vente B2B immédiatement. Tu peux aussi y rattacher des pièces déjà mises en ligne à la main.
                 </p>
               ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -207,7 +215,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    Articles en brouillon ({selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''})
+                    {addOnly ? 'Articles en brouillon ou en ligne' : 'Articles en brouillon'} ({selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''})
                   </label>
                 </div>
                 <div className="relative mb-2">
@@ -266,7 +274,10 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
-                            <p className="text-xs text-gray-500">{product.brand?.name || 'Sans marque'} · {product.sale_price.toFixed(0)} €</p>
+                            <p className="text-xs text-gray-500">
+                              {product.brand?.name || 'Sans marque'} · {product.sale_price.toFixed(0)} €
+                              {product.status === 'for-sale-b2b' && <span className="ml-1.5 rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700">Déjà en ligne</span>}
+                            </p>
                           </div>
                         </label>
                       );
