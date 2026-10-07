@@ -16,6 +16,7 @@ import { GrantAuctionAccessModal } from './auctions/GrantAuctionAccessModal';
 import { CancelAuctionItemModal } from './auctions/CancelAuctionItemModal';
 import { PreviewLinksModal } from './PreviewLinksModal';
 import { AuctionCountdown } from '../reseller/AuctionCountdown';
+import { ProductDetail } from '../ProductDetail';
 
 type AdminAuctionSection = 'sessions' | 'access' | 'results';
 
@@ -64,6 +65,8 @@ export const AuctionsAdmin: React.FC = () => {
 
   const { sessions, loading: sessionsLoading, error: sessionsError, createSession, updateSession, setSessionStatus, deleteSession } = useAdminAuctionSessions(isAdmin);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  // Fiche produit ouverte en clic sur un lot (photo ou nom).
+  const [viewingProductId, setViewingProductId] = useState<string | null>(null);
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [editingSession, setEditingSession] = useState<AuctionSession | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
@@ -339,11 +342,28 @@ export const AuctionsAdmin: React.FC = () => {
                                           <ChevronDown className="h-3.5 w-3.5" />
                                         </button>
                                       </div>
-                                      <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => item.product_id && setViewingProductId(item.product_id)}
+                                        disabled={!item.product_id}
+                                        title={item.product_id ? 'Ouvrir la fiche produit' : undefined}
+                                        className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden enabled:hover:ring-2 enabled:hover:ring-gray-300 disabled:cursor-default"
+                                      >
                                         {item.images?.[0] ? <img src={item.images[0]} alt="" className="h-full w-full object-cover" /> : <ImageOff className="h-4 w-4 text-gray-400" />}
-                                      </div>
+                                      </button>
                                       <div className="min-w-0">
-                                        <p className="text-sm font-medium text-gray-900 truncate max-w-[160px]">{item.title}</p>
+                                        {item.product_id ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setViewingProductId(item.product_id)}
+                                            title="Ouvrir la fiche produit"
+                                            className="block text-left text-sm font-medium text-gray-900 truncate max-w-[160px] hover:underline"
+                                          >
+                                            {item.title}
+                                          </button>
+                                        ) : (
+                                          <p className="text-sm font-medium text-gray-900 truncate max-w-[160px]">{item.title}</p>
+                                        )}
                                         <p className="text-xs text-gray-500">{item.brand} · {item.grade}</p>
                                         {!item.product_id && <p className="text-xs text-amber-600">Sans fiche produit</p>}
                                       </div>
@@ -601,7 +621,18 @@ export const AuctionsAdmin: React.FC = () => {
                         resultsItems.map((item) => (
                           <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
                             <td className="py-2.5 px-3">
-                              <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                              {item.product_id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingProductId(item.product_id)}
+                                  title="Ouvrir la fiche produit"
+                                  className="text-left text-sm font-medium text-gray-900 hover:underline"
+                                >
+                                  {item.title}
+                                </button>
+                              ) : (
+                                <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                              )}
                               <p className="text-xs text-gray-500">{item.brand}</p>
                             </td>
                             <td className="py-2.5 px-3">
@@ -718,6 +749,12 @@ export const AuctionsAdmin: React.FC = () => {
       )}
 
       {successToast && <Toast message={successToast} onDismiss={() => setSuccessToast('')} />}
+
+      {viewingProductId && (
+        <div className="fixed inset-0 z-[80] bg-white overflow-y-auto">
+          <ProductDetail productId={viewingProductId} onBack={() => setViewingProductId(null)} />
+        </div>
+      )}
     </div>
   );
 };
