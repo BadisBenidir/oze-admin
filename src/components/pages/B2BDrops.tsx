@@ -91,7 +91,9 @@ const MergeDropModal: React.FC<MergeDropModalProps> = ({ source, otherDrops, onC
 
 export const B2BDrops: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { drops, loading, error, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop, setFeaturedProducts, setLockCancellation } = useDrops(isAdmin);
+  const { drops, loading, error, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop, setFeaturedProducts, setLockCancellation, addProductsToPublishedDrop } = useDrops(isAdmin);
+  // Drop publié auquel on ajoute des pièces après coup (0189).
+  const [addingToDrop, setAddingToDrop] = useState<Drop | null>(null);
 
   const [showModal, setShowModal] = useState(false);
   const [editingDrop, setEditingDrop] = useState<Drop | null>(null);
@@ -322,6 +324,15 @@ export const B2BDrops: React.FC = () => {
                             >
                               <span className="text-xs font-semibold">Aa</span>
                             </button>
+                            {drop.status === 'publie' && (
+                              <button
+                                onClick={() => setAddingToDrop(drop)}
+                                className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                title="Ajouter des pièces (mises en vente immédiatement)"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            )}
                             {drop.status !== 'annule' && (
                               <button
                                 onClick={() => setMergingDrop(drop)}
@@ -356,6 +367,14 @@ export const B2BDrops: React.FC = () => {
         onClose={() => setShowModal(false)}
         onSubmit={editingDrop ? (input) => updateDrop(editingDrop.id, input) : createDrop}
         editingDrop={editingDrop}
+      />
+
+      <CreateDropModal
+        isOpen={!!addingToDrop}
+        onClose={() => setAddingToDrop(null)}
+        onSubmit={(input) => (addingToDrop ? addProductsToPublishedDrop(addingToDrop.id, input.product_ids) : Promise.resolve({ success: false }))}
+        editingDrop={addingToDrop}
+        addOnly
       />
 
       <DropDetailModal

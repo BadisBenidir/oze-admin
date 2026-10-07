@@ -19,6 +19,9 @@ interface CreateDropModalProps {
   onSubmit: (input: DropInput) => Promise<{ success: boolean; error?: string }>;
   /** Présent en mode édition : pré-remplit le formulaire avec ce drop existant. */
   editingDrop?: Drop | null;
+  /** Drop déjà publié : uniquement ajouter des articles en brouillon (mis en
+   * vente tout de suite), sans toucher au nom, à la date ni aux articles déjà dedans. */
+  addOnly?: boolean;
 }
 
 // Format attendu par <input type="datetime-local"> : "YYYY-MM-DDTHH:mm", en heure locale.
@@ -28,7 +31,7 @@ const toDatetimeLocalValue = (iso: string): string => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClose, onSubmit, editingDrop }) => {
+export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClose, onSubmit, editingDrop, addOnly = false }) => {
   const [products, setProducts] = useState<DraftProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -45,10 +48,10 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
 
     setTitle(editingDrop?.title || '');
     setScheduledAt(editingDrop ? toDatetimeLocalValue(editingDrop.scheduled_at) : '');
-    setSelectedIds(new Set(editingDrop?.product_ids || []));
+    setSelectedIds(new Set(addOnly ? [] : editingDrop?.product_ids || []));
     setFormError('');
     setSearch('');
-  }, [isOpen, editingDrop]);
+  }, [isOpen, editingDrop, addOnly]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -62,7 +65,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
         // on les inclut quand même pour ne pas les faire disparaître de la
         // liste. 'draft-b2b' (0130) : articles créés directement depuis
         // Produits B2B, éligibles aux drops au même titre qu'un 'draft' classique.
-        const preselected = editingDrop?.product_ids || [];
+        const preselected = addOnly ? [] : editingDrop?.product_ids || [];
         const [{ data, error }, { data: sourcedItems, error: sourcedError }] = await Promise.all([
           supabase
             .from('products')
@@ -95,7 +98,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
     };
 
     loadDraftProducts();
-  }, [isOpen, editingDrop]);
+  }, [isOpen, editingDrop, addOnly]);
 
   const filteredProducts = useMemo(() => {
     if (!search.trim()) return products;
@@ -127,7 +130,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
       return;
     }
     const scheduledIso = new Date(scheduledAt).toISOString();
-    if (!editingDrop && new Date(scheduledIso).getTime() <= Date.now()) {
+    if (!editingDrop && !addOnly && new Date(scheduledIso).getTime() <= Date.now()) {
       setFormError('La date de lancement doit être dans le futur');
       return;
     }
@@ -156,7 +159,9 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
-            <h3 className="text-lg font-semibold text-gray-900">{editingDrop ? 'Modifier le drop' : 'Créer un Drop'}</h3>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {addOnly ? `Ajouter des pièces à « ${editingDrop?.title || 'Drop sans nom'} »` : editingDrop ? 'Modifier le drop' : 'Créer un Drop'}
+            </h3>
             <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
               <X className="h-5 w-5" />
             </button>
@@ -164,6 +169,11 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
 
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {addOnly ? (
+                <p className="text-sm text-gray-500">
+                  Ce drop est déjà publié : les pièces choisies sont ajoutées au drop et mises en vente B2B immédiatement.
+                </p>
+              ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="drop-title" className="block text-sm font-medium text-gray-700 mb-2">
@@ -192,6 +202,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
                   />
                 </div>
               </div>
+              )}
 
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -285,7 +296,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
                 disabled={submitting}
                 className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm font-medium"
               >
-                {submitting ? 'Enregistrement...' : editingDrop ? 'Enregistrer' : 'Planifier le drop'}
+                {submitting ? 'Enregistrement...' : addOnly ? `Ajouter et mettre en vente (${selectedIds.size})` : editingDrop ? 'Enregistrer' : 'Planifier le drop'}
               </button>
             </div>
           </form>

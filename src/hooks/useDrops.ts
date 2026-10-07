@@ -43,6 +43,8 @@ interface UseDropsResult {
   setFeaturedProducts: (id: string, productIds: string[]) => Promise<{ success: boolean; error?: string }>;
   /** Interdit / autorise l'annulation en libre-service des articles du drop. */
   setLockCancellation: (id: string, locked: boolean) => Promise<{ success: boolean; error?: string }>;
+  /** Ajoute des articles en brouillon à un drop déjà publié, mis en vente B2B tout de suite (0189). */
+  addProductsToPublishedDrop: (id: string, productIds: string[]) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
@@ -160,6 +162,13 @@ export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
     return { success: true };
   };
 
+  const addProductsToPublishedDrop = async (id: string, productIds: string[]): Promise<{ success: boolean; error?: string }> => {
+    const { error: rpcError } = await supabase.rpc('admin_add_products_to_published_drop', { p_drop_id: id, p_product_ids: productIds });
+    if (rpcError) return { success: false, error: rpcError.message };
+    await fetchDrops();
+    return { success: true };
+  };
+
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
@@ -168,5 +177,5 @@ export const useDrops = (isAdmin: boolean = false): UseDropsResult => {
     fetchDrops();
   }, [isAdmin, fetchDrops]);
 
-  return { drops, loading, error, refresh: fetchDrops, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop, setFeaturedProducts, setLockCancellation };
+  return { drops, loading, error, refresh: fetchDrops, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop, setFeaturedProducts, setLockCancellation, addProductsToPublishedDrop };
 };
