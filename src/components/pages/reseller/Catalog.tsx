@@ -72,7 +72,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
     resetFilters,
     setPage,
     facets,
-    refresh,
+    refreshSilently,
   } = useB2BCatalog(isReseller);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
@@ -84,8 +84,10 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
   // tout abonnement direct de voir les réservations des AUTRES utilisateurs.
   // Un debounce évite une rafale de refetch si plusieurs signaux arrivent
   // en quelques millisecondes (plusieurs revendeurs actifs en même temps).
-  const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
+  // Toujours en silencieux : un rechargement visible remplaçait la grille par
+  // des squelettes, la page raccourcissait et le mobile remontait tout en haut.
+  const refreshRef = useRef(refreshSilently);
+  refreshRef.current = refreshSilently;
 
   useEffect(() => {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -250,7 +252,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
                   <ProductCard
                     key={product.id}
                     product={product}
-                    inCart={cart.isInCart(product.id)}
+                    inCart={!product.sold_at && cart.isInCart(product.id)}
                     onAdd={async () => {
                       const result = await cart.addItem(product);
                       // Un autre utilisateur (même collègue) vient de
@@ -258,7 +260,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
                       // immédiatement plutôt que d'attendre le prochain poll
                       // (20s), pour que le produit passe en grisé "Dans un
                       // panier" tout de suite sur cet écran.
-                      if (!result.success) refresh();
+                      if (!result.success) refreshSilently();
                       return result;
                     }}
                     onView={() => onOpenProduct(product.id)}
@@ -475,8 +477,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
   const [addError, setAddError] = useState<string | null>(null);
 
   const isDropPreview = product.status === 'draft' && Boolean(product.drop_preview_scheduled_at);
-  const held = product.held_by_other && !inCart;
-  const disabled = adding || inCart || held;
+  const sold = Boolean(product.sold_at);
+  const held = !sold && product.held_by_other && !inCart;
+  const disabled = sold || adding || inCart || held;
   const hasDiscount = Boolean(product.original_price && product.original_price > product.price);
   const discountPercent = hasDiscount ? Math.round((1 - product.price / product.original_price!) * 100) : 0;
 
@@ -492,7 +495,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
   };
 
   return (
-    <Card hover className="overflow-hidden flex flex-col cursor-pointer" onClick={onView}>
+    <Card
+      hover={!sold}
+      className={`overflow-hidden flex flex-col ${sold ? 'opacity-60 grayscale cursor-default' : 'cursor-pointer'}`}
+      onClick={sold ? undefined : onView}
+    >
       <div className="relative h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
         {hasDiscount && (
           <span className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-red-600 text-white text-xs font-semibold rounded">
@@ -513,6 +520,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
           />
         ) : (
           <ImageOff className="h-8 w-8 text-gray-300" />
+        )}
+        {sold && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="px-3 py-1 bg-gray-900 text-white text-sm font-semibold uppercase tracking-wide rounded-full">
+              Vendu
+            </span>
+          </div>
         )}
         {held && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -553,7 +567,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
                     : 'bg-gray-900 text-white hover:bg-gray-800'
                 }`}
               >
-                {inCart ? (
+                {sold ? (
+                  <span>Vendu</span>
+                ) : inCart ? (
                   <>
                     <Check className="h-3 w-3" />
                     <span>Dans le panier</span>

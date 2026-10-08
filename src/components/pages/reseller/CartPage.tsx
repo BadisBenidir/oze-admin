@@ -6,7 +6,11 @@ import { useMyAuctionPayments } from '../../../hooks/useMyAuctionPayments';
 import CheckoutSummary from './CheckoutSummary';
 import { VolumeDiscountBanner } from './VolumeDiscountBanner';
 import { PromoCodeField, AppliedPromo } from './PromoCodeField';
-import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Wallet, BadgeCheck } from 'lucide-react';
+import { AlertCircle, Trash2, ImageOff, CreditCard, Clock, ArrowLeft, ShoppingBag, X, ShieldCheck, Wallet, BadgeCheck, Eye } from 'lucide-react';
+import { Badge } from '../../ui/Badge';
+import { supabase } from '../../../lib/supabase';
+import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
+import { ProductPage } from './ProductPage';
 
 interface CartPageProps {
   cart: ReturnType<typeof useB2BCart>;
@@ -39,6 +43,28 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
   // ne change pas, seul "maintenant" avance) — le retrait effectif d'un
   // article expiré est lui géré par useB2BCart, pas ici.
   const [, setTick] = useState(0);
+  // Aperçu de la fiche en surimpression : le panier reste monté (sélection,
+  // options et chrono intacts), on revient exactement au même endroit.
+  const [quickViewId, setQuickViewId] = useState<string | null>(null);
+  // Grade de chaque pièce (absent de get_cart_state) : lu dans b2b_catalog.
+  const [grades, setGrades] = useState<Record<string, string>>({});
+  const cartIdsKey = cart.items.map((i) => i.id).join(',');
+  useEffect(() => {
+    const ids = cartIdsKey ? cartIdsKey.split(',') : [];
+    if (ids.length === 0) return;
+    supabase
+      .from('b2b_catalog')
+      .select('id, condition')
+      .in('id', ids)
+      .then(({ data }) => {
+        if (!data) return;
+        setGrades((prev) => {
+          const next = { ...prev };
+          for (const row of data) if (row.condition) next[row.id as string] = row.condition as string;
+          return next;
+        });
+      });
+  }, [cartIdsKey]);
 
   useEffect(() => {
     const interval = setInterval(() => setTick((t) => t + 1), 1000);
@@ -175,17 +201,44 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
                 <li key={item.id} className="bg-white border border-gray-200 rounded-lg p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center space-x-3 min-w-0">
-                      <div className="h-16 w-16 bg-gray-100 rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setQuickViewId(item.id)}
+                        title="Revoir la fiche"
+                        className="h-20 w-20 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden"
+                      >
                         {item.image ? (
                           <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                         ) : (
                           <ImageOff className="h-5 w-5 text-gray-300" />
                         )}
-                      </div>
+                      </button>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                        <p className="text-xs text-gray-400">{item.product_code}</p>
-                        <p className="text-sm text-gray-700 mt-1">{item.price.toFixed(0)} €</p>
+                        <button
+                          type="button"
+                          onClick={() => setQuickViewId(item.id)}
+                          className="block max-w-full text-left text-sm font-medium text-gray-900 line-clamp-2 hover:underline"
+                        >
+                          {item.name}
+                        </button>
+                        <p className="text-xs text-gray-500">
+                          {item.brandName || 'Sans marque'}
+                          <span className="text-gray-300"> · </span>
+                          <span className="text-gray-400">{item.product_code}</span>
+                        </p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900">{item.price.toFixed(0)} €</span>
+                          {isGrade(grades[item.id]) && (
+                            <Badge variant={GRADE_VARIANTS[grades[item.id]]}>Grade {grades[item.id]}</Badge>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setQuickViewId(item.id)}
+                          className="mt-1 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 hover:underline"
+                        >
+                          <Eye className="h-3 w-3" /> Revoir la fiche
+                        </button>
                       </div>
                     </div>
                     <button
@@ -344,6 +397,12 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
           <p className="text-xs text-gray-400 text-center">Paiement sécurisé par Stripe.</p>
         </div>
       </div>
+
+      {quickViewId && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-white">
+          <ProductPage productId={quickViewId} cart={cart} onBack={() => setQuickViewId(null)} backLabel="Retour au panier" />
+        </div>
+      )}
     </div>
   );
 };

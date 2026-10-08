@@ -27,6 +27,8 @@ interface ProductPageProps {
   productId: string;
   cart: ReturnType<typeof useB2BCart>;
   onBack: () => void;
+  /** Libellé du bouton retour (ex. « Retour au panier » depuis l'aperçu du panier). */
+  backLabel?: string;
 }
 
 const formatCountdown = (ms: number): string => {
@@ -53,7 +55,7 @@ const normalizeImageArray = (value: unknown): string[] => {
   return [];
 };
 
-export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBack }) => {
+export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBack, backLabel = 'Retour au catalogue' }) => {
   const { isReseller } = useResellerAuth();
   const { product, loading, error, refresh } = useB2BProduct(productId, isReseller);
 
@@ -175,7 +177,7 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 mb-6">
         <ArrowLeft className="h-4 w-4" />
-        <span>Retour au catalogue</span>
+        <span>{backLabel}</span>
       </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">

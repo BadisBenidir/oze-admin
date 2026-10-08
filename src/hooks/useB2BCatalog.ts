@@ -30,7 +30,14 @@ export interface B2BCatalogItem {
   drop_preview_scheduled_at: string | null;
   brand?: { id: string; name: string };
   category?: { id: string; name: string };
+  /** Côté client uniquement : l'article a disparu du catalogue pendant la
+   * consultation (vendu) — carte conservée grisée en bas de grille pendant
+   * SOLD_RETENTION_MS pour ne pas faire sauter la page (voir soldRef). */
+  sold_at?: number;
 }
+
+/** Durée pendant laquelle un article vendu reste affiché (grisé, « Vendu »). */
+const SOLD_RETENTION_MS = 60 * 60 * 1000;
 
 export interface B2BCatalogFacetOption {
   id: string;
@@ -77,6 +84,10 @@ interface UseB2BCatalogResult {
   resetFilters: () => void;
   setPage: (page: number) => void;
   refresh: () => Promise<void>;
+  /** Rechargement en arrière-plan (Realtime, filet 60 s) : ne repasse pas en
+   * état de chargement, donc la grille n'est jamais remplacée par les
+   * squelettes et le scroll de la page n'est pas réinitialisé. */
+  refreshSilently: () => Promise<void>;
   facets: B2BCatalogFacets;
   facetsLoading: boolean;
 }
@@ -95,9 +106,26 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
   const [facets, setFacets] = useState<B2BCatalogFacets>(EMPTY_FACETS);
   const [facetsLoading, setFacetsLoading] = useState(true);
 
-  const fetchItems = useCallback(async (page: number, currentFilters: B2BCatalogFilters) => {
+  // Articles vendus pendant la consultation (même page, mêmes filtres),
+  // ajoutés en bas de la grille jusqu'à expiration — remis à zéro à chaque
+  // changement de page/filtres (rechargement non silencieux).
+  const soldRef = useRef<Map<string, B2BCatalogItem>>(new Map());
+  const freshRef = useRef<B2BCatalogItem[]>([]);
+  const composeItems = useCallback(() => {
+    const now = Date.now();
+    const freshIds = new Set(freshRef.current.map((i) => i.id));
+    for (const [id, item] of soldRef.current) {
+      if (freshIds.has(id) || now - (item.sold_at || 0) > SOLD_RETENTION_MS) soldRef.current.delete(id);
+    }
+    setItems([...freshRef.current, ...soldRef.current.values()]);
+  }, []);
+
+  const fetchItems = useCallback(async (page: number, currentFilters: B2BCatalogFilters, silent: boolean = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+        soldRef.current.clear();
+      }
       setError(null);
 
       const from = (page - 1) * ITEMS_PER_PAGE;
@@ -142,15 +170,42 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
         throw new Error(fetchError.message);
       }
 
-      setItems(data || []);
+      const fresh: B2BCatalogItem[] = data || [];
+      if (silent) {
+        const freshIds = new Set(fresh.map((i) => i.id));
+        const missing = freshRef.current.filter((p) => !freshIds.has(p.id) && !soldRef.current.has(p.id));
+        if (missing.length > 0) {
+          // Une pièce peut aussi sortir de la page sans être vendue (nouvelles
+          // pièces d'un drop qui la poussent en page suivante) : seule une
+          // pièce absente de tout le catalogue est marquée « Vendu ».
+          const { data: stillListed } = await supabase
+            .from('b2b_catalog')
+            .select('id')
+            .in('id', missing.map((p) => p.id));
+          const listedIds = new Set((stillListed || []).map((r) => r.id as string));
+          for (const prev of missing) {
+            if (!listedIds.has(prev.id)) soldRef.current.set(prev.id, { ...prev, sold_at: Date.now() });
+          }
+        }
+      }
+      freshRef.current = fresh;
+      composeItems();
       setTotalCount(count || 0);
     } catch (err) {
       console.error('Erreur lors du chargement du catalogue B2B:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, []);
+  }, [composeItems]);
+
+  // Retire les cartes « Vendu » expirées (vérifié chaque minute).
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (soldRef.current.size > 0) composeItems();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [composeItems]);
 
   // Facettes (marques/catégories/états réellement présentes dans le catalogue
   // B2B) chargées une seule fois, indépendamment des filtres actifs, pour que
@@ -219,6 +274,10 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
     await fetchItems(currentPage, filtersRef.current);
   };
 
+  const refreshSilently = async () => {
+    await fetchItems(currentPage, filtersRef.current, true);
+  };
+
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   useEffect(() => {
@@ -246,6 +305,7 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
     resetFilters,
     setPage,
     refresh,
+    refreshSilently,
     facets,
     facetsLoading,
   };

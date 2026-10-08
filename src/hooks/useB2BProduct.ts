@@ -24,13 +24,15 @@ export const useB2BProduct = (productId: string | undefined, isAuthenticated: bo
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProduct = useCallback(async () => {
+  const fetchProduct = useCallback(async (silent: boolean = false) => {
     if (!productId || !isAuthenticated) {
       setLoading(false);
       return;
     }
     try {
-      setLoading(true);
+      // Rechargement Realtime silencieux : pas d'écran de chargement, la
+      // page garde sa position de scroll.
+      if (!silent) setLoading(true);
       setError(null);
 
       const { data, error: fetchError } = await supabase
@@ -71,7 +73,7 @@ export const useB2BProduct = (productId: string | undefined, isAuthenticated: bo
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'product_reservation_signals', filter: `product_id=eq.${productId}` },
-        () => fetchProductRef.current()
+        () => fetchProductRef.current(true)
       )
       .subscribe();
 
@@ -80,5 +82,5 @@ export const useB2BProduct = (productId: string | undefined, isAuthenticated: bo
     };
   }, [productId, isAuthenticated]);
 
-  return { product, loading, error, refresh: fetchProduct };
+  return { product, loading, error, refresh: () => fetchProduct(true) };
 };
