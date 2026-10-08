@@ -112,7 +112,7 @@ export const PrivacyPolicy: React.FC = () => {
 
           <Section title="5. Transferts hors de l'Union européenne">
             <p>
-              Certains prestataires (notamment Stripe et Vercel) peuvent traiter des données aux États-Unis. Ces
+              Certains prestataires (Stripe, Vercel, Resend et Google) peuvent traiter des données aux États-Unis. Ces
               transferts sont encadrés par le Data Privacy Framework UE–États-Unis et/ou par les clauses contractuelles
               types de la Commission européenne.
             </p>
