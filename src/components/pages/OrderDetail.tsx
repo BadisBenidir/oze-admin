@@ -4,6 +4,7 @@ import { Badge } from '../ui/Badge';
 import { orderService, type OrderWithItems } from '../../services/orderService';
 import { ShippingLabelButton } from '../orders/ShippingLabelButton';
 import { OrderTrackingCell } from '../orders/OrderTrackingCell';
+import { CancelOrderModal } from '../orders/CancelOrderModal';
 import { 
   ArrowLeft, 
   Eye, 
@@ -34,6 +35,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onBack }) => 
   const [error, setError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [groupedOrderNumber, setGroupedOrderNumber] = useState<string | null>(null);
 
   useEffect(() => {
@@ -93,13 +95,13 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onBack }) => 
     }
   };
 
-  const handleCancelOrder = async () => {
+  const handleCancelOrder = async (customerMessage: string) => {
     if (!order) return;
-    if (!confirm(`Annuler la commande ${order.order_number} ?\nUn email d'information sera envoyé au client.`)) return;
     try {
       setCancelling(true);
       setError(null);
-      const result = await orderService.cancelOrder(order.id);
+      const result = await orderService.cancelOrder(order.id, customerMessage);
+      setShowCancelModal(false);
       const wasPaid = order.payment_status === 'succeeded';
       const hadParcel = Boolean(order.sendcloud_parcel_id);
       setOrder({
@@ -359,7 +361,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onBack }) => 
                   {/* Annulation : disponible tant que la commande n'est pas déjà annulée/remboursée/livrée */}
                   {!['cancelled', 'refunded', 'delivered'].includes(order.status) && (
                     <button
-                      onClick={handleCancelOrder}
+                      onClick={() => setShowCancelModal(true)}
                       disabled={cancelling}
                       className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
                     >
@@ -615,6 +617,14 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onBack }) => 
           )}
         </div>
       </div>
+
+      <CancelOrderModal
+        orderNumber={order.order_number}
+        isOpen={showCancelModal}
+        submitting={cancelling}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleCancelOrder}
+      />
     </div>
   );
 };

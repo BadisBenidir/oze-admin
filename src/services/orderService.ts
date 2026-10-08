@@ -158,12 +158,13 @@ class OrderService {
    * Annule une commande via l'Edge Function `cancel-order` : passe le statut à
    * « cancelled » ET envoie un email d'information au client (côté serveur).
    */
-  async cancelOrder(orderId: string): Promise<{
+  /** customerMessage : motif choisi par l'admin, inséré dans l'email au client. */
+  async cancelOrder(orderId: string, customerMessage?: string): Promise<{
     refunded: boolean; refundError: string | null;
     sendcloudCancelled: boolean; sendcloudError: string | null;
   }> {
     const { data, error } = await supabase.functions.invoke('cancel-order', {
-      body: { order_id: orderId },
+      body: { order_id: orderId, ...(customerMessage ? { customer_message: customerMessage } : {}) },
     });
     if (error) {
       const message = (data && (data.error || data.message)) || error.message || "Échec de l'annulation";
