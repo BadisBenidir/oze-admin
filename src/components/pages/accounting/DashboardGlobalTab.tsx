@@ -13,6 +13,38 @@ import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, com
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 const pct = (current: number, previous: number): number | null => (previous ? ((current - previous) / Math.abs(previous)) * 100 : null);
 
+// Infobulle du graphique mensuel : CA total du mois en tête, puis le
+// détail par canal et les courbes, toujours dans le même ordre.
+const MONTHLY_TOOLTIP_ROWS: { key: 'web' | 'b2b' | 'live' | 'subscriptions' | 'cogs' | 'margin'; label: string; color: string }[] = [
+  { key: 'web', label: 'CA B2C', color: '#2563eb' },
+  { key: 'b2b', label: 'CA B2B', color: '#7c3aed' },
+  { key: 'live', label: 'CA Lives', color: '#d97706' },
+  { key: 'subscriptions', label: 'CA Abonnements', color: '#059669' },
+  { key: 'cogs', label: "Coût d'achat", color: '#dc2626' },
+  { key: 'margin', label: 'Marge brute', color: '#16a34a' },
+];
+
+const MonthlyTooltip: React.FC<{ active?: boolean; label?: string; payload?: { payload: Record<string, number> }[] }> = ({ active, label, payload }) => {
+  if (!active || !payload || payload.length === 0) return null;
+  const row = payload[0].payload;
+  const total = (row.web || 0) + (row.b2b || 0) + (row.live || 0) + (row.subscriptions || 0);
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-md">
+      <p className="mb-1.5 font-medium text-gray-900">{label}</p>
+      <p className="mb-1.5 flex justify-between gap-6 border-b border-gray-100 pb-1.5 font-semibold text-gray-900">
+        <span>CA total</span>
+        <span className="tabular-nums">{EUR(total)}</span>
+      </p>
+      {MONTHLY_TOOLTIP_ROWS.map((r) => (
+        <p key={r.key} className="flex justify-between gap-6" style={{ color: r.color }}>
+          <span>{r.label}</span>
+          <span className="tabular-nums">{EUR(row[r.key] || 0)}</span>
+        </p>
+      ))}
+    </div>
+  );
+};
+
 const CHANNEL_COLORS = { web: '#2563eb', b2b: '#7c3aed', live: '#d97706', subscriptions: '#059669' };
 
 interface DashboardGlobalTabProps {
@@ -118,7 +150,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} width={70} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k€`} />
-                <Tooltip formatter={(v: any) => EUR(Number(v))} />
+                <Tooltip content={<MonthlyTooltip />} />
                 <Legend />
                 <Bar dataKey="web" stackId="ca" name="CA B2C" fill={CHANNEL_COLORS.web} radius={[0, 0, 0, 0]} />
                 <Bar dataKey="b2b" stackId="ca" name="CA B2B" fill={CHANNEL_COLORS.b2b} />
