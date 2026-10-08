@@ -24,6 +24,9 @@ async function invoicePromo(stripe: Stripe | undefined, invoice: Stripe.Invoice)
     const full = await stripe.invoices.retrieve(invoice.id, { expand: ['discounts.promotion_code', 'discounts.coupon'] });
     for (const d of full.discounts || []) {
       if (typeof d === 'string') continue;
+      // Code promo Club (0192) : le coupon créé automatiquement porte le code.
+      const clubCode = d.coupon?.metadata?.club_promo_code;
+      if (clubCode) return { promoCode: clubCode, promotionCodeId: null, discountAmount };
       const pc = d.promotion_code;
       if (pc && typeof pc === 'object') return { promoCode: pc.code, promotionCodeId: pc.id, discountAmount };
       if (typeof pc === 'string') {

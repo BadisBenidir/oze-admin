@@ -1,14 +1,27 @@
-// Codes promo des abonnements Club B2B : codes promotionnels Stripe
-// (Dashboard Stripe → Produits → Coupons → Codes promotionnels). Saisis sur la
-// page d'inscription, validés ici puis appliqués à la session Checkout
-// (discounts). Le suivi par code (membres, CA) se fait sur
-// b2b_subscription_payments.promo_code (0191).
+// Codes promo des abonnements Club B2B, gérés dans l'admin (table
+// club_promo_codes, 0192). Saisis sur la page d'inscription, vérifiés ici ;
+// au paiement, la remise est transmise à Stripe via un coupon créé
+// automatiquement (ensureStripeCoupon). Le suivi par code (membres, CA) se
+// fait sur b2b_subscription_payments.promo_code (0191).
 
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { priceForPlan, type SubscriptionPlan } from './subscriptionCheckout.ts';
 
+export interface ClubPromoCode {
+  id: string;
+  code: string;
+  discount_type: 'percentage' | 'fixed_amount';
+  discount_value: number;
+  duration: 'once' | 'repeating' | 'forever';
+  duration_months: number | null;
+  plans: string[];
+  max_uses: number | null;
+  valid_until: string | null;
+  status: 'active' | 'inactive';
+}
+
 export interface PromoPreview {
-  promotionCodeId: string;
   code: string;
   /** Ex. « -20 % pendant 3 mois », « -10,00 € le premier mois ». */
   label: string;
@@ -18,52 +31,75 @@ export interface PromoPreview {
   regularAmount: number;
 }
 
-const euros = (cents: number) => (cents / 100).toFixed(2).replace('.', ',') + ' €';
+const euros = (value: number) => value.toFixed(2).replace('.', ',') + ' €';
 
-const durationLabel = (coupon: Stripe.Coupon): string => {
-  if (coupon.duration === 'forever') return 'chaque mois';
-  if (coupon.duration === 'once') return 'le premier mois';
-  const months = coupon.duration_in_months || 1;
+const durationLabel = (promo: ClubPromoCode): string => {
+  if (promo.duration === 'forever') return 'chaque mois';
+  const months = promo.duration === 'repeating' ? promo.duration_months || 1 : 1;
   return months === 1 ? 'le premier mois' : `pendant ${months} mois`;
 };
 
-/** Valide un code promo pour un pass ; lève une erreur lisible s'il est refusé. */
-export async function resolvePromotionCode(stripe: Stripe, rawCode: string, plan: SubscriptionPlan): Promise<PromoPreview> {
-  const code = rawCode.trim();
+/** Valide un code pour un pass ; lève une erreur lisible s'il est refusé. */
+export async function resolveClubPromo(
+  admin: SupabaseClient,
+  stripe: Stripe,
+  rawCode: string,
+  plan: SubscriptionPlan,
+): Promise<{ promo: ClubPromoCode; preview: PromoPreview }> {
+  const code = rawCode.trim().toUpperCase();
   if (!code) throw new Error('Saisissez un code promo');
-  const { data } = await stripe.promotionCodes.list({ code, active: true, limit: 1, expand: ['data.coupon.applies_to'] });
-  const promo = data[0];
-  if (!promo || !promo.coupon.valid) throw new Error('Ce code promo n\'est pas valable');
-  if (promo.expires_at && promo.expires_at * 1000 < Date.now()) throw new Error('Ce code promo a expiré');
-  if (promo.max_redemptions && promo.times_redeemed >= promo.max_redemptions) throw new Error('Ce code promo a atteint sa limite d\'utilisation');
+  const { data } = await admin.from('club_promo_codes').select('*').eq('code', code).maybeSingle();
+  const promo = data as ClubPromoCode | null;
+  if (!promo || promo.status !== 'active') throw new Error('Ce code promo n\'est pas valable');
+  if (promo.valid_until && new Date(promo.valid_until).getTime() < Date.now()) throw new Error('Ce code promo a expiré');
+  if (!promo.plans.includes(plan)) throw new Error('Ce code promo ne s\'applique pas à ce pass');
+  if (promo.max_uses) {
+    // Une utilisation = un client Stripe ayant payé au moins une échéance avec ce code.
+    const { data: used } = await admin.from('b2b_subscription_payments').select('stripe_customer_id').eq('promo_code', promo.code);
+    const customers = new Set((used || []).map((r) => r.stripe_customer_id));
+    if (customers.size >= promo.max_uses) throw new Error('Ce code promo a atteint sa limite d\'utilisation');
+  }
 
   const priceId = priceForPlan(plan);
   if (!priceId) throw new Error('Pass indisponible');
   const price = await stripe.prices.retrieve(priceId);
-  const productId = typeof price.product === 'string' ? price.product : price.product.id;
-  const appliesTo = promo.coupon.applies_to?.products;
-  if (appliesTo && appliesTo.length > 0 && !appliesTo.includes(productId)) {
-    throw new Error('Ce code promo ne s\'applique pas à ce pass');
-  }
-  const regular = price.unit_amount ?? 0;
-  const minimum = promo.restrictions?.minimum_amount;
-  if (minimum && regular < minimum) throw new Error('Ce code promo ne s\'applique pas à ce pass');
-
-  const coupon = promo.coupon;
-  let discount = 0;
-  let label = '';
-  if (coupon.percent_off) {
-    discount = Math.round((regular * coupon.percent_off) / 100);
-    label = `-${String(coupon.percent_off).replace('.', ',')} % ${durationLabel(coupon)}`;
-  } else if (coupon.amount_off) {
-    discount = Math.min(regular, coupon.amount_off);
-    label = `-${euros(coupon.amount_off)} ${durationLabel(coupon)}`;
-  }
+  const regular = (price.unit_amount ?? 0) / 100;
+  const value = Number(promo.discount_value);
+  const discount = promo.discount_type === 'percentage' ? Math.round(regular * value) / 100 : Math.min(regular, value);
+  const amountLabel = promo.discount_type === 'percentage' ? `-${String(value).replace('.', ',')} %` : `-${euros(value)}`;
   return {
-    promotionCodeId: promo.id,
-    code: promo.code,
-    label,
-    firstAmount: Math.max(0, regular - discount) / 100,
-    regularAmount: regular / 100,
+    promo,
+    preview: {
+      code: promo.code.toUpperCase(),
+      label: `${amountLabel} ${durationLabel(promo)}`,
+      firstAmount: Math.max(0, Math.round((regular - discount) * 100) / 100),
+      regularAmount: regular,
+    },
   };
+}
+
+/** Coupon Stripe portant la remise du code. Id déterministe dérivé des
+ * conditions : réutilisé tant qu'elles ne changent pas, nouveau coupon sinon
+ * (un coupon Stripe n'est pas modifiable). */
+export async function ensureStripeCoupon(stripe: Stripe, promo: ClubPromoCode): Promise<string> {
+  const value = Number(promo.discount_value);
+  const months = promo.duration === 'repeating' ? promo.duration_months || 1 : 0;
+  const terms = `${promo.discount_type === 'percentage' ? 'p' : 'a'}${String(value).replace('.', '_')}_${promo.duration}${months || ''}`;
+  const couponId = `club_${promo.code.toUpperCase().replace(/[^A-Z0-9]/g, '')}_${terms}`.slice(0, 200);
+  try {
+    await stripe.coupons.retrieve(couponId);
+    return couponId;
+  } catch {
+    await stripe.coupons.create({
+      id: couponId,
+      name: promo.code.toUpperCase(),
+      ...(promo.discount_type === 'percentage'
+        ? { percent_off: value }
+        : { amount_off: Math.round(value * 100), currency: 'eur' }),
+      duration: promo.duration,
+      ...(promo.duration === 'repeating' ? { duration_in_months: months } : {}),
+      metadata: { club_promo_code: promo.code.toUpperCase(), club_promo_code_id: promo.id },
+    });
+    return couponId;
+  }
 }

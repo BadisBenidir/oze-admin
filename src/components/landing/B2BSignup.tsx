@@ -56,7 +56,6 @@ const COUNTRIES = ['France', 'Belgique', 'Suisse', 'Luxembourg', 'Monaco', 'Alle
 const DRAFT_KEY = 'oze-b2b-signup-draft';
 
 interface PromoPreview {
-  promotionCodeId: string;
   code: string;
   label: string;
   firstAmount: number;
@@ -444,7 +443,7 @@ const SignupForm: React.FC = () => {
     setPromoError(null);
     const { data, error } = await invokeEdgeFunction<PromoPreview>('b2b-signup', { action: 'promo', plan: planId, code: code.trim() });
     setCheckingPromo(false);
-    if (data?.promotionCodeId) {
+    if (data?.code) {
       setPromo(data);
     } else {
       setPromo(null);

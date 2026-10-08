@@ -23,7 +23,7 @@ import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import bcrypt from 'npm:bcryptjs@2.4.3';
 import { createSubscriptionCheckout, isSubscriptionPlan, siteOrigin, type SubscriptionPlan } from '../_shared/subscriptionCheckout.ts';
 import { countryCode } from '../_shared/stripeBilling.ts';
-import { resolvePromotionCode } from '../_shared/subscriptionPromo.ts';
+import { ensureStripeCoupon, resolveClubPromo } from '../_shared/subscriptionPromo.ts';
 import { finalizePendingSignup } from '../_shared/pendingSignup.ts';
 import { handleSubscriptionCheckout } from '../b2b-stripe-webhook/subscriptions.ts';
 
@@ -145,7 +145,7 @@ Deno.serve(async (req: Request) => {
   if (body.action === 'promo') {
     if (!isSubscriptionPlan(body.plan)) return reply({ error: 'Pass invalide' }, 400);
     try {
-      const preview = await resolvePromotionCode(stripe, text(body.code, 60), body.plan);
+      const { preview } = await resolveClubPromo(admin, stripe, text(body.code, 60), body.plan);
       return reply(preview);
     } catch (err) {
       return reply({ code: 'invalid_promo', error: err instanceof Error ? err.message : 'Code promo invalide' }, 400);
@@ -213,11 +213,12 @@ Deno.serve(async (req: Request) => {
   if (taken) return taken;
 
   // Code promo facultatif : revalidé ici (jamais d'id accepté tel quel du client).
-  let promotionCodeId: string | undefined;
+  let couponId: string | undefined;
   const promoCode = text(body.promo_code, 60);
   if (promoCode) {
     try {
-      promotionCodeId = (await resolvePromotionCode(stripe, promoCode, plan)).promotionCodeId;
+      const { promo } = await resolveClubPromo(admin, stripe, promoCode, plan);
+      couponId = await ensureStripeCoupon(stripe, promo);
     } catch (err) {
       return reply({ code: 'invalid_promo', error: err instanceof Error ? err.message : 'Code promo invalide' }, 400);
     }
@@ -273,7 +274,7 @@ Deno.serve(async (req: Request) => {
       signupId: signup.id,
       email: input.email,
       customerId: customer.id,
-      promotionCodeId,
+      couponId,
       ...checkoutUrls(req, input.email, plan),
     });
     await admin
