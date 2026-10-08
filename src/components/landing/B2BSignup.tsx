@@ -713,6 +713,13 @@ const SignupForm: React.FC = () => {
                         et l'abonnement mensuel sans engagement, résiliable à tout moment depuis mon profil.
                       </span>
                     </label>
+                    <p className="mt-2 pl-7 text-xs text-gray-500">
+                      Vos données sont traitées conformément à notre{' '}
+                      <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline hover:text-black">
+                        politique de confidentialité
+                      </a>
+                      .
+                    </p>
                     {errors.terms && <p className="mt-2 text-xs text-red-500">{errors.terms}</p>}
 
 

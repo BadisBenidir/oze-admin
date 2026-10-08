@@ -11,6 +11,7 @@ import { B2BSignup } from './components/landing/B2BSignup';
 import { PreviewLinkPage, getPreviewToken } from './components/landing/PreviewLinkPage';
 import { isLandingHost } from './components/landing/plans';
 import { Terms } from './components/pages/reseller/Terms';
+import { PrivacyPolicy } from './components/pages/reseller/PrivacyPolicy';
 
 // La landing publique et l'inscription vivent sur leur propre domaine,
 // b2b.ozeparis.com (même build, même projet Vercel) : pro.ozeparis.com reste
@@ -103,6 +104,17 @@ function App() {
             <a href="/" className="text-sm text-gray-500 hover:text-gray-900">← Retour</a>
           </div>
           <Terms />
+        </div>
+      );
+    }
+    // Politique de confidentialité : même modèle que /cgv, lisible sans compte.
+    if (window.location.pathname === '/confidentialite' || window.location.pathname === '/confidentialite/') {
+      return (
+        <div className="min-h-screen bg-gray-50">
+          <div className="max-w-4xl mx-auto px-4 pt-6">
+            <a href="/" className="text-sm text-gray-500 hover:text-gray-900">← Retour</a>
+          </div>
+          <PrivacyPolicy />
         </div>
       );
     }

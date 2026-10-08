@@ -215,9 +215,8 @@ export const Terms: React.FC = () => {
               </Section>
               <Section title="10. Données personnelles">
                 <p>
-                  Les données collectées sont traitées conformément à notre politique de confidentialité.
-                  {/* TODO : page politique de confidentialité à créer, puis remplacer la fin de phrase par
-                      « …politique de confidentialité, accessible <a href="…">ici</a>. » */}
+                  Les données collectées sont traitées conformément à notre politique de confidentialité, accessible{' '}
+                  <a href="/confidentialite" className="font-medium underline hover:text-gray-900">ici</a>.
                 </p>
               </Section>
               <Section title="11. Contact">
@@ -291,13 +290,84 @@ export const Terms: React.FC = () => {
                   S'agissant de biens d'occasion, les défauts de conformité qui apparaissent dans un délai de douze mois
                   à compter de la délivrance sont présumés exister au moment de la délivrance.
                 </p>
-                {/* TODO : encadré masqué en attendant le texte officiel — le réactiver avec le texte de
-                    l'annexe de l'article D211-2 du Code de la consommation (Légifrance) :
+                {/* Texte imposé par l'annexe de l'article D211-2 du Code de la consommation — ne pas reformuler. */}
                 <div className="rounded-lg border border-gray-300 p-4 space-y-2">
                   <p className="font-semibold text-gray-900">Garantie légale de conformité</p>
-                  <p>…texte officiel de l'annexe de l'article D211-2…</p>
+                  <p>
+                    Le consommateur dispose d'un délai de deux ans à compter de la délivrance du bien pour obtenir la
+                    mise en œuvre de la garantie légale de conformité en cas d'apparition d'un défaut de conformité.
+                    S'agissant d'un bien d'occasion, durant les douze premiers mois suivant la délivrance, le
+                    consommateur n'est tenu d'établir que l'existence du défaut de conformité et non la date
+                    d'apparition de celui-ci.
+                  </p>
+                  <p>
+                    Lorsque le contrat de vente du bien prévoit la fourniture d'un contenu numérique ou d'un service
+                    numérique de manière continue pendant une durée supérieure à deux ans, la garantie légale est
+                    applicable à ce contenu numérique ou ce service numérique tout au long de la période de fourniture
+                    prévue. Durant ce délai, le consommateur n'est tenu d'établir que l'existence du défaut de
+                    conformité affectant le contenu numérique ou le service numérique et non la date d'apparition de
+                    celui-ci.
+                  </p>
+                  <p>
+                    La garantie légale de conformité emporte obligation pour le professionnel, le cas échéant, de
+                    fournir toutes les mises à jour nécessaires au maintien de la conformité du bien.
+                  </p>
+                  <p>
+                    La garantie légale de conformité donne au consommateur droit à la réparation ou au remplacement du
+                    bien dans un délai de trente jours suivant sa demande, sans frais et sans inconvénient majeur pour
+                    lui.
+                  </p>
+                  <p>
+                    Si le bien est réparé dans le cadre de la garantie légale de conformité, le consommateur bénéficie
+                    d'une extension de six mois de la garantie initiale.
+                  </p>
+                  <p>
+                    Si le consommateur demande la réparation du bien, mais que le vendeur impose le remplacement, la
+                    garantie légale de conformité est renouvelée pour une période de deux ans à compter de la date de
+                    remplacement du bien.
+                  </p>
+                  <p>
+                    Le consommateur peut obtenir une réduction du prix d'achat en conservant le bien ou mettre fin au
+                    contrat en se faisant rembourser intégralement contre restitution du bien, si :
+                    <br />
+                    1° Le professionnel refuse de réparer ou de remplacer le bien ;
+                    <br />
+                    2° La réparation ou le remplacement du bien intervient après un délai de trente jours ;
+                    <br />
+                    3° La réparation ou le remplacement du bien occasionne un inconvénient majeur pour le consommateur,
+                    notamment lorsque le consommateur supporte définitivement les frais de reprise ou d'enlèvement du
+                    bien non conforme, ou s'il supporte les frais d'installation du bien réparé ou de remplacement ;
+                    <br />
+                    4° La non-conformité du bien persiste en dépit de la tentative de mise en conformité du vendeur
+                    restée infructueuse.
+                  </p>
+                  <p>
+                    Le consommateur a également droit à une réduction du prix du bien ou à la résolution du contrat
+                    lorsque le défaut de conformité est si grave qu'il justifie que la réduction du prix ou la
+                    résolution du contrat soit immédiate. Le consommateur n'est alors pas tenu de demander la
+                    réparation ou le remplacement du bien au préalable.
+                  </p>
+                  <p>Le consommateur n'a pas droit à la résolution de la vente si le défaut de conformité est mineur.</p>
+                  <p>
+                    Toute période d'immobilisation du bien en vue de sa réparation ou de son remplacement suspend la
+                    garantie qui restait à courir jusqu'à la délivrance du bien remis en état.
+                  </p>
+                  <p>
+                    Les droits mentionnés ci-dessus résultent de l'application des articles L. 217-1 à L. 217-32 du code
+                    de la consommation.
+                  </p>
+                  <p>
+                    Le vendeur qui fait obstacle de mauvaise foi à la mise en œuvre de la garantie légale de conformité
+                    encourt une amende civile d'un montant maximal de 300 000 euros, qui peut être porté jusqu'à 10 % du
+                    chiffre d'affaires moyen annuel (article L. 241-5 du code de la consommation).
+                  </p>
+                  <p>
+                    Le consommateur bénéficie également de la garantie légale des vices cachés en application des
+                    articles 1641 à 1649 du code civil, pour une durée de deux ans à compter de la découverte du défaut.
+                    Cette garantie donne droit à une réduction de prix si le bien est conservé ou à un remboursement
+                    intégral contre restitution du bien.
+                  </p>
                 </div>
-                */}
               </Section>
               <Section title="Livraison et transfert des risques">
                 <p>

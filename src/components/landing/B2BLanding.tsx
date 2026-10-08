@@ -857,6 +857,7 @@ export const B2BLanding: React.FC = () => {
                 </button>
               ))}
               <a href="/cgv" className="transition-colors hover:text-white">CGV</a>
+              <a href="/confidentialite" className="transition-colors hover:text-white">Politique de confidentialité</a>
               <button onClick={goToLogin} className="transition-colors hover:text-white">Espace revendeur</button>
             </nav>
           </div>

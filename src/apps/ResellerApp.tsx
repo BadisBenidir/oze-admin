@@ -23,6 +23,7 @@ import { Auctions } from '../components/pages/reseller/Auctions';
 import { PlanLockedScreen } from '../components/pages/reseller/Subscription';
 import { useResellerPresenceTracking } from '../hooks/useResellerPresenceTracking';
 import { Terms } from '../components/pages/reseller/Terms';
+import { PrivacyPolicy } from '../components/pages/reseller/PrivacyPolicy';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 import { ShoppingCart, Wallet, X } from 'lucide-react';
 
@@ -120,11 +121,13 @@ function ResellerApp() {
   const openProduct = (productId: string) => navigatePath(`/catalogue/${productId}`);
   const openCart = () => navigatePath('/panier');
   const openTerms = () => navigatePath('/cgv');
+  const openPrivacy = () => navigatePath('/confidentialite');
   const closeToRoot = () => navigatePath('/');
 
   const productId = parseProductId(pathname);
   const isCartRoute = pathname === '/panier' || pathname === '/panier/';
   const isTermsRoute = pathname === '/cgv' || pathname === '/cgv/';
+  const isPrivacyRoute = pathname === '/confidentialite' || pathname === '/confidentialite/';
 
   // Retour depuis Stripe : lu une seule fois au montage, puis l'URL est
   // nettoyée pour ne pas re-déclencher au rafraîchissement de la page.
@@ -210,6 +213,10 @@ function ResellerApp() {
 
     if (isTermsRoute) {
       return <Terms />;
+    }
+
+    if (isPrivacyRoute) {
+      return <PrivacyPolicy />;
     }
 
     switch (currentTab) {
@@ -309,7 +316,7 @@ function ResellerApp() {
         activeSubTab={activeSubTab}
         onTabChange={(tab) => {
           setCheckoutStatus(null);
-          if (productId || isCartRoute || isTermsRoute) closeToRoot();
+          if (productId || isCartRoute || isTermsRoute || isPrivacyRoute) closeToRoot();
           navigateTo(tab, '');
         }}
         onSubTabChange={() => {}}
@@ -394,6 +401,10 @@ function ResellerApp() {
         <footer className="px-4 md:px-6 py-4 mt-6 border-t border-gray-100 text-center">
           <button onClick={openTerms} className="text-xs text-gray-400 hover:text-gray-600 underline">
             Conditions Générales de Vente et d'Utilisation
+          </button>
+          <span className="mx-2 text-xs text-gray-300">·</span>
+          <button onClick={openPrivacy} className="text-xs text-gray-400 hover:text-gray-600 underline">
+            Politique de confidentialité
           </button>
         </footer>
       </MainLayout>
