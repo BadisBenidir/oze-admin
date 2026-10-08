@@ -23,6 +23,7 @@ import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import bcrypt from 'npm:bcryptjs@2.4.3';
 import { createSubscriptionCheckout, isSubscriptionPlan, siteOrigin, type SubscriptionPlan } from '../_shared/subscriptionCheckout.ts';
 import { countryCode } from '../_shared/stripeBilling.ts';
+import { resolvePromotionCode } from '../_shared/subscriptionPromo.ts';
 import { finalizePendingSignup } from '../_shared/pendingSignup.ts';
 import { handleSubscriptionCheckout } from '../b2b-stripe-webhook/subscriptions.ts';
 
@@ -140,6 +141,17 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // ── Code promo saisi sur la page d'inscription : vérification + aperçu du prix ──
+  if (body.action === 'promo') {
+    if (!isSubscriptionPlan(body.plan)) return reply({ error: 'Pass invalide' }, 400);
+    try {
+      const preview = await resolvePromotionCode(stripe, text(body.code, 60), body.plan);
+      return reply(preview);
+    } catch (err) {
+      return reply({ code: 'invalid_promo', error: err instanceof Error ? err.message : 'Code promo invalide' }, 400);
+    }
+  }
+
   // ── Lien de l'email de relance : nouvelle session pour une inscription non payée ──
   if (body.action === 'resume') {
     const signupId = text(body.signup_id, 60);
@@ -200,6 +212,17 @@ Deno.serve(async (req: Request) => {
   const taken = await emailTaken(admin, input.email);
   if (taken) return taken;
 
+  // Code promo facultatif : revalidé ici (jamais d'id accepté tel quel du client).
+  let promotionCodeId: string | undefined;
+  const promoCode = text(body.promo_code, 60);
+  if (promoCode) {
+    try {
+      promotionCodeId = (await resolvePromotionCode(stripe, promoCode, plan)).promotionCodeId;
+    } catch (err) {
+      return reply({ code: 'invalid_promo', error: err instanceof Error ? err.message : 'Code promo invalide' }, 400);
+    }
+  }
+
   try {
     // Inscription précédente non payée avec le même email : son client Stripe
     // est réutilisé (pas de doublon de clients), l'ancienne inscription remplacée.
@@ -250,6 +273,7 @@ Deno.serve(async (req: Request) => {
       signupId: signup.id,
       email: input.email,
       customerId: customer.id,
+      promotionCodeId,
       ...checkoutUrls(req, input.email, plan),
     });
     await admin

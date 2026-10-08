@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  AlertCircle, ArrowLeft, Check, CreditCard, KeyRound, Lock, Mail, MapPin, Phone, Shield, User, UserPlus, X,
+  AlertCircle, ArrowLeft, Check, CreditCard, KeyRound, Lock, Mail, MapPin, Phone, Shield, Tag, User, UserPlus, X,
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
@@ -54,6 +54,14 @@ const COUNTRIES = ['France', 'Belgique', 'Suisse', 'Luxembourg', 'Monaco', 'Alle
 // Brouillon conservé dans l'onglet : si le visiteur revient de Stripe sans
 // payer, il retrouve ses informations.
 const DRAFT_KEY = 'oze-b2b-signup-draft';
+
+interface PromoPreview {
+  promotionCodeId: string;
+  code: string;
+  label: string;
+  firstAmount: number;
+  regularAmount: number;
+}
 
 const SIGNUP_PLANS = PLANS.filter((p): p is Plan & { id: SignupPlanId } => p.id === 'drops' || p.id === 'revendeur');
 
@@ -415,6 +423,12 @@ const SignupForm: React.FC = () => {
     }
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
+  // Code promo (codes promotionnels Stripe), vérifié par b2b-signup (action
+  // "promo") puis revalidé côté serveur à l'envoi.
+  const [promoInput, setPromoInput] = useState('');
+  const [promo, setPromo] = useState<PromoPreview | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [checkingPromo, setCheckingPromo] = useState(false);
   const [errors, setErrors] = useState<ReturnType<typeof validate>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -423,6 +437,37 @@ const SignupForm: React.FC = () => {
   const paymentCancelled = new URLSearchParams(window.location.search).get('paiement') === 'annule';
 
   const plan = SIGNUP_PLANS.find((p) => p.id === planId)!;
+
+  const applyPromo = async (code: string) => {
+    if (!code.trim()) return;
+    setCheckingPromo(true);
+    setPromoError(null);
+    const { data, error } = await invokeEdgeFunction<PromoPreview>('b2b-signup', { action: 'promo', plan: planId, code: code.trim() });
+    setCheckingPromo(false);
+    if (data?.promotionCodeId) {
+      setPromo(data);
+    } else {
+      setPromo(null);
+      setPromoError(error || "Ce code promo n'est pas valable");
+    }
+  };
+
+  // Changement de pass : la remise est recalculée pour le nouveau pass.
+  const promoCodeRef = useRef<string | null>(null);
+  promoCodeRef.current = promo?.code ?? null;
+  useEffect(() => {
+    if (promoCodeRef.current) applyPromo(promoCodeRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planId]);
+
+  const removePromo = () => {
+    setPromo(null);
+    setPromoInput('');
+    setPromoError(null);
+  };
+
+  const formatEuros = (n: number) => n.toFixed(2).replace('.', ',') + ' €';
+  const dueToday = promo ? formatEuros(promo.firstAmount) : plan.price;
 
   useEffect(() => {
     document.title = `Inscription — ${plan.name} | OZË Paris B2B`;
@@ -482,6 +527,7 @@ const SignupForm: React.FC = () => {
       password: trimmed.password,
       terms_accepted: true,
       cgv_version: CGV_VERSION,
+      ...(promo ? { promo_code: promo.code } : {}),
     });
 
     if (data?.url) {
@@ -492,6 +538,9 @@ const SignupForm: React.FC = () => {
     setSubmitting(false);
     if (code === 'existing_subscriber') {
       setExistingAccount(true);
+    } else if (code === 'invalid_promo') {
+      setPromo(null);
+      setPromoError(error || "Ce code promo n'est plus valable");
     } else if (code === 'email_taken') {
       setErrors((prev) => ({ ...prev, email: error || 'Cet email est déjà utilisé' }));
       document.querySelector('[data-signup-form]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -686,12 +735,70 @@ const SignupForm: React.FC = () => {
                       <span>Engagement</span>
                       <span className="font-medium text-gray-900">Sans engagement</span>
                     </div>
+                    {promo && (
+                      <div className="flex items-center justify-between gap-2 text-xs text-green-700 sm:text-sm">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <Tag className="h-3.5 w-3.5 flex-shrink-0" />
+                          <span className="truncate">
+                            Code <strong>{promo.code}</strong> : {promo.label}
+                          </span>
+                        </span>
+                        <button type="button" onClick={removePromo} className="flex-shrink-0 text-gray-400 hover:text-gray-700" title="Retirer le code">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm font-semibold text-gray-900 sm:text-base">
                       <span>À régler aujourd'hui</span>
-                      <span>{plan.price}</span>
+                      <span>
+                        {promo && <span className="mr-1.5 text-xs font-normal text-gray-400 line-through sm:text-sm">{plan.price}</span>}
+                        {dueToday}
+                      </span>
                     </div>
-                    <p className="text-xs text-gray-500">Puis {plan.price} {PERIOD}, résiliable à tout moment.</p>
+                    <p className="text-xs text-gray-500">
+                      {promo && promo.label.endsWith('chaque mois')
+                        ? `Puis ${dueToday} ${PERIOD}, résiliable à tout moment.`
+                        : promo
+                        ? `Puis ${plan.price} ${PERIOD} une fois la remise terminée, résiliable à tout moment.`
+                        : `Puis ${plan.price} ${PERIOD}, résiliable à tout moment.`}
+                    </p>
                   </div>
+
+                  {/* Code promo */}
+                  {!promo && (
+                    <div className="mt-4">
+                      <div className="flex gap-2">
+                        <div className="relative min-w-0 flex-1">
+                          <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="text"
+                            value={promoInput}
+                            onChange={(e) => {
+                              setPromoInput(e.target.value.toUpperCase());
+                              if (promoError) setPromoError(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                applyPromo(promoInput);
+                              }
+                            }}
+                            placeholder="Code promo"
+                            className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm uppercase placeholder:normal-case focus:border-gray-400 focus:outline-none"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => applyPromo(promoInput)}
+                          disabled={checkingPromo || !promoInput.trim()}
+                          className="rounded-lg border border-gray-900 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-900 hover:text-white disabled:opacity-40"
+                        >
+                          {checkingPromo ? '…' : 'Appliquer'}
+                        </button>
+                      </div>
+                      {promoError && <p className="mt-1.5 text-xs text-red-500">{promoError}</p>}
+                    </div>
+                  )}
 
                   {/* CGV + paiement, dans la même carte que le récapitulatif */}
                   <div className="mt-5 border-t border-gray-100 pt-4">
@@ -740,7 +847,7 @@ const SignupForm: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <CreditCard className="h-4 w-4" /> S'abonner et payer — {plan.price} {PERIOD}
+                          <CreditCard className="h-4 w-4" /> S'abonner et payer — {promo ? dueToday : `${plan.price} ${PERIOD}`}
                         </>
                       )}
                     </button>

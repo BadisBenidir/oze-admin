@@ -133,7 +133,7 @@ Deno.serve(async (req: Request) => {
     // CA des abonnements (0185) : chaque facture de pass payée est enregistrée,
     // y compris la première (souscription). Jamais bloquant pour l'email.
     try {
-      await recordSubscriptionInvoice(createClient(supabaseUrl, serviceRoleKey), event.data.object as Stripe.Invoice);
+      await recordSubscriptionInvoice(createClient(supabaseUrl, serviceRoleKey), event.data.object as Stripe.Invoice, stripe);
     } catch (err) {
       console.error(`${LOG_PREFIX} Enregistrement paiement d'abonnement (${event.id}):`, err instanceof Error ? err.message : err);
     }

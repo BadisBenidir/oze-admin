@@ -35,6 +35,8 @@ export async function createSubscriptionCheckout(
     customerId?: string | null;
     successUrl: string;
     cancelUrl: string;
+    /** Code promo saisi sur la page d'inscription et déjà validé (subscriptionPromo.ts). */
+    promotionCodeId?: string;
   },
 ): Promise<{ url: string; sessionId: string }> {
   if (!params.resellerId && !params.signupId) throw new Error('resellerId ou signupId requis');
@@ -67,7 +69,11 @@ export async function createSubscriptionCheckout(
     metadata,
     subscription_data: { metadata },
     locale: 'fr',
-    allow_promotion_codes: true,
+    // Code saisi chez nous : appliqué d'office. Sinon, le champ « code promo »
+    // de la page Stripe reste disponible (les deux sont exclusifs chez Stripe).
+    ...(params.promotionCodeId
+      ? { discounts: [{ promotion_code: params.promotionCodeId }] }
+      : { allow_promotion_codes: true }),
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
   });

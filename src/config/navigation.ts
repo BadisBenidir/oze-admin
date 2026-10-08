@@ -111,6 +111,7 @@ export const navigationItems: MenuItem[] = [
       { id: 'sourcing', label: 'Sourcing sur mesure', path: '/espace-b2b/sourcing', icon: PackageSearch },
       { id: 'auctions', label: 'Enchères B2B', path: '/espace-b2b/encheres', icon: Gavel },
       { id: 'promo-codes', label: 'Codes Promos', path: '/espace-b2b/codes-promo', icon: Ticket },
+      { id: 'club-promo-codes', label: 'Codes promo Club', path: '/espace-b2b/codes-promo-club', icon: Ticket },
       { id: 'commissions', label: 'Chiffre d\'affaires B2B', path: '/espace-b2b/chiffre-affaires', icon: Banknote },
       { id: 'gift-rewards', label: 'Portefeuilles offerts', path: '/espace-b2b/portefeuilles-offerts', icon: Gift },
       { id: 'entrupy', label: 'Entrupy', path: '/espace-b2b/entrupy', icon: BadgeCheck },

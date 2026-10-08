@@ -1,17 +1,16 @@
-// Edge Function : sync-subscription-payments
+// Edge Function : subscription-promo-codes
 //
-// Rattrapage du CA des abonnements Club B2B (0185) : relit chez Stripe toutes
-// les factures payées des abonnés et les enregistre dans
-// b2b_subscription_payments (idempotent : relancer ne crée aucun doublon).
-// Le webhook (invoice.paid) enregistre ensuite chaque nouveau paiement.
-// Réservée aux admins (bouton « Synchroniser » de la page Abonnés).
+// Liste les codes promo Stripe (Dashboard Stripe → Coupons → Codes
+// promotionnels) pour l'écran admin « Codes promo Club » : conditions de la
+// remise, utilisations comptées par Stripe, limite et expiration. Les membres
+// et le CA par code sont lus côté admin dans b2b_subscription_payments (0191).
+// Réservée aux admins.
 //
-// Secrets : STRIPE_SECRET_KEY, STRIPE_PRICE_DROPS, STRIPE_PRICE_REVENDEUR
-// Déploiement : `supabase functions deploy sync-subscription-payments`
+// Secrets : STRIPE_SECRET_KEY
+// Déploiement : `supabase functions deploy subscription-promo-codes`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
-import { recordSubscriptionInvoice } from '../_shared/subscriptionPayments.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,21 +38,29 @@ Deno.serve(async (req: Request) => {
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
     if (me?.role !== 'admin') return reply({ error: 'Accès refusé' }, 403);
 
-    const { data: subscribers, error } = await admin
-      .from('resellers')
-      .select('stripe_customer_id')
-      .eq('account_type', 'subscriber')
-      .not('stripe_customer_id', 'is', null);
-    if (error) return reply({ error: error.message }, 500);
-
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
-    let recorded = 0;
-    for (const s of subscribers || []) {
-      for await (const invoice of stripe.invoices.list({ customer: s.stripe_customer_id as string, status: 'paid', limit: 100 })) {
-        if (await recordSubscriptionInvoice(admin, invoice, stripe)) recorded += 1;
-      }
+    const codes = [];
+    for await (const promo of stripe.promotionCodes.list({ limit: 100, expand: ['data.coupon'] })) {
+      const coupon = promo.coupon;
+      codes.push({
+        id: promo.id,
+        code: promo.code,
+        active: promo.active && coupon.valid,
+        times_redeemed: promo.times_redeemed,
+        max_redemptions: promo.max_redemptions,
+        expires_at: promo.expires_at ? new Date(promo.expires_at * 1000).toISOString() : null,
+        created_at: new Date(promo.created * 1000).toISOString(),
+        coupon: {
+          name: coupon.name,
+          percent_off: coupon.percent_off,
+          amount_off: coupon.amount_off != null ? coupon.amount_off / 100 : null,
+          duration: coupon.duration,
+          duration_in_months: coupon.duration_in_months,
+        },
+      });
+      if (codes.length >= 500) break;
     }
-    return reply({ recorded, subscribers: (subscribers || []).length });
+    return reply({ codes });
   } catch (err) {
     return reply({ error: err instanceof Error ? err.message : 'Erreur inconnue' }, 500);
   }
