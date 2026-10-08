@@ -1,30 +1,38 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { orderService, type OrderWithItems } from '../services/orderService';
 
 export const useOrders = (source?: 'web' | 'external') => {
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // « Toutes les commandes » et « Commandes site web » partagent le même
+  // composant : en passant de l'un à l'autre, la liste complète (plus lente)
+  // pouvait arriver APRÈS la liste filtrée et l'écraser (commandes B2B
+  // affichées dans « Commandes site web »). Seule la dernière requête compte.
+  const requestIdRef = useRef(0);
 
   const fetchOrders = async () => {
+    const requestId = ++requestIdRef.current;
     try {
       setLoading(true);
       setError(null);
-      
+
       let fetchedOrders: OrderWithItems[];
-      
+
       if (source) {
         fetchedOrders = await orderService.getOrdersBySource(source);
       } else {
         fetchedOrders = await orderService.getAllOrders();
       }
-      
+
+      if (requestId !== requestIdRef.current) return;
       setOrders(fetchedOrders);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       console.error('Error fetching orders:', err);
       setError(err instanceof Error ? err.message : 'Erreur lors du chargement des commandes');
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   };
 
