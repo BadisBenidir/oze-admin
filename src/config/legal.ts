@@ -8,11 +8,12 @@
 /** Identifie la version des CGV acceptée par un revendeur (profiles.terms_version) —
  * incrémenter (ex: date de révision) à chaque changement substantiel du texte,
  * pour pouvoir un jour redemander un consentement explicite après mise à jour. */
-export const CGV_VERSION = '2026-09-30';
+export const CGV_VERSION = '2026-10-08';
 
 // Source : annuaire-entreprises.data.gouv.fr (INSEE/INPI), fiche OZE PARIS.
 export const COMPANY_LEGAL_NAME = 'OZE PARIS, SAS';
-export const COMPANY_SIRET = '105 405 211 00019';
+export const COMPANY_SHARE_CAPITAL = '1 000';
+export const COMPANY_SIRET ='105 405 211 00019';
 export const COMPANY_RCS = 'RCS Paris 105 405 211';
 export const COMPANY_JURISDICTION_CITY = 'Paris';
 export const COMPANY_ADDRESS = '6 rue d\'Armaille, 75017 Paris';
