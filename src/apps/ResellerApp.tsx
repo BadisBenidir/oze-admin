@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { useNavigation } from '../hooks/useNavigation';
 import { useResellerAuth } from '../hooks/useResellerAuth';
 import { useB2BCart } from '../hooks/useB2BCart';
@@ -60,6 +61,18 @@ function ResellerApp() {
   const { notifications, markRead: markNotificationRead } = useResellerNotifications(profile?.id);
   const currentTab = activeTab || 'catalog';
   const isDropsPlan = profile?.account_type === 'subscriber' && profile.subscription_plan === 'drops';
+  // Pass Drops avec un accès enchères offert par l'admin (auction_access,
+  // 0193) : la page Enchères est débloquée jusqu'à la fin de l'accès.
+  const [auctionsUnlocked, setAuctionsUnlocked] = useState(false);
+  useEffect(() => {
+    if (!isDropsPlan || !profile?.id) {
+      setAuctionsUnlocked(false);
+      return;
+    }
+    supabase
+      .rpc('reseller_plan_allows', { p_user_id: profile.id, p_feature: 'auctions' })
+      .then(({ data, error }) => setAuctionsUnlocked(!error && data === true));
+  }, [isDropsPlan, profile?.id, currentTab]);
 
   // Présence temps réel + visiteur unique du jour (onglet admin
   // "Statistiques B2B") — no-op tant que `profile` n'est pas encore chargé.
@@ -232,7 +245,7 @@ function ResellerApp() {
       case 'sourcing':
         return isDropsPlan ? <PlanLockedScreen feature="sourcing" /> : <SourcingSurMesure />;
       case 'auctions':
-        return isDropsPlan ? <PlanLockedScreen feature="auctions" /> : <Auctions />;
+        return isDropsPlan && !auctionsUnlocked ? <PlanLockedScreen feature="auctions" /> : <Auctions />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':
