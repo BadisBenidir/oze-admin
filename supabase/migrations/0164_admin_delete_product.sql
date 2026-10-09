@@ -19,12 +19,14 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_status text; -- conservé pour de futurs contrôles par statut
 begin
   if not public.is_admin() then
     raise exception 'Accès refusé';
   end if;
 
-  perform 1 from public.products where id = p_product_id for update;
+  select status into v_status from public.products where id = p_product_id for update;
   if not found then
     raise exception 'Produit introuvable';
   end if;
