@@ -31,7 +31,7 @@ export interface PreviewLinkInput {
 // vit sur le domaine revendeurs, avec son bouton de connexion.
 const PREVIEW_LINK_ORIGIN = 'https://pro.ozeparis.com';
 
-export const buildPreviewLinkUrl = (token: string): string => `${PREVIEW_LINK_ORIGIN}/avant-premiere/${token}`;
+export const buildPreviewLinkUrl = (token: string): string => `${PREVIEW_LINK_ORIGIN}/p/${token}`;
 
 /** Liens d'avant-première d'un drop ou d'une session d'enchères (preview_links, 0169). */
 export const useAdminPreviewLinks = (target: PreviewTarget | null) => {

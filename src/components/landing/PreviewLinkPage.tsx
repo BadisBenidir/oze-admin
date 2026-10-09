@@ -67,7 +67,8 @@ const mainImage = (item: PreviewItem): string | null =>
   item.images[item.main_image_index] || item.images[0] || null;
 
 export const getPreviewToken = (): string | null => {
-  const match = window.location.pathname.match(/^\/avant-premiere\/([A-Za-z0-9]+)\/?$/);
+  // /p/<code> : liens courts (0194) ; /avant-premiere/<code> : anciens liens, toujours valides.
+  const match = window.location.pathname.match(/^\/(?:p|avant-premiere)\/([A-Za-z0-9]+)\/?$/);
   return match ? match[1] : null;
 };
 
