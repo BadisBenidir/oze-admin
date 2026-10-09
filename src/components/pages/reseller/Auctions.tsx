@@ -85,7 +85,11 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
   };
 
   return (
-    <Card hover onClick={onOpen} className="overflow-hidden flex flex-col cursor-pointer">
+    <Card
+      hover
+      onClick={onOpen}
+      className={`overflow-hidden flex flex-col cursor-pointer ${isWinning ? 'ring-2 ring-green-500 border-green-500' : ''}`}
+    >
       <div className="relative aspect-square bg-white flex items-center justify-center overflow-hidden">
         {item.images?.[0] ? (
           <img src={item.images[0]} alt={item.title} className="w-full h-full object-contain" />
@@ -272,6 +276,14 @@ const lotsRevealAt = (startsAt: string): Date => {
 export const Auctions: React.FC = () => {
   const { profile, acceptTerms } = useResellerAuth();
   const { session, items, myBidItemIds, myMaxAmounts, loading, error, placeAutoBid } = useAuctionItems(true, profile?.id);
+  // Lots que l'on mène en tête, puis ceux où l'on a été surenchéri, puis le
+  // reste — chaque groupe garde l'ordre de la session.
+  const myRank = (item: (typeof items)[number]) =>
+    profile?.id && item.current_winner_id === profile.id ? 0 : myBidItemIds.has(item.id) ? 1 : 2;
+  const sortedItems = items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => myRank(a.item) - myRank(b.item) || a.index - b.index)
+    .map(({ item }) => item);
   const { payments: pendingPayments, pay: payAuctionOrder, hasOverduePayment } = useMyAuctionPayments(Boolean(profile?.id));
   const { balance: walletBalance } = useWallet(profile?.id);
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
@@ -415,7 +427,7 @@ export const Auctions: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {items.map((item) => (
+          {sortedItems.map((item) => (
             <ItemCard
               key={item.id}
               item={item}
