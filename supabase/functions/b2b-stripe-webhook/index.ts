@@ -118,10 +118,24 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Factures : le payload suit la version d'API du endpoint (2025-05-28.basil :
+  // plus de invoice.subscription ni de lines[].price), alors que tout le
+  // traitement lit l'ancienne forme. La facture est donc relue avec le client
+  // Stripe ci-dessus (version d'API fixée) avant tout traitement.
+  const loadInvoice = async (): Promise<Stripe.Invoice> => {
+    const raw = event.data.object as Stripe.Invoice;
+    try {
+      return await stripe.invoices.retrieve(raw.id);
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Relecture de la facture ${raw.id}:`, err instanceof Error ? err.message : err);
+      return raw;
+    }
+  };
+
   // Échéance d'abonnement refusée : email à l'abonné (premier échec et dernier essai).
   if (event.type === 'invoice.payment_failed') {
     try {
-      return await handleSubscriptionPaymentFailed(event.data.object as Stripe.Invoice, supabaseUrl, serviceRoleKey);
+      return await handleSubscriptionPaymentFailed(await loadInvoice(), supabaseUrl, serviceRoleKey);
     } catch (err) {
       console.error(`${LOG_PREFIX} Erreur échec de paiement (${event.id}):`, err instanceof Error ? err.message : err);
       return new Response(JSON.stringify({ received: true }), { status: 200 });
@@ -132,13 +146,14 @@ Deno.serve(async (req: Request) => {
   if (event.type === 'invoice.paid') {
     // CA des abonnements (0185) : chaque facture de pass payée est enregistrée,
     // y compris la première (souscription). Jamais bloquant pour l'email.
+    const invoice = await loadInvoice();
     try {
-      await recordSubscriptionInvoice(createClient(supabaseUrl, serviceRoleKey), event.data.object as Stripe.Invoice, stripe);
+      await recordSubscriptionInvoice(createClient(supabaseUrl, serviceRoleKey), invoice, stripe);
     } catch (err) {
       console.error(`${LOG_PREFIX} Enregistrement paiement d'abonnement (${event.id}):`, err instanceof Error ? err.message : err);
     }
     try {
-      return await handleSubscriptionInvoicePaid(event.data.object as Stripe.Invoice, supabaseUrl, serviceRoleKey);
+      return await handleSubscriptionInvoicePaid(invoice, supabaseUrl, serviceRoleKey);
     } catch (err) {
       console.error(`${LOG_PREFIX} Erreur facture payée (${event.id}):`, err instanceof Error ? err.message : err);
       return new Response(JSON.stringify({ received: true }), { status: 200 });
