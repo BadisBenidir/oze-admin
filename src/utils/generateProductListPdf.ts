@@ -150,9 +150,16 @@ export const generateProductListPdf = async (data: ProductListPdfData): Promise<
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(110);
-  doc.text('Montants en euros', MARGIN, by + 10);
+  doc.text('Montants en euros', MARGIN, by + 6);
+  // Légende coupée pour tenir à gauche des cases de totaux (sans les chevaucher).
+  doc.setFontSize(7);
   doc.setTextColor(...SOURCING_COLOR);
-  doc.text('En orange : prix vendu des pièces de sourcing sur mesure (prix revendeur de la mission)', MARGIN, by + 14);
+  const legendWidth = PAGE_W - MARGIN - boxW * boxes.length - MARGIN - 4;
+  doc.text(
+    doc.splitTextToSize('En orange : prix vendu des pièces de sourcing sur mesure (prix revendeur de la mission)', legendWidth).slice(0, 2),
+    MARGIN,
+    by + 10.5,
+  );
   doc.setTextColor(0);
 
   // ── Tableau ──
