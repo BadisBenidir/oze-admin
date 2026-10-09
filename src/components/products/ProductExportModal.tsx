@@ -88,6 +88,8 @@ type ExportRow = {
   original_price: number | null;
   /** Prix réellement encaissé (voir loadSoldPrices), null si pas vendu ou inconnu. */
   sold_price?: number | null;
+  /** true : prix vendu = prix revendeur de la pièce sur sa mission de sourcing sur mesure. */
+  sold_via_sourcing?: boolean;
   colors: string[] | null;
   material: string | null;
   serial_number: string | null;
@@ -99,9 +101,14 @@ type ExportRow = {
 /** Prix réellement encaissé par article vendu : ligne de commande payée et
  * non annulée (site web, B2B, enchère B2B — commandes AUC-…), sinon, pour une
  * vente en Live (pas de commande), le prix enregistré à la vente, comme en
- * Comptabilité. Les autres ventes hors plateforme restent sans prix vendu. */
-const loadSoldPrices = async (rows: ExportRow[]): Promise<Map<string, number>> => {
-  const prices = new Map<string, number>();
+ * Comptabilité. Une pièce de sourcing sur mesure prend toujours son « prix
+ * revendeur » sur la mission (prix imposé, sinon floor(coût × (1 + marge de la
+ * mission)), comme useSourcingMissions). Les autres ventes hors plateforme
+ * restent sans prix vendu. */
+type SoldPrice = { price: number; source: 'order' | 'live' | 'sourcing' };
+
+const loadSoldPrices = async (rows: ExportRow[]): Promise<Map<string, SoldPrice>> => {
+  const prices = new Map<string, SoldPrice>();
   const ids = rows.map((r) => r.id);
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error } = await supabase
@@ -119,11 +126,36 @@ const loadSoldPrices = async (rows: ExportRow[]): Promise<Map<string, number>> =
       if (!paid) continue;
       if (latest.has(it.product_id) && latest.get(it.product_id)! > o.created_at) continue;
       latest.set(it.product_id, o.created_at);
-      prices.set(it.product_id, Number(it.line_total) || 0);
+      prices.set(it.product_id, { price: Number(it.line_total) || 0, source: 'order' });
+    }
+
+    const { data: sourced, error: sourcedError } = await supabase
+      .from('b2b_sourcing_items')
+      .select('product_id, cost_price, custom_reseller_price, mission:b2b_sourcing_missions!inner(status, advance_amount, allocated_cost_budget)')
+      .in('product_id', ids.slice(i, i + 200))
+      .neq('status', 'cancelled');
+    if (sourcedError) throw new Error(sourcedError.message);
+    for (const it of (sourced || []) as unknown as {
+      product_id: string;
+      cost_price: number | null;
+      custom_reseller_price: number | null;
+      mission: { status: string; advance_amount: number; allocated_cost_budget: number };
+    }[]) {
+      if (it.mission.status === 'cancelled') continue;
+      const advance = Number(it.mission.advance_amount);
+      const margin = advance > 0 ? ((advance - Number(it.mission.allocated_cost_budget)) / advance) * 100 : null;
+      const price = it.custom_reseller_price != null
+        ? Number(it.custom_reseller_price)
+        : it.cost_price != null && margin != null
+          ? Math.floor(Number(it.cost_price) * (1 + margin / 100))
+          : null;
+      if (price != null) prices.set(it.product_id, { price, source: 'sourcing' });
     }
   }
   for (const r of rows) {
-    if (!prices.has(r.id) && r.status === 'sold-auction' && r.sale_price != null) prices.set(r.id, Number(r.sale_price));
+    if (!prices.has(r.id) && r.status === 'sold-auction' && r.sale_price != null) {
+      prices.set(r.id, { price: Number(r.sale_price), source: 'live' });
+    }
   }
   return prices;
 };
@@ -217,11 +249,15 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
         if (!data || data.length < PAGE) break;
       }
       const soldPrices = await loadSoldPrices(rows);
-      for (const r of rows) r.sold_price = soldPrices.get(r.id) ?? null;
+      for (const r of rows) {
+        const sold = soldPrices.get(r.id);
+        r.sold_price = sold?.price ?? null;
+        r.sold_via_sourcing = sold?.source === 'sourcing';
+      }
 
       const header = [
         'Date de création', 'Code produit', 'Référence OZË', 'Référence B2B', 'Référence fournisseur', 'Plateforme source',
-        'Marque', 'Catégorie', 'Titre', 'État', 'Statut', "Prix d'achat (€)", 'Prix de vente (€)', 'Prix vendu (€)', 'Ancien prix (€)',
+        'Marque', 'Catégorie', 'Titre', 'État', 'Statut', "Prix d'achat (€)", 'Prix de vente (€)', 'Prix vendu (€)', 'Origine du prix vendu', 'Ancien prix (€)',
         'Marge (€)', 'Couleurs', 'Matière', 'N° de série', 'Code-barres',
       ];
       const body = rows.map((r) => {
@@ -241,6 +277,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
           r.purchase_price ?? '',
           r.sale_price ?? '',
           r.sold_price ?? '',
+          r.sold_price == null ? '' : r.sold_via_sourcing ? 'Sourcing sur mesure' : r.status === 'sold-auction' ? 'Live' : 'Commande',
           r.original_price ?? '',
           margin,
           (r.colors || []).join(', '),
@@ -280,6 +317,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
             purchasePrice: r.purchase_price,
             salePrice: r.sale_price,
             soldPrice: r.sold_price ?? null,
+            soldViaSourcing: Boolean(r.sold_via_sourcing),
           })),
           periodLabel,
           filtersLabel: `${statusLabel} · ${brandLabel}`,

@@ -20,6 +20,8 @@ export interface ProductListPdfRow {
   salePrice: number | null;
   /** Prix réellement encaissé (vendu), null si pas vendu. */
   soldPrice: number | null;
+  /** Prix vendu = prix revendeur d'une mission de sourcing sur mesure : affiché en orange. */
+  soldViaSourcing: boolean;
 }
 
 export interface ProductListPdfData {
@@ -33,6 +35,8 @@ const PAGE_W = 297;
 const PAGE_H = 210;
 const MARGIN = 10;
 const HEADER_FILL: [number, number, number] = [31, 41, 55];
+/** Prix vendu des pièces de sourcing sur mesure (prix revendeur de la mission). */
+const SOURCING_COLOR: [number, number, number] = [217, 119, 6];
 
 const COLUMNS: { label: string; width: number; align?: 'right' | 'center' }[] = [
   { label: 'N°', width: 10, align: 'center' },
@@ -109,12 +113,14 @@ export const generateProductListPdf = async (data: ProductListPdfData): Promise<
   // ── Encadré des totaux ──
   const totalPurchase = data.rows.reduce((s, r) => s + (r.purchasePrice ?? 0), 0);
   const totalSale = data.rows.reduce((s, r) => s + (r.salePrice ?? 0), 0);
+  // Total vendu hors sourcing, puis avec les pièces de sourcing sur mesure.
+  const totalSoldOrders = data.rows.reduce((s, r) => s + (!r.soldViaSourcing ? r.soldPrice ?? 0 : 0), 0);
   const totalSold = data.rows.reduce((s, r) => s + (r.soldPrice ?? 0), 0);
-  const boxes = [
+  const boxes: { label: string; value: string; second?: string }[] = [
     { label: "Nombre d'articles", value: String(data.rows.length) },
     { label: "Total prix d'achat", value: eur(totalPurchase) },
     { label: 'Total prix de vente', value: eur(totalSale) },
-    { label: 'Total vendu', value: eur(totalSold) },
+    { label: 'Total vendu', value: eur(totalSoldOrders), second: `avec sourcing : ${eur(totalSold)}` },
     { label: 'Marge totale', value: eur(totalSale - totalPurchase) },
   ];
   const boxW = 42;
@@ -125,7 +131,7 @@ export const generateProductListPdf = async (data: ProductListPdfData): Promise<
     doc.rect(bx, by, boxW, 5, 'F');
     doc.setDrawColor(...HEADER_FILL);
     doc.setLineWidth(0.3);
-    doc.rect(bx, by, boxW, 12);
+    doc.rect(bx, by, boxW, 15);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(255);
@@ -133,17 +139,25 @@ export const generateProductListPdf = async (data: ProductListPdfData): Promise<
     doc.setTextColor(0);
     doc.setFontSize(10);
     doc.text(box.value, bx + boxW - 2, by + 10.2, { align: 'right' });
+    if (box.second) {
+      doc.setFontSize(7);
+      doc.setTextColor(...SOURCING_COLOR);
+      doc.text(box.second, bx + boxW - 2, by + 13.6, { align: 'right' });
+      doc.setTextColor(0);
+    }
     bx += boxW;
   }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(110);
-  doc.text('Montants en euros', MARGIN, by + 11);
+  doc.text('Montants en euros', MARGIN, by + 10);
+  doc.setTextColor(...SOURCING_COLOR);
+  doc.text('En orange : prix vendu des pièces de sourcing sur mesure (prix revendeur de la mission)', MARGIN, by + 14);
   doc.setTextColor(0);
 
   // ── Tableau ──
   const ROW_H = 5;
-  let y = drawTableHeader(doc, 60);
+  let y = drawTableHeader(doc, 63);
   doc.setDrawColor(190);
   doc.setLineWidth(0.15);
 
@@ -176,8 +190,17 @@ export const generateProductListPdf = async (data: ProductListPdfData): Promise<
     let x = MARGIN;
     COLUMNS.forEach((col, c) => {
       const text = fit(doc, cells[c], col.width - 2.4);
+      const orange = col.label === 'Prix vendu' && row.soldViaSourcing && row.soldPrice != null;
+      if (orange) {
+        doc.setTextColor(...SOURCING_COLOR);
+        doc.setFont('helvetica', 'bold');
+      }
       const tx = col.align === 'right' ? x + col.width - 1.2 : col.align === 'center' ? x + col.width / 2 : x + 1.2;
       doc.text(text, tx, y + 3.5, { align: col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left' });
+      if (orange) {
+        doc.setTextColor(0);
+        doc.setFont('helvetica', 'normal');
+      }
       doc.line(x, y, x, y + ROW_H);
       x += col.width;
     });
