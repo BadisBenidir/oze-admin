@@ -4,6 +4,7 @@ import { Badge } from '../../ui/Badge';
 import { AuctionItem, QUICK_BID_INCREMENTS, computeQuickBidIncrement } from '../../../hooks/useAuctionItems';
 import { AuctionCountdown } from './AuctionCountdown';
 import { OVERDUE_RESTRICTION_MESSAGE } from '../../../hooks/useMyAuctionPayments';
+import { ImageLightbox } from '../../ui/ImageLightbox';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
@@ -40,9 +41,12 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
+  // Photo agrandie en plein écran (clic sur la grande photo), défilable.
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     setActiveIndex(0);
+    setLightboxOpen(false);
     setCustomAmount('');
     setError('');
     setWarning('');
@@ -104,7 +108,13 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
               <div className="bg-gray-100 rounded-lg overflow-hidden">
                 <div className="relative h-72 md:h-96 flex items-center justify-center">
                   {images.length > 0 ? (
-                    <img src={images[activeIndex]} alt={item.title} className="w-full h-full object-cover" />
+                    <img
+                      src={images[activeIndex]}
+                      alt={item.title}
+                      onClick={() => setLightboxOpen(true)}
+                      title="Agrandir la photo"
+                      className="w-full h-full object-cover cursor-zoom-in"
+                    />
                   ) : (
                     <ImageOff className="h-12 w-12 text-gray-300" />
                   )}
@@ -310,6 +320,16 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
           </div>
         </div>
       </div>
+
+      {lightboxOpen && images.length > 0 && (
+        <ImageLightbox
+          images={images}
+          index={activeIndex}
+          onIndexChange={setActiveIndex}
+          onClose={() => setLightboxOpen(false)}
+          alt={item.title}
+        />
+      )}
     </div>
   );
 };
