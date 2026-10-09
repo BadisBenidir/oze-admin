@@ -82,15 +82,50 @@ type ExportRow = {
   name: string;
   condition: string | null;
   status: string;
+  id: string;
   purchase_price: number | null;
   sale_price: number | null;
   original_price: number | null;
+  /** Prix réellement encaissé (voir loadSoldPrices), null si pas vendu ou inconnu. */
+  sold_price?: number | null;
   colors: string[] | null;
   material: string | null;
   serial_number: string | null;
   barcode: string | null;
   brand: { name: string } | null;
   category: { name: string } | null;
+};
+
+/** Prix réellement encaissé par article vendu : ligne de commande payée et
+ * non annulée (site web, B2B, enchère B2B — commandes AUC-…), sinon, pour une
+ * vente en Live (pas de commande), le prix enregistré à la vente, comme en
+ * Comptabilité. Les autres ventes hors plateforme restent sans prix vendu. */
+const loadSoldPrices = async (rows: ExportRow[]): Promise<Map<string, number>> => {
+  const prices = new Map<string, number>();
+  const ids = rows.map((r) => r.id);
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await supabase
+      .from('order_items')
+      .select('product_id, line_total, order:orders!inner(status, payment_status, created_at)')
+      .in('product_id', ids.slice(i, i + 200))
+      .eq('status', 'active');
+    if (error) throw new Error(error.message);
+    const items = (data || []) as unknown as { product_id: string; line_total: number; order: { status: string; payment_status: string; created_at: string } }[];
+    const latest = new Map<string, string>();
+    for (const it of items) {
+      const o = it.order;
+      const paid = !['cancelled', 'canceled'].includes(o.status)
+        && (['paid', 'succeeded'].includes(o.payment_status) || ['confirmed', 'shipped', 'delivered'].includes(o.status));
+      if (!paid) continue;
+      if (latest.has(it.product_id) && latest.get(it.product_id)! > o.created_at) continue;
+      latest.set(it.product_id, o.created_at);
+      prices.set(it.product_id, Number(it.line_total) || 0);
+    }
+  }
+  for (const r of rows) {
+    if (!prices.has(r.id) && r.status === 'sold-auction' && r.sale_price != null) prices.set(r.id, Number(r.sale_price));
+  }
+  return prices;
 };
 
 interface ProductExportModalProps {
@@ -173,7 +208,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
       const PAGE = 1000;
       for (let start = 0; ; start += PAGE) {
         const { data, error: fetchError } = await buildQuery(
-          'created_at, product_code, reference, b2b_reference, source_reference, source_platform, name, condition, status, purchase_price, sale_price, original_price, colors, material, serial_number, barcode, brand:brands(name), category:categories(name)'
+          'id, created_at, product_code, reference, b2b_reference, source_reference, source_platform, name, condition, status, purchase_price, sale_price, original_price, colors, material, serial_number, barcode, brand:brands(name), category:categories(name)'
         )
           .order('created_at', { ascending: true })
           .range(start, start + PAGE - 1);
@@ -181,10 +216,12 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
         rows.push(...((data || []) as unknown as ExportRow[]));
         if (!data || data.length < PAGE) break;
       }
+      const soldPrices = await loadSoldPrices(rows);
+      for (const r of rows) r.sold_price = soldPrices.get(r.id) ?? null;
 
       const header = [
         'Date de création', 'Code produit', 'Référence OZË', 'Référence B2B', 'Référence fournisseur', 'Plateforme source',
-        'Marque', 'Catégorie', 'Titre', 'État', 'Statut', "Prix d'achat (€)", 'Prix de vente (€)', 'Ancien prix (€)',
+        'Marque', 'Catégorie', 'Titre', 'État', 'Statut', "Prix d'achat (€)", 'Prix de vente (€)', 'Prix vendu (€)', 'Ancien prix (€)',
         'Marge (€)', 'Couleurs', 'Matière', 'N° de série', 'Code-barres',
       ];
       const body = rows.map((r) => {
@@ -203,6 +240,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
           STATUS_LABELS[r.status] || r.status,
           r.purchase_price ?? '',
           r.sale_price ?? '',
+          r.sold_price ?? '',
           r.original_price ?? '',
           margin,
           (r.colors || []).join(', '),
@@ -241,6 +279,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
             status: STATUS_LABELS[r.status] || r.status,
             purchasePrice: r.purchase_price,
             salePrice: r.sale_price,
+            soldPrice: r.sold_price ?? null,
           })),
           periodLabel,
           filtersLabel: `${statusLabel} · ${brandLabel}`,

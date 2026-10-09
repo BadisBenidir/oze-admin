@@ -18,6 +18,8 @@ export interface ProductListPdfRow {
   status: string;
   purchasePrice: number | null;
   salePrice: number | null;
+  /** Prix réellement encaissé (vendu), null si pas vendu. */
+  soldPrice: number | null;
 }
 
 export interface ProductListPdfData {
@@ -35,14 +37,15 @@ const HEADER_FILL: [number, number, number] = [31, 41, 55];
 const COLUMNS: { label: string; width: number; align?: 'right' | 'center' }[] = [
   { label: 'N°', width: 10, align: 'center' },
   { label: 'Date', width: 18, align: 'center' },
-  { label: 'Réf. fournisseur', width: 30 },
-  { label: 'Plateforme', width: 20 },
-  { label: 'Marque', width: 30 },
-  { label: 'Titre', width: 77 },
+  { label: 'Réf. fournisseur', width: 26 },
+  { label: 'Plateforme', width: 18 },
+  { label: 'Marque', width: 24 },
+  { label: 'Titre', width: 65 },
   { label: 'État', width: 16, align: 'center' },
   { label: 'Statut', width: 28 },
   { label: "Prix d'achat", width: 24, align: 'right' },
   { label: 'Prix de vente', width: 24, align: 'right' },
+  { label: 'Prix vendu', width: 24, align: 'right' },
 ];
 
 /** Montant « 1 234,50 € » sans les espaces insécables que jsPDF n'affiche pas. */
@@ -106,10 +109,12 @@ export const generateProductListPdf = async (data: ProductListPdfData): Promise<
   // ── Encadré des totaux ──
   const totalPurchase = data.rows.reduce((s, r) => s + (r.purchasePrice ?? 0), 0);
   const totalSale = data.rows.reduce((s, r) => s + (r.salePrice ?? 0), 0);
+  const totalSold = data.rows.reduce((s, r) => s + (r.soldPrice ?? 0), 0);
   const boxes = [
     { label: "Nombre d'articles", value: String(data.rows.length) },
     { label: "Total prix d'achat", value: eur(totalPurchase) },
     { label: 'Total prix de vente', value: eur(totalSale) },
+    { label: 'Total vendu', value: eur(totalSold) },
     { label: 'Marge totale', value: eur(totalSale - totalPurchase) },
   ];
   const boxW = 42;
@@ -164,6 +169,7 @@ export const generateProductListPdf = async (data: ProductListPdfData): Promise<
       row.status,
       row.purchasePrice != null ? eur(row.purchasePrice) : '—',
       row.salePrice != null ? eur(row.salePrice) : '—',
+      row.soldPrice != null ? eur(row.soldPrice) : '—',
     ];
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
