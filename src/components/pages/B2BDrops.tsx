@@ -326,6 +326,15 @@ export const B2BDrops: React.FC = () => {
                             </button>
                             {drop.status === 'publie' && (
                               <button
+                                onClick={() => setPreviewLinksDropId(drop.id)}
+                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Liens d'aperçu (Discord)"
+                              >
+                                <Link2 className="h-4 w-4" />
+                              </button>
+                            )}
+                            {drop.status === 'publie' && (
+                              <button
                                 onClick={() => setAddingToDrop(drop)}
                                 className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                 title="Ajouter des pièces (mises en vente immédiatement)"
