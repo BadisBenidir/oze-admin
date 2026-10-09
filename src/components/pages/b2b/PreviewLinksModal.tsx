@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X, Link2, Copy, Check, Plus, Ban, Trash2, ImageOff, Eye, ExternalLink } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
-import { useAdminPreviewLinks, buildPreviewLinkUrl, PreviewLink, PreviewTarget } from '../../../hooks/useAdminPreviewLinks';
+import { useAdminPreviewLinks, buildPreviewLinkUrl, PreviewLink, PreviewTarget, AuctionPriceMode } from '../../../hooks/useAdminPreviewLinks';
 
 interface PreviewItem {
   id: string;
@@ -99,6 +99,8 @@ export const PreviewLinksModal: React.FC<PreviewLinksModalProps> = ({ target, ti
   const [mode, setMode] = useState<'all' | 'some'>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showPrices, setShowPrices] = useState(false);
+  // Sessions d'enchères : choix des prix affichés (0195).
+  const [priceMode, setPriceMode] = useState<AuctionPriceMode>('start');
   const [expiresAt, setExpiresAt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -147,7 +149,8 @@ export const PreviewLinksModal: React.FC<PreviewLinksModalProps> = ({ target, ti
       label,
       // Conserve l'ordre du drop / de la session plutôt que l'ordre de clic.
       item_ids: mode === 'all' ? null : items.filter((i) => selected.has(i.id)).map((i) => i.id),
-      show_prices: showPrices,
+      show_prices: target.kind === 'auction' ? priceMode !== 'none' : showPrices,
+      ...(target.kind === 'auction' ? { price_mode: priceMode } : {}),
       expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
     });
     setSubmitting(false);
@@ -283,10 +286,26 @@ export const PreviewLinksModal: React.FC<PreviewLinksModalProps> = ({ target, ti
                   )}
                 </div>
 
-                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                  <input type="checkbox" checked={showPrices} onChange={(e) => setShowPrices(e.target.checked)} className="rounded" />
-                  Afficher les prix {target.kind === 'auction' ? '(prix de départ)' : '(prix revendeur)'}
-                </label>
+                {target.kind === 'auction' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Prix affichés</label>
+                    <select
+                      value={priceMode}
+                      onChange={(e) => setPriceMode(e.target.value as AuctionPriceMode)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                    >
+                      <option value="start">Prix de départ</option>
+                      <option value="final">Prix final (lots adjugés)</option>
+                      <option value="both">Prix de départ et prix final</option>
+                      <option value="none">Aucun prix</option>
+                    </select>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input type="checkbox" checked={showPrices} onChange={(e) => setShowPrices(e.target.checked)} className="rounded" />
+                    Afficher les prix (prix revendeur)
+                  </label>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Expiration (optionnel)</label>
@@ -341,7 +360,9 @@ export const PreviewLinksModal: React.FC<PreviewLinksModalProps> = ({ target, ti
                             </div>
                             <p className="text-xs text-gray-500 mt-0.5">
                               {link.item_ids ? `${link.item_ids.length} pièce${link.item_ids.length > 1 ? 's' : ''}` : 'Toutes les pièces'}
-                              {' · '}{link.show_prices ? 'prix affichés' : 'sans prix'}
+                              {' · '}{link.session_id && link.price_mode
+                                ? { start: 'prix de départ', final: 'prix final', both: 'prix de départ et final', none: 'sans prix' }[link.price_mode]
+                                : link.show_prices ? 'prix affichés' : 'sans prix'}
                               {link.expires_at && ` · expire le ${formatDateTime(link.expires_at)}`}
                             </p>
                             <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">

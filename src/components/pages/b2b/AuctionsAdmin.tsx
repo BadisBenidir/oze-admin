@@ -241,16 +241,15 @@ export const AuctionsAdmin: React.FC = () => {
                           Clôturer
                         </button>
                       )}
-                      {s.status !== 'closed' && (
-                        <button
-                          onClick={() => setPreviewLinksSession(s)}
-                          title="Liens d'avant-première (Discord)"
-                          className="flex items-center gap-1 px-2.5 py-1 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium"
-                        >
-                          <Link2 className="h-3 w-3" />
-                          Aperçu
-                        </button>
-                      )}
+                      {/* Aussi pour une session clôturée (prix de départ / final au choix, 0195). */}
+                      <button
+                        onClick={() => setPreviewLinksSession(s)}
+                        title="Liens d'aperçu (Discord)"
+                        className="flex items-center gap-1 px-2.5 py-1 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium"
+                      >
+                        <Link2 className="h-3 w-3" />
+                        Aperçu
+                      </button>
                       <button
                         onClick={() => handleDeleteSession(s)}
                         disabled={deletingSessionId === s.id}

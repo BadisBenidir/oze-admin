@@ -21,6 +21,8 @@ interface PreviewItem {
   images: string[];
   main_image_index: number;
   price: number | null;
+  /** Sessions d'enchères (0195) : prix d'adjudication, si le lien l'affiche. */
+  final_price?: number | null;
   sold: boolean;
 }
 
@@ -258,8 +260,13 @@ export const PreviewLinkPage: React.FC = () => {
                     {item.brand && <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{item.brand}</p>}
                     <p className="mt-0.5 line-clamp-2 text-sm text-neutral-900">{item.name}</p>
                     {data.show_prices && item.price != null && (
-                      <p className="mt-1 text-sm font-semibold text-neutral-900">
+                      <p className={`mt-1 text-sm ${item.final_price != null ? 'text-neutral-500' : 'font-semibold text-neutral-900'}`}>
                         {isDrop ? EUR(Number(item.price)) : `Départ ${EUR(Number(item.price))}`}
+                      </p>
+                    )}
+                    {!isDrop && item.final_price != null && (
+                      <p className="mt-0.5 text-sm font-semibold text-neutral-900">
+                        {ended ? 'Adjugé' : 'Enchère actuelle'} {EUR(Number(item.final_price))}
                       </p>
                     )}
                   </div>

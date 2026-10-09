@@ -10,6 +10,8 @@ export interface PreviewLink {
   /** null = toutes les pièces du drop / de la session. */
   item_ids: string[] | null;
   show_prices: boolean;
+  /** Sessions d'enchères (0195) : prix affichés — départ, final (adjugé), les deux ou aucun. */
+  price_mode: AuctionPriceMode | null;
   expires_at: string | null;
   revoked_at: string | null;
   view_count: number;
@@ -17,12 +19,15 @@ export interface PreviewLink {
   created_at: string;
 }
 
+export type AuctionPriceMode = 'none' | 'start' | 'final' | 'both';
+
 export type PreviewTarget = { kind: 'drop'; id: string } | { kind: 'auction'; id: string };
 
 export interface PreviewLinkInput {
   label?: string;
   item_ids: string[] | null;
   show_prices: boolean;
+  price_mode?: AuctionPriceMode | null;
   expires_at: string | null;
 }
 
@@ -72,6 +77,7 @@ export const useAdminPreviewLinks = (target: PreviewTarget | null) => {
         label: input.label?.trim() || null,
         item_ids: input.item_ids,
         show_prices: input.show_prices,
+        ...(input.price_mode ? { price_mode: input.price_mode } : {}),
         expires_at: input.expires_at,
         created_by: userData?.user?.id ?? null,
       })
