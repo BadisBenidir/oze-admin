@@ -417,8 +417,8 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
 
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Panier B2B</p>
-                  <div className="border border-gray-100 rounded-lg overflow-hidden">
-                    <table className="w-full">
+                  <div className="border border-gray-100 rounded-lg overflow-x-auto">
+                    <table className="w-full min-w-[480px]">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-100">
                           <th className="text-left py-2.5 px-4 font-medium text-gray-500 text-xs">Produit</th>
@@ -455,6 +455,11 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                     {item.is_loyalty_gift && (
                                       <div className="mt-1">
                                         <Badge variant="warning">🎁 Cadeau Fidélité offert</Badge>
+                                      </div>
+                                    )}
+                                    {!isCancelled && item.insured && (
+                                      <div className="mt-1">
+                                        <Badge variant="info">Assuré · {Number(item.insurance_cost).toFixed(2)} €</Badge>
                                       </div>
                                     )}
                                     {!isCancelled && item.entrupy_requested && (
@@ -589,6 +594,24 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                       <span className="text-gray-500">Livraison</span>
                       <span className="text-gray-900">{viewingOrder.shipping_cost.toFixed(0)} €</span>
                     </div>
+                    {Number(viewingOrder.insurance_cost) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Assurance</span>
+                        <span className="text-gray-900">{Number(viewingOrder.insurance_cost).toFixed(2)} €</span>
+                      </div>
+                    )}
+                    {Number(viewingOrder.entrupy_cost) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Certificat Entrupy</span>
+                        <span className="text-gray-900">{Number(viewingOrder.entrupy_cost).toFixed(2)} €</span>
+                      </div>
+                    )}
+                    {Number(viewingOrder.discount_amount) + Number(viewingOrder.promo_discount_amount) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Remise</span>
+                        <span className="text-gray-900">-{(Number(viewingOrder.discount_amount) + Number(viewingOrder.promo_discount_amount)).toFixed(2)} €</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-base font-semibold border-t border-gray-100 pt-1.5">
                       <span className="text-gray-900">Total</span>
                       <span className="text-gray-900">{viewingOrder.total_amount.toFixed(0)} €</span>
