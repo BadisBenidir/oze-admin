@@ -646,6 +646,11 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                       <Badge variant="warning">🎁 Cadeau Fidélité — 0 €</Badge>
                                     </div>
                                   )}
+                                  {!isCancelled && item.insured && (
+                                    <div className="mt-1">
+                                      <Badge variant="info">Assuré · {Number(item.insurance_cost).toFixed(2)} €</Badge>
+                                    </div>
+                                  )}
                                   {!isCancelled && item.entrupy_requested && (
                                     <div className="mt-1 flex items-center gap-1.5">
                                       <Badge variant="purple">
@@ -776,6 +781,24 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                     <span className="text-gray-500">Livraison</span>
                     <span className="text-gray-900">{order.shipping_cost.toFixed(0)} €</span>
                   </div>
+                  {Number(order.insurance_cost) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Assurance</span>
+                      <span className="text-gray-900">{Number(order.insurance_cost).toFixed(2)} €</span>
+                    </div>
+                  )}
+                  {Number(order.entrupy_cost) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Certificat Entrupy</span>
+                      <span className="text-gray-900">{Number(order.entrupy_cost).toFixed(2)} €</span>
+                    </div>
+                  )}
+                  {Number(order.discount_amount) + Number(order.promo_discount_amount) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Remise</span>
+                      <span className="text-gray-900">-{(Number(order.discount_amount) + Number(order.promo_discount_amount)).toFixed(2)} €</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-base font-semibold border-t border-gray-100 pt-2">
                     <span className="text-gray-900">Total net</span>
                     <span className="text-gray-900">{order.total_amount.toFixed(0)} €</span>

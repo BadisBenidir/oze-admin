@@ -15,6 +15,44 @@ export interface InvoiceLineItem {
   lineTotal: number;
 }
 
+export interface InvoiceSourceItem {
+  product_snapshot?: { name?: string } | null;
+  unit_price: number;
+  quantity: number;
+  line_total: number;
+  status?: string | null;
+  insured?: boolean | null;
+  insurance_cost?: number | null;
+  entrupy_requested?: boolean | null;
+  entrupy_cost?: number | null;
+}
+
+/**
+ * Lignes de facture d'une commande — source unique pour tous les écrans
+ * (admin, portail revendeur, export groupé). L'assurance transport et le
+ * certificat Entrupy sont inclus dans orders.total_amount (voir 0021 / 0083) :
+ * sans lignes dédiées, ils étaient absorbés dans le reliquat "Livraison" et
+ * rien n'indiquait sur la facture que l'article avait été assuré.
+ */
+export const buildInvoiceItems = (items: InvoiceSourceItem[]): InvoiceLineItem[] =>
+  items
+    .filter((i) => i.status !== 'cancelled')
+    .flatMap((i) => {
+      const name = i.product_snapshot?.name || 'Article';
+      const lines: InvoiceLineItem[] = [
+        { description: name, unitPrice: i.unit_price, quantity: i.quantity, lineTotal: i.line_total },
+      ];
+      const insurance = Number(i.insurance_cost) || 0;
+      if (i.insured && insurance > 0) {
+        lines.push({ description: `Assurance transport — ${name}`, unitPrice: insurance, quantity: 1, lineTotal: insurance });
+      }
+      const entrupy = Number(i.entrupy_cost) || 0;
+      if (i.entrupy_requested && entrupy > 0) {
+        lines.push({ description: `Certificat d'authenticité Entrupy — ${name}`, unitPrice: entrupy, quantity: 1, lineTotal: entrupy });
+      }
+      return lines;
+    });
+
 export interface InvoiceBillingDetails {
   name?: string | null;
   entity_name?: string | null;
@@ -152,6 +190,7 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
   y += 7;
 
   const subtotal = data.items.reduce((sum, i) => sum + i.lineTotal, 0);
+  // Reliquat = livraison, ou remise (volume / code promo) quand il est négatif.
   const shipping = data.totalAmount - subtotal;
 
   doc.setFontSize(9.5);
@@ -159,7 +198,7 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
   doc.text(EUR(subtotal), pageWidth - marginX, y, { align: 'right' });
   if (Math.abs(shipping) > 0.005) {
     y += 5;
-    doc.text('Livraison', pageWidth - 60, y);
+    doc.text(shipping < 0 ? 'Remise' : 'Livraison', pageWidth - 60, y);
     doc.text(EUR(shipping), pageWidth - marginX, y, { align: 'right' });
   }
   y += 3;

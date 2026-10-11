@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useOrders } from '../../hooks/useOrders';
 import { useInvoices, useOrderInvoiceBadges } from '../../hooks/useInvoices';
+import { buildInvoiceItems } from '../../utils/generateInvoicePdf';
 import type { OrderWithItems } from '../../services/orderService';
 import { OrderDetail } from './OrderDetail';
 import { B2BOrders } from './B2BOrders';
@@ -61,14 +62,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
   const { downloadInvoice, emitQontoInvoice, downloadingOrderId } = useInvoices();
 
   const handleDownloadInvoice = async (order: OrderWithItems) => {
-    const items = order.order_items
-      .filter((i) => i.status !== 'cancelled')
-      .map((i) => ({
-        description: i.product_snapshot?.name || 'Article',
-        unitPrice: i.unit_price,
-        quantity: i.quantity,
-        lineTotal: i.line_total,
-      }));
+    const items = buildInvoiceItems(order.order_items);
     const result = await downloadInvoice(
       {
         id: order.id,

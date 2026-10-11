@@ -5,6 +5,7 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useB2BOrders, B2BOrder, B2BOrderComputedStatus, getRequesterDisplayName } from '../../hooks/useB2BOrders';
 import { useSendcloudSync } from '../../hooks/useSendcloudSync';
 import { useInvoices, useOrderInvoiceBadges } from '../../hooks/useInvoices';
+import { buildInvoiceItems } from '../../utils/generateInvoicePdf';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck, Search, FileDown, Loader2, Send, CheckCircle2 } from 'lucide-react';
 
@@ -40,14 +41,7 @@ export const B2BOrders: React.FC = () => {
   const { downloadInvoice, emitQontoInvoice, downloadingOrderId } = useInvoices();
 
   const handleDownloadInvoice = async (order: B2BOrder) => {
-    const items = order.order_items
-      .filter((i) => i.status !== 'cancelled')
-      .map((i) => ({
-        description: i.product_snapshot?.name || 'Article',
-        unitPrice: i.unit_price,
-        quantity: i.quantity,
-        lineTotal: i.line_total,
-      }));
+    const items = buildInvoiceItems(order.order_items);
     const result = await downloadInvoice(
       {
         id: order.id,

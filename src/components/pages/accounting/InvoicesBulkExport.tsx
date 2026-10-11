@@ -1,19 +1,11 @@
 import React, { useState } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { generateInvoicesBulkPdf, InvoiceData, InvoiceBillingDetails } from '../../../utils/generateInvoicePdf';
+import { generateInvoicesBulkPdf, buildInvoiceItems, InvoiceData, InvoiceBillingDetails, InvoiceSourceItem } from '../../../utils/generateInvoicePdf';
 import { AccountingPeriod } from '../../../utils/accountingPeriods';
 import { FileDown, Loader2 } from 'lucide-react';
 
 interface InvoicesBulkExportProps {
   period: AccountingPeriod;
-}
-
-interface OrderItemRow {
-  product_snapshot: { name?: string } | null;
-  unit_price: number;
-  quantity: number;
-  line_total: number;
-  status?: string;
 }
 
 interface InvoiceEmbed {
@@ -28,7 +20,7 @@ interface OrderRow {
   order_number: string;
   created_at: string;
   stripe_payment_intent_id: string | null;
-  order_items: OrderItemRow[] | null;
+  order_items: InvoiceSourceItem[] | null;
   invoice: InvoiceEmbed | InvoiceEmbed[] | null;
 }
 
@@ -53,7 +45,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
         .from('orders')
         .select(
           'order_number, created_at, stripe_payment_intent_id, ' +
-            'order_items(product_snapshot, unit_price, quantity, line_total, status), ' +
+            'order_items(product_snapshot, unit_price, quantity, line_total, status, insured, insurance_cost, entrupy_requested, entrupy_cost), ' +
             'invoice:invoices!inner(invoice_number, issued_at, total_amount, legal_status, billing_details)'
         )
         .gte('created_at', period.range.start.toISOString())
@@ -72,14 +64,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
         .map((row) => {
           const invoice = Array.isArray(row.invoice) ? row.invoice[0] : row.invoice;
           if (!invoice) return null;
-          const items = (row.order_items || [])
-            .filter((i) => i.status !== 'cancelled')
-            .map((i) => ({
-              description: i.product_snapshot?.name || 'Article',
-              unitPrice: i.unit_price,
-              quantity: i.quantity,
-              lineTotal: i.line_total,
-            }));
+          const items = buildInvoiceItems(row.order_items || []);
           const invoiceData: InvoiceData = {
             invoiceNumber: invoice.invoice_number,
             issuedAt: invoice.issued_at,

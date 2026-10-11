@@ -4,6 +4,7 @@ import { Badge } from '../../ui/Badge';
 import { MyB2BOrder, MyB2BOrderItem } from '../../../hooks/useMyB2BOrders';
 import { useEntrupyCertificate } from '../../../hooks/useEntrupyCertificate';
 import { useInvoices } from '../../../hooks/useInvoices';
+import { buildInvoiceItems } from '../../../utils/generateInvoicePdf';
 import { FULFILLMENT_RANK } from '../../../hooks/useB2BOrders';
 import { ShoppingBag, ImageOff, AlertCircle, Eye, X, Package, MapPin, Truck, FileDown, Ban, BadgeCheck } from 'lucide-react';
 import { CancelMyOrderModal } from './CancelMyOrderModal';
@@ -188,14 +189,7 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
   const { downloadInvoice, downloadingOrderId, downloadError } = useInvoices();
 
   const handleDownloadInvoice = (order: MyB2BOrder) => {
-    const items = order.order_items
-      .filter((i) => i.status === 'active')
-      .map((i) => ({
-        description: i.product_snapshot?.name || 'Article',
-        unitPrice: i.unit_price,
-        quantity: i.quantity,
-        lineTotal: i.line_total,
-      }));
+    const items = buildInvoiceItems(order.order_items);
     downloadInvoice(
       {
         id: order.id,

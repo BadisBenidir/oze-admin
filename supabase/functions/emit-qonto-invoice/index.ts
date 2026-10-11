@@ -71,6 +71,10 @@ interface OrderItemRow {
   line_total: number;
   status: string | null;
   product_snapshot: { name?: string; condition?: string } | null;
+  insured: boolean | null;
+  insurance_cost: number | null;
+  entrupy_requested: boolean | null;
+  entrupy_cost: number | null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -168,7 +172,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: items } = await adminClient
       .from('order_items')
-      .select('id, quantity, unit_price, line_total, status, product_snapshot')
+      .select('id, quantity, unit_price, line_total, status, product_snapshot, insured, insurance_cost, entrupy_requested, entrupy_cost')
       .eq('order_id', order_id);
     const activeItems = ((items || []) as OrderItemRow[]).filter((i) => i.status !== 'cancelled');
 
@@ -290,7 +294,10 @@ Deno.serve(async (req: Request) => {
         iban: qontoIban,
         bic: settlementBic,
       },
-      items: activeItems.map((item) => {
+      // Assurance transport et certificat Entrupy : inclus dans
+      // orders.total_amount, donc facturés sur des lignes dédiées (sinon la
+      // facture Qonto était inférieure au montant réellement payé).
+      items: activeItems.flatMap((item) => {
         const rawTitle = String(
           [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article'
         );
@@ -301,14 +308,34 @@ Deno.serve(async (req: Request) => {
         const title = rawTitle.length > QONTO_ITEM_TITLE_MAX
           ? rawTitle.slice(0, QONTO_ITEM_TITLE_MAX - 1) + '…'
           : rawTitle;
-        return {
+        const productName = String(item.product_snapshot?.name || 'Article').slice(0, 80);
+        // OZË Paris est en franchise en base de TVA (art. 293 B du CGI) :
+        // jamais de TVA facturée.
+        const lines = [{
           title,
           quantity: String(item.quantity || '1'),
           unit_price: { value: Number(item.unit_price || 1).toFixed(2), currency: 'EUR' },
-          // OZË Paris est en franchise en base de TVA (art. 293 B du CGI) :
-          // jamais de TVA facturée.
           vat_rate: '0',
-        };
+        }];
+        const insurance = Number(item.insurance_cost) || 0;
+        if (item.insured && insurance > 0) {
+          lines.push({
+            title: `Assurance transport — ${productName}`,
+            quantity: '1',
+            unit_price: { value: insurance.toFixed(2), currency: 'EUR' },
+            vat_rate: '0',
+          });
+        }
+        const entrupy = Number(item.entrupy_cost) || 0;
+        if (item.entrupy_requested && entrupy > 0) {
+          lines.push({
+            title: `Certificat Entrupy — ${productName}`,
+            quantity: '1',
+            unit_price: { value: entrupy.toFixed(2), currency: 'EUR' },
+            vat_rate: '0',
+          });
+        }
+        return lines;
       }),
       footer: VAT_NOTE,
       finalize: true,
