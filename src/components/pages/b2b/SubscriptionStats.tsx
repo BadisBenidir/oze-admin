@@ -10,7 +10,8 @@ import { supabase } from '../../../lib/supabase';
  * par pass, revenu mensuel estimé, résiliations et changements programmés,
  * paiements en échec, inscriptions jamais payées. Calculé depuis les
  * colonnes d'abonnement des revendeurs (tenues à jour par le webhook Stripe).
- * Le revenu est une estimation au prix catalogue (hors codes promo).
+ * Le revenu est le montant du PROCHAIN prélèvement de chaque abonné, codes
+ * promo Club (0192) déduits — voir expectedMonthlyAmount.
  */
 
 const ONGOING = new Set(['active', 'trialing', 'past_due']);
@@ -18,6 +19,56 @@ const ONGOING = new Set(['active', 'trialing', 'past_due']);
 const planPriceValue = (id: 'drops' | 'revendeur') => {
   const raw = PLANS.find((p) => p.id === id)?.price || '0';
   return Number(raw.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+};
+
+interface PaymentRow {
+  reseller_id: string | null;
+  stripe_subscription_id: string | null;
+  amount: number;
+  discount_amount: number;
+  promo_code: string | null;
+  paid_at: string;
+}
+
+interface PromoTerms {
+  code: string;
+  discount_type: 'percentage' | 'fixed_amount';
+  discount_value: number;
+  duration: 'once' | 'repeating' | 'forever';
+  duration_months: number | null;
+}
+
+/**
+ * Montant mensuel attendu d'un abonné : prix catalogue du pass, moins la
+ * remise du code promo de sa dernière échéance SI elle s'applique encore au
+ * prochain prélèvement — « forever » toujours (100 % → 0 €, 15 % → 85 % du
+ * prix), « repeating » tant que le nombre d'échéances payées avec ce code est
+ * inférieur à duration_months, « once » jamais (déjà consommée). Une remise
+ * posée depuis le Dashboard Stripe (« coupon:… », conditions inconnues ici)
+ * est supposée reconduite : on reprend le montant réellement payé.
+ */
+const expectedMonthlyAmount = (
+  r: Reseller,
+  payments: PaymentRow[],
+  promos: Map<string, PromoTerms>,
+): number => {
+  const catalogue = planPriceValue(r.subscription_plan === 'drops' ? 'drops' : 'revendeur');
+  const own = payments
+    .filter((p) => p.reseller_id === r.id || (r.stripe_subscription_id && p.stripe_subscription_id === r.stripe_subscription_id))
+    .sort((a, b) => b.paid_at.localeCompare(a.paid_at));
+  const latest = own[0];
+  if (!latest?.promo_code) return catalogue;
+
+  const promo = promos.get(latest.promo_code.toUpperCase());
+  if (!promo) return Number(latest.discount_amount) > 0 ? Number(latest.amount) || 0 : catalogue;
+  if (promo.duration === 'once') return catalogue;
+  if (promo.duration === 'repeating') {
+    const used = own.filter((p) => p.promo_code?.toUpperCase() === promo.code.toUpperCase()).length;
+    if (used >= (promo.duration_months || 1)) return catalogue;
+  }
+  const value = Number(promo.discount_value) || 0;
+  const discounted = promo.discount_type === 'percentage' ? catalogue * (1 - value / 100) : catalogue - value;
+  return Math.max(0, Math.round(discounted * 100) / 100);
 };
 
 const EUR = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
@@ -45,7 +96,31 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[] }> = ({ subsc
   const paying = subscribers.filter((r) => r.status === 'active' && ONGOING.has(r.subscription_status || ''));
   const drops = paying.filter((r) => r.subscription_plan === 'drops');
   const revendeur = paying.filter((r) => r.subscription_plan === 'revendeur');
-  const mrr = drops.length * planPriceValue('drops') + revendeur.length * planPriceValue('revendeur');
+  const catalogueMrr = drops.length * planPriceValue('drops') + revendeur.length * planPriceValue('revendeur');
+  const [payments, setPayments] = useState<PaymentRow[] | null>(null);
+  const [promos, setPromos] = useState<Map<string, PromoTerms>>(new Map());
+  useEffect(() => {
+    Promise.all([
+      supabase
+        .from('b2b_subscription_payments')
+        .select('reseller_id, stripe_subscription_id, amount, discount_amount, promo_code, paid_at'),
+      supabase.from('club_promo_codes').select('code, discount_type, discount_value, duration, duration_months'),
+    ]).then(([paymentsRes, promosRes]) => {
+      // En cas d'erreur, on retombe sur le prix catalogue (payments reste null).
+      if (!paymentsRes.error) setPayments((paymentsRes.data || []) as PaymentRow[]);
+      if (!promosRes.error) {
+        setPromos(new Map(((promosRes.data || []) as PromoTerms[]).map((p) => [p.code.toUpperCase(), p])));
+      }
+    });
+  }, []);
+  const expected = payments ? paying.map((r) => expectedMonthlyAmount(r, payments, promos)) : null;
+  const mrr = expected ? expected.reduce((sum, n) => sum + n, 0) : catalogueMrr;
+  const freeCount = expected ? expected.filter((n) => n === 0).length : 0;
+  const mrrHint = !expected
+    ? 'au prix catalogue, hors promos'
+    : mrr < catalogueMrr - 0.005
+      ? `codes promo déduits${freeCount ? ` · dont ${freeCount} gratuit${freeCount > 1 ? 's' : ''}` : ''} (catalogue ${EUR(catalogueMrr)})`
+      : 'codes promo déduits';
   const cancelling = paying.filter((r) => r.subscription_cancel_at_period_end);
   const downgrading = paying.filter((r) => r.subscription_pending_plan === 'drops');
   const pastDue = paying.filter((r) => r.subscription_status === 'past_due');
@@ -87,7 +162,7 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[] }> = ({ subsc
     <div className="mb-6 space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat icon={Users} label="Abonnés payants" value={String(paying.length)} hint={`${revendeur.length} Revendeur · ${drops.length} Drops`} />
-        <Stat icon={TrendingUp} label="Revenu mensuel estimé" value={EUR(mrr)} hint="au prix catalogue, hors promos" />
+        <Stat icon={TrendingUp} label="Revenu mensuel estimé" value={EUR(mrr)} hint={mrrHint} />
         <Stat
           icon={CalendarX}
           label="Résiliations programmées"
