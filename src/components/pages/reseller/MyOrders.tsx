@@ -4,6 +4,9 @@ import { useMyB2BOrders } from '../../../hooks/useMyB2BOrders';
 import { useReadyToShipItems } from '../../../hooks/useReadyToShipItems';
 import { B2BOrdersList } from './B2BOrdersList';
 import { RequestDeliveryModal } from './RequestDeliveryModal';
+import { AuctionPaymentsDue } from './AuctionPaymentsDue';
+import { useMyAuctionPayments } from '../../../hooks/useMyAuctionPayments';
+import { useWallet } from '../../../hooks/useWallet';
 import { ImageOff, Truck } from 'lucide-react';
 
 interface MyOrdersProps {
@@ -20,6 +23,21 @@ export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct, onWalletChang
   const { items: readyItems, requestDelivery } = useReadyToShipItems(isReseller);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showRequestModal, setShowRequestModal] = useState(false);
+  // Lots d'enchères gagnés à payer : les commandes AUC- apparaissent ici
+  // « En attente de paiement », le paiement doit donc être possible ici aussi
+  // (pas seulement depuis la page Enchères).
+  const { payments: auctionPayments, pay: payAuctionOrder } = useMyAuctionPayments(Boolean(profile?.id));
+  const wallet = useWallet(profile?.id);
+
+  const handlePayAuction = async (orderId: string, method: 'wallet' | 'card' | 'mixed') => {
+    const result = await payAuctionOrder(orderId, method);
+    if (result.success && !result.redirectUrl) {
+      refresh();
+      wallet.refresh();
+      onWalletChanged?.();
+    }
+    return result;
+  };
 
   const handleOrderCancelled = () => {
     refresh();
@@ -51,6 +69,8 @@ export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct, onWalletChang
         <h3 className="text-lg font-semibold text-gray-900">Mes commandes</h3>
         <p className="text-sm text-gray-500">{loading ? 'Chargement...' : `${orders.length} commande${orders.length > 1 ? 's' : ''}`}</p>
       </div>
+
+      <AuctionPaymentsDue payments={auctionPayments} walletBalance={wallet.balance} onPay={handlePayAuction} />
 
       {readyItems.length > 0 && (
         <div className="mb-8">

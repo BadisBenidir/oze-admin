@@ -285,7 +285,14 @@ export const Auctions: React.FC = () => {
     .sort((a, b) => myRank(a.item) - myRank(b.item) || a.index - b.index)
     .map(({ item }) => item);
   const { payments: pendingPayments, pay: payAuctionOrder, hasOverduePayment } = useMyAuctionPayments(Boolean(profile?.id));
-  const { balance: walletBalance } = useWallet(profile?.id);
+  const { balance: walletBalance, refresh: refreshWallet } = useWallet(profile?.id);
+  // Après un paiement par solde, relit le solde : sinon les lots suivants
+  // sont proposés « Payer (solde) » avec l'ancien montant.
+  const handlePayAuction = async (orderId: string, method: 'wallet' | 'card' | 'mixed') => {
+    const result = await payAuctionOrder(orderId, method);
+    if (result.success && !result.redirectUrl) refreshWallet();
+    return result;
+  };
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
   const viewingItem = items.find((i) => i.id === viewingItemId) || null;
   const [termsCheckbox, setTermsCheckbox] = useState(false);
@@ -322,7 +329,7 @@ export const Auctions: React.FC = () => {
         </div>
       )}
 
-      <AuctionPaymentsDue payments={pendingPayments} walletBalance={walletBalance} onPay={payAuctionOrder} />
+      <AuctionPaymentsDue payments={pendingPayments} walletBalance={walletBalance} onPay={handlePayAuction} />
 
       <div className="mb-6">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
