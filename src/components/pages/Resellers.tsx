@@ -10,6 +10,7 @@ import { ResellerDetail } from './ResellerDetail';
 import { ResellerFormModal } from './ResellerFormModal';
 import { InviteLinkPanel } from '../reseller/InviteLinkPanel';
 import { SubscriptionStats } from './b2b/SubscriptionStats';
+import { useSubscriptionPromos, lifetimeFreeCode } from '../../hooks/useSubscriptionPromos';
 import { PendingWalletDebitsButton } from './b2b/PendingWalletDebitsButton';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import { whatsappUrl } from '../../utils/whatsapp';
@@ -69,6 +70,7 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
     removeContact,
     updateContactCanPreviewDrops,
   } = useResellers(isAdmin);
+  const promoData = useSubscriptionPromos(isSubscribers);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Reseller['status']>('all');
@@ -300,7 +302,7 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
       </div>
 
       {!isSubscribers && <PendingWalletDebitsButton />}
-      {isSubscribers && !loading && <SubscriptionStats subscribers={scopedResellers} />}
+      {isSubscribers && !loading && <SubscriptionStats subscribers={scopedResellers} promoData={promoData} />}
 
       {/* Filtres */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -392,7 +394,17 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
                               <Building2 className="h-4 w-4 text-white" />
                             </div>
                             <div>
-                              <p className="font-medium text-gray-900 text-sm md:text-base">{reseller.company_name}</p>
+                              <p className="font-medium text-gray-900 text-sm md:text-base flex flex-wrap items-center gap-2">
+                                {reseller.company_name}
+                                {isSubscribers && promoData && (() => {
+                                  const freeCode = lifetimeFreeCode(reseller, promoData);
+                                  return freeCode ? (
+                                    <span title="Code promo 100 % à vie : aucun prélèvement">
+                                      <Badge variant="purple">Gratuit à vie · {freeCode}</Badge>
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </p>
                               {reseller.contact_email && (
                                 <p className="text-xs md:text-sm text-gray-500 flex items-center gap-1">
                                   <Mail className="h-3 w-3" /> {reseller.contact_email}

@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CalendarX, CreditCard, RefreshCw, TrendingUp, UserX, Users } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import type { Reseller } from '../../../hooks/useResellers';
-import { PLANS } from '../../landing/plans';
 import { supabase } from '../../../lib/supabase';
+import { expectedMonthlyAmount, planPriceValue, type SubscriptionPromoData } from '../../../hooks/useSubscriptionPromos';
 
 /**
  * Tableau de bord des abonnements Club B2B (section « Abonnés ») : abonnés
@@ -11,65 +11,10 @@ import { supabase } from '../../../lib/supabase';
  * paiements en échec, inscriptions jamais payées. Calculé depuis les
  * colonnes d'abonnement des revendeurs (tenues à jour par le webhook Stripe).
  * Le revenu est le montant du PROCHAIN prélèvement de chaque abonné, codes
- * promo Club (0192) déduits — voir expectedMonthlyAmount.
+ * promo Club (0192) déduits — voir useSubscriptionPromos.expectedMonthlyAmount.
  */
 
 const ONGOING = new Set(['active', 'trialing', 'past_due']);
-
-const planPriceValue = (id: 'drops' | 'revendeur') => {
-  const raw = PLANS.find((p) => p.id === id)?.price || '0';
-  return Number(raw.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
-};
-
-interface PaymentRow {
-  reseller_id: string | null;
-  stripe_subscription_id: string | null;
-  amount: number;
-  discount_amount: number;
-  promo_code: string | null;
-  paid_at: string;
-}
-
-interface PromoTerms {
-  code: string;
-  discount_type: 'percentage' | 'fixed_amount';
-  discount_value: number;
-  duration: 'once' | 'repeating' | 'forever';
-  duration_months: number | null;
-}
-
-/**
- * Montant mensuel attendu d'un abonné : prix catalogue du pass, moins la
- * remise du code promo de sa dernière échéance SI elle s'applique encore au
- * prochain prélèvement — « forever » toujours (100 % → 0 €, 15 % → 85 % du
- * prix), « repeating » tant que le nombre d'échéances payées avec ce code est
- * inférieur à duration_months, « once » jamais (déjà consommée). Une remise
- * posée depuis le Dashboard Stripe (« coupon:… », conditions inconnues ici)
- * est supposée reconduite : on reprend le montant réellement payé.
- */
-const expectedMonthlyAmount = (
-  r: Reseller,
-  payments: PaymentRow[],
-  promos: Map<string, PromoTerms>,
-): number => {
-  const catalogue = planPriceValue(r.subscription_plan === 'drops' ? 'drops' : 'revendeur');
-  const own = payments
-    .filter((p) => p.reseller_id === r.id || (r.stripe_subscription_id && p.stripe_subscription_id === r.stripe_subscription_id))
-    .sort((a, b) => b.paid_at.localeCompare(a.paid_at));
-  const latest = own[0];
-  if (!latest?.promo_code) return catalogue;
-
-  const promo = promos.get(latest.promo_code.toUpperCase());
-  if (!promo) return Number(latest.discount_amount) > 0 ? Number(latest.amount) || 0 : catalogue;
-  if (promo.duration === 'once') return catalogue;
-  if (promo.duration === 'repeating') {
-    const used = own.filter((p) => p.promo_code?.toUpperCase() === promo.code.toUpperCase()).length;
-    if (used >= (promo.duration_months || 1)) return catalogue;
-  }
-  const value = Number(promo.discount_value) || 0;
-  const discounted = promo.discount_type === 'percentage' ? catalogue * (1 - value / 100) : catalogue - value;
-  return Math.max(0, Math.round(discounted * 100) / 100);
-};
 
 const EUR = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 const shortDate = (iso: string | null | undefined) =>
@@ -92,28 +37,16 @@ const Stat: React.FC<{ icon: React.ElementType; label: string; value: string; hi
   </Card>
 );
 
-export const SubscriptionStats: React.FC<{ subscribers: Reseller[] }> = ({ subscribers }) => {
+export const SubscriptionStats: React.FC<{ subscribers: Reseller[]; promoData: SubscriptionPromoData | null }> = ({
+  subscribers,
+  promoData,
+}) => {
   const paying = subscribers.filter((r) => r.status === 'active' && ONGOING.has(r.subscription_status || ''));
   const drops = paying.filter((r) => r.subscription_plan === 'drops');
   const revendeur = paying.filter((r) => r.subscription_plan === 'revendeur');
   const catalogueMrr = drops.length * planPriceValue('drops') + revendeur.length * planPriceValue('revendeur');
-  const [payments, setPayments] = useState<PaymentRow[] | null>(null);
-  const [promos, setPromos] = useState<Map<string, PromoTerms>>(new Map());
-  useEffect(() => {
-    Promise.all([
-      supabase
-        .from('b2b_subscription_payments')
-        .select('reseller_id, stripe_subscription_id, amount, discount_amount, promo_code, paid_at'),
-      supabase.from('club_promo_codes').select('code, discount_type, discount_value, duration, duration_months'),
-    ]).then(([paymentsRes, promosRes]) => {
-      // En cas d'erreur, on retombe sur le prix catalogue (payments reste null).
-      if (!paymentsRes.error) setPayments((paymentsRes.data || []) as PaymentRow[]);
-      if (!promosRes.error) {
-        setPromos(new Map(((promosRes.data || []) as PromoTerms[]).map((p) => [p.code.toUpperCase(), p])));
-      }
-    });
-  }, []);
-  const expected = payments ? paying.map((r) => expectedMonthlyAmount(r, payments, promos)) : null;
+  // Tant que promoData est null (chargement / erreur), on retombe sur le prix catalogue.
+  const expected = promoData ? paying.map((r) => expectedMonthlyAmount(r, promoData)) : null;
   const mrr = expected ? expected.reduce((sum, n) => sum + n, 0) : catalogueMrr;
   const freeCount = expected ? expected.filter((n) => n === 0).length : 0;
   const mrrHint = !expected
