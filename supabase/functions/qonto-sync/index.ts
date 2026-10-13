@@ -220,11 +220,53 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // 4. Factures d'avance de sourcing (0196) émises sur Qonto : relit leur
+    // statut ; une facture passée « paid » côté Qonto (virement rapproché
+    // dans Qonto) marque l'avance de la mission comme encaissée.
+    const { data: openAdvances } = await adminClient
+      .from('invoices')
+      .select('id, qonto_invoice_id, sourcing_mission_id, transmission_status')
+      .eq('kind', 'advance')
+      .not('qonto_invoice_id', 'is', null)
+      .not('transmission_status', 'in', '(paid,cancelled,canceled)');
+
+    let advancesPaid = 0;
+    for (const inv of openAdvances || []) {
+      const res = await fetch(`${QONTO_BASE_URL}/client_invoices/${inv.qonto_invoice_id}`, { headers: qontoHeaders });
+      if (!res.ok) {
+        console.error('qonto-sync: lecture facture', inv.qonto_invoice_id, res.status, await res.text());
+        continue;
+      }
+      const qontoInvoice = (await res.json())?.client_invoice;
+      const status: string | undefined = qontoInvoice?.status;
+      if (!status || status === inv.transmission_status) continue;
+
+      await adminClient.from('invoices').update({ transmission_status: status }).eq('id', inv.id);
+      if (status === 'paid' && inv.sourcing_mission_id) {
+        const { data: mission } = await adminClient
+          .from('b2b_sourcing_missions')
+          .select('paid_at, payment_method')
+          .eq('id', inv.sourcing_mission_id)
+          .maybeSingle();
+        if (mission && !mission.paid_at) {
+          await adminClient
+            .from('b2b_sourcing_missions')
+            .update({
+              paid_at: qontoInvoice?.paid_at || new Date().toISOString(),
+              payment_method: mission.payment_method || 'Virement (facture Qonto)',
+            })
+            .eq('id', inv.sourcing_mission_id);
+        }
+        advancesPaid += 1;
+      }
+    }
+
     return json({
       success: true,
       balance: account.balance,
       transactions_synced: totalSynced,
       auto_matched: totalMatched,
+      advances_paid: advancesPaid,
     });
   } catch (err) {
     console.error('qonto-sync: erreur non gérée', err instanceof Error ? err.stack || err.message : err);

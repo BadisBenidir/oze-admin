@@ -102,8 +102,11 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Accès refusé : réservé aux administrateurs' }, 403);
     }
 
-    const { order_id } = await req.json();
-    if (!order_id) return json({ error: 'order_id est requis' }, 400);
+    // order_id : facture d'une commande ; sourcing_mission_id : facture
+    // d'avance d'une mission de sourcing sur mesure (0196), émise avant toute
+    // commande pour demander le paiement de l'avance.
+    const { order_id, sourcing_mission_id } = await req.json();
+    if (!order_id && !sourcing_mission_id) return json({ error: 'order_id ou sourcing_mission_id est requis' }, 400);
 
     const secretKey = Deno.env.get('QONTO_SECRET_KEY');
     const orgSlug = Deno.env.get('QONTO_ORGANIZATION_SLUG');
@@ -122,13 +125,15 @@ Deno.serve(async (req: Request) => {
     // le téléchargement jsPDF (generate_invoice_for_order, 0115/0117),
     // appelé via le jeton de l'admin (pas service-role) pour que
     // public.is_admin() y voie bien un admin.
-    const { data: genData, error: genError } = await callerClient.rpc('generate_invoice_for_order', { p_order_id: order_id });
+    const { data: genData, error: genError } = sourcing_mission_id
+      ? await callerClient.rpc('generate_advance_invoice_for_mission', { p_mission_id: sourcing_mission_id })
+      : await callerClient.rpc('generate_invoice_for_order', { p_order_id: order_id });
     if (genError) return json({ error: genError.message }, 400);
 
     const { data: invoiceRow, error: invoiceFetchError } = await adminClient
       .from('invoices')
-      .select('id, invoice_number, legal_status, profile_id, qonto_invoice_id, pdf_url')
-      .eq('order_id', order_id)
+      .select('id, invoice_number, legal_status, profile_id, qonto_invoice_id, pdf_url, kind, sourcing_mission_id, total_amount')
+      .eq(sourcing_mission_id ? 'sourcing_mission_id' : 'order_id', sourcing_mission_id || order_id)
       .single();
     if (invoiceFetchError || !invoiceRow) {
       return json({ error: invoiceFetchError?.message || 'Facture introuvable après génération' }, 400);
@@ -163,18 +168,33 @@ Deno.serve(async (req: Request) => {
       return json({ error: "L'émission sur Qonto est réservée aux clients professionnels (Société ou EI), pas aux particuliers" }, 400);
     }
 
-    const { data: order, error: orderError } = await adminClient
-      .from('orders')
-      .select('id, order_number, created_at')
-      .eq('id', order_id)
-      .single();
-    if (orderError || !order) return json({ error: orderError?.message || 'Commande introuvable' }, 400);
+    // Facture d'avance (0196) : une seule ligne, le montant de l'avance —
+    // y compris quand elle a été rattachée ensuite à la commande de la mission.
+    const isAdvance = invoiceRow.kind === 'advance';
+    let advanceLine: { title: string; amount: number } | null = null;
+    let activeItems: OrderItemRow[] = [];
+    if (isAdvance) {
+      const { data: mission } = await adminClient
+        .from('b2b_sourcing_missions')
+        .select('reference, title')
+        .eq('id', invoiceRow.sourcing_mission_id)
+        .maybeSingle();
+      const rawTitle = ['Avance — Sourcing sur mesure', mission?.reference, mission?.title].filter(Boolean).join(' — ');
+      advanceLine = { title: rawTitle.length > 120 ? rawTitle.slice(0, 119) + '…' : rawTitle, amount: Number(invoiceRow.total_amount) };
+    } else {
+      const { data: order, error: orderError } = await adminClient
+        .from('orders')
+        .select('id, order_number, created_at')
+        .eq('id', order_id)
+        .single();
+      if (orderError || !order) return json({ error: orderError?.message || 'Commande introuvable' }, 400);
 
-    const { data: items } = await adminClient
-      .from('order_items')
-      .select('id, quantity, unit_price, line_total, status, product_snapshot, insured, insurance_cost, entrupy_requested, entrupy_cost')
-      .eq('order_id', order_id);
-    const activeItems = ((items || []) as OrderItemRow[]).filter((i) => i.status !== 'cancelled');
+      const { data: items } = await adminClient
+        .from('order_items')
+        .select('id, quantity, unit_price, line_total, status, product_snapshot, insured, insurance_cost, entrupy_requested, entrupy_cost')
+        .eq('order_id', order_id);
+      activeItems = ((items || []) as OrderItemRow[]).filter((i) => i.status !== 'cancelled');
+    }
 
     // 2. Client Qonto — créé une seule fois par profil, réutilisé ensuite.
     // Champs CONFIRMÉS par des 422 réels sur un client société : `locale`
@@ -257,7 +277,6 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Secret QONTO_IBAN manquant dans Supabase' }, 500);
     }
     console.log('emit-qonto-invoice: QONTO_IBAN lu, longueur', qontoIban.length, 'préfixe', qontoIban.slice(0, 4));
-    console.log('QONTO_IBAN lu dans la fonction :', qontoIban);
 
     // Coordonnées du compte de règlement — la structure ci-dessous est
     // CONFIRMÉE par un appel réel réussi (201) contre l'API Qonto pendant le
@@ -283,11 +302,14 @@ Deno.serve(async (req: Request) => {
     // 4. Émission de la facture officielle (numéro officiel + routage PDP
     // automatique côté Qonto pour un client pro).
     const today = new Date().toISOString().slice(0, 10);
+    // Une facture de commande est déjà réglée (échéance = émission) ; une
+    // facture d'avance demande le paiement : échéance à 7 jours.
+    const dueDate = isAdvance ? new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().slice(0, 10) : today;
     const invoicePayload = {
       client_id: qontoClientId,
       currency: 'EUR',
       issue_date: today,
-      due_date: today,
+      due_date: dueDate,
       payment_methods: {
         type: 'transfer',
         beneficiary_name: beneficiaryName,
@@ -297,7 +319,12 @@ Deno.serve(async (req: Request) => {
       // Assurance transport et certificat Entrupy : inclus dans
       // orders.total_amount, donc facturés sur des lignes dédiées (sinon la
       // facture Qonto était inférieure au montant réellement payé).
-      items: activeItems.flatMap((item) => {
+      items: advanceLine ? [{
+        title: advanceLine.title,
+        quantity: '1',
+        unit_price: { value: advanceLine.amount.toFixed(2), currency: 'EUR' },
+        vat_rate: '0',
+      }] : activeItems.flatMap((item) => {
         const rawTitle = String(
           [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article'
         );

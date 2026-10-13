@@ -62,6 +62,23 @@ export const useOrderInvoiceBadges = (orderIds: string[]) => {
   return { badges, refresh: fetchBadges };
 };
 
+type MissionEmbed = { reference: string | null; title: string | null };
+
+/** Ligne unique d'une facture d'avance de sourcing (même libellé que sur Qonto). */
+export const advanceInvoiceItems = (invoice: {
+  total_amount: number | string;
+  sourcing_mission?: MissionEmbed | MissionEmbed[] | null;
+}): InvoiceLineItem[] => {
+  const mission = Array.isArray(invoice.sourcing_mission) ? invoice.sourcing_mission[0] : invoice.sourcing_mission;
+  const amount = Number(invoice.total_amount) || 0;
+  return [{
+    description: ['Avance — Sourcing sur mesure', mission?.reference, mission?.title].filter(Boolean).join(' — '),
+    unitPrice: amount,
+    quantity: 1,
+    lineTotal: amount,
+  }];
+};
+
 export interface InvoiceOrderInput {
   id: string;
   order_number: string;
@@ -103,7 +120,7 @@ export const useInvoices = () => {
 
       const { data: invoice, error: fetchError } = await supabase
         .from('invoices')
-        .select('invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url')
+        .select('invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, kind, sourcing_mission:b2b_sourcing_missions(reference, title)')
         .eq('order_id', order.id)
         .single();
       if (fetchError || !invoice) {
@@ -127,7 +144,9 @@ export const useInvoices = () => {
         legalStatus: invoice.legal_status as 'individual' | 'sole_proprietorship' | 'company',
         billingDetails: (invoice.billing_details || {}) as InvoiceBillingDetails,
         paymentMethod: order.paymentMethod,
-        items,
+        // Facture d'avance de sourcing rattachée à la commande (0196) : elle
+        // ne facture que l'avance, jamais le détail des pièces.
+        items: invoice.kind === 'advance' ? advanceInvoiceItems(invoice) : items,
       });
 
       return { success: true as const };
@@ -172,4 +191,103 @@ export const useInvoices = () => {
   };
 
   return { downloadInvoice, backfillMissingInvoices, emitQontoInvoice, downloadingOrderId, downloadError };
+};
+
+/** Facture d'avance d'une mission de sourcing (0196) : une seule facture par
+ * mission, du montant de l'avance, émise sur Qonto pour en demander le
+ * paiement par virement. transmissionStatus = statut Qonto ('unpaid' →
+ * 'paid', relu par qonto-sync qui marque alors l'avance encaissée). */
+export interface AdvanceInvoice {
+  invoiceNumber: string;
+  totalAmount: number;
+  transmissionStatus: string;
+  qontoEmitted: boolean;
+  qontoInvoiceNumber: string | null;
+  pdfUrl: string | null;
+}
+
+export const emitAdvanceInvoice = async (missionId: string) => {
+  try {
+    const { data, error } = await supabase.functions.invoke('emit-qonto-invoice', { body: { sourcing_mission_id: missionId } });
+    if (error) throw new Error(await extractFunctionErrorMessage(error, "Échec de l'émission sur Qonto"));
+    const result = data as { already_emitted?: boolean; qonto_invoice_number?: string; pdf_url?: string };
+    return { success: true as const, ...result };
+  } catch (err) {
+    return { success: false as const, error: err instanceof Error ? err.message : "Erreur lors de l'émission sur Qonto" };
+  }
+};
+
+export const useAdvanceInvoice = (missionId: string | null) => {
+  const [invoice, setInvoice] = useState<AdvanceInvoice | null>(null);
+  const [emitting, setEmitting] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!missionId) {
+      setInvoice(null);
+      return;
+    }
+    const { data } = await supabase
+      .from('invoices')
+      .select('invoice_number, total_amount, transmission_status, qonto_invoice_id, qonto_invoice_number, pdf_url')
+      .eq('sourcing_mission_id', missionId)
+      .maybeSingle();
+    setInvoice(
+      data
+        ? {
+            invoiceNumber: data.invoice_number,
+            totalAmount: Number(data.total_amount),
+            transmissionStatus: data.transmission_status,
+            qontoEmitted: Boolean(data.qonto_invoice_id),
+            qontoInvoiceNumber: data.qonto_invoice_number,
+            pdfUrl: data.pdf_url,
+          }
+        : null
+    );
+  }, [missionId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  /** PDF officiel Qonto s'il existe, sinon PDF généré localement (jsPDF). */
+  const download = async () => {
+    if (!missionId) return;
+    const { data } = await supabase
+      .from('invoices')
+      .select('invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, transmission_status, sourcing_mission:b2b_sourcing_missions(reference, title, created_at, paid_at)')
+      .eq('sourcing_mission_id', missionId)
+      .maybeSingle();
+    if (!data) return;
+    if (data.pdf_url) {
+      window.open(data.pdf_url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const mission = (Array.isArray(data.sourcing_mission) ? data.sourcing_mission[0] : data.sourcing_mission) as
+      | (MissionEmbed & { created_at: string; paid_at: string | null })
+      | null;
+    const paidAt = mission?.paid_at;
+    await generateInvoicePdf({
+      invoiceNumber: data.invoice_number,
+      issuedAt: data.issued_at,
+      orderNumber: mission?.reference || data.invoice_number,
+      orderDate: mission?.created_at || data.issued_at,
+      totalAmount: Number(data.total_amount),
+      legalStatus: data.legal_status as 'individual' | 'sole_proprietorship' | 'company',
+      billingDetails: (data.billing_details || {}) as InvoiceBillingDetails,
+      paymentMethod: 'virement bancaire',
+      items: advanceInvoiceItems(data),
+      paid: Boolean(paidAt) || data.transmission_status === 'paid',
+    });
+  };
+
+  const emit = async () => {
+    if (!missionId) return { success: false as const, error: 'Mission introuvable' };
+    setEmitting(true);
+    const result = await emitAdvanceInvoice(missionId);
+    setEmitting(false);
+    await refresh();
+    return result;
+  };
+
+  return { invoice, emitting, emit, download, refresh };
 };

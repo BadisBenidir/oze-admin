@@ -6,7 +6,7 @@ import { useResellers, ResellerContact } from '../../../hooks/useResellers';
 interface CreateSourcingMissionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
+  onSubmit: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string; warning?: string }>;
   /** Fixe l'entreprise (ouverture depuis l'onglet de la fiche revendeur) — masque le sélecteur entreprise. */
   fixedReseller?: { id: string; company_name: string };
   /** Présent en mode édition : pré-remplit le formulaire, entreprise verrouillée. */
@@ -34,6 +34,8 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paidAt, setPaidAt] = useState('');
   const [notes, setNotes] = useState('');
+  // Création : facture d'avance émise sur Qonto pour demander le paiement (0196).
+  const [emitAdvanceInvoice, setEmitAdvanceInvoice] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -46,6 +48,7 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
     setPaymentMethod(editingMission?.payment_method || '');
     setPaidAt(toDateInputValue(editingMission?.paid_at || null));
     setNotes(editingMission?.notes || '');
+    setEmitAdvanceInvoice(!editingMission);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, editingMission]);
 
@@ -144,6 +147,7 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
       payment_method: paymentMethod.trim() || undefined,
       paid_at: paidAt ? new Date(paidAt).toISOString() : undefined,
       notes: notes.trim() || undefined,
+      emit_advance_invoice: !editingMission && emitAdvanceInvoice,
     });
     setSubmitting(false);
 
@@ -151,6 +155,7 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
       setError(result.error || (editingMission ? 'Erreur lors de la mise à jour de la mission' : 'Erreur lors de la création de la mission'));
       return;
     }
+    if (result.warning) alert(result.warning);
     handleClose();
   };
 
@@ -236,7 +241,7 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="mission-advance" className="block text-sm font-medium text-gray-700 mb-1">Avance versée / encaissée</label>
+                <label htmlFor="mission-advance" className="block text-sm font-medium text-gray-700 mb-1">Montant de l'avance</label>
                 <div className="relative">
                   <input
                     id="mission-advance"
@@ -284,6 +289,9 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
             )}
 
             <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 -mb-2">
+                <p className="text-xs text-gray-500">Avance déjà encaissée ? Renseigne la date — sinon laisse vide, elle se remplit quand la facture Qonto est payée.</p>
+              </div>
               <div>
                 <label htmlFor="mission-payment-method" className="block text-sm font-medium text-gray-700 mb-1">Moyen de paiement</label>
                 <input
@@ -318,6 +326,24 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
                 placeholder="Ex : brief transmis par le client, préférences de marques..."
               />
             </div>
+
+            {!editingMission && (
+              <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={emitAdvanceInvoice}
+                  onChange={(e) => setEmitAdvanceInvoice(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                />
+                <span>
+                  Émettre la facture d'avance sur Qonto
+                  <span className="block text-xs text-gray-500">
+                    Facture du montant de l'avance, à régler par virement sous 7 jours — envoie-la au membre depuis Qonto.
+                    L'avance passe en « encaissée » automatiquement quand Qonto la voit payée. Réservé aux membres Société / EI.
+                  </span>
+                </span>
+              </label>
+            )}
 
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">

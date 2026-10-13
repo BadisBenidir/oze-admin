@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil, Trash2, Eye, EyeOff, Link2, Undo2, Send } from 'lucide-react';
+import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil, Trash2, Eye, EyeOff, Link2, Undo2, Send, FileText } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { Toast } from '../../ui/Toast';
 import { SourcingMission, SourcingMissionInput } from '../../../hooks/useSourcingMissions';
 import { useSourcingItems, SourcingItem } from '../../../hooks/useSourcingItems';
-import { useInvoices, useOrderInvoiceBadges } from '../../../hooks/useInvoices';
+import { useInvoices, useOrderInvoiceBadges, useAdvanceInvoice } from '../../../hooks/useInvoices';
 import { AddSourcingItemModal } from './AddSourcingItemModal';
 import { CreateSourcingMissionModal } from './CreateSourcingMissionModal';
 import { LinkSourcingProductModal } from './LinkSourcingProductModal';
@@ -66,6 +66,22 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   const [successToast, setSuccessToast] = useState('');
   const { emitQontoInvoice, downloadingOrderId } = useInvoices();
   const { badges: invoiceBadges, refresh: refreshInvoiceBadges } = useOrderInvoiceBadges(mission?.order_id ? [mission.order_id] : []);
+  const {
+    invoice: advanceInvoice,
+    emitting: emittingAdvance,
+    emit: emitAdvance,
+    download: downloadAdvanceInvoice,
+  } = useAdvanceInvoice(mission?.id ?? null);
+
+  const handleEmitAdvance = async () => {
+    if (!confirm("Émettre la facture d'avance sur Qonto ? Une facture finalisée ne peut plus être modifiée.")) return;
+    const result = await emitAdvance();
+    if (!result.success) {
+      alert(result.error);
+      return;
+    }
+    setSuccessToast(`Facture d'avance émise sur Qonto${result.qonto_invoice_number ? ` (n° ${result.qonto_invoice_number})` : ''} — envoie-la au membre depuis Qonto.`);
+  };
 
   useEffect(() => {
     setStatusError('');
@@ -78,8 +94,10 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   // facture n'a encore été générée pour cette commande (invoiceBadge absent),
   // on se fie directement au statut légal du demandeur plutôt que d'attendre
   // qu'un admin l'ait déjà téléchargée une première fois ailleurs.
+  // Une mission avec facture d'avance (0196) n'a jamais de seconde facture :
+  // la commande de validation réutilise la facture d'avance.
   const canEmitQonto =
-    Boolean(mission.order_id) && (invoiceBadge ? invoiceBadge.invoiceType === 'b2b_facturx' : mission.requester?.legal_status && mission.requester.legal_status !== 'individual');
+    !advanceInvoice && Boolean(mission.order_id) && (invoiceBadge ? invoiceBadge.invoiceType === 'b2b_facturx' : mission.requester?.legal_status && mission.requester.legal_status !== 'individual');
 
   const handleEmitQonto = async () => {
     if (!mission.order_id) return;
@@ -326,6 +344,49 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 <p className="text-sm text-red-700">{unitPricesError}</p>
               </div>
             )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-3">
+              <div className="flex items-center gap-2 text-sm">
+                <FileText className="h-4 w-4 text-gray-400" />
+                <span className="font-medium text-gray-900">Facture d'avance</span>
+                {advanceInvoice ? (
+                  <>
+                    <span className="text-gray-500">{advanceInvoice.qontoInvoiceNumber || advanceInvoice.invoiceNumber} · {advanceInvoice.totalAmount.toFixed(2)} €</span>
+                    {mission.paid_at || advanceInvoice.transmissionStatus === 'paid' ? (
+                      <Badge variant="success">Payée</Badge>
+                    ) : advanceInvoice.qontoEmitted ? (
+                      <Badge variant="warning">En attente de paiement</Badge>
+                    ) : (
+                      <Badge variant="default">Non émise sur Qonto</Badge>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-gray-500">aucune</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {advanceInvoice && (
+                  <button
+                    type="button"
+                    onClick={downloadAdvanceInvoice}
+                    className="text-xs font-medium text-gray-700 hover:text-gray-900 underline"
+                  >
+                    {advanceInvoice.pdfUrl ? 'Voir la facture Qonto' : 'Télécharger le PDF'}
+                  </button>
+                )}
+                {!advanceInvoice?.qontoEmitted && mission.status !== 'cancelled' && (
+                  <button
+                    type="button"
+                    onClick={handleEmitAdvance}
+                    disabled={emittingAdvance}
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {emittingAdvance ? 'Émission...' : "Émettre la facture d'avance sur Qonto"}
+                  </button>
+                )}
+              </div>
+            </div>
 
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center mb-3">

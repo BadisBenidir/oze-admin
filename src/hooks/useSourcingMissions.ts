@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { emitAdvanceInvoice } from './useInvoices';
 
 export interface SourcingMissionRequester {
   first_name: string | null;
@@ -98,6 +99,9 @@ export interface SourcingMissionInput {
   payment_method?: string;
   paid_at?: string;
   notes?: string;
+  /** Création uniquement : génère la facture d'avance (0196) et l'émet sur
+   * Qonto juste après la création, pour en demander le paiement. */
+  emit_advance_invoice?: boolean;
 }
 
 interface UseSourcingMissionsResult {
@@ -105,7 +109,7 @@ interface UseSourcingMissionsResult {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  createMission: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
+  createMission: (input: SourcingMissionInput) => Promise<{ success: boolean; error?: string; warning?: string }>;
   updateMission: (id: string, input: SourcingMissionInput) => Promise<{ success: boolean; error?: string }>;
   setMissionStatus: (id: string, status: 'active' | 'completed' | 'cancelled') => Promise<{ success: boolean; error?: string }>;
   /** Bascule la visibilité côté portail revendeur (reseller_sourcing_missions/items, voir 0094). */
@@ -232,8 +236,8 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     }
   }, [resellerId]);
 
-  const createMission = async (input: SourcingMissionInput): Promise<{ success: boolean; error?: string }> => {
-    const { error: insertError } = await supabase.from('b2b_sourcing_missions').insert({
+  const createMission = async (input: SourcingMissionInput): Promise<{ success: boolean; error?: string; warning?: string }> => {
+    const { data: created, error: insertError } = await supabase.from('b2b_sourcing_missions').insert({
       reseller_id: input.reseller_id,
       user_id: input.user_id || null,
       title: input.title.trim(),
@@ -242,11 +246,20 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
       payment_method: input.payment_method?.trim() || null,
       paid_at: input.paid_at || null,
       notes: input.notes?.trim() || null,
-    });
+    }).select('id').single();
 
     if (insertError) return { success: false, error: insertError.message };
+
+    // La mission existe : un échec de facturation ne doit jamais faire
+    // recréer la mission (doublon) — simple avertissement, la facture se
+    // réémet depuis le détail de la mission.
+    let warning: string | undefined;
+    if (input.emit_advance_invoice && created?.id) {
+      const result = await emitAdvanceInvoice(created.id);
+      if (!result.success) warning = `Mission créée, mais la facture d'avance n'a pas pu être émise : ${result.error}`;
+    }
     await fetchMissions();
-    return { success: true };
+    return { success: true, warning };
   };
 
   const updateMission = async (id: string, input: SourcingMissionInput): Promise<{ success: boolean; error?: string }> => {

@@ -75,6 +75,9 @@ export interface InvoiceData {
   billingDetails: InvoiceBillingDetails;
   paymentMethod: string;
   items: InvoiceLineItem[];
+  /** false : facture à régler (ex. facture d'avance de sourcing pas encore
+   * payée) — sinon « Facture acquittée ». */
+  paid?: boolean;
 }
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -214,7 +217,13 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`Facture acquittée — paiement par ${data.paymentMethod}.`, marginX, y);
+  doc.text(
+    data.paid === false
+      ? `Facture à régler par ${data.paymentMethod} à réception.`
+      : `Facture acquittée — paiement par ${data.paymentMethod}.`,
+    marginX,
+    y
+  );
   y += 6;
 
   // Mention légale de TVA — franchise en base (art. 293 B), jamais un
