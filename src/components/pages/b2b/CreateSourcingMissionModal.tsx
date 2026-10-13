@@ -339,7 +339,7 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
                   Émettre la facture d'avance sur Qonto
                   <span className="block text-xs text-gray-500">
                     Facture du montant de l'avance, à régler par virement sous 7 jours — envoie-la au membre depuis Qonto.
-                    L'avance passe en « encaissée » automatiquement quand Qonto la voit payée. Réservé aux membres Société / EI.
+                    L'avance passe en « encaissée » automatiquement quand Qonto la voit payée.
                   </span>
                 </span>
               </label>

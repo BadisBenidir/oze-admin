@@ -160,17 +160,18 @@ Deno.serve(async (req: Request) => {
       .single();
     if (profileError || !profile) return json({ error: profileError?.message || 'Profil client introuvable' }, 400);
 
-    // Restriction stricte : l'émission Qonto (facturation B2B Factur-X) est
-    // réservée aux clients professionnels (Société ou EI). Un particulier
-    // reste sur le PDF jsPDF standard (voir generate_invoice_for_order,
-    // invoice_type = 'b2c_retail' pour ce statut) — jamais de facture Qonto.
-    if (profile.legal_status === 'individual') {
-      return json({ error: "L'émission sur Qonto est réservée aux clients professionnels (Société ou EI), pas aux particuliers" }, 400);
-    }
-
     // Facture d'avance (0196) : une seule ligne, le montant de l'avance —
     // y compris quand elle a été rattachée ensuite à la commande de la mission.
     const isAdvance = invoiceRow.kind === 'advance';
+
+    // Factures de commande : émission Qonto (facturation B2B Factur-X)
+    // réservée aux clients professionnels (Société ou EI) ; un particulier
+    // reste sur le PDF jsPDF standard (invoice_type = 'b2c_retail'). La
+    // facture d'avance, elle, sert à demander le paiement : ouverte à tous
+    // les membres, particuliers compris (client Qonto « individual »).
+    if (!isAdvance && profile.legal_status === 'individual') {
+      return json({ error: "L'émission sur Qonto est réservée aux clients professionnels (Société ou EI), pas aux particuliers" }, 400);
+    }
     let advanceLine: { title: string; amount: number } | null = null;
     let activeItems: OrderItemRow[] = [];
     if (isAdvance) {
