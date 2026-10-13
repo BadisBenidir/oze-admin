@@ -8,6 +8,7 @@ import { useInvoices, useOrderInvoiceBadges } from '../../../hooks/useInvoices';
 import { AddSourcingItemModal } from './AddSourcingItemModal';
 import { CreateSourcingMissionModal } from './CreateSourcingMissionModal';
 import { LinkSourcingProductModal } from './LinkSourcingProductModal';
+import { ProductDetail } from '../ProductDetail';
 
 interface SourcingMissionDetailModalProps {
   mission: SourcingMission | null;
@@ -50,6 +51,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [linkingItemId, setLinkingItemId] = useState<string | null>(null);
+  const [viewingProductId, setViewingProductId] = useState<string | null>(null);
   const [statusError, setStatusError] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [publishError, setPublishError] = useState('');
@@ -448,15 +450,32 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                           <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
                             <td className="py-2.5 px-3">
                               <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => item.product_id && setViewingProductId(item.product_id)}
+                                  disabled={!item.product_id}
+                                  title={item.product_id ? 'Ouvrir la fiche produit' : undefined}
+                                  className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden enabled:hover:ring-2 enabled:hover:ring-gray-300 disabled:cursor-default"
+                                >
                                   {photo ? (
                                     <img src={photo} alt={item.title} className="h-full w-full object-cover" />
                                   ) : (
                                     <Package className="h-4 w-4 text-gray-400" />
                                   )}
-                                </div>
+                                </button>
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-medium text-gray-900 break-words line-clamp-2">{item.title}</p>
+                                  {item.product_id ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingProductId(item.product_id)}
+                                      title="Ouvrir la fiche produit"
+                                      className="text-left text-sm font-medium text-gray-900 break-words line-clamp-2 hover:underline"
+                                    >
+                                      {item.title}
+                                    </button>
+                                  ) : (
+                                    <p className="text-sm font-medium text-gray-900 break-words line-clamp-2">{item.title}</p>
+                                  )}
                                   {item.brand && <p className="text-xs text-gray-500 truncate">{item.brand}</p>}
                                   {!item.product_id && (
                                     <button
@@ -685,6 +704,12 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {viewingProductId && (
+        <div className="fixed inset-0 z-[80] bg-white overflow-y-auto">
+          <ProductDetail productId={viewingProductId} onBack={() => setViewingProductId(null)} />
         </div>
       )}
 
