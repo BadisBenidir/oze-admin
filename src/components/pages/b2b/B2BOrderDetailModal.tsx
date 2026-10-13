@@ -5,6 +5,9 @@ import { B2BOrder, B2BOrderItem, B2BOrderComputedStatus, getRequesterDisplayName
 import { cancelOrderItem, cancelOrder, cancelEntrupyCertificate } from '../../../hooks/useCancelOrderItem';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 import { supabase } from '../../../lib/supabase';
+import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
+import { AdminAuctionItem, AuctionRestockAction, CancelAuctionItemResult } from '../../../hooks/useAdminAuctionItems';
+import { CancelAuctionItemModal } from './auctions/CancelAuctionItemModal';
 
 // `orders.shipping_address` est stocké dans la forme assemblée par
 // b2b-checkout (address/postcode/city/country/pickup_point_*/delivery_type/
@@ -410,6 +413,8 @@ interface B2BOrderDetailModalProps {
 export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order, onClose, onOrderUpdated }) => {
   const [cancellingItem, setCancellingItem] = useState<B2BOrderItem | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState(false);
+  const [cancellingAuctionItem, setCancellingAuctionItem] = useState<AdminAuctionItem | null>(null);
+  const [auctionCancelError, setAuctionCancelError] = useState<string | null>(null);
   const [refundNotice, setRefundNotice] = useState<string | null>(null);
   const { sync: syncSendcloud } = useSendcloudSync();
   const [syncingShipmentId, setSyncingShipmentId] = useState<string | null>(null);
@@ -503,6 +508,54 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
     onOrderUpdated();
   };
 
+  // Commande d'enchère (AUC-) : jamais annulable par les chemins génériques
+  // (0146) — on annule le LOT via cancel-auction-item (0156), comme depuis
+  // Enchères B2B, ce qui annule aussi la commande et rembourse si payé.
+  const isAuctionOrder = Boolean(order.order_number?.startsWith('AUC-'));
+  const openAuctionCancel = async () => {
+    setAuctionCancelError(null);
+    const { data, error } = await supabase
+      .from('auction_items')
+      .select('id, title, images, current_price, product_id')
+      .eq('order_id', order.id)
+      .neq('status', 'cancelled')
+      .maybeSingle();
+    if (error || !data) {
+      setAuctionCancelError(error?.message || 'Lot d’enchère introuvable pour cette commande');
+      return;
+    }
+    setCancellingAuctionItem({
+      ...(data as Pick<AdminAuctionItem, 'id' | 'title' | 'images' | 'current_price' | 'product_id'>),
+      current_price: Number(data.current_price),
+      winner_name: getRequesterDisplayName(order) || order.reseller?.company_name || null,
+      winner_email: order.email,
+      order_payment_status: isPaid ? 'paid' : 'pending',
+      order_has_stripe_payment: hasStripePayment,
+    } as AdminAuctionItem);
+  };
+  const handleAuctionCancel = async (
+    reason: string,
+    restockAction: AuctionRestockAction,
+    refundMethod?: 'wallet' | 'stripe'
+  ): Promise<CancelAuctionItemResult> => {
+    if (!cancellingAuctionItem) return { success: false };
+    const { data, error } = await invokeEdgeFunction<CancelAuctionItemResult>('cancel-auction-item', {
+      item_id: cancellingAuctionItem.id,
+      reason,
+      restock_action: restockAction,
+      refund_method: refundMethod,
+    });
+    if (error) return { success: false, error };
+    setCancellingAuctionItem(null);
+    handleOrderConfirmed({
+      total_refund: (data?.wallet_refunded || 0) + (data?.stripe_refunded || 0),
+      refund_status: data?.refund_status,
+      refund_method: data?.refund_method,
+      refund_error: data?.refund_error,
+    });
+    return { success: true, ...(data || {}) };
+  };
+
   const handleOrderConfirmed = (result: { total_refund?: number; refund_status?: string; refund_method?: string | null; refund_error?: string }) => {
     setCancellingOrder(false);
     if (result.refund_status === 'succeeded') {
@@ -550,6 +603,12 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
             </div>
 
             <div className="p-6 space-y-6">
+              {auctionCancelError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-700">{auctionCancelError}</p>
+                </div>
+              )}
               {refundNotice && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -610,6 +669,16 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                     >
                       <Ban className="h-3.5 w-3.5" />
                       Annuler toute la commande
+                    </button>
+                  )}
+                  {isAuctionOrder && hasActiveItems && order.computedStatus !== 'cancelled' && (
+                    <button
+                      onClick={openAuctionCancel}
+                      title="Annule le lot d'enchère (et cette commande), rembourse s'il a été payé"
+                      className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-800 transition-colors"
+                    >
+                      <Ban className="h-3.5 w-3.5" />
+                      Annuler ce lot
                     </button>
                   )}
                 </div>
@@ -817,6 +886,14 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
           hasStripePayment={hasStripePayment}
           onCancel={() => setCancellingItem(null)}
           onConfirmed={handleItemConfirmed}
+        />
+      )}
+
+      {cancellingAuctionItem && (
+        <CancelAuctionItemModal
+          item={cancellingAuctionItem}
+          onClose={() => setCancellingAuctionItem(null)}
+          onConfirm={handleAuctionCancel}
         />
       )}
 
