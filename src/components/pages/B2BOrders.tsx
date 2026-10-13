@@ -6,6 +6,7 @@ import { useB2BOrders, B2BOrder, B2BOrderComputedStatus, getRequesterDisplayName
 import { useSendcloudSync } from '../../hooks/useSendcloudSync';
 import { useInvoices, useOrderInvoiceBadges } from '../../hooks/useInvoices';
 import { buildInvoiceItems } from '../../utils/generateInvoicePdf';
+import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { AlertCircle, RefreshCw, ShoppingBag, Eye, BadgeCheck, Search, FileDown, Loader2, Send, CheckCircle2 } from 'lucide-react';
 
@@ -122,6 +123,36 @@ export const B2BOrders: React.FC = () => {
     [orders, invoiceBadges]
   );
 
+  // Factures de commandes déjà réglées mais restées « À encaisser » sur Qonto
+  // (émises avant le marquage automatique) — voir qonto-mark-invoices-paid.
+  const unpaidOnQonto = useMemo(
+    () =>
+      orders.filter((o) => {
+        const b = invoiceBadges[o.id];
+        return b?.qontoEmitted && !['paid', 'cancelled', 'canceled'].includes(b.transmissionStatus) && o.payment_status === 'paid' && o.computedStatus !== 'cancelled';
+      }),
+    [orders, invoiceBadges]
+  );
+  const [markingPaid, setMarkingPaid] = useState(false);
+
+  const handleMarkPaidOnQonto = async () => {
+    if (unpaidOnQonto.length === 0 || markingPaid) return;
+    if (!window.confirm(`Marquer ${unpaidOnQonto.length} facture(s) comme payée(s) sur Qonto, à la date de paiement de chaque commande ?`)) return;
+    setMarkingPaid(true);
+    const { data, error } = await invokeEdgeFunction<{ checked: number; marked: number; failures: string[] }>('qonto-mark-invoices-paid', {});
+    setMarkingPaid(false);
+    await refreshInvoiceBadges();
+    if (error) {
+      alert(error);
+      return;
+    }
+    alert(
+      data?.failures?.length
+        ? `${data.marked}/${data.checked} facture(s) marquée(s) payée(s).\n\nÉchecs :\n${data.failures.join('\n')}`
+        : `${data?.marked ?? 0} facture(s) marquée(s) payée(s) sur Qonto.`
+    );
+  };
+
   const handleBulkEmitQonto = async () => {
     if (pendingFacturxOrders.length === 0 || bulkSending) return;
     if (!window.confirm(`Émettre ${pendingFacturxOrders.length} facture(s) sur Qonto ?`)) return;
@@ -189,6 +220,17 @@ export const B2BOrders: React.FC = () => {
               {bulkSending
                 ? `Envoi... (${bulkProgress?.done ?? 0}/${bulkProgress?.total ?? pendingFacturxOrders.length})`
                 : `Envoyer toutes les factures (${pendingFacturxOrders.length})`}
+            </button>
+          )}
+          {unpaidOnQonto.length > 0 && (
+            <button
+              onClick={handleMarkPaidOnQonto}
+              disabled={markingPaid}
+              title="Ces commandes sont réglées, mais leur facture est encore « À encaisser » sur Qonto"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-emerald-700 border border-emerald-200 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
+            >
+              {markingPaid ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {markingPaid ? 'Marquage...' : `Marquer payées sur Qonto (${unpaidOnQonto.length})`}
             </button>
           )}
           <button

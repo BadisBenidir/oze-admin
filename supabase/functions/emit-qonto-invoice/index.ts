@@ -227,6 +227,9 @@ Deno.serve(async (req: Request) => {
     }
     let advanceLine: { title: string; amount: number } | null = null;
     let activeItems: OrderItemRow[] = [];
+    // Commande déjà réglée : la facture Qonto est marquée payée juste après
+    // son émission (sinon elle reste « À encaisser », puis « En retard »).
+    let orderPaidAt: string | null = null;
     if (isAdvance) {
       const { data: mission } = await adminClient
         .from('b2b_sourcing_missions')
@@ -238,10 +241,13 @@ Deno.serve(async (req: Request) => {
     } else {
       const { data: order, error: orderError } = await adminClient
         .from('orders')
-        .select('id, order_number, created_at')
+        .select('id, order_number, created_at, paid_at, payment_status, status')
         .eq('id', order_id)
         .single();
       if (orderError || !order) return json({ error: orderError?.message || 'Commande introuvable' }, 400);
+      if (['paid', 'succeeded'].includes(order.payment_status || '') && !['cancelled', 'canceled'].includes(order.status || '')) {
+        orderPaidAt = order.paid_at || order.created_at;
+      }
 
       const { data: items } = await adminClient
         .from('order_items')
@@ -432,7 +438,21 @@ Deno.serve(async (req: Request) => {
     // Statut RÉEL renvoyé par Qonto (confirmé : 'unpaid' pour une facture
     // fraîchement finalisée, 'draft' pour une facture non finalisée) —
     // stocké tel quel plutôt que remappé dans un enum imaginé au préalable.
-    const transmissionStatus = rawStatus || 'pending';
+    let transmissionStatus = rawStatus || 'pending';
+
+    if (orderPaidAt) {
+      const at = new Date(orderPaidAt);
+      const paidDate = (at.getTime() > Date.now() ? new Date() : at).toLocaleDateString('en-CA', { timeZone: 'Europe/Paris' });
+      const paidRes = await fetch(`${QONTO_BASE_URL}/client_invoices/${qontoInvoiceId}/mark_as_paid`, {
+        method: 'POST',
+        headers: qontoHeaders,
+        body: JSON.stringify({ paid_at: paidDate }),
+      });
+      if (paidRes.ok) transmissionStatus = 'paid';
+      // Non bloquant : la facture est émise ; le bouton « Marquer payées sur
+      // Qonto » (qonto-mark-invoices-paid) rattrape ensuite.
+      else console.error('emit-qonto-invoice: mark_as_paid a échoué', paidRes.status, await paidRes.text());
+    }
 
     const { error: updateError } = await adminClient
       .from('invoices')
