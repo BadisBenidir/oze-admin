@@ -28,6 +28,7 @@
 // Déploiement : `supabase functions deploy emit-qonto-invoice`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { sendAdvanceInvoiceEmail } from './advanceInvoiceEmail.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -105,7 +106,9 @@ Deno.serve(async (req: Request) => {
     // order_id : facture d'une commande ; sourcing_mission_id : facture
     // d'avance d'une mission de sourcing sur mesure (0196), émise avant toute
     // commande pour demander le paiement de l'avance.
-    const { order_id, sourcing_mission_id } = await req.json();
+    // resend_email : renvoie seulement l'email de la facture d'avance déjà
+    // émise (aucune nouvelle émission Qonto).
+    const { order_id, sourcing_mission_id, resend_email } = await req.json();
     if (!order_id && !sourcing_mission_id) return json({ error: 'order_id ou sourcing_mission_id est requis' }, 400);
 
     const secretKey = Deno.env.get('QONTO_SECRET_KEY');
@@ -137,6 +140,56 @@ Deno.serve(async (req: Request) => {
       .single();
     if (invoiceFetchError || !invoiceRow) {
       return json({ error: invoiceFetchError?.message || 'Facture introuvable après génération' }, 400);
+    }
+
+    // Coordonnées du compte de règlement — la structure ci-dessous est
+    // CONFIRMÉE par un appel réel réussi (201) contre l'API Qonto. IBAN
+    // vérifié avant tout appel, pour un message explicite si le secret manque.
+    const getSettlement = async (): Promise<{ iban: string; bic: string; beneficiary: string } | { error: string }> => {
+      const iban = (Deno.env.get('QONTO_IBAN') || '').replace(/\s+/g, '').toUpperCase();
+      if (!iban) return { error: 'Secret QONTO_IBAN manquant dans Supabase' };
+      const orgRes = await fetch(`${QONTO_BASE_URL}/organizations/${orgSlug}`, { headers: qontoHeaders });
+      if (!orgRes.ok) return { error: `Qonto /organizations a échoué (${orgRes.status}) : ${await orgRes.text()}` };
+      const bankAccounts = (await orgRes.json())?.organization?.bank_accounts || [];
+      const account = bankAccounts.find((a: { iban?: string }) => a.iban === iban) || bankAccounts[0];
+      return { iban, bic: account?.bic || 'QNTOFRP1XXX', beneficiary: 'OZË PARIS' };
+    };
+
+    // Email « Votre facture d'avance » depuis nepasrepondre@ozeparis.com
+    // (Qonto, lui, enverrait depuis invoice@qonto.com) — relit la facture
+    // Qonto pour son numéro officiel, son échéance et sa page publique.
+    const emailAdvanceInvoice = async (qontoInvoiceId: string, profileId: string, missionId: string | null): Promise<string | null> => {
+      const [{ data: member }, { data: mission }, qontoRes, settlement] = await Promise.all([
+        adminClient.from('profiles').select('email, first_name').eq('id', profileId).maybeSingle(),
+        missionId
+          ? adminClient.from('b2b_sourcing_missions').select('reference, title').eq('id', missionId).maybeSingle()
+          : Promise.resolve({ data: null }),
+        fetch(`${QONTO_BASE_URL}/client_invoices/${qontoInvoiceId}`, { headers: qontoHeaders }),
+        getSettlement(),
+      ]);
+      if (!member?.email) return 'Email du membre introuvable';
+      if ('error' in settlement) return settlement.error;
+      const qontoInvoice = qontoRes.ok ? (await qontoRes.json())?.client_invoice : null;
+      return sendAdvanceInvoiceEmail({
+        to: member.email,
+        firstName: member.first_name,
+        missionTitle: mission?.title ?? null,
+        missionReference: mission?.reference ?? null,
+        invoiceNumber: qontoInvoice?.number || invoiceRow.invoice_number,
+        amount: Number(invoiceRow.total_amount),
+        dueDate: qontoInvoice?.due_date ?? null,
+        invoiceUrl: qontoInvoice?.invoice_url ?? invoiceRow.pdf_url ?? null,
+        ...settlement,
+      });
+    };
+
+    if (resend_email) {
+      if (invoiceRow.kind !== 'advance' || !invoiceRow.qonto_invoice_id) {
+        return json({ error: "Seule une facture d'avance déjà émise sur Qonto peut être renvoyée par email" }, 400);
+      }
+      const emailError = await emailAdvanceInvoice(invoiceRow.qonto_invoice_id, invoiceRow.profile_id, invoiceRow.sourcing_mission_id);
+      if (emailError) return json({ error: emailError }, 502);
+      return json({ success: true, email_sent: true });
     }
 
     // Idempotent : jamais de double émission.
@@ -270,18 +323,8 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 3. IBAN de règlement — vérifié et nettoyé AVANT tout appel, pour
-    // échouer avec un message explicite plutôt qu'un 422 Qonto opaque si le
-    // secret manque côté Supabase.
-    const qontoIban = (Deno.env.get('QONTO_IBAN') || '').replace(/\s+/g, '').toUpperCase();
-    if (!qontoIban) {
-      return json({ error: 'Secret QONTO_IBAN manquant dans Supabase' }, 500);
-    }
-    console.log('emit-qonto-invoice: QONTO_IBAN lu, longueur', qontoIban.length, 'préfixe', qontoIban.slice(0, 4));
-
-    // Coordonnées du compte de règlement — la structure ci-dessous est
-    // CONFIRMÉE par un appel réel réussi (201) contre l'API Qonto pendant le
-    // diagnostic de ce bug, pas une hypothèse de plus :
+    // 3. Compte de règlement (voir getSettlement). Structure du payload
+    // CONFIRMÉE par des appels réels réussis (201) :
     //   - payload PLAT (jamais d'enveloppe { data: { attributes } })
     //   - payment_methods est un OBJET UNIQUE (pas un tableau)
     //   - items[].unit_price est un objet Amount { value, currency }
@@ -289,16 +332,9 @@ Deno.serve(async (req: Request) => {
     //     .vat_rate restent des strings.
     //   - il n'y a pas de champ `note` ni `customer_locale` sur la facture ;
     //     la mention légale va dans `footer`.
-    const orgRes = await fetch(`${QONTO_BASE_URL}/organizations/${orgSlug}`, { headers: qontoHeaders });
-    if (!orgRes.ok) {
-      const body = await orgRes.text();
-      return json({ error: `Qonto /organizations a échoué (${orgRes.status}) : ${body}` }, 502);
-    }
-    const orgData = await orgRes.json();
-    const bankAccounts = orgData?.organization?.bank_accounts || [];
-    const settlementAccount = bankAccounts.find((a: { iban?: string }) => a.iban === qontoIban) || bankAccounts[0];
-    const beneficiaryName = 'OZË PARIS';
-    const settlementBic: string = settlementAccount?.bic || 'QNTOFRP1XXX';
+    const settlement = await getSettlement();
+    if ('error' in settlement) return json({ error: settlement.error }, 502);
+    const { iban: qontoIban, bic: settlementBic, beneficiary: beneficiaryName } = settlement;
 
     // 4. Émission de la facture officielle (numéro officiel + routage PDP
     // automatique côté Qonto pour un client pro).
@@ -409,9 +445,17 @@ Deno.serve(async (req: Request) => {
       .eq('id', invoiceRow.id);
     if (updateError) return json({ error: updateError.message }, 500);
 
+    // Facture d'avance : envoyée au membre par nos soins (jamais bloquant —
+    // la facture est émise ; l'email se renvoie depuis la fiche mission).
+    const emailError = isAdvance
+      ? await emailAdvanceInvoice(qontoInvoiceId, invoiceRow.profile_id, invoiceRow.sourcing_mission_id)
+      : null;
+
     return json({
       success: true,
       already_emitted: false,
+      email_sent: isAdvance && !emailError,
+      email_error: emailError,
       qonto_invoice_id: qontoInvoiceId,
       qonto_invoice_number: qontoInvoiceNumber,
       pdf_url: pdfUrl,

@@ -210,10 +210,30 @@ export const emitAdvanceInvoice = async (missionId: string) => {
   try {
     const { data, error } = await supabase.functions.invoke('emit-qonto-invoice', { body: { sourcing_mission_id: missionId } });
     if (error) throw new Error(await extractFunctionErrorMessage(error, "Échec de l'émission sur Qonto"));
-    const result = data as { already_emitted?: boolean; qonto_invoice_number?: string; pdf_url?: string };
+    const result = data as {
+      already_emitted?: boolean;
+      qonto_invoice_number?: string;
+      pdf_url?: string;
+      /** Email « Votre facture d'avance » envoyé au membre depuis nepasrepondre@ozeparis.com. */
+      email_sent?: boolean;
+      email_error?: string | null;
+    };
     return { success: true as const, ...result };
   } catch (err) {
     return { success: false as const, error: err instanceof Error ? err.message : "Erreur lors de l'émission sur Qonto" };
+  }
+};
+
+/** Renvoie au membre l'email de sa facture d'avance déjà émise (sans nouvelle émission Qonto). */
+export const resendAdvanceInvoiceEmail = async (missionId: string) => {
+  try {
+    const { error } = await supabase.functions.invoke('emit-qonto-invoice', {
+      body: { sourcing_mission_id: missionId, resend_email: true },
+    });
+    if (error) throw new Error(await extractFunctionErrorMessage(error, "Échec de l'envoi de l'email"));
+    return { success: true as const };
+  } catch (err) {
+    return { success: false as const, error: err instanceof Error ? err.message : "Échec de l'envoi de l'email" };
   }
 };
 

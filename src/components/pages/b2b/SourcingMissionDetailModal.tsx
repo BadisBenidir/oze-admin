@@ -4,7 +4,7 @@ import { Badge } from '../../ui/Badge';
 import { Toast } from '../../ui/Toast';
 import { SourcingMission, SourcingMissionInput } from '../../../hooks/useSourcingMissions';
 import { useSourcingItems, SourcingItem } from '../../../hooks/useSourcingItems';
-import { useInvoices, useOrderInvoiceBadges, useAdvanceInvoice } from '../../../hooks/useInvoices';
+import { useInvoices, useOrderInvoiceBadges, useAdvanceInvoice, resendAdvanceInvoiceEmail } from '../../../hooks/useInvoices';
 import { AddSourcingItemModal } from './AddSourcingItemModal';
 import { CreateSourcingMissionModal } from './CreateSourcingMissionModal';
 import { LinkSourcingProductModal } from './LinkSourcingProductModal';
@@ -80,7 +80,24 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
       alert(result.error);
       return;
     }
-    setSuccessToast(`Facture d'avance émise sur Qonto${result.qonto_invoice_number ? ` (n° ${result.qonto_invoice_number})` : ''} — envoie-la au membre depuis Qonto.`);
+    if (result.email_error) {
+      alert(`Facture émise, mais l'email au membre n'est pas parti : ${result.email_error}`);
+      return;
+    }
+    setSuccessToast(`Facture d'avance émise sur Qonto${result.qonto_invoice_number ? ` (n° ${result.qonto_invoice_number})` : ''} et envoyée au membre par email.`);
+  };
+
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const handleResendAdvanceEmail = async () => {
+    if (!mission) return;
+    setResendingEmail(true);
+    const result = await resendAdvanceInvoiceEmail(mission.id);
+    setResendingEmail(false);
+    if (!result.success) {
+      alert(result.error);
+      return;
+    }
+    setSuccessToast("Email de la facture d'avance renvoyé au membre.");
   };
 
   useEffect(() => {
@@ -372,6 +389,17 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                     className="text-xs font-medium text-gray-700 hover:text-gray-900 underline"
                   >
                     {advanceInvoice.pdfUrl ? 'Voir la facture Qonto' : 'Télécharger le PDF'}
+                  </button>
+                )}
+                {advanceInvoice?.qontoEmitted && (
+                  <button
+                    type="button"
+                    onClick={handleResendAdvanceEmail}
+                    disabled={resendingEmail}
+                    title="Renvoie au membre l'email de la facture (depuis nepasrepondre@ozeparis.com)"
+                    className="text-xs font-medium text-gray-700 hover:text-gray-900 underline disabled:opacity-50"
+                  >
+                    {resendingEmail ? 'Envoi...' : "Renvoyer l'email"}
                   </button>
                 )}
                 {!advanceInvoice?.qontoEmitted && mission.status !== 'cancelled' && (

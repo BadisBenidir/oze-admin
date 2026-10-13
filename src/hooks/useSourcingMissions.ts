@@ -257,6 +257,7 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     if (input.emit_advance_invoice && created?.id) {
       const result = await emitAdvanceInvoice(created.id);
       if (!result.success) warning = `Mission créée, mais la facture d'avance n'a pas pu être émise : ${result.error}`;
+      else if (result.email_error) warning = `Facture d'avance émise, mais l'email au membre n'est pas parti : ${result.email_error}`;
     }
     await fetchMissions();
     return { success: true, warning };
