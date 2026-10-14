@@ -29,7 +29,8 @@ import {
   PackageSearch,
   Gift,
   Radio,
-  BadgeCheck
+  BadgeCheck,
+  TrendingDown,
 } from 'lucide-react';
 import { MenuItem } from '../types';
 
@@ -108,6 +109,7 @@ export const navigationItems: MenuItem[] = [
       { id: 'subscribers', label: 'Abonnés', path: '/espace-b2b/abonnes', icon: UserCheck },
       { id: 'b2b-products', label: 'Produits B2B', path: '/espace-b2b/produits', icon: Package },
       { id: 'drops', label: 'Drops B2B', path: '/espace-b2b/drops', icon: Rocket },
+      { id: 'price-changes', label: 'Baisses de prix', path: '/espace-b2b/baisses-de-prix', icon: TrendingDown },
       { id: 'sourcing', label: 'Sourcing sur mesure', path: '/espace-b2b/sourcing', icon: PackageSearch },
       { id: 'auctions', label: 'Enchères B2B', path: '/espace-b2b/encheres', icon: Gavel },
       { id: 'promo-codes', label: 'Codes Promos', path: '/espace-b2b/codes-promo', icon: Ticket },
