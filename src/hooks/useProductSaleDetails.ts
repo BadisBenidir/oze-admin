@@ -10,6 +10,8 @@ export interface ProductSaleDetails {
     orderNumber: string;
     createdAt: string;
     companyName: string | null;
+    /** Revendeur de la commande — demandes de livraison auxquelles rattacher l'article. */
+    resellerId: string;
   };
   /** Sous-compte ayant réellement passé la commande — null si inconnu
    * (commande antérieure à placed_by_profile_id, voir 0017). */
@@ -59,7 +61,7 @@ export const useProductSaleDetails = (productId: string | undefined, reservedByO
         .select(
           'id, status, fulfillment_status, shipment_id, ' +
           'shipment_parcel:shipment_parcels(parcel_index, tracking_number, tracking_url, label_url), ' +
-          'order:orders(id, order_number, created_at, placed_by_profile_id, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email))'
+          'order:orders(id, order_number, created_at, placed_by_profile_id, reseller_id, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email))'
         )
         .eq('order_id', reservedByOrderId)
         .eq('product_id', productId)
@@ -82,6 +84,7 @@ export const useProductSaleDetails = (productId: string | undefined, reservedByO
           order_number: string;
           created_at: string;
           placed_by_profile_id: string | null;
+          reseller_id: string;
           reseller: { company_name: string } | null;
           placed_by: { first_name: string | null; last_name: string | null; email: string | null } | null;
         };
@@ -110,6 +113,7 @@ export const useProductSaleDetails = (productId: string | undefined, reservedByO
           orderNumber: row.order.order_number,
           createdAt: row.order.created_at,
           companyName: row.order.reseller?.company_name || null,
+          resellerId: row.order.reseller_id,
         },
         requesterName,
         requesterIsPrimary,

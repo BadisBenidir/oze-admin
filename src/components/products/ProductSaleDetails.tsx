@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useProductSaleDetails, ProductSaleDetails as SaleDetails } from '../../hooks/useProductSaleDetails';
@@ -47,6 +47,48 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
   const [syncError, setSyncError] = useState<string | null>(null);
   const [updatingFulfillment, setUpdatingFulfillment] = useState(false);
   const [fulfillmentError, setFulfillmentError] = useState<string | null>(null);
+  // Demandes de livraison « En attente » du même revendeur : un article
+  // oublié peut y être rattaché (0198) au lieu d'une nouvelle demande payante.
+  const [openShipments, setOpenShipments] = useState<{ id: string; requested_at: string; items: number; label: string }[]>([]);
+  const [selectedShipmentId, setSelectedShipmentId] = useState('');
+  const resellerId = details?.order.resellerId;
+  const canJoinShipment =
+    Boolean(details) && details!.orderItemStatus !== 'cancelled' && !details!.shipmentId && ['ordered', 'received', 'ready_to_ship'].includes(details!.fulfillmentStatus);
+
+  useEffect(() => {
+    if (!resellerId || !canJoinShipment) {
+      setOpenShipments([]);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from('shipments')
+      .select('id, requested_at, delivery_type, parcel_point, order_items!order_items_shipment_id_fkey(count)')
+      .eq('reseller_id', resellerId)
+      .eq('status', 'requested')
+      .order('requested_at', { ascending: false })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const rows = (data || []) as unknown as {
+          id: string;
+          requested_at: string;
+          delivery_type: 'domicile' | 'point_relais';
+          parcel_point: { name?: string } | null;
+          order_items: { count: number }[];
+        }[];
+        const list = rows.map((r) => ({
+          id: r.id,
+          requested_at: r.requested_at,
+          items: r.order_items?.[0]?.count ?? 0,
+          label: r.delivery_type === 'point_relais' ? `Point relais${r.parcel_point?.name ? ` ${r.parcel_point.name}` : ''}` : 'Domicile',
+        }));
+        setOpenShipments(list);
+        setSelectedShipmentId(list[0]?.id || '');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resellerId, canJoinShipment]);
 
   if (!reservedByOrderId) return null;
   if (loading) {
@@ -105,6 +147,25 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
     ]);
 
   const handleRevert = () => runFulfillment([{ rpc: 'admin_revert_item_to_received', label: 'remettre l\'article en attente' }]);
+
+  const handleJoinShipment = async () => {
+    if (!selectedShipmentId) return;
+    setFulfillmentError(null);
+    setUpdatingFulfillment(true);
+    const { data, error: rpcError } = await supabase.rpc('admin_add_item_to_shipment', {
+      p_item_id: details.orderItemId,
+      p_shipment_id: selectedShipmentId,
+    });
+    setUpdatingFulfillment(false);
+    if (rpcError) {
+      setFulfillmentError(rpcError.message);
+      return;
+    }
+    if ((data as { attached_to_existing_label?: boolean } | null)?.attached_to_existing_label) {
+      alert("Article ajouté à la demande. Attention : son bordereau était déjà généré, sans cet article — vérifie le poids/la valeur ou régénère le bordereau.");
+    }
+    refresh();
+  };
 
   const handleSyncSendcloud = async () => {
     setSyncError(null);
@@ -238,6 +299,35 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
                   {updatingFulfillment ? 'Mise à jour...' : 'Remettre en attente'}
                 </button>
               )}
+            </div>
+          )}
+          {canJoinShipment && openShipments.length > 0 && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs text-amber-900 mb-2">
+                Le client a déjà une demande de livraison en attente : ajoute cet article à son colis, sans nouvelle demande ni frais de port.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={selectedShipmentId}
+                  onChange={(e) => setSelectedShipmentId(e.target.value)}
+                  className="px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white"
+                >
+                  {openShipments.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      Demande du {new Date(s.requested_at).toLocaleDateString('fr-FR')} — {s.label} — {s.items} article{s.items > 1 ? 's' : ''}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleJoinShipment}
+                  disabled={updatingFulfillment || !selectedShipmentId}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 text-sm font-medium"
+                >
+                  <Truck className="h-4 w-4" />
+                  {updatingFulfillment ? 'Ajout...' : 'Ajouter à cette demande'}
+                </button>
+              </div>
             </div>
           )}
           {fulfillmentError && <p className="mt-2 text-sm text-red-600">{fulfillmentError}</p>}
