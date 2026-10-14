@@ -51,31 +51,34 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
   // oublié peut y être rattaché (0198) au lieu d'une nouvelle demande payante.
   const [openShipments, setOpenShipments] = useState<{ id: string; requested_at: string; items: number; label: string }[]>([]);
   const [selectedShipmentId, setSelectedShipmentId] = useState('');
-  const resellerId = details?.order.resellerId;
+  const buyerId = details?.order.placedByProfileId;
   const canJoinShipment =
     Boolean(details) && details!.orderItemStatus !== 'cancelled' && !details!.shipmentId && ['ordered', 'received', 'ready_to_ship'].includes(details!.fulfillmentStatus);
 
   useEffect(() => {
-    if (!resellerId || !canJoinShipment) {
+    if (!buyerId || !canJoinShipment) {
       setOpenShipments([]);
       return;
     }
     let cancelled = false;
+    // Demandes de l'ACHETEUR lui-même (pas de tout le revendeur) et pas
+    // encore traitées : aucun bordereau généré (0199 refuse les autres).
     supabase
       .from('shipments')
-      .select('id, requested_at, delivery_type, parcel_point, order_items!order_items_shipment_id_fkey(count)')
-      .eq('reseller_id', resellerId)
+      .select('id, requested_at, delivery_type, parcel_point, order_items!order_items_shipment_id_fkey(count), shipment_parcels(status)')
+      .eq('requested_by_profile_id', buyerId)
       .eq('status', 'requested')
       .order('requested_at', { ascending: false })
       .then(({ data }) => {
         if (cancelled) return;
-        const rows = (data || []) as unknown as {
+        const rows = ((data || []) as unknown as {
           id: string;
           requested_at: string;
           delivery_type: 'domicile' | 'point_relais';
           parcel_point: { name?: string } | null;
           order_items: { count: number }[];
-        }[];
+          shipment_parcels: { status: string }[] | null;
+        }[]).filter((r) => !(r.shipment_parcels || []).some((p) => ['label_created', 'shipped', 'delivered'].includes(p.status)));
         const list = rows.map((r) => ({
           id: r.id,
           requested_at: r.requested_at,
@@ -88,7 +91,7 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
     return () => {
       cancelled = true;
     };
-  }, [resellerId, canJoinShipment]);
+  }, [buyerId, canJoinShipment]);
 
   if (!reservedByOrderId) return null;
   if (loading) {
@@ -152,7 +155,7 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
     if (!selectedShipmentId) return;
     setFulfillmentError(null);
     setUpdatingFulfillment(true);
-    const { data, error: rpcError } = await supabase.rpc('admin_add_item_to_shipment', {
+    const { error: rpcError } = await supabase.rpc('admin_add_item_to_shipment', {
       p_item_id: details.orderItemId,
       p_shipment_id: selectedShipmentId,
     });
@@ -160,9 +163,6 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
     if (rpcError) {
       setFulfillmentError(rpcError.message);
       return;
-    }
-    if ((data as { attached_to_existing_label?: boolean } | null)?.attached_to_existing_label) {
-      alert("Article ajouté à la demande. Attention : son bordereau était déjà généré, sans cet article — vérifie le poids/la valeur ou régénère le bordereau.");
     }
     refresh();
   };

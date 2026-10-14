@@ -12,6 +12,8 @@ export interface ProductSaleDetails {
     companyName: string | null;
     /** Revendeur de la commande — demandes de livraison auxquelles rattacher l'article. */
     resellerId: string;
+    /** Acheteur réel : seules SES demandes de livraison peuvent recevoir l'article. */
+    placedByProfileId: string | null;
   };
   /** Sous-compte ayant réellement passé la commande — null si inconnu
    * (commande antérieure à placed_by_profile_id, voir 0017). */
@@ -114,6 +116,7 @@ export const useProductSaleDetails = (productId: string | undefined, reservedByO
           createdAt: row.order.created_at,
           companyName: row.order.reseller?.company_name || null,
           resellerId: row.order.reseller_id,
+          placedByProfileId: row.order.placed_by_profile_id,
         },
         requesterName,
         requesterIsPrimary,
