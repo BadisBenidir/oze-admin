@@ -17,6 +17,7 @@ import { useBrands, Brand } from '../../hooks/useBrands';
 import { useProducts, ProductFilters } from '../../hooks/useProducts';
 import { useDashboardStats } from '../../hooks/useDashboardStats';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
+import { useProductFulfillment, FULFILLMENT_LABELS } from '../../hooks/useProductFulfillment';
 import { Plus, Edit, Trash2, Eye, Package, AlertCircle, TrendingUp, Tag, Download, Archive, ArchiveRestore } from 'lucide-react';
 
 interface ProductsProps {
@@ -70,6 +71,10 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
     filters,
     deleteProduct
   } = useProducts(isAdmin)
+  // Étape de réception / livraison des articles vendus en B2B de la page affichée.
+  const fulfillmentByProduct = useProductFulfillment(
+    products.filter((p) => p.status === 'sold-b2b').map((p) => p.id)
+  )
   
   const { 
     stats, 
@@ -1153,6 +1158,17 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
                            product.status === 'cadeau-livre' ? '🎁 Cadeau livré' :
                            product.status}
                         </Badge>
+                        {product.status === 'sold-b2b' && (
+                          <div className="mt-1">
+                            {fulfillmentByProduct[product.id] ? (
+                              <Badge variant={FULFILLMENT_LABELS[fulfillmentByProduct[product.id]].variant}>
+                                {FULFILLMENT_LABELS[fulfillmentByProduct[product.id]].label}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-gray-400" title="Aucune commande liée (mission de sourcing clôturée sans commande ?)">Sans commande</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 md:py-4 px-4 md:px-6">
                         <div className="flex items-center space-x-1">
