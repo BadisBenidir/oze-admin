@@ -241,13 +241,13 @@ interface ItemRow {
 // colis partait à 1 kg quel que soit son contenu. Clé = nom de catégorie
 // en minuscules. Emballage (carton + calage) ajouté une fois par colis.
 const CATEGORY_WEIGHT_KG: Record<string, number> = {
-  sacs: 1.0,
-  portefeuille: 0.25,
-  pochettes: 0.4,
-  accessoires: 0.3,
+  sacs: 0.5,
+  portefeuille: 0.15,
+  pochettes: 0.2,
+  accessoires: 0.15,
 };
-const DEFAULT_ITEM_WEIGHT_KG = 0.6;
-const PACKAGING_WEIGHT_KG = 0.3;
+const DEFAULT_ITEM_WEIGHT_KG = 0.3;
+const PACKAGING_WEIGHT_KG = 0.15;
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
