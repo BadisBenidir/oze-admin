@@ -233,8 +233,21 @@ interface ItemRow {
   insurance_cost: number;
   fulfillment_status: string;
   shipment_id: string | null;
-  product_snapshot: { weight?: number; name?: string } | null;
+  product_snapshot: { weight?: number; name?: string; category_id?: string | null } | null;
 }
+
+// Poids estimé (kg) d'un article sans poids renseigné, selon sa catégorie —
+// aucun produit n'a de poids saisi en pratique : sans estimation, chaque
+// colis partait à 1 kg quel que soit son contenu. Clé = nom de catégorie
+// en minuscules. Emballage (carton + calage) ajouté une fois par colis.
+const CATEGORY_WEIGHT_KG: Record<string, number> = {
+  sacs: 1.0,
+  portefeuille: 0.25,
+  pochettes: 0.4,
+  accessoires: 0.3,
+};
+const DEFAULT_ITEM_WEIGHT_KG = 0.6;
+const PACKAGING_WEIGHT_KG = 0.3;
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -303,6 +316,11 @@ Deno.serve(async (req: Request) => {
       return json({ error: itemsError.message }, 500);
     }
     const itemsById = new Map<string, ItemRow>((pendingItems || []).map((it: ItemRow) => [it.id, it]));
+    // Noms de catégorie (minuscules) pour l'estimation du poids des colis.
+    const { data: categories } = await adminClient.from('categories').select('id, name');
+    const categoryNameById = new Map<string, string>(
+      (categories || []).map((c: { id: string; name: string }) => [c.id, (c.name || '').trim().toLowerCase()])
+    );
     const ineligible = allItemIds.filter((id: string) => {
       const it = itemsById.get(id);
       return !it || it.shipment_id !== shipment_id || it.fulfillment_status !== 'delivery_requested';
@@ -467,11 +485,16 @@ Deno.serve(async (req: Request) => {
       const parcel = parcels[i] as { item_ids: string[]; weight_kg?: number };
       const items = parcel.item_ids.map((id: string) => itemsById.get(id)!);
 
-      const weightGrams = items.reduce((sum, it) => sum + Number(it.product_snapshot?.weight || 0), 0);
-      // 1.0 kg par défaut si aucun poids produit n'est connu (0.1 kg minimal
-      // précédent pouvait être rejeté comme irréaliste par certains
-      // transporteurs, Mondial Relay en particulier).
-      const weightKg = parcel.weight_kg ?? (weightGrams > 0 ? weightGrams / 1000 : 1.0);
+      // Poids réel du produit (grammes) s'il est renseigné, sinon estimation
+      // par catégorie ; + emballage. Plancher 0.5 kg (un poids trop faible
+      // peut être rejeté comme irréaliste, Mondial Relay en particulier).
+      const itemsKg = items.reduce((sum, it) => {
+        const grams = Number(it.product_snapshot?.weight || 0);
+        if (grams > 0) return sum + grams / 1000;
+        const category = categoryNameById.get(it.product_snapshot?.category_id || '') || '';
+        return sum + (CATEGORY_WEIGHT_KG[category] ?? DEFAULT_ITEM_WEIGHT_KG);
+      }, 0);
+      const weightKg = parcel.weight_kg ?? Math.max(0.5, Math.round((itemsKg + PACKAGING_WEIGHT_KG) * 1000) / 1000);
       const totalValue = items.reduce((sum, it) => sum + Number(it.line_total) + (it.insured ? Number(it.insurance_cost) : 0), 0);
 
       // Toujours recalculé juste avant l'insert : jamais fourni par le
