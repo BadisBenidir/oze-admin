@@ -242,6 +242,11 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   };
 
   const handleCloseMission = async () => {
+    if (!confirm(
+      mission?.status === 'completed'
+        ? `Générer la commande ${mission.reference} ? Total = l'avance (${mission.advance_amount.toFixed(2)} €), répartie sur les pièces au prorata de leur coût. Les pièces passeront en réception.`
+        : `Clôturer la mission ? La commande ${mission?.reference ?? ''} sera créée (total = l'avance), les pièces passeront en réception.`
+    )) return;
     setUpdatingStatus(true);
     setStatusError('');
     const result = await onStatusChange('completed');
@@ -658,6 +663,17 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
               >
                 <CheckCircle2 className="h-4 w-4" />
                 {updatingStatus ? 'Clôture...' : 'Clôturer la mission'}
+              </button>
+            )}
+            {mission.status === 'completed' && !mission.order_id && (
+              <button
+                onClick={handleCloseMission}
+                disabled={updatingStatus}
+                title="Mission clôturée sans commande : crée la commande (total = avance) pour réceptionner les pièces et permettre au membre de demander sa livraison"
+                className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm font-medium"
+              >
+                <Package className="h-4 w-4" />
+                {updatingStatus ? 'Génération...' : 'Générer la commande'}
               </button>
             )}
             {mission.status === 'completed' && mission.order_id && (

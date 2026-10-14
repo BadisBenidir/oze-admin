@@ -281,6 +281,15 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
   };
 
   const setMissionStatus = async (id: string, status: 'active' | 'completed' | 'cancelled'): Promise<{ success: boolean; error?: string }> => {
+    // Clôture par l'admin : génère aussi la commande de la mission (0197),
+    // sans quoi les pièces ne pourraient jamais être réceptionnées ni
+    // livrées. Sert aussi pour une mission déjà clôturée sans commande.
+    if (status === 'completed') {
+      const { error: rpcError } = await supabase.rpc('admin_generate_sourcing_order', { p_mission_id: id });
+      if (rpcError) return { success: false, error: rpcError.message };
+      await fetchMissions();
+      return { success: true };
+    }
     const { error: updateError } = await supabase.from('b2b_sourcing_missions').update({ status }).eq('id', id);
     if (updateError) return { success: false, error: updateError.message };
     await fetchMissions();
