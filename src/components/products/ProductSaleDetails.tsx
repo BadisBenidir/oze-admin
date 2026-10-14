@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { useProductSaleDetails, ProductSaleDetails as SaleDetails } from '../../hooks/useProductSaleDetails';
 import { useSendcloudSync } from '../../hooks/useSendcloudSync';
-import { Copy, Check, Truck, ExternalLink, FileDown, RefreshCw } from 'lucide-react';
+import { Copy, Check, Truck, ExternalLink, FileDown, RefreshCw, PackageCheck } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 interface ProductSaleDetailsProps {
   productId: string;
@@ -21,11 +22,13 @@ const fulfillmentBadge = (details: SaleDetails) => {
       return <Badge variant="info">Expédié / En transit</Badge>;
     case 'delivered':
       return <Badge variant="success">Livré</Badge>;
-    case 'ordered':
-    case 'received':
     case 'ready_to_ship':
+      return <Badge variant="success">Prêt à la livraison — le client peut demander l'envoi</Badge>;
+    case 'received':
+      return <Badge variant="warning">Reçu — pas encore prêt à la livraison</Badge>;
+    case 'ordered':
     default:
-      return <Badge variant="warning">Vendu — en attente de demande de livraison</Badge>;
+      return <Badge variant="warning">Vendu — pas encore réceptionné</Badge>;
   }
 };
 
@@ -42,6 +45,8 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
   const [copied, setCopied] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [updatingFulfillment, setUpdatingFulfillment] = useState(false);
+  const [fulfillmentError, setFulfillmentError] = useState<string | null>(null);
 
   if (!reservedByOrderId) return null;
   if (loading) {
@@ -69,6 +74,37 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
   };
 
   const showRequesterSubtitle = Boolean(details.requesterName) && !details.requesterIsPrimary;
+
+  // Réception d'un colis : même chaîne que la Vue Réception (0063/0070) —
+  // un article encore « commandé » passe d'abord « reçu », puis « prêt »
+  // (admin_mark_items_ready_to_ship n'accepte que des articles reçus).
+  const isActiveItem = details.orderItemStatus !== 'cancelled';
+  const canMarkReady = isActiveItem && ['ordered', 'received'].includes(details.fulfillmentStatus);
+  const canRevert = isActiveItem && details.fulfillmentStatus === 'ready_to_ship';
+
+  const runFulfillment = async (steps: { rpc: string; label: string }[]) => {
+    setFulfillmentError(null);
+    setUpdatingFulfillment(true);
+    for (const step of steps) {
+      const { data, error: rpcError } = await supabase.rpc(step.rpc, { p_item_ids: [details.orderItemId] });
+      if (rpcError || !(data as { updated_count?: number } | null)?.updated_count) {
+        setFulfillmentError(rpcError?.message || `Impossible de ${step.label} (commande hors B2B ou article déjà expédié ?)`);
+        setUpdatingFulfillment(false);
+        refresh();
+        return;
+      }
+    }
+    setUpdatingFulfillment(false);
+    refresh();
+  };
+
+  const handleMarkReady = () =>
+    runFulfillment([
+      ...(details.fulfillmentStatus === 'ordered' ? [{ rpc: 'admin_mark_items_received', label: 'marquer l\'article reçu' }] : []),
+      { rpc: 'admin_mark_items_ready_to_ship', label: 'marquer l\'article prêt à la livraison' },
+    ]);
+
+  const handleRevert = () => runFulfillment([{ rpc: 'admin_revert_item_to_received', label: 'remettre l\'article en attente' }]);
 
   const handleSyncSendcloud = async () => {
     setSyncError(null);
@@ -178,6 +214,33 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
               </a>
             )}
           </div>
+          {(canMarkReady || canRevert) && (
+            <div className="mt-3 flex items-center gap-3 flex-wrap">
+              {canMarkReady && (
+                <button
+                  type="button"
+                  onClick={handleMarkReady}
+                  disabled={updatingFulfillment}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm font-medium"
+                >
+                  <PackageCheck className="h-4 w-4" />
+                  {updatingFulfillment ? 'Mise à jour...' : 'Marquer prêt à la livraison'}
+                </button>
+              )}
+              {canRevert && (
+                <button
+                  type="button"
+                  onClick={handleRevert}
+                  disabled={updatingFulfillment}
+                  title="Repasse l'article en « reçu » : le client ne peut plus demander sa livraison"
+                  className="text-xs font-medium text-gray-500 hover:text-gray-800 underline disabled:opacity-50"
+                >
+                  {updatingFulfillment ? 'Mise à jour...' : 'Remettre en attente'}
+                </button>
+              )}
+            </div>
+          )}
+          {fulfillmentError && <p className="mt-2 text-sm text-red-600">{fulfillmentError}</p>}
         </div>
       </CardContent>
     </Card>

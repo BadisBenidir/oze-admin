@@ -99,7 +99,7 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
 
       if (currentFilters.search) {
         const searchTerm = currentFilters.search
-        countQuery = countQuery.or('name.ilike.%' + searchTerm + '%,product_code.ilike.%' + searchTerm + '%,source_reference.ilike.%' + searchTerm + '%')
+        countQuery = countQuery.or('name.ilike.%' + searchTerm + '%,product_code.ilike.%' + searchTerm + '%,source_reference.ilike.%' + searchTerm + '%,serial_number.ilike.%' + searchTerm + '%')
       }
       if (currentFilters.categoryId) {
         countQuery = countQuery.eq('category_id', currentFilters.categoryId)
@@ -124,7 +124,7 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
 
       if (currentFilters.search) {
         const searchTerm = currentFilters.search
-        dataQuery = dataQuery.or('name.ilike.%' + searchTerm + '%,product_code.ilike.%' + searchTerm + '%,source_reference.ilike.%' + searchTerm + '%')
+        dataQuery = dataQuery.or('name.ilike.%' + searchTerm + '%,product_code.ilike.%' + searchTerm + '%,source_reference.ilike.%' + searchTerm + '%,serial_number.ilike.%' + searchTerm + '%')
       }
       if (currentFilters.categoryId) {
         dataQuery = dataQuery.eq('category_id', currentFilters.categoryId)
