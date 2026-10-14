@@ -76,6 +76,25 @@ interface UseProductsResult {
 
 const ITEMS_PER_PAGE = 20
 
+/**
+ * Filtre de recherche produits (PostgREST .or). La référence fournisseur et
+ * le n° de série sont comparés en ignorant tirets, espaces, points et
+ * barres : « 88629128 » trouve « 886-29128 » (Aucnet) et inversement —
+ * expression régulière insensible à la casse (imatch) avec un séparateur
+ * optionnel entre chaque caractère.
+ */
+const productSearchFilter = (searchTerm: string) => {
+  const filters = ['name.ilike.%' + searchTerm + '%', 'product_code.ilike.%' + searchTerm + '%']
+  const compact = searchTerm.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (compact.length >= 3) {
+    const pattern = compact.split('').join('\\W*')
+    filters.push('source_reference.imatch.' + pattern, 'serial_number.imatch.' + pattern)
+  } else {
+    filters.push('source_reference.ilike.%' + searchTerm + '%', 'serial_number.ilike.%' + searchTerm + '%')
+  }
+  return filters.join(',')
+}
+
 export const useProducts = (isAuthenticated: boolean = false): UseProductsResult => {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -99,7 +118,7 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
 
       if (currentFilters.search) {
         const searchTerm = currentFilters.search
-        countQuery = countQuery.or('name.ilike.%' + searchTerm + '%,product_code.ilike.%' + searchTerm + '%,source_reference.ilike.%' + searchTerm + '%,serial_number.ilike.%' + searchTerm + '%')
+        countQuery = countQuery.or(productSearchFilter(searchTerm))
       }
       if (currentFilters.categoryId) {
         countQuery = countQuery.eq('category_id', currentFilters.categoryId)
@@ -124,7 +143,7 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
 
       if (currentFilters.search) {
         const searchTerm = currentFilters.search
-        dataQuery = dataQuery.or('name.ilike.%' + searchTerm + '%,product_code.ilike.%' + searchTerm + '%,source_reference.ilike.%' + searchTerm + '%,serial_number.ilike.%' + searchTerm + '%')
+        dataQuery = dataQuery.or(productSearchFilter(searchTerm))
       }
       if (currentFilters.categoryId) {
         dataQuery = dataQuery.eq('category_id', currentFilters.categoryId)
