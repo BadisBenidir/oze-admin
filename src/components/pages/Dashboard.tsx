@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
-import { TrendingUp, TrendingDown, Users, Package, ShoppingCart, DollarSign } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, Package, ShoppingCart, DollarSign, Eye, EyeOff } from 'lucide-react';
 import { useState, useEffect } from 'react'; // Ajoute useState et useEffect
 import { orderService } from '../../services/orderService';
 import { JpyEurRateCard } from './JpyEurRateCard';
@@ -14,12 +14,38 @@ interface DashboardProps {
 const formatDateTime = (date: Date): string =>
   `${date.toLocaleDateString('fr-FR')} à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
 
+// Masquage des chiffres (écran partagé / en public) — préférence propre à ce
+// navigateur, mémorisée tant que possible (stockage parfois indisponible).
+const HIDE_FIGURES_KEY = 'oze:dashboard-hide-figures';
+const HIDDEN = '••••';
+const readHideFigures = () => {
+  try {
+    return localStorage.getItem(HIDE_FIGURES_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
 const INITIAL_LIST_SIZE = 5;
 const LOAD_MORE_STEP = 10;
 
 export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
 
   const [stats, setStats] = useState<any>(null);
+  const [hideFigures, setHideFigures] = useState(readHideFigures);
+  const toggleHideFigures = () => {
+    setHideFigures((prev) => {
+      try {
+        localStorage.setItem(HIDE_FIGURES_KEY, prev ? '0' : '1');
+      } catch {
+        // stockage indisponible : masquage le temps de la session seulement
+      }
+      return !prev;
+    });
+  };
+  const show = (value: React.ReactNode) => (hideFigures ? HIDDEN : value);
+  // Montants glissés dans les textes d'activité (« … 80,48 € … »).
+  const maskAmounts = (text: string) => (hideFigures ? text.replace(/d[ds.,]*s?€/g, `${HIDDEN} €`) : text);
   const [loading, setLoading] = useState(true);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
@@ -128,7 +154,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                   <p className="text-2xl font-bold text-gray-900">12,483</p>
                   <div className="flex items-center mt-2">
                     <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                    <span className="text-sm text-green-600">+12.5%</span>
+                    <span className="text-sm text-green-600">{show('+12.5%')}</span>
                   </div>
                 </div>
                 <div className="h-12 w-12 bg-purple-50 rounded-lg flex items-center justify-center">
@@ -146,7 +172,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                   <p className="text-2xl font-bold text-gray-900">42.3%</p>
                   <div className="flex items-center mt-2">
                     <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-                    <span className="text-sm text-red-600">-2.1%</span>
+                    <span className="text-sm text-red-600">{show('-2.1%')}</span>
                   </div>
                 </div>
                 <div className="h-12 w-12 bg-red-50 rounded-lg flex items-center justify-center">
@@ -164,7 +190,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                   <p className="text-2xl font-bold text-gray-900">45,921</p>
                   <div className="flex items-center mt-2">
                     <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                    <span className="text-sm text-green-600">+8.2%</span>
+                    <span className="text-sm text-green-600">{show('+8.2%')}</span>
                   </div>
                 </div>
                 <div className="h-12 w-12 bg-green-50 rounded-lg flex items-center justify-center">
@@ -231,16 +257,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
   // Default dashboard overview
   return (
     <div className="p-4 md:p-6">
+      <div className="flex justify-end mb-3">
+        <button
+          type="button"
+          onClick={toggleHideFigures}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          {hideFigures ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          {hideFigures ? 'Afficher les chiffres' : 'Masquer les chiffres'}
+        </button>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
         <Card>
           <CardContent className="p-4 md:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Chiffre d'Affaires</p>
-                <p className="text-xl md:text-2xl font-bold text-gray-900">{stats?.total_revenue?.toLocaleString()} €</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">{show(stats?.total_revenue?.toLocaleString())} €</p>
                 <div className="flex items-center mt-2">
                   <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-sm text-green-600">+12.5%</span>
+                  <span className="text-sm text-green-600">{show('+12.5%')}</span>
                 </div>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-green-50 rounded-lg flex items-center justify-center">
@@ -255,10 +291,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Commandes</p>
-                <p className="text-xl md:text-2xl font-bold text-gray-900">{stats?.web_orders || 0}</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">{show(stats?.web_orders || 0)}</p>
                 <div className="flex items-center mt-2">
                   <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-sm text-green-600">+8.2%</span>
+                  <span className="text-sm text-green-600">{show('+8.2%')}</span>
                 </div>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-blue-50 rounded-lg flex items-center justify-center">
@@ -273,10 +309,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Clients</p>
-                <p className="text-xl md:text-2xl font-bold text-gray-900">{stats?.total_customers || 0}</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">{show(stats?.total_customers || 0)}</p>
                 <div className="flex items-center mt-2">
                   <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-sm text-green-600">+5.7%</span>
+                  <span className="text-sm text-green-600">{show('+5.7%')}</span>
                 </div>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-purple-50 rounded-lg flex items-center justify-center">
@@ -291,10 +327,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Produits</p>
-                <p className="text-xl md:text-2xl font-bold text-gray-900">{stats?.total_products || 0}</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">{show(stats?.total_products || 0)}</p>
                 <div className="flex items-center mt-2">
                   <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-                  <span className="text-sm text-red-600">-2.1%</span>
+                  <span className="text-sm text-red-600">{show('-2.1%')}</span>
                 </div>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-orange-50 rounded-lg flex items-center justify-center">
@@ -329,7 +365,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-bold text-gray-900">+{r.amount.toFixed(2)} €</p>
+                          <p className="text-sm font-bold text-gray-900">+{show(r.amount.toFixed(2))} €</p>
                           <p className="text-[10px] uppercase font-semibold text-violet-600">Recharge</p>
                         </div>
                       </div>
@@ -362,7 +398,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                       </div>
                       <div className="text-right">
                         <p className={`text-sm font-bold ${isCancelled ? 'text-red-600' : 'text-gray-900'}`}>
-                          {isCancelled ? `-${refundedAmount.toFixed(2)} €` : `${order.total_amount} €`}
+                          {isCancelled ? `-${show(refundedAmount.toFixed(2))} €` : `${show(order.total_amount)} €`}
                         </p>
                         <p className={`text-[10px] uppercase font-semibold ${isCancelled ? 'text-red-600' : ['confirmed', 'shipped', 'delivered'].includes(order.status) ? 'text-green-600' : order.status === 'pending' ? 'text-orange-600' : 'text-red-600'}`}>
                           {isCancelled ? 'Annulée' : order.status === 'pending' ? 'En attente' : order.status === 'confirmed' ? 'Confirmée' : order.status === 'shipped' ? 'Expédiée' : order.status === 'delivered' ? 'Livrée' : order.status}
@@ -400,7 +436,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                   <div key={activity.id} className="flex items-start space-x-3">
                     <div className={`mt-1 h-2 w-2 rounded-full ${activity.type === 'order' ? 'bg-green-500' : activity.type === 'wallet' ? 'bg-violet-500' : activity.type === 'cancellation' ? 'bg-red-500' : 'bg-blue-500'}`} />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{activity.text}</p>
+                      <p className="text-sm font-medium text-gray-900">{maskAmounts(activity.text)}</p>
                       <p className="text-xs text-gray-500">{formatDateTime(activity.date)}</p>
                     </div>
                   </div>
