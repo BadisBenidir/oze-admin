@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Truck, AlertCircle, CheckCircle, ExternalLink, FileDown, Eye, BadgeCheck, X, PackageX, Undo2 } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipmentItem } from '../../../hooks/useAdminShipments';
@@ -7,6 +7,7 @@ import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabe
 import { ProductDetail } from '../ProductDetail';
 import { isPlausiblePhone } from '../../../utils/phoneValidation';
 import { cancelEntrupyCertificate } from '../../../hooks/useCancelOrderItem';
+import { supabase } from '../../../lib/supabase';
 
 interface ParcelDraft {
   items: string[];
@@ -42,6 +43,37 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
   const [error, setError] = useState<string | null>(null);
   const [viewingProductId, setViewingProductId] = useState<string | null>(null);
   const [cancellingEntrupyId, setCancellingEntrupyId] = useState<string | null>(null);
+
+  // « Dans le carton » (0202) : coché par l'admin au fil de la préparation.
+  // Lu à part et sans bloquer (colonne absente avant la migration).
+  const [packed, setPacked] = useState<Record<string, boolean>>({});
+  const itemIdsKey = items.map((i) => i.id).sort().join(',');
+  useEffect(() => {
+    if (!itemIdsKey) return;
+    let cancelled = false;
+    supabase
+      .from('order_items')
+      .select('id, packed_at')
+      .in('id', itemIdsKey.split(','))
+      .then(({ data, error: fetchError }) => {
+        if (cancelled || fetchError) return;
+        setPacked(Object.fromEntries((data || []).map((row) => [row.id, Boolean(row.packed_at)])));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [itemIdsKey]);
+
+  const togglePacked = async (itemId: string) => {
+    const next = !packed[itemId];
+    setPacked((prev) => ({ ...prev, [itemId]: next }));
+    const { error: rpcError } = await supabase.rpc('admin_set_items_packed', { p_item_ids: [itemId], p_packed: next });
+    if (rpcError) {
+      setPacked((prev) => ({ ...prev, [itemId]: !next }));
+      setError(`Impossible d'enregistrer « dans le carton » : ${rpcError.message}`);
+    }
+  };
+  const packedCount = items.filter((i) => packed[i.id]).length;
 
   // Retire le certificat Entrupy d'un article en attente d'expédition
   // (cancel-entrupy-certificate : 19,99 € recrédités sur le solde du
@@ -98,6 +130,8 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
       setError('Un numéro de téléphone valide est requis par Sendcloud pour générer le bordereau.');
       return;
     }
+    const unpacked = nonEmpty.flatMap((p) => p.items).filter((id) => !packed[id]).length;
+    if (unpacked > 0 && !window.confirm(`${unpacked} article${unpacked > 1 ? 's ne sont pas cochés' : " n'est pas coché"} « dans le carton ». Générer le bordereau quand même ?`)) return;
     setError(null);
     setGenerating(true);
     const result = await generate(
@@ -179,7 +213,12 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">Article</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500 text-xs">
+                    Article
+                    <span className={`ml-2 font-semibold ${packedCount === items.length ? 'text-green-700' : 'text-gray-400'}`}>
+                      · Dans le carton : {packedCount}/{items.length}
+                    </span>
+                  </th>
                   <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Colis</th>
                 </tr>
               </thead>
@@ -189,9 +228,18 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                   const product = item.product;
                   const image = product?.images?.[product.main_image_index] || product?.images?.[0];
                   return (
-                    <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
+                    <tr key={item.id} className={`border-b border-gray-50 last:border-b-0 ${packed[item.id] ? 'bg-green-50/60' : ''}`}>
                       <td className="py-2 px-3">
                         <div className="flex items-start gap-3">
+                          <label className="flex flex-col items-center gap-0.5 pt-1 cursor-pointer flex-shrink-0" title="Coche quand l'article est dans le carton">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(packed[item.id])}
+                              onChange={() => togglePacked(item.id)}
+                              className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-600"
+                            />
+                            <span className="text-[10px] leading-none text-gray-400">carton</span>
+                          </label>
                           {image ? (
                             <img src={image} alt={product?.name || 'Article'} className="h-12 w-12 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
                           ) : (
