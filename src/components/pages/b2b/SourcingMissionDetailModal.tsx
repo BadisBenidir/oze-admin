@@ -9,6 +9,7 @@ import { AddSourcingItemModal } from './AddSourcingItemModal';
 import { CreateSourcingMissionModal } from './CreateSourcingMissionModal';
 import { LinkSourcingProductModal } from './LinkSourcingProductModal';
 import { ProductDetail } from '../ProductDetail';
+import { useProductFulfillment, FULFILLMENT_LABELS } from '../../../hooks/useProductFulfillment';
 
 interface SourcingMissionDetailModalProps {
   mission: SourcingMission | null;
@@ -46,6 +47,11 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
  * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
 export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onShowUnitPricesChange, onCancelValidation, onDelete, onItemsChanged }) => {
   const { items, loading, error, addItem, addItems, setItemStatus, removeItem, linkProduct, setCustomPrice } = useSourcingItems(mission?.id || null);
+  // Étape de réception / livraison de chaque pièce, une fois la commande de
+  // la mission créée (validation du membre ou génération à la clôture).
+  const fulfillmentByProduct = useProductFulfillment(
+    mission?.order_id ? items.filter((i) => i.product_id && i.status !== 'cancelled').map((i) => i.product_id as string) : []
+  );
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [savingPriceId, setSavingPriceId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -629,6 +635,13 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                                 <option value="cancelled">Annulée</option>
                               </select>
                               <span className="ml-2 align-middle">{itemStatusBadge(item.status)}</span>
+                              {item.product_id && fulfillmentByProduct[item.product_id] && (
+                                <div className="mt-1">
+                                  <Badge variant={FULFILLMENT_LABELS[fulfillmentByProduct[item.product_id]].variant}>
+                                    {FULFILLMENT_LABELS[fulfillmentByProduct[item.product_id]].label}
+                                  </Badge>
+                                </div>
+                              )}
                             </td>
                             <td className="py-2.5 px-3 text-right">
                               <button
