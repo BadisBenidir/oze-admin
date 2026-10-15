@@ -42,6 +42,13 @@ const dateTime = (iso: string) =>
   new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 
+/** ISO → valeur d'un champ datetime-local (heure locale). */
+const toLocalInput = (iso: string) => {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 /** Valeur par défaut du sélecteur : demain 20:00, heure locale. */
 const defaultWhen = () => {
   const d = new Date();
@@ -176,6 +183,33 @@ export const B2BPriceChanges: React.FC = () => {
     load();
   };
 
+  // Reprogrammer tout un groupe (erreur d'heure) sans ressaisir les prix.
+  const [reschedulingAt, setReschedulingAt] = useState<string | null>(null);
+  const [rescheduleWhen, setRescheduleWhen] = useState('');
+  const rescheduleChanges = async (ids: string[]) => {
+    const at = new Date(rescheduleWhen);
+    if (Number.isNaN(at.getTime())) {
+      setError('Date et heure invalides');
+      return;
+    }
+    if (at.getTime() < Date.now() - 60_000) {
+      setError("L'heure choisie est déjà passée");
+      return;
+    }
+    const { error: updateError } = await supabase
+      .from('b2b_price_changes')
+      .update({ scheduled_at: at.toISOString() })
+      .in('id', ids)
+      .eq('status', 'scheduled');
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setReschedulingAt(null);
+    setToast(`${ids.length} changement(s) reprogrammé(s) pour le ${dateTime(at.toISOString())}.`);
+    load();
+  };
+
   const upcomingGroups = useMemo(() => {
     const groups = new Map<string, PriceChange[]>();
     for (const c of changes.filter((x) => x.status === 'scheduled').sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))) {
@@ -217,13 +251,46 @@ export const B2BPriceChanges: React.FC = () => {
                   <span className="text-sm font-medium text-gray-900">
                     {dateTime(at)} — {group.length} article{group.length > 1 ? 's' : ''}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => cancelChanges(group.map((c) => c.id))}
-                    className="text-xs font-medium text-red-600 hover:text-red-800"
-                  >
-                    Tout annuler
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {reschedulingAt === at ? (
+                      <>
+                        <input
+                          type="datetime-local"
+                          value={rescheduleWhen}
+                          onChange={(e) => setRescheduleWhen(e.target.value)}
+                          className="px-2 py-1 border border-gray-200 rounded-lg text-xs bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => rescheduleChanges(group.map((c) => c.id))}
+                          className="text-xs font-medium text-gray-900 hover:underline"
+                        >
+                          Valider
+                        </button>
+                        <button type="button" onClick={() => setReschedulingAt(null)} className="text-xs text-gray-500 hover:text-gray-800">
+                          Annuler
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReschedulingAt(at);
+                          setRescheduleWhen(toLocalInput(at));
+                        }}
+                        className="text-xs font-medium text-gray-700 hover:text-gray-900"
+                      >
+                        Changer l'heure
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => cancelChanges(group.map((c) => c.id))}
+                      className="text-xs font-medium text-red-600 hover:text-red-800"
+                    >
+                      Tout annuler
+                    </button>
+                  </div>
                 </div>
                 <ul className="divide-y divide-gray-50">
                   {group.map((c) => (
