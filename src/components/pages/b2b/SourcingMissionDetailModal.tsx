@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil, Trash2, Eye, EyeOff, Link2, Undo2, Send, FileText } from 'lucide-react';
+import { X, AlertCircle, Plus, Package, CheckCircle2, Pencil, Trash2, Eye, EyeOff, Link2, Undo2, Send, FileText, Truck } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { Toast } from '../../ui/Toast';
 import { SourcingMission, SourcingMissionInput } from '../../../hooks/useSourcingMissions';
@@ -9,7 +9,8 @@ import { AddSourcingItemModal } from './AddSourcingItemModal';
 import { CreateSourcingMissionModal } from './CreateSourcingMissionModal';
 import { LinkSourcingProductModal } from './LinkSourcingProductModal';
 import { ProductDetail } from '../ProductDetail';
-import { useProductFulfillment, FULFILLMENT_LABELS } from '../../../hooks/useProductFulfillment';
+import { FULFILLMENT_LABELS, ProductFulfillmentStatus } from '../../../hooks/useProductFulfillment';
+import { supabase } from '../../../lib/supabase';
 
 interface SourcingMissionDetailModalProps {
   mission: SourcingMission | null;
@@ -47,11 +48,78 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
  * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
 export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onShowUnitPricesChange, onCancelValidation, onDelete, onItemsChanged }) => {
   const { items, loading, error, addItem, addItems, setItemStatus, removeItem, linkProduct, setCustomPrice } = useSourcingItems(mission?.id || null);
-  // Étape de réception / livraison de chaque pièce, une fois la commande de
-  // la mission créée (validation du membre ou génération à la clôture).
-  const fulfillmentByProduct = useProductFulfillment(
-    mission?.order_id ? items.filter((i) => i.product_id && i.status !== 'cancelled').map((i) => i.product_id as string) : []
-  );
+  // Lignes de la commande de la mission (validation du membre ou génération
+  // à la clôture) : étape de réception / livraison et case « dans le
+  // carton » (0202) de chaque pièce, demande de livraison (0205).
+  const [orderLines, setOrderLines] = useState<Record<string, { id: string; fulfillment: ProductFulfillmentStatus; packed: boolean; shipmentId: string | null }>>({});
+  const [linesVersion, setLinesVersion] = useState(0);
+  const [creatingDelivery, setCreatingDelivery] = useState(false);
+  useEffect(() => {
+    const orderId = mission?.order_id;
+    if (!orderId) {
+      setOrderLines({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const primary = await supabase
+        .from('order_items')
+        .select('id, product_id, fulfillment_status, shipment_id, packed_at')
+        .eq('order_id', orderId)
+        .eq('status', 'active');
+      let data: unknown[] | null = primary.data;
+      let linesError = primary.error;
+      // Avant la migration 0202 (packed_at absente) : sans la case carton.
+      if (linesError) {
+        const fallback = await supabase
+          .from('order_items')
+          .select('id, product_id, fulfillment_status, shipment_id')
+          .eq('order_id', orderId)
+          .eq('status', 'active');
+        data = fallback.data;
+        linesError = fallback.error;
+      }
+      if (cancelled || linesError) return;
+      const next: typeof orderLines = {};
+      for (const row of (data || []) as { id: string; product_id: string | null; fulfillment_status: ProductFulfillmentStatus; shipment_id: string | null; packed_at?: string | null }[]) {
+        if (row.product_id) next[row.product_id] = { id: row.id, fulfillment: row.fulfillment_status, packed: Boolean(row.packed_at), shipmentId: row.shipment_id };
+      }
+      setOrderLines(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mission?.order_id, linesVersion]);
+
+  const togglePacked = async (productId: string) => {
+    const line = orderLines[productId];
+    if (!line) return;
+    const next = !line.packed;
+    setOrderLines((prev) => ({ ...prev, [productId]: { ...line, packed: next } }));
+    const { error: rpcError } = await supabase.rpc('admin_set_items_packed', { p_item_ids: [line.id], p_packed: next });
+    if (rpcError) {
+      setOrderLines((prev) => ({ ...prev, [productId]: { ...line, packed: !next } }));
+      setStatusError(`Impossible d'enregistrer « dans le carton » : ${rpcError.message}`);
+    }
+  };
+
+  const linesList = Object.values(orderLines);
+  const packedCount = linesList.filter((l) => l.packed).length;
+  const awaitingDeliveryRequest = linesList.filter((l) => !l.shipmentId && ['ordered', 'received', 'ready_to_ship'].includes(l.fulfillment)).length;
+
+  const handleCreateDeliveryRequest = async () => {
+    if (!mission) return;
+    if (!confirm(`Créer la demande de livraison du membre pour ${awaitingDeliveryRequest} pièce(s), à l'adresse de son profil (port 0 €) ?`)) return;
+    setCreatingDelivery(true);
+    const { error: rpcError } = await supabase.rpc('admin_create_sourcing_delivery_request', { p_mission_id: mission.id });
+    setCreatingDelivery(false);
+    if (rpcError) {
+      setStatusError(rpcError.message);
+      return;
+    }
+    setLinesVersion((v) => v + 1);
+    setSuccessToast('Demande de livraison créée — à retrouver dans Commandes → Demandes de livraison.');
+  };
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [savingPriceId, setSavingPriceId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -120,7 +188,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   // Une mission avec facture d'avance (0196) n'a jamais de seconde facture :
   // la commande de validation réutilise la facture d'avance.
   const canEmitQonto =
-    !advanceInvoice && Boolean(mission.order_id) && (invoiceBadge ? invoiceBadge.invoiceType === 'b2b_facturx' : mission.requester?.legal_status && mission.requester.legal_status !== 'individual');
+    !advanceInvoice && !mission.order_generated_by_admin && Boolean(mission.order_id) && (invoiceBadge ? invoiceBadge.invoiceType === 'b2b_facturx' : mission.requester?.legal_status && mission.requester.legal_status !== 'individual');
 
   const handleEmitQonto = async () => {
     if (!mission.order_id) return;
@@ -497,7 +565,25 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
             )}
 
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-900">Pièces sourcées ({items.length})</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <p className="text-sm font-medium text-gray-900">Pièces sourcées ({items.length})</p>
+                {linesList.length > 0 && (
+                  <span className={`text-xs font-semibold ${packedCount === linesList.length ? 'text-green-700' : 'text-gray-500'}`}>
+                    Dans le carton : {packedCount}/{linesList.length}
+                  </span>
+                )}
+                {awaitingDeliveryRequest > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleCreateDeliveryRequest}
+                    disabled={creatingDelivery}
+                    className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    <Truck className="h-3.5 w-3.5" />
+                    {creatingDelivery ? 'Création...' : `Créer la demande de livraison (${awaitingDeliveryRequest})`}
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => !isCompleted && setShowAddModal(true)}
                 disabled={isCompleted}
@@ -635,11 +721,20 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                                 <option value="cancelled">Annulée</option>
                               </select>
                               <span className="ml-2 align-middle">{itemStatusBadge(item.status)}</span>
-                              {item.product_id && fulfillmentByProduct[item.product_id] && (
-                                <div className="mt-1">
-                                  <Badge variant={FULFILLMENT_LABELS[fulfillmentByProduct[item.product_id]].variant}>
-                                    {FULFILLMENT_LABELS[fulfillmentByProduct[item.product_id]].label}
+                              {item.product_id && orderLines[item.product_id] && (
+                                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                  <Badge variant={FULFILLMENT_LABELS[orderLines[item.product_id].fulfillment].variant}>
+                                    {FULFILLMENT_LABELS[orderLines[item.product_id].fulfillment].label}
                                   </Badge>
+                                  <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer" title="Coche quand la pièce est dans le carton">
+                                    <input
+                                      type="checkbox"
+                                      checked={orderLines[item.product_id].packed}
+                                      onChange={() => togglePacked(item.product_id as string)}
+                                      className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-600"
+                                    />
+                                    carton
+                                  </label>
                                 </div>
                               )}
                             </td>

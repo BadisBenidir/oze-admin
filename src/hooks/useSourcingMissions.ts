@@ -30,6 +30,9 @@ export interface SourcingMission {
    * 0098_sourcing_validation_lifecycle.sql. Absent (undefined) tant que
    * cette migration n'est pas encore appliquée sur cet environnement. */
   order_id?: string | null;
+  /** Commande générée par l'admin à la clôture (0197) : commande de suivi
+   * uniquement, jamais facturée ni comptée (0204). */
+  order_generated_by_admin?: boolean;
   /** Visible dans le portail revendeur (pro.ozeparis.com) dès true — voir 0094. */
   is_published_to_reseller: boolean;
   published_at: string | null;
