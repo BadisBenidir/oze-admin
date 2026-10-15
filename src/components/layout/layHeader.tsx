@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { User, Menu, LogOut, ChevronDown } from 'lucide-react';
+import { User, Menu, LogOut, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { useHideFigures } from '../../hooks/useHideFigures';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 
 interface HeaderProps {
@@ -10,6 +11,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ activeTab, onMenuToggle }) => {
   const { profile, signOut } = useAdminAuth()
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const { hidden: figuresHidden, toggle: toggleFigures } = useHideFigures()
   const getPageTitle = (tab: string) => {
     const titles = {
       dashboard: 'Dashboard',
@@ -42,6 +44,16 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onMenuToggle }) => {
         </div>
         
         <div className="flex items-center space-x-4">
+          {/* Masquer les chiffres partout (CA, prix d'achat, marges…) */}
+          <button
+            type="button"
+            onClick={toggleFigures}
+            title={figuresHidden ? 'Afficher les chiffres' : 'Masquer les chiffres (CA, prix d\x27achat, marges…)'}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${figuresHidden ? 'bg-gray-900 text-white border-gray-900' : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+          >
+            {figuresHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            <span className="hidden md:inline">{figuresHidden ? 'Afficher les chiffres' : 'Masquer les chiffres'}</span>
+          </button>
           {/* User Profile Desktop */}
           <div className="hidden sm:block relative">
             <button

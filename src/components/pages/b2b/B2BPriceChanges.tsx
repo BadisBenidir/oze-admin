@@ -4,6 +4,7 @@ import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { Toast } from '../../ui/Toast';
 import { supabase } from '../../../lib/supabase';
+import { useHideFigures } from '../../../hooks/useHideFigures';
 
 /**
  * Changements de prix programmés du catalogue B2B (0200) : filtrer les
@@ -51,6 +52,7 @@ const defaultWhen = () => {
 };
 
 export const B2BPriceChanges: React.FC = () => {
+  const { show: showFigure } = useHideFigures();
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [changes, setChanges] = useState<PriceChange[]>([]);
   const [loading, setLoading] = useState(true);
@@ -319,7 +321,7 @@ export const B2BPriceChanges: React.FC = () => {
                           </div>
                         </td>
                         <td className="py-2 px-3 text-right text-xs text-gray-500 tabular-nums whitespace-nowrap">{daysSince(p.created_at)} j</td>
-                        <td className="py-2 px-3 text-right text-sm text-gray-500 tabular-nums whitespace-nowrap">{EUR(p.purchase_price)}</td>
+                        <td className="py-2 px-3 text-right text-sm text-gray-500 tabular-nums whitespace-nowrap">{showFigure(EUR(p.purchase_price))}</td>
                         <td className="py-2 px-3 text-right text-sm font-semibold text-gray-900 tabular-nums whitespace-nowrap">{EUR(p.sale_price)}</td>
                         <td className="py-2 px-3 text-right">
                           <div className="relative inline-block">

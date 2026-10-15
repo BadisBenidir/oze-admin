@@ -11,6 +11,7 @@ import { LinkSourcingProductModal } from './LinkSourcingProductModal';
 import { ProductDetail } from '../ProductDetail';
 import { FULFILLMENT_LABELS, ProductFulfillmentStatus } from '../../../hooks/useProductFulfillment';
 import { supabase } from '../../../lib/supabase';
+import { useHideFigures } from '../../../hooks/useHideFigures';
 
 interface SourcingMissionDetailModalProps {
   mission: SourcingMission | null;
@@ -47,6 +48,7 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
  * affectées à l'enveloppe d'achat, ajout d'une pièce, édition et clôture —
  * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
 export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onShowUnitPricesChange, onCancelValidation, onDelete, onItemsChanged }) => {
+  const { show: showFigure } = useHideFigures();
   const { items, loading, error, addItem, addItems, setItemStatus, removeItem, linkProduct, setCustomPrice } = useSourcingItems(mission?.id || null);
   // Lignes de la commande de la mission (validation du membre ou génération
   // à la clôture) : étape de réception / livraison et case « dans le
@@ -509,11 +511,11 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Enveloppe d'achat</p>
-                  <p className="text-sm font-semibold text-gray-900">{effectiveEnvelope.toFixed(2)} €</p>
+                  <p className="text-sm font-semibold text-gray-900">{showFigure(effectiveEnvelope.toFixed(2))} €</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Dépensé (achats)</p>
-                  <p className="text-sm font-semibold text-gray-900">{totalSpent.toFixed(2)} €</p>
+                  <p className="text-sm font-semibold text-gray-900">{showFigure(totalSpent.toFixed(2))} €</p>
                 </div>
                 <div>
                   <p
@@ -527,7 +529,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 <div>
                   <p className="text-xs text-gray-500">{marginLabel}</p>
                   <p className={`text-sm font-semibold ${marginReal < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {marginReal.toFixed(2)} €{marginPercent !== null && ` (${marginPercent.toFixed(1)}%)`}
+                    {showFigure(`${marginReal.toFixed(2)} €${marginPercent !== null ? ` (${marginPercent.toFixed(1)}%)` : ''}`)}
                   </p>
                 </div>
               </div>
@@ -536,10 +538,10 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                   <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
                     <p className="text-xs text-gray-500">Marge si l'avance est conservée en forfait</p>
                     <p className={`font-semibold ${flatMargin < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                      {flatMargin.toFixed(2)} €{flatMarginPercent !== null && ` (${flatMarginPercent.toFixed(2)}%)`}
+                      {showFigure(`${flatMargin.toFixed(2)} €${flatMarginPercent !== null ? ` (${flatMarginPercent.toFixed(2)}%)` : ''}`)}
                     </p>
                     <p className="text-xs text-gray-500">
-                      Avance {mission.advance_amount.toFixed(2)} € − achats {totalSpent.toFixed(2)} € — uniquement si le solde non alloué n'est pas rendu au client
+                      Avance {mission.advance_amount.toFixed(2)} € − achats {showFigure(totalSpent.toFixed(2))} € — uniquement si le solde non alloué n'est pas rendu au client
                     </p>
                   </div>
                 </div>
@@ -678,7 +680,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                               </div>
                             </td>
                             <td className="py-2.5 px-3 text-right text-sm font-medium text-gray-900 tabular-nums whitespace-nowrap w-24 shrink-0">
-                              {item.cost_price != null ? `${item.cost_price.toFixed(2)} €` : '—'}
+                              {item.cost_price != null ? `${showFigure(item.cost_price.toFixed(2))} €` : '—'}
                             </td>
                             <td className="py-2.5 px-3 text-right w-24 shrink-0">
                               <div

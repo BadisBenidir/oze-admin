@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { ProductPosterModal } from '../products/ProductPosterModal';
 import { downloadProductPhotos } from '../../utils/downloadProductPhotos';
+import { useHideFigures } from '../../hooks/useHideFigures';
 
 interface ProductDetailProps {
   productId: string;
@@ -40,6 +41,7 @@ interface ProductDetailProps {
 }
 
 export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack, onEdit, onProductUpdate }) => {
+  const { show: showFigure } = useHideFigures();
   const { isAdmin } = useAdminAuth();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -446,7 +448,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                 <div>
                   <label className="text-sm font-medium text-gray-500">Prix d'achat</label>
                   <p className="text-gray-900">
-                    {product.purchase_price ? `${product.purchase_price.toFixed(2)} €` : 'Non renseigné'}
+                    {product.purchase_price ? `${showFigure(product.purchase_price.toFixed(2))} €` : 'Non renseigné'}
                   </p>
                 </div>
                 <div>

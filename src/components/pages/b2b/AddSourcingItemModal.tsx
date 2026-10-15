@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X, AlertCircle, Search, Package, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { SourcingItemInput } from '../../../hooks/useSourcingItems';
+import { useHideFigures } from '../../../hooks/useHideFigures';
 
 interface StockProduct {
   id: string;
@@ -33,6 +34,7 @@ interface AddSourcingItemModalProps {
  * la frappe — même pattern que CreateDropModal.tsx), soit une pièce créée à
  * la volée — voir 0089_b2b_sourcing_missions.sql. */
 export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOpen, onClose, onSubmit, onSubmitBatch, remainingCostBudget, existingProductIds }) => {
+  const { show: showFigure } = useHideFigures();
   const [mode, setMode] = useState<'stock' | 'manual'>('stock');
   const [draftProducts, setDraftProducts] = useState<StockProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -344,7 +346,7 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                               <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
                               <p className="text-xs text-gray-500">
                                 {product.brand?.name || 'Sans marque'}
-                                {product.purchase_price != null && <> · Achat {product.purchase_price.toFixed(0)} €</>}
+                                {product.purchase_price != null && <> · Achat {showFigure(product.purchase_price.toFixed(0))} €</>}
                               </p>
                             </div>
                             {alreadyAdded && (

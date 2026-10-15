@@ -17,6 +17,7 @@ import { CancelAuctionItemModal } from './auctions/CancelAuctionItemModal';
 import { PreviewLinksModal } from './PreviewLinksModal';
 import { AuctionCountdown } from '../reseller/AuctionCountdown';
 import { ProductDetail } from '../ProductDetail';
+import { useHideFigures } from '../../../hooks/useHideFigures';
 
 type AdminAuctionSection = 'sessions' | 'access' | 'results';
 
@@ -59,6 +60,7 @@ const paymentBadge = (item: AdminAuctionItem) => {
  * qui passent par une RPC dédiée sont la clôture (classement adjugé/non
  * vendu, voir admin_close_auction_session) et la génération de commande. */
 export const AuctionsAdmin: React.FC = () => {
+  const { show: showFigure } = useHideFigures();
   const { isAdmin } = useAdminAuth();
   const [section, setSection] = useState<AdminAuctionSection>('sessions');
   const [successToast, setSuccessToast] = useState('');
@@ -376,7 +378,7 @@ export const AuctionsAdmin: React.FC = () => {
                                       <span className="text-gray-400" title="Aucun prix d'achat renseigné sur la fiche produit">—</span>
                                     ) : (
                                       <span className={`font-semibold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        {profit >= 0 ? '+' : '-'}{EUR(Math.abs(profit))}
+                                        {showFigure(`${profit >= 0 ? '+' : '-'}${EUR(Math.abs(profit))}`)}
                                       </span>
                                     )}
                                   </td>
@@ -493,7 +495,7 @@ export const AuctionsAdmin: React.FC = () => {
                                   const total = known.reduce((sum, i) => sum + (i.current_price - (i.product_purchase_price as number)), 0);
                                   return (
                                     <span className={`font-semibold ${total >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {total >= 0 ? '+' : '-'}{EUR(Math.abs(total))}
+                                      {showFigure(`${total >= 0 ? '+' : '-'}${EUR(Math.abs(total))}`)}
                                       {known.length < countedItems.length && <span className="text-gray-400 font-normal"> ({known.length}/{countedItems.length})</span>}
                                     </span>
                                   );

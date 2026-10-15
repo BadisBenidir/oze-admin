@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
-import { TrendingUp, TrendingDown, Users, Package, ShoppingCart, DollarSign, Eye, EyeOff } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, Package, ShoppingCart, DollarSign } from 'lucide-react';
+import { useHideFigures, HIDDEN_FIGURE } from '../../hooks/useHideFigures';
 import { useState, useEffect } from 'react'; // Ajoute useState et useEffect
 import { orderService } from '../../services/orderService';
 import { JpyEurRateCard } from './JpyEurRateCard';
@@ -14,38 +15,16 @@ interface DashboardProps {
 const formatDateTime = (date: Date): string =>
   `${date.toLocaleDateString('fr-FR')} à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
 
-// Masquage des chiffres (écran partagé / en public) — préférence propre à ce
-// navigateur, mémorisée tant que possible (stockage parfois indisponible).
-const HIDE_FIGURES_KEY = 'oze:dashboard-hide-figures';
-const HIDDEN = '••••';
-const readHideFigures = () => {
-  try {
-    return localStorage.getItem(HIDE_FIGURES_KEY) === '1';
-  } catch {
-    return false;
-  }
-};
-
 const INITIAL_LIST_SIZE = 5;
 const LOAD_MORE_STEP = 10;
 
 export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
 
   const [stats, setStats] = useState<any>(null);
-  const [hideFigures, setHideFigures] = useState(readHideFigures);
-  const toggleHideFigures = () => {
-    setHideFigures((prev) => {
-      try {
-        localStorage.setItem(HIDE_FIGURES_KEY, prev ? '0' : '1');
-      } catch {
-        // stockage indisponible : masquage le temps de la session seulement
-      }
-      return !prev;
-    });
-  };
-  const show = (value: React.ReactNode) => (hideFigures ? HIDDEN : value);
+  // « Masquer les chiffres » (interrupteur global dans l'en-tête).
+  const { hidden: hideFigures, show } = useHideFigures();
   // Montants glissés dans les textes d'activité (« … 80,48 € … »).
-  const maskAmounts = (text: string) => (hideFigures ? text.replace(/d[ds.,]*s?€/g, `${HIDDEN} €`) : text);
+  const maskAmounts = (text: string) => (hideFigures ? text.replace(/d[ds.,]*s?€/g, `${HIDDEN_FIGURE} €`) : text);
   const [loading, setLoading] = useState(true);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
@@ -257,16 +236,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
   // Default dashboard overview
   return (
     <div className="p-4 md:p-6">
-      <div className="flex justify-end mb-3">
-        <button
-          type="button"
-          onClick={toggleHideFigures}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          {hideFigures ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-          {hideFigures ? 'Afficher les chiffres' : 'Masquer les chiffres'}
-        </button>
-      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
         <Card>
           <CardContent className="p-4 md:p-6">

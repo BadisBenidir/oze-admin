@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, AlertCircle, Search, Package } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
+import { useHideFigures } from '../../../hooks/useHideFigures';
 
 interface StockProduct {
   id: string;
@@ -24,6 +25,7 @@ interface LinkSourcingProductModalProps {
  * pattern de recherche en mémoire que l'onglet "Depuis le stock" de
  * AddSourcingItemModal.tsx, mais sélection unique. */
 export const LinkSourcingProductModal: React.FC<LinkSourcingProductModalProps> = ({ isOpen, onClose, onLink }) => {
+  const { show: showFigure } = useHideFigures();
   const [draftProducts, setDraftProducts] = useState<StockProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -168,7 +170,7 @@ export const LinkSourcingProductModal: React.FC<LinkSourcingProductModalProps> =
                         <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
                         <p className="text-xs text-gray-500">
                           {product.brand?.name || 'Sans marque'}
-                          {product.purchase_price != null && <> · Achat {product.purchase_price.toFixed(0)} €</>}
+                          {product.purchase_price != null && <> · Achat {showFigure(product.purchase_price.toFixed(0))} €</>}
                         </p>
                       </div>
                     </label>

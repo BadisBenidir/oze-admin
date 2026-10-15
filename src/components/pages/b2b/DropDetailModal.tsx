@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Package, ImageOff, Trash2, Star, Lock, Unlock } from 'lucide-react';
 import { Drop } from '../../../hooks/useDrops';
 import { useDropProducts } from '../../../hooks/useDropProducts';
+import { useHideFigures } from '../../../hooks/useHideFigures';
 
 const formatDateTime = (iso: string): string =>
   new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -26,6 +27,7 @@ interface DropDetailModalProps {
 const MAX_FEATURED = 4;
 
 export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose, otherDrops = [], onReassignProduct, onDelete, onSetFeatured, onSetLockCancellation }) => {
+  const { show: showFigure } = useHideFigures();
   // `drop` est dérivé en direct de la liste `drops` du parent (voir
   // B2BDrops.tsx) : product_ids se met à jour automatiquement après un
   // déplacement, ce qui redéclenche useDropProducts via sa dépendance sur
@@ -220,7 +222,7 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
                             </div>
                           </td>
                           <td className="py-3 px-4 text-right text-sm text-gray-700">
-                            {p.purchase_price != null ? `${p.purchase_price.toFixed(2)} €` : '—'}
+                            {p.purchase_price != null ? `${showFigure(p.purchase_price.toFixed(2))} €` : '—'}
                           </td>
                           <td className="py-3 px-4 text-right">
                             {sold ? (
@@ -257,7 +259,7 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
                 <div className="w-full sm:w-72 space-y-1.5 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Total achat</span>
-                    <span className="text-gray-900">{totalPurchase.toFixed(2)} €</span>
+                    <span className="text-gray-900">{showFigure(totalPurchase.toFixed(2))} €</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Total vente (catalogue)</span>
