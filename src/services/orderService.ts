@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { Order } from '../types';
+import { fetchSourcingFulfillmentOrderIds } from '../utils/sourcingFulfillment';
 
 export interface DatabaseOrder {
   id: string;
@@ -266,7 +267,7 @@ class OrderService {
   }> {
     const { data: orders, error } = await supabase
       .from('orders')
-      .select('total_amount, status')
+      .select('id, total_amount, status')
       .neq('status', 'cancelled')
       .neq('status', 'pending')
       .neq('status', 'refunded');
@@ -298,7 +299,7 @@ class OrderService {
       .from('b2b_sourcing_missions')
       .select('advance_amount')
       .eq('status', 'completed')
-      .is('order_id', null)
+      .or('order_id.is.null,order_generated_by_admin.eq.true')
       .not('paid_at', 'is', null);
     const sourcingRevenue = (closedMissions || []).reduce((sum, m) => sum + Number(m.advance_amount || 0), 0);
 
@@ -318,11 +319,15 @@ class OrderService {
       .from('profiles')
       .select('*', { count: 'exact', head: true });
 
-    const totalOrders = orders?.length || 0;
+    // Commandes de suivi des missions clôturées (0197/0204) : la mission est
+    // déjà comptée via sourcingRevenue ci-dessus.
+    const fulfillmentOrderIds = await fetchSourcingFulfillmentOrderIds();
+    const countedOrders = (orders || []).filter((o) => !fulfillmentOrderIds.has(o.id));
+    const totalOrders = countedOrders.length;
     const webOrders = totalOrders; // Toutes les commandes BDD sont web pour l'instant
     const externalOrders = 0; // Pas encore d'intégration externe
 
-    const ordersRevenue = orders?.reduce((sum, order) => sum + Number(order.total_amount), 0) || 0;
+    const ordersRevenue = countedOrders.reduce((sum, order) => sum + Number(order.total_amount), 0);
     const webRevenue = ordersRevenue;
     const externalRevenue = 0;
     // CA global = commandes (web + B2B) + ventes Live enchères (hors site)

@@ -41,7 +41,9 @@ export const useB2BRevenue = (isAuthenticated: boolean = false) => {
         .select('reseller_id, advance_amount, resellers(company_name)')
         .not('paid_at', 'is', null)
         .neq('status', 'cancelled')
-        .is('order_id', null);
+        // + missions clôturées dont la commande n'est qu'une commande de
+        // suivi (0197/0204), exclue de b2b_order_item_revenue.
+        .or('order_id.is.null,order_generated_by_admin.eq.true');
 
       // Repli : la migration 0098 (colonne order_id) n'est peut-être pas
       // encore appliquée sur cet environnement — on retombe sur l'ancien

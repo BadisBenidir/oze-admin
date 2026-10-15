@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
+import { fetchSourcingFulfillmentOrderIds } from '../utils/sourcingFulfillment';
 
 export type SalesJournalScope = 'all' | 'web' | 'b2b' | 'sourcing';
 
@@ -123,13 +124,16 @@ export const useSalesJournalExport = () => {
       if (scope === 'all' || scope === 'b2b') {
         const { data, error } = await supabase
           .from('orders')
-          .select('order_number, status, payment_status, total_amount, created_at, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email)')
+          .select('id, order_number, status, payment_status, total_amount, created_at, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email)')
           .eq('order_channel', 'b2b')
           .gte('created_at', startIso)
           .lte('created_at', endIso);
         if (error) throw new Error(error.message);
-        for (const o of (data || []) as unknown as B2BOrderRow[]) {
-          if (!isOrderPaid(o)) continue;
+        // Commandes de suivi des missions clôturées (0197/0204) : la vente
+        // figure déjà au journal via l'avance de la mission.
+        const fulfillmentOrderIds = await fetchSourcingFulfillmentOrderIds();
+        for (const o of (data || []) as unknown as (B2BOrderRow & { id: string })[]) {
+          if (!isOrderPaid(o) || fulfillmentOrderIds.has(o.id)) continue;
           // La facture porte le nom du sous-compte qui a passé la commande,
           // pas celui de l'entreprise — le nom de l'entreprise ne sert que
           // de tout dernier repli (commandes antérieures à

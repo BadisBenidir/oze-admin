@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { rawDataWindowStart } from '../utils/accountingPeriods';
+import { fetchSourcingFulfillmentOrderIds } from '../utils/sourcingFulfillment';
 
 export interface AccountingOrderItem {
   id: string;
@@ -132,7 +133,10 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         placed_by: { first_name: string | null; last_name: string | null } | null;
       };
 
-      const orders: AccountingOrder[] = ((ordersRes.data || []) as unknown as OrderRow[]).map((o) => ({
+      // Commandes de suivi des missions clôturées (0197/0204) : jamais dans
+      // les chiffres — la mission est comptée plus bas (closedMissionOrders).
+      const fulfillmentOrderIds = await fetchSourcingFulfillmentOrderIds();
+      const orders: AccountingOrder[] = ((ordersRes.data || []) as unknown as OrderRow[]).filter((o) => !fulfillmentOrderIds.has(o.id)).map((o) => ({
         ...o,
         company_name: o.resellers?.company_name || null,
         requester_name: o.placed_by ? `${o.placed_by.first_name || ''} ${o.placed_by.last_name || ''}`.trim() || null : null,
@@ -172,7 +176,7 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         .from('b2b_sourcing_missions')
         .select('id, reference, title, reseller_id, advance_amount, completed_at, resellers(company_name)')
         .eq('status', 'completed')
-        .is('order_id', null)
+        .or('order_id.is.null,order_generated_by_admin.eq.true')
         .not('paid_at', 'is', null)
         .not('completed_at', 'is', null);
       if (!closedError && closedMissions && closedMissions.length > 0) {

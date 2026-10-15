@@ -4,6 +4,7 @@ import { Download, X, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Brand } from '../../hooks/useBrands';
 import { generateProductListPdf } from '../../utils/generateProductListPdf';
+import { fetchSourcingFulfillmentOrderIds } from '../../utils/sourcingFulfillment';
 
 /**
  * Export de la liste des articles (Excel, CSV ou PDF) depuis « Liste des Produits » :
@@ -110,20 +111,22 @@ type SoldPrice = { price: number; source: 'order' | 'live' | 'sourcing' };
 const loadSoldPrices = async (rows: ExportRow[]): Promise<Map<string, SoldPrice>> => {
   const prices = new Map<string, SoldPrice>();
   const ids = rows.map((r) => r.id);
+  // Commandes de suivi de sourcing (0197/0204) : le prix vendu reste celui de la mission.
+  const fulfillmentOrderIds = await fetchSourcingFulfillmentOrderIds();
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error } = await supabase
       .from('order_items')
-      .select('product_id, line_total, order:orders!inner(status, payment_status, created_at)')
+      .select('product_id, line_total, order:orders!inner(id, status, payment_status, created_at)')
       .in('product_id', ids.slice(i, i + 200))
       .eq('status', 'active');
     if (error) throw new Error(error.message);
-    const items = (data || []) as unknown as { product_id: string; line_total: number; order: { status: string; payment_status: string; created_at: string } }[];
+    const items = (data || []) as unknown as { product_id: string; line_total: number; order: { id: string; status: string; payment_status: string; created_at: string } }[];
     const latest = new Map<string, string>();
     for (const it of items) {
       const o = it.order;
       const paid = !['cancelled', 'canceled'].includes(o.status)
         && (['paid', 'succeeded'].includes(o.payment_status) || ['confirmed', 'shipped', 'delivered'].includes(o.status));
-      if (!paid) continue;
+      if (!paid || fulfillmentOrderIds.has(o.id)) continue;
       if (latest.has(it.product_id) && latest.get(it.product_id)! > o.created_at) continue;
       latest.set(it.product_id, o.created_at);
       prices.set(it.product_id, { price: Number(it.line_total) || 0, source: 'order' });

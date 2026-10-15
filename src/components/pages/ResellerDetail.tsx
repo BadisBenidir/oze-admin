@@ -19,6 +19,7 @@ import {
   Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, X, Search, EyeOff, Phone, CreditCard,
 } from 'lucide-react';
 import type { B2BOrder } from '../../hooks/useB2BOrders';
+import { fetchSourcingFulfillmentOrderIds } from '../../utils/sourcingFulfillment';
 
 interface ResellerDetailProps {
   reseller: Reseller;
@@ -215,7 +216,14 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
     onResellerUpdated?.(updated);
   };
 
-  const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
+  // Commandes de suivi des missions de sourcing clôturées (0197/0204) :
+  // listées pour le suivi, jamais comptées (ni nombre ni CA).
+  const [fulfillmentOrderIds, setFulfillmentOrderIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    fetchSourcingFulfillmentOrderIds().then(setFulfillmentOrderIds);
+  }, []);
+  const countedOrders = orders.filter((o) => !fulfillmentOrderIds.has(o.id));
+  const totalRevenue = countedOrders.reduce((sum, o) => sum + o.total_amount, 0);
   // Abonné Club B2B (0167) : un seul compte, jamais de sous-comptes — fiche dédiée.
   const isSubscriber = currentReseller.account_type === 'subscriber';
   const subscriberContact = contacts[0] || null;
@@ -342,7 +350,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
             </div>
             <div>
               <p className="text-xs text-gray-500">Total commandes</p>
-              <p className="text-xl font-semibold text-gray-900">{ordersLoading ? '—' : orders.length}</p>
+              <p className="text-xl font-semibold text-gray-900">{ordersLoading ? '—' : countedOrders.length}</p>
             </div>
           </CardContent>
         </Card>
