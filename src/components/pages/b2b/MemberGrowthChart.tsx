@@ -4,15 +4,21 @@ import { TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { supabase } from '../../../lib/supabase';
 import { useHideFigures } from '../../../hooks/useHideFigures';
+import { useSubscriptionPromos, lifetimeFreeCode } from '../../../hooks/useSubscriptionPromos';
+import type { Reseller } from '../../../hooks/useResellers';
 
 /**
  * Croissance des membres depuis le lancement de la plateforme : nombre
  * cumulé, jour après jour, de comptes ayant rejoint le portail — date
  * d'arrivée = reseller_contacts.created_at.
- *   - Abonnés : comptes Club B2B (resellers.account_type = 'subscriber') ;
+ *   - Abonnés : comptes Club B2B payants (resellers.account_type =
+ *     'subscriber'). Un abonné gratuit à vie (code promo Club 100 % à vie,
+ *     même règle que le badge « Gratuit à vie » de la liste des abonnés)
+ *     est compté en Partenaire ;
  *   - Membres d'accompagnement : sous-comptes des entreprises partenaires
  *     (account_type 'company', contact non principal) ;
- *   - Partenaires : contact principal de chaque entreprise partenaire.
+ *   - Partenaires : contact principal de chaque entreprise partenaire, plus
+ *     les abonnés gratuits à vie.
  * Les comptes supprimés depuis n'apparaissent plus (aucun historique).
  */
 
@@ -27,7 +33,7 @@ const SERIES: { key: Group; label: string; color: string }[] = [
 interface ContactRow {
   created_at: string;
   is_primary: boolean;
-  reseller: { account_type: string | null } | null;
+  reseller: { id: string; account_type: string | null; subscription_plan: Reseller['subscription_plan']; stripe_subscription_id: string | null } | null;
 }
 
 const dayKey = (d: Date) => d.toLocaleDateString('en-CA');
@@ -37,11 +43,12 @@ export const MemberGrowthChart: React.FC = () => {
   const [rows, setRows] = useState<ContactRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { show } = useHideFigures();
+  const promoData = useSubscriptionPromos(true);
 
   useEffect(() => {
     supabase
       .from('reseller_contacts')
-      .select('created_at, is_primary, reseller:resellers(account_type)')
+      .select('created_at, is_primary, reseller:resellers(id, account_type, subscription_plan, stripe_subscription_id)')
       .order('created_at', { ascending: true })
       .then(({ data, error: fetchError }) => {
         if (fetchError) setError(fetchError.message);
@@ -49,13 +56,20 @@ export const MemberGrowthChart: React.FC = () => {
       });
   }, []);
 
-  const groupOf = (r: ContactRow): Group =>
-    r.reseller?.account_type === 'subscriber' ? 'subscribers' : r.is_primary ? 'partners' : 'members';
 
-  const { series, totals, last30 } = useMemo(() => {
+  const { series, totals, last30, lifetimeFreeCount } = useMemo(() => {
     const totals: Record<Group, number> = { subscribers: 0, members: 0, partners: 0 };
     const last30: Record<Group, number> = { subscribers: 0, members: 0, partners: 0 };
-    if (!rows || rows.length === 0) return { series: [], totals, last30 };
+    if (!rows || rows.length === 0 || !promoData) return { series: [], totals, last30, lifetimeFreeCount: 0 };
+
+    // Abonnés gratuits à vie : comptés en Partenaires, pas en Abonnés.
+    const isLifetimeFree = (r: ContactRow) =>
+      r.reseller?.account_type === 'subscriber' && Boolean(lifetimeFreeCode(r.reseller as unknown as Reseller, promoData));
+    const groupOf = (r: ContactRow): Group =>
+      r.reseller?.account_type === 'subscriber'
+        ? isLifetimeFree(r) ? 'partners' : 'subscribers'
+        : r.is_primary ? 'partners' : 'members';
+    const lifetimeFreeCount = rows.filter(isLifetimeFree).length;
 
     const joinsByDay = new Map<string, Record<Group, number>>();
     const since30 = Date.now() - 30 * 86_400_000;
@@ -85,8 +99,8 @@ export const MemberGrowthChart: React.FC = () => {
       });
       cursor.setDate(cursor.getDate() + 1);
     }
-    return { series, totals, last30 };
-  }, [rows]);
+    return { series, totals, last30, lifetimeFreeCount };
+  }, [rows, promoData]);
 
   const grandTotal = totals.subscribers + totals.members + totals.partners;
 
@@ -113,13 +127,16 @@ export const MemberGrowthChart: React.FC = () => {
                 {s.label}
               </p>
               <p className="text-xl font-semibold text-gray-900 tabular-nums">{show(totals[s.key])}</p>
+              {s.key === 'partners' && lifetimeFreeCount > 0 && (
+                <p className="text-xs text-gray-400">dont {show(lifetimeFreeCount)} abonné{lifetimeFreeCount > 1 ? 's' : ''} gratuit{lifetimeFreeCount > 1 ? 's' : ''} à vie</p>
+              )}
               <p className="text-xs text-gray-500">+{show(last30[s.key])} sur 30 jours</p>
             </div>
           ))}
         </div>
 
         <div className="h-72">
-          {rows === null ? (
+          {rows === null || !promoData ? (
             <div className="h-full bg-gray-50 rounded-lg animate-pulse" />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
