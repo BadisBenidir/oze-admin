@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Gavel, Plus, AlertCircle, Trophy, Radio, CheckCircle2, Trash2, ImageOff,
-  Ticket, Receipt, Clock, Zap, TrendingUp, Pencil, Ban, Link2, ChevronUp, ChevronDown,
+  Ticket, Receipt, Clock, Zap, TrendingUp, Pencil, Ban, Link2, ChevronUp, ChevronDown, Shuffle,
 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
@@ -76,11 +76,19 @@ export const AuctionsAdmin: React.FC = () => {
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [previewLinksSession, setPreviewLinksSession] = useState<AuctionSession | null>(null);
 
-  const { items, loading: itemsLoading, error: itemsError, addItem, removeItem, generateOrder, cancelItem, moveItem } = useAdminAuctionItems(selectedSessionId);
+  const { items, loading: itemsLoading, error: itemsError, addItem, removeItem, generateOrder, cancelItem, moveItem, shuffleItems } = useAdminAuctionItems(selectedSessionId);
 
   const handleMoveItem = async (id: string, direction: -1 | 1) => {
     const result = await moveItem(id, direction);
     if (!result.success) alert(`Impossible de changer l'ordre : ${result.error || 'erreur inconnue'}`);
+  };
+  const [shuffling, setShuffling] = useState(false);
+  const handleShuffleItems = async () => {
+    if (!window.confirm('Mélanger l\x27ordre des pièces de cette session ? Tous les membres verront ce nouvel ordre.')) return;
+    setShuffling(true);
+    const result = await shuffleItems();
+    setShuffling(false);
+    if (!result.success) alert(`Impossible de mélanger l'ordre : ${result.error || 'erreur inconnue'}`);
   };
   const [cancellingItem, setCancellingItem] = useState<AdminAuctionItem | null>(null);
   const countedItems = useMemo(() => items.filter((i) => i.status !== 'cancelled'), [items]);
@@ -276,13 +284,26 @@ export const AuctionsAdmin: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-sm font-medium text-gray-900">Pièces de "{selectedSession.title}" ({items.length})</p>
-                  <button
-                    onClick={() => setShowItemModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-xs font-medium"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Ajouter une pièce
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {items.length > 1 && (
+                      <button
+                        onClick={handleShuffleItems}
+                        disabled={shuffling}
+                        title="Mélange l'ordre d'affichage des pièces (même ordre pour tous les membres)"
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium disabled:opacity-50"
+                      >
+                        <Shuffle className="h-3.5 w-3.5" />
+                        {shuffling ? 'Mélange...' : 'Mélanger l\x27ordre'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowItemModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-xs font-medium"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Ajouter une pièce
+                    </button>
+                  </div>
                 </div>
 
                 {itemsError && (

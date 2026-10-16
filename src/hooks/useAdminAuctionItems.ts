@@ -237,5 +237,25 @@ export const useAdminAuctionItems = (sessionId: string | null) => {
     return { success: true };
   };
 
-  return { items, loading, error, refresh: fetchItems, addItem, removeItem, updateStartPrice, linkProduct, generateOrder, cancelItem, moveItem };
+  /** Mélange l'ordre d'affichage de tous les lots de la session (positions
+   * renumérotées 1..n) — même ordre pour tous les membres et l'aperçu. */
+  const shuffleItems = async (): Promise<{ success: boolean; error?: string }> => {
+    const shuffled = [...sortAuctionItems(items)];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setItems(shuffled.map((item, i) => ({ ...item, position: i + 1 })));
+    const results = await Promise.all(
+      shuffled.map((item, i) => supabase.from('auction_items').update({ position: i + 1 }).eq('id', item.id))
+    );
+    const failed = results.find((r) => r.error);
+    if (failed?.error) {
+      await fetchItems();
+      return { success: false, error: failed.error.message };
+    }
+    return { success: true };
+  };
+
+  return { items, loading, error, refresh: fetchItems, addItem, removeItem, updateStartPrice, linkProduct, generateOrder, cancelItem, moveItem, shuffleItems };
 };
