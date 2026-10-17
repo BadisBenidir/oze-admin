@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Trophy } from 'lucide-react';
+import { Trophy, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { supabase } from '../../../lib/supabase';
 import { useHideFigures } from '../../../hooks/useHideFigures';
@@ -203,6 +204,43 @@ export const TopBuyers: React.FC = () => {
   const buyersCount = buyers.filter((b) => b.orders > 0).length;
 
   const visible = expanded ? buyers : buyers.slice(0, TOP);
+
+  // Export de la liste affichée (filtres communauté + période appliqués),
+  // tous les membres — pas seulement le top 10.
+  const PERIOD_LABELS: Record<Period, string> = { all: 'depuis-le-lancement', year: 'cette-annee', month: 'ce-mois', '30d': '30-jours' };
+  const exportList = (format: 'xlsx' | 'csv') => {
+    const header = ['Rang', 'Membre', 'Email', 'Communauté', 'Achats', 'Articles', 'Total dépensé (€)', 'Dernier achat'];
+    const body = buyers.map((b, i) => [
+      i + 1,
+      b.name,
+      b.email || '',
+      b.community,
+      b.orders,
+      b.items,
+      Math.round(b.amount * 100) / 100,
+      b.lastPurchase ? new Date(b.lastPurchase).toLocaleDateString('fr-FR') : '',
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([header, ...body]);
+    ws['!cols'] = [{ wch: 6 }, { wch: 26 }, { wch: 32 }, { wch: 22 }, { wch: 8 }, { wch: 9 }, { wch: 16 }, { wch: 14 }];
+    const slug = (community === 'all' ? 'toutes-communautes' : community)
+      .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+    const fileBase = `acheteurs_${slug}_${PERIOD_LABELS[period]}`;
+    if (format === 'csv') {
+      // Point-virgule + BOM : ouverture directe dans Excel (version française).
+      const csv = XLSX.utils.sheet_to_csv(ws, { FS: ';' });
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${fileBase}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Acheteurs');
+    XLSX.writeFile(wb, `${fileBase}.xlsx`);
+  };
   const select = 'px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-gray-400';
 
   return (
@@ -225,6 +263,23 @@ export const TopBuyers: React.FC = () => {
               <option value="month">Ce mois-ci</option>
               <option value="30d">30 derniers jours</option>
             </select>
+            <button
+              type="button"
+              onClick={() => exportList('xlsx')}
+              disabled={buyers.length === 0}
+              title="Exporte la liste complète avec les filtres choisis"
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" /> Excel
+            </button>
+            <button
+              type="button"
+              onClick={() => exportList('csv')}
+              disabled={buyers.length === 0}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              CSV
+            </button>
           </div>
         </div>
       </CardHeader>
