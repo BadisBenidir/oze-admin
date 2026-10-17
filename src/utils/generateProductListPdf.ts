@@ -1,5 +1,6 @@
 import type { jsPDF as JsPDFType } from 'jspdf';
 import { COMPANY_ADDRESS, COMPANY_LEGAL_NAME, COMPANY_SIRET } from '../config/legal';
+import { importOrReload } from './reloadOnStaleChunk';
 
 /**
  * PDF de la liste des articles (export de « Liste des Produits ») : A4
@@ -80,7 +81,7 @@ const drawTableHeader = (doc: JsPDFType, y: number) => {
 };
 
 export const generateProductListPdf = async (data: ProductListPdfData): Promise<void> => {
-  const { jsPDF } = await import('jspdf');
+  const { jsPDF } = await importOrReload(() => import('jspdf'));
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
   const today = new Date().toLocaleDateString('fr-FR');
 

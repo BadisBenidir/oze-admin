@@ -7,6 +7,7 @@ import {
   COMPANY_VAT_NUMBER,
 } from '../config/legal';
 import { OZE_LOGO_BASE64, OZE_LOGO_ASPECT_RATIO } from '../assets/ozeLogoBase64';
+import { importOrReload } from './reloadOnStaleChunk';
 
 export interface InvoiceLineItem {
   description: string;
@@ -242,7 +243,7 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
  * pour ne pas alourdir le bundle principal (déjà une dépendance de ce repo,
  * voir ProductLabel.tsx). */
 export const generateInvoicePdf = async (data: InvoiceData): Promise<void> => {
-  const { jsPDF } = await import('jspdf');
+  const { jsPDF } = await importOrReload(() => import('jspdf'));
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   drawInvoicePage(doc, data);
   // Le numéro séquentiel (obligatoire, art. 242 nonies A du CGI) reste
@@ -261,7 +262,7 @@ export const generateInvoicePdf = async (data: InvoiceData): Promise<void> => {
  * usage comptable sans ajouter de dépendance.
  */
 export const generateInvoicesBulkPdf = async (invoices: InvoiceData[], filename: string): Promise<void> => {
-  const { jsPDF } = await import('jspdf');
+  const { jsPDF } = await importOrReload(() => import('jspdf'));
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   invoices.forEach((data, index) => {
     if (index > 0) doc.addPage();
