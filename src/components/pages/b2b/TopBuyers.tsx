@@ -34,7 +34,14 @@ interface BuyerRow {
   amount: number;
   orders: number;
   items: number;
-  lastPurchase: string;
+  lastPurchase: string | null;
+}
+
+interface Member {
+  profileId: string;
+  name: string;
+  email: string | null;
+  community: string;
 }
 
 const EUR = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -53,6 +60,8 @@ const personName = (p: { first_name: string | null; last_name: string | null; em
 
 export const TopBuyers: React.FC = () => {
   const [purchases, setPurchases] = useState<Purchase[] | null>(null);
+  // Tous les membres du portail, y compris ceux qui n'ont encore rien acheté.
+  const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [community, setCommunity] = useState('all');
   const [period, setPeriod] = useState<Period>('all');
@@ -61,7 +70,7 @@ export const TopBuyers: React.FC = () => {
 
   useEffect(() => {
     (async () => {
-      const [ordersRes, missionsRes, fulfillmentIds] = await Promise.all([
+      const [ordersRes, missionsRes, fulfillmentIds, contactsRes] = await Promise.all([
         supabase
           .from('orders')
           .select(
@@ -81,6 +90,9 @@ export const TopBuyers: React.FC = () => {
           .not('paid_at', 'is', null)
           .neq('status', 'cancelled'),
         fetchSourcingFulfillmentOrderIds(),
+        supabase
+          .from('reseller_contacts')
+          .select('profile_id, profile:profiles(first_name, last_name, email), reseller:resellers(company_name, account_type)'),
       ]);
       if (ordersRes.error || missionsRes.error) {
         setError(ordersRes.error?.message || missionsRes.error?.message || 'Erreur de chargement');
@@ -139,18 +151,34 @@ export const TopBuyers: React.FC = () => {
           date: m.paid_at,
         });
       }
+      setMembers(
+        ((contactsRes.data || []) as unknown as {
+          profile_id: string;
+          profile: { first_name: string | null; last_name: string | null; email: string | null } | null;
+          reseller: Reseller;
+        }[]).map((c) => ({
+          profileId: c.profile_id,
+          name: personName(c.profile),
+          email: c.profile?.email ?? null,
+          community: communityOf(c.reseller),
+        }))
+      );
       setPurchases(list);
     })();
   }, []);
 
   const communities = useMemo(
-    () => Array.from(new Set((purchases || []).map((p) => p.community))).sort((a, b) => a.localeCompare(b)),
-    [purchases]
+    () => Array.from(new Set([...members, ...(purchases || [])].map((p) => p.community))).sort((a, b) => a.localeCompare(b)),
+    [purchases, members]
   );
 
   const buyers = useMemo(() => {
     const since = periodStart(period);
     const byProfile = new Map<string, BuyerRow>();
+    for (const m of members) {
+      if (community !== 'all' && m.community !== community) continue;
+      byProfile.set(m.profileId, { ...m, amount: 0, orders: 0, items: 0, lastPurchase: null });
+    }
     for (const p of purchases || []) {
       if (community !== 'all' && p.community !== community) continue;
       if (new Date(p.date).getTime() < since) continue;
@@ -167,11 +195,12 @@ export const TopBuyers: React.FC = () => {
       row.amount += p.amount;
       row.orders += 1;
       row.items += p.items;
-      if (p.date > row.lastPurchase) row.lastPurchase = p.date;
+      if (!row.lastPurchase || p.date > row.lastPurchase) row.lastPurchase = p.date;
       byProfile.set(p.profileId, row);
     }
-    return Array.from(byProfile.values()).sort((a, b) => b.amount - a.amount);
-  }, [purchases, community, period]);
+    return Array.from(byProfile.values()).sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
+  }, [purchases, members, community, period]);
+  const buyersCount = buyers.filter((b) => b.orders > 0).length;
 
   const visible = expanded ? buyers : buyers.slice(0, TOP);
   const select = 'px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-gray-400';
@@ -205,7 +234,7 @@ export const TopBuyers: React.FC = () => {
         ) : purchases === null ? (
           <div className="m-4 h-40 rounded-lg bg-gray-50 animate-pulse" />
         ) : buyers.length === 0 ? (
-          <p className="p-6 text-center text-sm text-gray-500">Aucun achat pour ces filtres.</p>
+          <p className="p-6 text-center text-sm text-gray-500">Aucun membre pour ces filtres.</p>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -235,7 +264,7 @@ export const TopBuyers: React.FC = () => {
                       <td className="py-2.5 px-4 text-right text-sm tabular-nums text-gray-700">{b.orders}</td>
                       <td className="py-2.5 px-4 text-right text-sm tabular-nums text-gray-700">{b.items}</td>
                       <td className="py-2.5 px-4 text-right text-sm font-semibold tabular-nums text-gray-900">{show(EUR(b.amount))}</td>
-                      <td className="py-2.5 px-4 text-right text-xs text-gray-500">{new Date(b.lastPurchase).toLocaleDateString('fr-FR')}</td>
+                      <td className="py-2.5 px-4 text-right text-xs text-gray-500">{b.lastPurchase ? new Date(b.lastPurchase).toLocaleDateString('fr-FR') : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -247,7 +276,7 @@ export const TopBuyers: React.FC = () => {
                 onClick={() => setExpanded((v) => !v)}
                 className="w-full border-t border-gray-100 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               >
-                {expanded ? 'Afficher le top 10' : `Voir tous les acheteurs (${buyers.length})`}
+                {expanded ? 'Afficher le top 10' : `Voir tous les membres (${buyers.length} — dont ${buyersCount} acheteur${buyersCount > 1 ? 's' : ''})`}
               </button>
             )}
           </>
