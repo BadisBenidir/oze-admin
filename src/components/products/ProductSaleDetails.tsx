@@ -302,15 +302,15 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
             </div>
           )}
           {canJoinShipment && openShipments.length > 0 && (
-            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <div className="mt-3 min-w-0 overflow-hidden rounded-lg border border-amber-200 bg-amber-50 p-3">
               <p className="text-xs text-amber-900 mb-2">
                 Le client a déjà une demande de livraison en attente : ajoute cet article à son colis, sans nouvelle demande ni frais de port.
               </p>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex flex-col items-stretch gap-2 min-w-0">
                 <select
                   value={selectedShipmentId}
                   onChange={(e) => setSelectedShipmentId(e.target.value)}
-                  className="px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white"
+                  className="w-full min-w-0 max-w-full truncate px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white"
                 >
                   {openShipments.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -322,7 +322,7 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
                   type="button"
                   onClick={handleJoinShipment}
                   disabled={updatingFulfillment || !selectedShipmentId}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 text-sm font-medium"
+                  className="self-start flex items-center gap-1.5 px-3 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
                   <Truck className="h-4 w-4" />
                   {updatingFulfillment ? 'Ajout...' : 'Ajouter à cette demande'}
