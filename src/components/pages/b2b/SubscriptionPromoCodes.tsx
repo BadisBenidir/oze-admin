@@ -76,8 +76,26 @@ const EMPTY_FORM = {
   valid_until: '',
 };
 
-const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
-  const [form, setForm] = useState(EMPTY_FORM);
+/** Création, ou modification d'un code existant (editing) — même s'il est
+ * actif et déjà utilisé : les membres déjà inscrits gardent la remise de
+ * leur inscription (coupon Stripe propre à chaque jeu de conditions, voir
+ * ensureStripeCoupon) ; les nouvelles conditions valent pour les prochaines
+ * inscriptions. Le code lui-même n'est pas modifiable (suivi des paiements). */
+const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; editing?: ClubPromoCode | null; usedCount?: number }> = ({ onClose, onCreated, editing, usedCount = 0 }) => {
+  const [form, setForm] = useState(
+    editing
+      ? {
+          code: editing.code,
+          discount_type: editing.discount_type,
+          discount_value: String(Number(editing.discount_value)),
+          duration: editing.duration,
+          duration_months: String(editing.duration_months || 3),
+          plans: editing.plans,
+          max_uses: editing.max_uses ? String(editing.max_uses) : '',
+          valid_until: editing.valid_until ? editing.valid_until.slice(0, 10) : '',
+        }
+      : EMPTY_FORM
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,7 +104,7 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void }> 
     setError(null);
     const code = form.code.trim().toUpperCase();
     const value = Number(form.discount_value.replace(',', '.'));
-    if (!/^[A-Z0-9_-]{3,30}$/.test(code)) return setError('Code : 3 à 30 caractères, lettres, chiffres, - ou _');
+    if (!editing && !/^[A-Z0-9_-]{3,30}$/.test(code)) return setError('Code : 3 à 30 caractères, lettres, chiffres, - ou _');
     if (!value || value <= 0) return setError('Indique le montant de la remise');
     if (form.discount_type === 'percentage' && value > 100) return setError('Un pourcentage ne peut pas dépasser 100 %');
     if (form.plans.length === 0) return setError('Choisis au moins un pass');
@@ -94,6 +112,28 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void }> 
     if (form.duration === 'repeating' && (!months || months < 1 || months > 36)) return setError('Durée : entre 1 et 36 mois');
 
     setSaving(true);
+    if (editing) {
+      const { error: updateError } = await supabase
+        .from('club_promo_codes')
+        .update({
+          discount_type: form.discount_type,
+          discount_value: value,
+          duration: form.duration,
+          duration_months: form.duration === 'repeating' ? months : null,
+          plans: form.plans,
+          max_uses: form.max_uses ? Number(form.max_uses) : null,
+          valid_until: form.valid_until ? new Date(`${form.valid_until}T23:59:59`).toISOString() : null,
+        })
+        .eq('id', editing.id);
+      setSaving(false);
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+      onCreated();
+      onClose();
+      return;
+    }
     const { data: userData } = await supabase.auth.getUser();
     const { error: insertError } = await supabase.from('club_promo_codes').insert({
       code,
@@ -123,7 +163,7 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void }> 
       <div className="flex min-h-full items-center justify-center p-4">
         <form onSubmit={submit} className="relative w-full max-w-lg rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between border-b border-gray-100 p-5">
-            <h3 className="text-base font-semibold text-gray-900">Nouveau code promo Club</h3>
+            <h3 className="text-base font-semibold text-gray-900">{editing ? `Modifier le code ${editing.code}` : 'Nouveau code promo Club'}</h3>
             <button type="button" onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:text-gray-600">
               <X className="h-5 w-5" />
             </button>
@@ -135,8 +175,14 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void }> 
                 value={form.code}
                 onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
                 placeholder="BIENVENUE20"
-                className={`${input} font-mono uppercase`}
+                disabled={Boolean(editing)}
+                className={`${input} font-mono uppercase disabled:bg-gray-50 disabled:text-gray-500`}
               />
+              {editing && usedCount > 0 && (
+                <p className="mt-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs text-amber-900">
+                  Déjà utilisé par {usedCount} membre{usedCount > 1 ? 's' : ''} : {usedCount > 1 ? 'ils gardent' : 'il garde'} la remise de leur inscription. Les nouvelles conditions s'appliquent aux prochaines inscriptions.
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -238,7 +284,7 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void }> 
               disabled={saving}
               className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
-              {saving ? 'Création…' : 'Créer le code'}
+              {saving ? (editing ? 'Enregistrement…' : 'Création…') : editing ? 'Enregistrer' : 'Créer le code'}
             </button>
           </div>
         </form>
@@ -254,6 +300,7 @@ export const SubscriptionPromoCodes: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingCode, setEditingCode] = useState<ClubPromoCode | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -467,6 +514,12 @@ export const SubscriptionPromoCodes: React.FC = () => {
                           <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="inline-flex items-center gap-1">
                               <button
+                                onClick={() => setEditingCode(c)}
+                                className="rounded-lg px-2 py-1 text-xs text-gray-600 hover:bg-gray-100"
+                              >
+                                Modifier
+                              </button>
+                              <button
                                 onClick={() => toggleStatus(c)}
                                 disabled={busyId === c.id}
                                 className="rounded-lg px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 disabled:opacity-50"
@@ -534,6 +587,15 @@ export const SubscriptionPromoCodes: React.FC = () => {
       </p>
 
       {showCreate && <CreateCodeModal onClose={() => setShowCreate(false)} onCreated={load} />}
+      {editingCode && (
+        <CreateCodeModal
+          key={editingCode.id}
+          editing={editingCode}
+          usedCount={statsByCode.get(editingCode.code.toUpperCase())?.members.length ?? 0}
+          onClose={() => setEditingCode(null)}
+          onCreated={load}
+        />
+      )}
     </div>
   );
 };
