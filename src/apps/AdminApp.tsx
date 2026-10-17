@@ -25,14 +25,18 @@ function AdminApp() {
   // « Équipe » réservée au propriétaire ; chiffres masqués d'office sans le
   // droit « voir les chiffres ».
   const staffPages = profile?.staff?.pages;
+  const profileLoaded = Boolean(profile);
   const visibleItems = useMemo(() => {
-    if (isOwner) return staticNavigationItems;
+    // Profil pas encore chargé : menu complet, pour que la page de l'URL soit
+    // reconnue au rechargement (sinon menu vide → retour au Dashboard). Les
+    // droits d'un employé s'appliquent dès que son profil est connu.
+    if (isOwner || !profileLoaded) return staticNavigationItems;
     if (!staffPages) return [];
     return staticNavigationItems
       .filter((item) => item.id !== 'team')
       .map((item) => ({ ...item, subItems: item.subItems?.filter((sub) => staffPages.includes(`${item.id}:${sub.id}`)) }))
       .filter((item) => (item.subItems?.length ?? 0) > 0);
-  }, [isOwner, staffPages]);
+  }, [isOwner, staffPages, profileLoaded]);
   useEffect(() => {
     setForcedHideFigures({
       costs: Boolean(profile?.staff && !profile.staff.show_figures),
