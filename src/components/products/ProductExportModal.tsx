@@ -399,7 +399,10 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
             title: r.name,
             condition: formatCondition(r.condition),
             status: STATUS_LABELS[r.status] || r.status,
+            channel: r.sale_channel || '',
             purchasePrice: r.purchase_price,
+            firstPrice: r.first_price ?? null,
+            auctionStartPrice: r.auction_start_price ?? null,
             salePrice: r.sale_price,
             soldPrice: r.sold_price ?? null,
             soldViaSourcing: Boolean(r.sold_via_sourcing),
@@ -560,7 +563,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
             <p className="text-xs text-gray-500">
               Colonnes : date de création, code produit, références OZË / B2B / fournisseur, plateforme, marque, catégorie, titre,
               état, statut, canal de vente, prix d'achat, premier prix affiché, prix de vente, prix de départ et prix adjugé d'enchère, prix vendu,
-              ancien prix, marge, couleurs, matière, n° de série, code-barres (Excel / CSV).
+              ancien prix, marge, couleurs, matière, n° de série, code-barres (Excel / CSV ; le PDF reprend les principales).
             </p>
 
             {error && (

@@ -17,7 +17,13 @@ export interface ProductListPdfRow {
   title: string;
   condition: string;
   status: string;
+  /** Canal de vente (enchère B2B, sourcing, drop, vente directe…). */
+  channel: string;
   purchasePrice: number | null;
+  /** Premier prix affiché (avant baisse / prix d'origine / départ d'enchère). */
+  firstPrice: number | null;
+  /** Prix de départ, si l'article est passé en enchère B2B. */
+  auctionStartPrice: number | null;
   salePrice: number | null;
   /** Prix réellement encaissé (vendu), null si pas vendu. */
   soldPrice: number | null;
@@ -39,18 +45,22 @@ const HEADER_FILL: [number, number, number] = [31, 41, 55];
 /** Prix vendu des pièces de sourcing sur mesure (prix revendeur de la mission). */
 const SOURCING_COLOR: [number, number, number] = [217, 119, 6];
 
+// Largeur totale = 277 mm (A4 paysage moins les marges).
 const COLUMNS: { label: string; width: number; align?: 'right' | 'center' }[] = [
-  { label: 'N°', width: 10, align: 'center' },
-  { label: 'Date', width: 18, align: 'center' },
-  { label: 'Réf. fournisseur', width: 26 },
-  { label: 'Plateforme', width: 18 },
-  { label: 'Marque', width: 24 },
-  { label: 'Titre', width: 65 },
-  { label: 'État', width: 16, align: 'center' },
-  { label: 'Statut', width: 28 },
-  { label: "Prix d'achat", width: 24, align: 'right' },
-  { label: 'Prix de vente', width: 24, align: 'right' },
-  { label: 'Prix vendu', width: 24, align: 'right' },
+  { label: 'N°', width: 8, align: 'center' },
+  { label: 'Date', width: 16, align: 'center' },
+  { label: 'Réf. fournisseur', width: 22 },
+  { label: 'Plateforme', width: 15 },
+  { label: 'Marque', width: 20 },
+  { label: 'Titre', width: 46 },
+  { label: 'État', width: 11, align: 'center' },
+  { label: 'Statut', width: 22 },
+  { label: 'Canal', width: 24 },
+  { label: "Prix d'achat", width: 19, align: 'right' },
+  { label: '1er prix', width: 19, align: 'right' },
+  { label: 'Prix de vente', width: 19, align: 'right' },
+  { label: 'Départ ench.', width: 17, align: 'right' },
+  { label: 'Prix vendu', width: 19, align: 'right' },
 ];
 
 /** Montant « 1 234,50 € » sans les espaces insécables que jsPDF n'affiche pas. */
@@ -189,8 +199,11 @@ export const generateProductListPdf = async (data: ProductListPdfData): Promise<
       row.title,
       row.condition,
       row.status,
+      row.channel || '—',
       row.purchasePrice != null ? eur(row.purchasePrice) : '—',
+      row.firstPrice != null ? eur(row.firstPrice) : '—',
       row.salePrice != null ? eur(row.salePrice) : '—',
+      row.auctionStartPrice != null ? eur(row.auctionStartPrice) : '—',
       row.soldPrice != null ? eur(row.soldPrice) : '—',
     ];
     doc.setFont('helvetica', 'normal');
