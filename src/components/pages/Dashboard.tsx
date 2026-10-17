@@ -22,7 +22,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
 
   const [stats, setStats] = useState<any>(null);
   // « Masquer les chiffres » (interrupteur global dans l'en-tête).
-  const { hidden: hideFigures, show } = useHideFigures();
+  const { hidden: hideFigures, show } = useHideFigures('revenue');
   // Montants glissés dans les textes d'activité (« … 80,48 € … »).
   const maskAmounts = (text: string) => (hideFigures ? text.replace(/d[ds.,]*s?€/g, `${HIDDEN_FIGURE} €`) : text);
   const [loading, setLoading] = useState(true);

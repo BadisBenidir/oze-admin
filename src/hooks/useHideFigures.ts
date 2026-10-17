@@ -2,28 +2,36 @@ import { useSyncExternalStore } from 'react';
 
 /**
  * « Masquer les chiffres » de l'admin (écran partagé, en public) : un seul
- * réglage pour toutes les pages — CA et compteurs du Dashboard, prix
- * d'achat, coûts et marges des écrans produits / B2B. Interrupteur dans
- * l'en-tête (layHeader.tsx). Préférence propre à ce navigateur (stockage
- * local, parfois indisponible : le masquage dure alors la session),
- * synchronisée entre les composants et les onglets.
+ * interrupteur pour toutes les pages (en-tête, layHeader.tsx). Préférence
+ * propre à ce navigateur (stockage local, parfois indisponible : le masquage
+ * dure alors la session), synchronisée entre les composants et les onglets.
+ *
+ * Deux familles de chiffres, pour les droits des employés (0208/0209) :
+ *   - 'costs'   : prix d'achat, coûts, marges (défaut) ;
+ *   - 'revenue' : chiffre d'affaires (Dashboard, montants des ventes, CA B2B).
+ * Un employé sans le droit correspondant a cette famille masquée d'office.
  */
+
+export type FigureKind = 'costs' | 'revenue';
 
 const KEY = 'oze:dashboard-hide-figures';
 const EVENT = 'oze:hide-figures-change';
 export const HIDDEN_FIGURE = '••••';
 
 let memoryValue = false;
-// Employé sans le droit « voir les chiffres » (0208) : masquage imposé.
-let forced = false;
+const forced: Record<FigureKind, boolean> = { costs: false, revenue: false };
 
-const read = (): boolean => {
-  if (forced) return true;
+const readManual = (): boolean => {
   try {
     return localStorage.getItem(KEY) === '1';
   } catch {
     return memoryValue;
   }
+};
+
+const readers: Record<FigureKind, () => boolean> = {
+  costs: () => forced.costs || readManual(),
+  revenue: () => forced.revenue || readManual(),
 };
 
 const subscribe = (callback: () => void) => {
@@ -38,10 +46,16 @@ const subscribe = (callback: () => void) => {
   };
 };
 
-export const setForcedHideFigures = (value: boolean) => {
-  if (forced === value) return;
-  forced = value;
-  window.dispatchEvent(new Event(EVENT));
+/** Masquage imposé par les droits de l'employé connecté (AdminApp.tsx). */
+export const setForcedHideFigures = (value: Partial<Record<FigureKind, boolean>>) => {
+  let changed = false;
+  for (const kind of Object.keys(value) as FigureKind[]) {
+    if (forced[kind] !== Boolean(value[kind])) {
+      forced[kind] = Boolean(value[kind]);
+      changed = true;
+    }
+  }
+  if (changed) window.dispatchEvent(new Event(EVENT));
 };
 
 export const setHideFigures = (hidden: boolean) => {
@@ -54,9 +68,12 @@ export const setHideFigures = (hidden: boolean) => {
   window.dispatchEvent(new Event(EVENT));
 };
 
-export const useHideFigures = () => {
-  const hidden = useSyncExternalStore(subscribe, read, () => false);
+export const useHideFigures = (kind: FigureKind = 'costs') => {
+  const hidden = useSyncExternalStore(subscribe, readers[kind], () => false);
+  const manual = useSyncExternalStore(subscribe, readManual, () => false);
   /** Valeur à afficher, ou « •••• » quand les chiffres sont masqués. */
   const show = <T,>(value: T): T | string => (hidden ? HIDDEN_FIGURE : value);
-  return { hidden, show, locked: forced, toggle: () => (forced ? undefined : setHideFigures(!hidden)) };
+  // Interrupteur inutile quand tout est déjà masqué d'office.
+  const locked = forced.costs && forced.revenue;
+  return { hidden, manualHidden: manual, show, locked, toggle: () => (locked ? undefined : setHideFigures(!manual)) };
 };

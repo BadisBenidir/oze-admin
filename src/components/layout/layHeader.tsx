@@ -11,7 +11,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ activeTab, onMenuToggle }) => {
   const { profile, signOut } = useAdminAuth()
   const [showUserMenu, setShowUserMenu] = useState(false)
-  const { hidden: figuresHidden, toggle: toggleFigures, locked: figuresLocked } = useHideFigures()
+  const { manualHidden: figuresHidden, toggle: toggleFigures, locked: figuresLocked } = useHideFigures()
   const getPageTitle = (tab: string) => {
     const titles = {
       dashboard: 'Dashboard',

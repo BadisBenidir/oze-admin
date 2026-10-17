@@ -7,6 +7,7 @@ import { useHideFigures } from '../../hooks/useHideFigures';
 
 export const B2BRevenue: React.FC = () => {
   const { show: showFigure } = useHideFigures();
+  const { show: showRevenue } = useHideFigures('revenue');
   const { isAdmin } = useAdminAuth();
   const { revenue, loading, error, refresh } = useB2BRevenue(isAdmin);
 
@@ -48,7 +49,7 @@ export const B2BRevenue: React.FC = () => {
                 <Banknote className="h-4 w-4 text-gray-400" />
                 <p className="text-xs text-gray-500">Chiffre d'affaires total</p>
               </div>
-              <p className="text-xl font-semibold text-gray-900">{totalRevenue.toFixed(0)} €</p>
+              <p className="text-xl font-semibold text-gray-900">{showRevenue(totalRevenue.toFixed(0))} €</p>
             </CardContent>
           </Card>
           <Card>
@@ -116,7 +117,7 @@ export const B2BRevenue: React.FC = () => {
                         <td className="py-4 px-4 md:px-6 text-sm font-medium text-gray-900">{r.company_name}</td>
                         <td className="py-4 px-4 md:px-6 text-sm text-gray-600">{r.orders_count}</td>
                         <td className="py-4 px-4 md:px-6 text-sm text-gray-600">{showFigure(r.total_purchase_price.toFixed(0))} €</td>
-                        <td className="py-4 px-4 md:px-6 text-sm font-semibold text-gray-900">{r.total_revenue.toFixed(0)} €</td>
+                        <td className="py-4 px-4 md:px-6 text-sm font-semibold text-gray-900">{showRevenue(r.total_revenue.toFixed(0))} €</td>
                         <td className="py-4 px-4 md:px-6 text-sm font-semibold text-green-600">{showFigure(r.total_profit.toFixed(0))} €</td>
                       </tr>
                     ))

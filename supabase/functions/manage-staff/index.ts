@@ -92,6 +92,7 @@ Deno.serve(async (req: Request) => {
         pages: cleanList(body.pages),
         actions: cleanList(body.actions, ACTIONS),
         show_figures: Boolean(body.show_figures),
+        show_revenue: Boolean(body.show_revenue),
         active: true,
         created_by: user.id,
       });
@@ -119,6 +120,7 @@ Deno.serve(async (req: Request) => {
           pages: cleanList(body.pages),
           actions: cleanList(body.actions, ACTIONS),
           show_figures: Boolean(body.show_figures),
+          show_revenue: Boolean(body.show_revenue),
           active,
           updated_at: new Date().toISOString(),
         })

@@ -53,7 +53,7 @@ export const useAdminAuth = () => {
         // Employé (0208) : accès seulement si son compte est actif.
         const { data: perms } = await supabase
           .from('staff_permissions')
-          .select('pages, actions, show_figures, active')
+          .select('*')
           .eq('profile_id', userId)
           .maybeSingle()
         if (!perms?.active) return null

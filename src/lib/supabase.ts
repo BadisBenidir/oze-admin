@@ -42,7 +42,10 @@ export interface StaffPermissions {
   /** Pages visibles, ids 'onglet:sous-onglet' (config/navigation.ts). */
   pages: string[]
   actions: StaffAction[]
+  /** Prix d'achat, coûts et marges. */
   show_figures: boolean
+  /** Chiffre d'affaires (0209) — absent avant la migration. */
+  show_revenue?: boolean
   active: boolean
 }
 

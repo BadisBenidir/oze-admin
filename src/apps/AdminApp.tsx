@@ -34,7 +34,10 @@ function AdminApp() {
       .filter((item) => (item.subItems?.length ?? 0) > 0);
   }, [isOwner, staffPages]);
   useEffect(() => {
-    setForcedHideFigures(Boolean(profile?.staff && !profile.staff.show_figures));
+    setForcedHideFigures({
+      costs: Boolean(profile?.staff && !profile.staff.show_figures),
+      revenue: Boolean(profile?.staff && !profile.staff.show_revenue),
+    });
   }, [profile]);
 
   // Injecte dynamiquement le nombre de portefeuilles offerts en attente

@@ -45,6 +45,7 @@ interface FormState {
   pages: string[];
   actions: StaffAction[];
   show_figures: boolean;
+  show_revenue: boolean;
   active: boolean;
 }
 
@@ -58,6 +59,7 @@ const StaffModal: React.FC<{ member: StaffMember | null; onClose: () => void; on
     pages: perms?.pages || [],
     actions: perms?.actions || [],
     show_figures: perms?.show_figures ?? false,
+    show_revenue: perms?.show_revenue ?? false,
     active: perms?.active ?? true,
   });
   const [saving, setSaving] = useState(false);
@@ -88,6 +90,7 @@ const StaffModal: React.FC<{ member: StaffMember | null; onClose: () => void; on
       pages: form.pages,
       actions: form.actions,
       show_figures: form.show_figures,
+      show_revenue: form.show_revenue,
     };
     const { error: fnError } = await invokeEdgeFunction('manage-staff', member
       ? { action: 'update', profile_id: member.id, ...base, active: form.active }
@@ -205,8 +208,20 @@ const StaffModal: React.FC<{ member: StaffMember | null; onClose: () => void; on
                     className="mt-0.5 h-4 w-4 accent-gray-900"
                   />
                   <span>
-                    Voir les chiffres
-                    <span className="block text-xs text-gray-500">CA, prix d'achat, marges — sinon « Masquer les chiffres » lui est imposé</span>
+                    Voir les prix d'achat et les marges
+                    <span className="block text-xs text-gray-500">Prix d'achat, coûts du sourcing, marges — sinon masqués (••••)</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={form.show_revenue}
+                    onChange={() => setForm({ ...form, show_revenue: !form.show_revenue })}
+                    className="mt-0.5 h-4 w-4 accent-gray-900"
+                  />
+                  <span>
+                    Voir le chiffre d'affaires
+                    <span className="block text-xs text-gray-500">CA du Dashboard, montants des ventes, CA B2B — sinon masqués (••••)</span>
                   </span>
                 </label>
               </div>
@@ -252,7 +267,7 @@ export const StaffManagement: React.FC = () => {
     setLoading(true);
     const { data, error: fetchError } = await supabase
       .from('profiles')
-      .select('id, email, first_name, last_name, created_at, staff_permissions!staff_permissions_profile_id_fkey(pages, actions, show_figures, active)')
+      .select('id, email, first_name, last_name, created_at, staff_permissions!staff_permissions_profile_id_fkey(*)')
       .eq('role', 'staff')
       .order('created_at', { ascending: true });
     if (fetchError) setError(fetchError.message);
@@ -328,7 +343,8 @@ export const StaffManagement: React.FC = () => {
                       <p className="text-xs text-gray-400">
                         {[
                           ...ACTIONS.filter((a) => perms?.actions.includes(a.id)).map((a) => a.label),
-                          perms?.show_figures ? 'Voit les chiffres' : 'Chiffres masqués',
+                          perms?.show_figures ? 'Voit les prix d\x27achat' : 'Prix d\x27achat masqués',
+                          perms?.show_revenue ? 'Voit le CA' : 'CA masqué',
                         ].join(' · ')}
                       </p>
                     </div>
