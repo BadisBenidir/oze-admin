@@ -22,7 +22,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
 
   const [stats, setStats] = useState<any>(null);
   // « Masquer les chiffres » (interrupteur global dans l'en-tête).
-  const { hidden: hideFigures, show } = useHideFigures('revenue');
+  // CA total : masqué pour un employé sans ce droit ; montants unitaires et
+  // compteurs : seulement via l'interrupteur « Masquer les chiffres ».
+  const { show: showRevenue } = useHideFigures('revenue');
+  const { hidden: hideFigures, show } = useHideFigures('detail');
   // Montants glissés dans les textes d'activité (« … 80,48 € … »).
   const maskAmounts = (text: string) => (hideFigures ? text.replace(/d[ds.,]*s?€/g, `${HIDDEN_FIGURE} €`) : text);
   const [loading, setLoading] = useState(true);
@@ -133,7 +136,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                   <p className="text-2xl font-bold text-gray-900">12,483</p>
                   <div className="flex items-center mt-2">
                     <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                    <span className="text-sm text-green-600">{show('+12.5%')}</span>
+                    <span className="text-sm text-green-600">{showRevenue('+12.5%')}</span>
                   </div>
                 </div>
                 <div className="h-12 w-12 bg-purple-50 rounded-lg flex items-center justify-center">
@@ -242,10 +245,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Chiffre d'Affaires</p>
-                <p className="text-xl md:text-2xl font-bold text-gray-900">{show(stats?.total_revenue?.toLocaleString())} €</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">{showRevenue(stats?.total_revenue?.toLocaleString())} €</p>
                 <div className="flex items-center mt-2">
                   <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-sm text-green-600">{show('+12.5%')}</span>
+                  <span className="text-sm text-green-600">{showRevenue('+12.5%')}</span>
                 </div>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-green-50 rounded-lg flex items-center justify-center">

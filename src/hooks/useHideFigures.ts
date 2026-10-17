@@ -6,20 +6,22 @@ import { useSyncExternalStore } from 'react';
  * propre à ce navigateur (stockage local, parfois indisponible : le masquage
  * dure alors la session), synchronisée entre les composants et les onglets.
  *
- * Deux familles de chiffres, pour les droits des employés (0208/0209) :
+ * Trois familles de chiffres, pour les droits des employés (0208/0209) :
  *   - 'costs'   : prix d'achat, coûts, marges (défaut) ;
- *   - 'revenue' : chiffre d'affaires (Dashboard, montants des ventes, CA B2B).
+ *   - 'revenue' : chiffre d'affaires TOTAL (carte CA du Dashboard, CA B2B) ;
+ *   - 'detail'  : montants unitaires (une vente, un rechargement…) — jamais
+ *                 imposé à un employé, masqué seulement par l'interrupteur.
  * Un employé sans le droit correspondant a cette famille masquée d'office.
  */
 
-export type FigureKind = 'costs' | 'revenue';
+export type FigureKind = 'costs' | 'revenue' | 'detail';
 
 const KEY = 'oze:dashboard-hide-figures';
 const EVENT = 'oze:hide-figures-change';
 export const HIDDEN_FIGURE = '••••';
 
 let memoryValue = false;
-const forced: Record<FigureKind, boolean> = { costs: false, revenue: false };
+const forced: Record<FigureKind, boolean> = { costs: false, revenue: false, detail: false };
 
 const readManual = (): boolean => {
   try {
@@ -32,6 +34,7 @@ const readManual = (): boolean => {
 const readers: Record<FigureKind, () => boolean> = {
   costs: () => forced.costs || readManual(),
   revenue: () => forced.revenue || readManual(),
+  detail: () => readManual(),
 };
 
 const subscribe = (callback: () => void) => {

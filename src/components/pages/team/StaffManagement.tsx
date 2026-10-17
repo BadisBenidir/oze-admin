@@ -221,7 +221,7 @@ const StaffModal: React.FC<{ member: StaffMember | null; onClose: () => void; on
                   />
                   <span>
                     Voir le chiffre d'affaires
-                    <span className="block text-xs text-gray-500">CA du Dashboard, montants des ventes, CA B2B — sinon masqués (••••)</span>
+                    <span className="block text-xs text-gray-500">CA total du Dashboard et de la page CA B2B — les montants de chaque vente restent visibles</span>
                   </span>
                 </label>
               </div>
