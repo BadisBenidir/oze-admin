@@ -6,6 +6,7 @@ import { AccountingKpiCard } from './accounting/AccountingKpiCard';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useB2BTraffic } from '../../hooks/useB2BTraffic';
 import { MemberGrowthChart } from './b2b/MemberGrowthChart';
+import { TopBuyers } from './b2b/TopBuyers';
 
 /** Formate "depuis Xmin"/"depuis Xh" à partir d'un ISO online_at — recalculé
  * à chaque rendu plutôt qu'un vrai minuteur, suffisant pour un dashboard
@@ -164,6 +165,8 @@ export const B2BTraffic: React.FC = () => {
       </Card>
 
       <MemberGrowthChart />
+
+      <TopBuyers />
     </div>
   );
 };
