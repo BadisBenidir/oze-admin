@@ -15,6 +15,7 @@
 // Déploiement : `supabase functions deploy delete-reseller-contact`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { hasAdminAccess } from '../_shared/adminAccess.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -93,7 +94,7 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single();
 
-    const isAdmin = callerProfile?.role === 'admin';
+    const isAdmin = await hasAdminAccess(callerClient, user.id, 'accounts');
 
     let isPrimaryOfSameReseller = false;
     if (!isAdmin) {

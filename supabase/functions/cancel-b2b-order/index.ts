@@ -10,6 +10,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
+import { hasAdminAccess } from '../_shared/adminAccess.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,7 +42,7 @@ Deno.serve(async (req: Request) => {
       .select('role')
       .eq('id', user.id)
       .maybeSingle();
-    if (callerProfile?.role !== 'admin') {
+    if (!(await hasAdminAccess(callerClient, user.id, 'refunds'))) {
       return json({ error: 'Action réservée aux administrateurs' }, 403);
     }
 

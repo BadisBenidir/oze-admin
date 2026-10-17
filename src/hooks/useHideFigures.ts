@@ -14,8 +14,11 @@ const EVENT = 'oze:hide-figures-change';
 export const HIDDEN_FIGURE = '••••';
 
 let memoryValue = false;
+// Employé sans le droit « voir les chiffres » (0208) : masquage imposé.
+let forced = false;
 
 const read = (): boolean => {
+  if (forced) return true;
   try {
     return localStorage.getItem(KEY) === '1';
   } catch {
@@ -35,6 +38,12 @@ const subscribe = (callback: () => void) => {
   };
 };
 
+export const setForcedHideFigures = (value: boolean) => {
+  if (forced === value) return;
+  forced = value;
+  window.dispatchEvent(new Event(EVENT));
+};
+
 export const setHideFigures = (hidden: boolean) => {
   memoryValue = hidden;
   try {
@@ -49,5 +58,5 @@ export const useHideFigures = () => {
   const hidden = useSyncExternalStore(subscribe, read, () => false);
   /** Valeur à afficher, ou « •••• » quand les chiffres sont masqués. */
   const show = <T,>(value: T): T | string => (hidden ? HIDDEN_FIGURE : value);
-  return { hidden, show, toggle: () => setHideFigures(!hidden) };
+  return { hidden, show, locked: forced, toggle: () => (forced ? undefined : setHideFigures(!hidden)) };
 };

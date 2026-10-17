@@ -14,6 +14,7 @@
 // Déploiement : `supabase functions deploy qonto-attachment-upload`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { hasAdminAccess } from '../_shared/adminAccess.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,7 +44,7 @@ Deno.serve(async (req: Request) => {
     if (userError || !user) return json({ error: 'Non authentifié' }, 401);
 
     const { data: callerProfile } = await callerClient.from('profiles').select('role').eq('id', user.id).maybeSingle();
-    if (callerProfile?.role !== 'admin') {
+    if (!(await hasAdminAccess(callerClient, user.id, 'invoicing'))) {
       return json({ error: 'Accès refusé : réservé aux administrateurs' }, 403);
     }
 

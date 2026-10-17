@@ -155,7 +155,8 @@ function App() {
     return <ResellerApp />;
   }
 
-  if (role === 'admin') {
+  // Propriétaire (admin) ou employé (staff, 0208 : pages et actions selon ses droits).
+  if (role === 'admin' || role === 'staff') {
     return <AdminApp />;
   }
 

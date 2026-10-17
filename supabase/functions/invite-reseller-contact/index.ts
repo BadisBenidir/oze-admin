@@ -6,6 +6,7 @@
 // Déploiement : `supabase functions deploy invite-reseller-contact`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { hasAdminAccess } from '../_shared/adminAccess.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -64,7 +65,7 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single();
 
-    const isAdmin = callerProfile?.role === 'admin';
+    const isAdmin = await hasAdminAccess(callerClient, user.id, 'accounts');
 
     // Un admin OZË peut créer un contact pour n'importe quel revendeur. Un
     // contact "principal" (is_primary) peut créer des comptes UNIQUEMENT
@@ -130,8 +131,8 @@ Deno.serve(async (req: Request) => {
         .eq('id', existingUser.id)
         .maybeSingle();
 
-      // Compte administrateur : jamais touché, sous aucun prétexte.
-      if (existingProfile?.role === 'admin') {
+      // Compte administrateur ou employé : jamais touché, sous aucun prétexte.
+      if (existingProfile?.role === 'admin' || existingProfile?.role === 'staff') {
         return new Response(JSON.stringify({ error: 'Cet email est déjà utilisé par un compte administrateur. Utilise une autre adresse email.' }), {
           status: 409,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -31,6 +31,7 @@ import {
   Radio,
   BadgeCheck,
   TrendingDown,
+  UserCog,
 } from 'lucide-react';
 import { MenuItem } from '../types';
 
@@ -130,6 +131,17 @@ export const navigationItems: MenuItem[] = [
     // attend toujours au moins un subItems[0]), même pattern que 'accounting'.
     subItems: [
       { id: 'overview', label: 'Statistiques B2B', path: '/statistiques-b2b/vue-ensemble', icon: Radio },
+    ]
+  },
+  {
+    // Comptes employés (0208) — visible par le propriétaire uniquement
+    // (filtré dans AdminApp.tsx), jamais attribuable à un employé.
+    id: 'team',
+    label: 'Équipe',
+    icon: UserCog,
+    path: '/equipe',
+    subItems: [
+      { id: 'staff', label: 'Employés', path: '/equipe/employes', icon: UserCog },
     ]
   },
 ];

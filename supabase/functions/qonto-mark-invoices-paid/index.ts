@@ -14,6 +14,7 @@
 // Déploiement : `supabase functions deploy qonto-mark-invoices-paid`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { hasAdminAccess } from '../_shared/adminAccess.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -52,7 +53,7 @@ Deno.serve(async (req: Request) => {
     const { data: { user } } = await callerClient.auth.getUser();
     if (!user) return json({ error: 'Non authentifié' }, 401);
     const { data: callerProfile } = await callerClient.from('profiles').select('role').eq('id', user.id).maybeSingle();
-    if (callerProfile?.role !== 'admin') return json({ error: 'Accès refusé : réservé aux administrateurs' }, 403);
+    if (!(await hasAdminAccess(callerClient, user.id, 'invoicing'))) return json({ error: 'Accès refusé : réservé aux administrateurs' }, 403);
 
     const secretKey = Deno.env.get('QONTO_SECRET_KEY');
     const orgSlug = Deno.env.get('QONTO_ORGANIZATION_SLUG');

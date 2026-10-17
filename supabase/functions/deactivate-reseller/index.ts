@@ -24,6 +24,7 @@
 // Déploiement : `supabase functions deploy deactivate-reseller`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { hasAdminAccess } from '../_shared/adminAccess.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -71,7 +72,7 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single();
 
-    if (callerProfile?.role !== 'admin') {
+    if (!(await hasAdminAccess(callerClient, user.id, 'accounts'))) {
       return new Response(JSON.stringify({ error: 'Accès refusé : réservé aux administrateurs OZË' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

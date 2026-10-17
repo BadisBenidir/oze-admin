@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { User, Session } from '@supabase/supabase-js'
-import { supabase, AdminProfile } from '../lib/supabase'
+import { supabase, AdminProfile, StaffPermissions, StaffAction } from '../lib/supabase'
 
 interface AdminAuthState {
   user: User | null
@@ -49,6 +49,15 @@ export const useAdminAuth = () => {
       if (data && data.role === 'admin') {
         console.log('Profil admin confirmé')
         return data as AdminProfile
+      } else if (data && data.role === 'staff') {
+        // Employé (0208) : accès seulement si son compte est actif.
+        const { data: perms } = await supabase
+          .from('staff_permissions')
+          .select('pages, actions, show_figures, active')
+          .eq('profile_id', userId)
+          .maybeSingle()
+        if (!perms?.active) return null
+        return { ...(data as AdminProfile), staff: perms as StaffPermissions }
       } else {
         console.log('Profil trouvé mais pas admin. Rôle:', data?.role)
         return null
@@ -213,8 +222,17 @@ export const useAdminAuth = () => {
     }
   }, [])
 
+  // Propriétaire : tout. Employé : pages et actions cochées par le propriétaire.
+  const isOwner = authState.profile?.role === 'admin'
+  const can = (action: StaffAction) => isOwner || Boolean(authState.profile?.staff?.actions.includes(action))
+  const canSeePage = (tab: string, subTab?: string) =>
+    isOwner || Boolean(authState.profile?.staff?.pages.some((p) => p === `${tab}:${subTab}` || (!subTab && p.startsWith(`${tab}:`))))
+
   return {
     ...authState,
+    isOwner,
+    can,
+    canSeePage,
     signIn,
     signOut
   }

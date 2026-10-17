@@ -35,6 +35,7 @@
 // Déploiement : `supabase functions deploy sendcloud-sync-tracking`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { hasAdminAccess } from '../_shared/adminAccess.ts';
 
 const LOG_PREFIX = '[sendcloud-sync-tracking]';
 
@@ -111,7 +112,7 @@ Deno.serve(async (req: Request) => {
       .select('role')
       .eq('id', user.id)
       .maybeSingle();
-    if (callerProfile?.role !== 'admin') {
+    if (!(await hasAdminAccess(callerClient, user.id))) {
       console.error(`${LOG_PREFIX} Utilisateur ${user.id} n'est pas admin (role=${callerProfile?.role})`);
       return json({ error: 'Action réservée aux administrateurs' }, 403);
     }

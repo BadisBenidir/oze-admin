@@ -29,9 +29,21 @@ export interface AdminProfile {
   email: string
   first_name: string
   last_name: string
-  role: 'admin' | 'client'
+  role: 'admin' | 'client' | 'staff'
   created_at: string
   updated_at: string
+  /** Droits d'un compte employé (role 'staff', 0208) — absent pour le propriétaire. */
+  staff?: StaffPermissions | null
+}
+
+export type StaffAction = 'wallet' | 'refunds' | 'invoicing' | 'accounts'
+
+export interface StaffPermissions {
+  /** Pages visibles, ids 'onglet:sous-onglet' (config/navigation.ts). */
+  pages: string[]
+  actions: StaffAction[]
+  show_figures: boolean
+  active: boolean
 }
 
 // Types pour la table customers (gestion admin)

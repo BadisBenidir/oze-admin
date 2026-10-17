@@ -11,6 +11,7 @@
 // Déploiement : `supabase functions deploy reset-reseller-password`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { hasAdminAccess } from '../_shared/adminAccess.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -73,7 +74,7 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single();
 
-    const isAdmin = callerProfile?.role === 'admin';
+    const isAdmin = await hasAdminAccess(callerClient, user.id, 'accounts');
 
     // Un admin OZË peut réinitialiser n'importe quel contact revendeur. Le
     // contact principal peut réinitialiser UNIQUEMENT les collègues de sa

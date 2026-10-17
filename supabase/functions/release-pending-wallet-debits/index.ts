@@ -22,6 +22,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
+import { hasAdminAccess } from '../_shared/adminAccess.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -55,7 +56,7 @@ Deno.serve(async (req: Request) => {
     }
     if (allUsers) {
       const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
-      if (me?.role !== 'admin') return reply({ error: 'Accès refusé' }, 403);
+      if (!(await hasAdminAccess(admin, user.id, 'wallet'))) return reply({ error: 'Accès refusé' }, 403);
     }
     let query = admin
       .from('wallet_transactions')

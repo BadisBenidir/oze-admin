@@ -12,6 +12,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import { recordSubscriptionInvoice } from '../_shared/subscriptionPayments.ts';
+import { hasAdminAccess } from '../_shared/adminAccess.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,7 +38,7 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
-    if (me?.role !== 'admin') return reply({ error: 'Accès refusé' }, 403);
+    if (!(await hasAdminAccess(admin, user.id, 'invoicing'))) return reply({ error: 'Accès refusé' }, 403);
 
     const { data: subscribers, error } = await admin
       .from('resellers')

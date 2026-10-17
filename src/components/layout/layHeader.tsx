@@ -11,7 +11,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ activeTab, onMenuToggle }) => {
   const { profile, signOut } = useAdminAuth()
   const [showUserMenu, setShowUserMenu] = useState(false)
-  const { hidden: figuresHidden, toggle: toggleFigures } = useHideFigures()
+  const { hidden: figuresHidden, toggle: toggleFigures, locked: figuresLocked } = useHideFigures()
   const getPageTitle = (tab: string) => {
     const titles = {
       dashboard: 'Dashboard',
@@ -22,6 +22,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onMenuToggle }) => {
       b2b: 'Espace B2B',
       analytics: 'Analytics & Rapports',
       settings: 'Paramètres',
+      team: 'Équipe',
     };
     return titles[tab as keyof typeof titles] || 'Espace de Gestion';
   };
@@ -44,8 +45,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onMenuToggle }) => {
         </div>
         
         <div className="flex items-center space-x-4">
-          {/* Masquer les chiffres partout (CA, prix d'achat, marges…) */}
-          <button
+          {/* Masquer les chiffres partout (CA, prix d'achat, marges…) — imposé à un employé sans ce droit */}
+          {!figuresLocked && <button
             type="button"
             onClick={toggleFigures}
             title={figuresHidden ? 'Afficher les chiffres' : 'Masquer les chiffres (CA, prix d\x27achat, marges…)'}
@@ -53,7 +54,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onMenuToggle }) => {
           >
             {figuresHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
             <span className="hidden md:inline">{figuresHidden ? 'Afficher les chiffres' : 'Masquer les chiffres'}</span>
-          </button>
+          </button>}
           {/* User Profile Desktop */}
           <div className="hidden sm:block relative">
             <button
