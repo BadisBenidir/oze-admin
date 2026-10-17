@@ -252,7 +252,7 @@ export const StaffManagement: React.FC = () => {
     setLoading(true);
     const { data, error: fetchError } = await supabase
       .from('profiles')
-      .select('id, email, first_name, last_name, created_at, staff_permissions(pages, actions, show_figures, active)')
+      .select('id, email, first_name, last_name, created_at, staff_permissions!staff_permissions_profile_id_fkey(pages, actions, show_figures, active)')
       .eq('role', 'staff')
       .order('created_at', { ascending: true });
     if (fetchError) setError(fetchError.message);
