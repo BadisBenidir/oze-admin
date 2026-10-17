@@ -315,9 +315,11 @@ class OrderService {
       .from('products')
       .select('*', { count: 'exact', head: true });
 
+    // Clients = tous les comptes sauf le propriétaire et les employés (0208).
     const { count: customerCount } = await supabase
       .from('profiles')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .not('role', 'in', '(admin,staff)');
 
     // Commandes de suivi des missions clôturées (0197/0204) : la mission est
     // déjà comptée via sourcingRevenue ci-dessus.
@@ -596,7 +598,9 @@ class OrderService {
     // 2. Récupérer les derniers profils inscrits
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, created_at, first_name')
+      .select('id, created_at, first_name, role')
+      // Le propriétaire n'est pas une « inscription ».
+      .neq('role', 'admin')
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -629,7 +633,8 @@ class OrderService {
       profiles.forEach(p => activities.push({
         id: `user-${p.id}`,
         type: 'user',
-        text: `Nouveau client : ${p.first_name || 'Anonyme'}`,
+        // Compte employé (0208) : jamais présenté comme un client.
+        text: p.role === 'staff' ? `Nouvel employé : ${p.first_name || 'Anonyme'}` : `Nouveau client : ${p.first_name || 'Anonyme'}`,
         date: new Date(p.created_at)
       }));
     }
