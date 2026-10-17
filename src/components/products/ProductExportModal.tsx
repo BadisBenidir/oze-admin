@@ -91,6 +91,13 @@ type ExportRow = {
   sold_price?: number | null;
   /** true : prix vendu = prix revendeur de la pièce sur sa mission de sourcing sur mesure. */
   sold_via_sourcing?: boolean;
+  /** Par où l'article est parti (voir loadSaleChannels). */
+  sale_channel?: string;
+  /** Premier prix affiché et sa source (voir loadSaleChannels). */
+  first_price?: number | null;
+  first_price_source?: string;
+  auction_start_price?: number | null;
+  auction_final_price?: number | null;
   colors: string[] | null;
   material: string | null;
   serial_number: string | null;
@@ -106,7 +113,7 @@ type ExportRow = {
  * revendeur » sur la mission (prix imposé, sinon floor(coût × (1 + marge de la
  * mission)), comme useSourcingMissions). Les autres ventes hors plateforme
  * restent sans prix vendu. */
-type SoldPrice = { price: number; source: 'order' | 'live' | 'sourcing' };
+type SoldPrice = { price: number; source: 'order' | 'live' | 'sourcing'; orderNumber?: string; orderChannel?: string };
 
 const loadSoldPrices = async (rows: ExportRow[]): Promise<Map<string, SoldPrice>> => {
   const prices = new Map<string, SoldPrice>();
@@ -116,11 +123,11 @@ const loadSoldPrices = async (rows: ExportRow[]): Promise<Map<string, SoldPrice>
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error } = await supabase
       .from('order_items')
-      .select('product_id, line_total, order:orders!inner(id, status, payment_status, created_at)')
+      .select('product_id, line_total, order:orders!inner(id, status, payment_status, created_at, order_number, order_channel)')
       .in('product_id', ids.slice(i, i + 200))
       .eq('status', 'active');
     if (error) throw new Error(error.message);
-    const items = (data || []) as unknown as { product_id: string; line_total: number; order: { id: string; status: string; payment_status: string; created_at: string } }[];
+    const items = (data || []) as unknown as { product_id: string; line_total: number; order: { id: string; status: string; payment_status: string; created_at: string; order_number: string | null; order_channel: string | null } }[];
     const latest = new Map<string, string>();
     for (const it of items) {
       const o = it.order;
@@ -129,7 +136,7 @@ const loadSoldPrices = async (rows: ExportRow[]): Promise<Map<string, SoldPrice>
       if (!paid || fulfillmentOrderIds.has(o.id)) continue;
       if (latest.has(it.product_id) && latest.get(it.product_id)! > o.created_at) continue;
       latest.set(it.product_id, o.created_at);
-      prices.set(it.product_id, { price: Number(it.line_total) || 0, source: 'order' });
+      prices.set(it.product_id, { price: Number(it.line_total) || 0, source: 'order', orderNumber: o.order_number || undefined, orderChannel: o.order_channel || undefined });
     }
 
     const { data: sourced, error: sourcedError } = await supabase
@@ -161,6 +168,75 @@ const loadSoldPrices = async (rows: ExportRow[]): Promise<Map<string, SoldPrice>
     }
   }
   return prices;
+};
+
+/**
+ * Canal de vente et premier prix affiché de chaque article.
+ *   - Canal : enchère B2B (lot adjugé), sourcing sur mesure, drop, vente
+ *     directe catalogue B2B, site web, Live, autre plateforme… d'après la
+ *     commande payée retenue (préfixe AUC- / SRC-) et l'appartenance à un
+ *     drop ou une mission.
+ *   - Premier prix affiché : le prix d'avant la première baisse programmée
+ *     (b2b_price_changes, 0200), sinon le prix d'origine (original_price),
+ *     sinon le prix de départ d'enchère pour un lot (sale_price est écrasé
+ *     par le prix adjugé à la clôture), sinon le prix de vente actuel.
+ */
+const loadSaleChannels = async (rows: ExportRow[], sold: Map<string, SoldPrice>) => {
+  const ids = rows.map((r) => r.id);
+  const auctions = new Map<string, { start: number; final: number | null; sold: boolean }>();
+  const firstChange = new Map<string, number>();
+  const inDrop = new Set<string>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const slice = ids.slice(i, i + 200);
+    const [auctionRes, changesRes] = await Promise.all([
+      supabase.from('auction_items').select('product_id, start_price, current_price, status, created_at').in('product_id', slice).neq('status', 'cancelled'),
+      supabase.from('b2b_price_changes').select('product_id, old_price, applied_at').in('product_id', slice).eq('status', 'applied').order('applied_at', { ascending: true }),
+    ]);
+    for (const a of (auctionRes.data || []) as { product_id: string; start_price: number; current_price: number | null; status: string }[]) {
+      // Plusieurs passages en enchère : on garde le lot adjugé s'il y en a un.
+      const prev = auctions.get(a.product_id);
+      if (prev?.sold && a.status !== 'sold') continue;
+      auctions.set(a.product_id, { start: Number(a.start_price), final: a.status === 'sold' ? Number(a.current_price) : null, sold: a.status === 'sold' });
+    }
+    for (const c of (changesRes.data || []) as { product_id: string; old_price: number | null }[]) {
+      if (!firstChange.has(c.product_id) && c.old_price != null) firstChange.set(c.product_id, Number(c.old_price));
+    }
+  }
+  const { data: drops } = await supabase.from('drops').select('product_ids').neq('status', 'annule');
+  for (const d of (drops || []) as { product_ids: string[] | null }[]) for (const id of d.product_ids || []) inDrop.add(id);
+
+  for (const r of rows) {
+    const s = sold.get(r.id);
+    const auction = auctions.get(r.id);
+    const isSold = r.status.startsWith('sold') || s != null;
+    let channel = '';
+    if (s?.source === 'sourcing' || s?.orderNumber?.startsWith('SRC-')) channel = 'Sourcing sur mesure';
+    else if (s?.orderNumber?.startsWith('AUC-') || auction?.sold) channel = 'Enchère B2B';
+    else if (r.status === 'sold-auction') channel = 'Live';
+    else if (r.status === 'sold-other-platform') channel = 'Autre plateforme';
+    else if (r.status === 'sold-display') channel = 'Vente affichée';
+    else if (s?.orderChannel === 'web' || r.status === 'sold-online') channel = 'Site web';
+    else if (isSold && inDrop.has(r.id)) channel = 'Drop B2B';
+    else if (isSold) channel = 'Vente directe B2B (catalogue)';
+    r.sale_channel = channel;
+
+    r.auction_start_price = auction ? auction.start : null;
+    r.auction_final_price = auction?.final ?? null;
+
+    if (firstChange.has(r.id)) {
+      r.first_price = firstChange.get(r.id)!;
+      r.first_price_source = 'Avant baisse programmée';
+    } else if (r.original_price != null) {
+      r.first_price = Number(r.original_price);
+      r.first_price_source = 'Prix d\x27origine';
+    } else if (auction) {
+      r.first_price = auction.start;
+      r.first_price_source = 'Départ enchère';
+    } else {
+      r.first_price = r.sale_price;
+      r.first_price_source = r.sale_price != null ? 'Prix de vente' : '';
+    }
+  }
 };
 
 interface ProductExportModalProps {
@@ -252,6 +328,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
         if (!data || data.length < PAGE) break;
       }
       const soldPrices = await loadSoldPrices(rows);
+      await loadSaleChannels(rows, soldPrices);
       for (const r of rows) {
         const sold = soldPrices.get(r.id);
         r.sold_price = sold?.price ?? null;
@@ -260,7 +337,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
 
       const header = [
         'Date de création', 'Code produit', 'Référence OZË', 'Référence B2B', 'Référence fournisseur', 'Plateforme source',
-        'Marque', 'Catégorie', 'Titre', 'État', 'Statut', "Prix d'achat (€)", 'Prix de vente (€)', 'Prix vendu (€)', 'Origine du prix vendu', 'Ancien prix (€)',
+        'Marque', 'Catégorie', 'Titre', 'État', 'Statut', 'Canal de vente', "Prix d'achat (€)", 'Premier prix affiché (€)', 'Source du premier prix', 'Prix de vente (€)', 'Prix de départ enchère (€)', 'Prix adjugé (€)', 'Prix vendu (€)', 'Origine du prix vendu', 'Ancien prix (€)',
         'Marge (€)', 'Couleurs', 'Matière', 'N° de série', 'Code-barres',
       ];
       const body = rows.map((r) => {
@@ -277,8 +354,13 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
           r.name,
           formatCondition(r.condition),
           STATUS_LABELS[r.status] || r.status,
+          r.sale_channel || '',
           r.purchase_price ?? '',
+          r.first_price ?? '',
+          r.first_price_source || '',
           r.sale_price ?? '',
+          r.auction_start_price ?? '',
+          r.auction_final_price ?? '',
           r.sold_price ?? '',
           r.sold_price == null ? '' : r.sold_via_sourcing ? 'Sourcing sur mesure' : r.status === 'sold-auction' ? 'Live' : 'Commande',
           r.original_price ?? '',
@@ -477,7 +559,8 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({ brands, 
 
             <p className="text-xs text-gray-500">
               Colonnes : date de création, code produit, références OZË / B2B / fournisseur, plateforme, marque, catégorie, titre,
-              état, statut, prix d'achat, prix de vente, ancien prix, marge, couleurs, matière, n° de série, code-barres.
+              état, statut, canal de vente, prix d'achat, premier prix affiché, prix de vente, prix de départ et prix adjugé d'enchère, prix vendu,
+              ancien prix, marge, couleurs, matière, n° de série, code-barres (Excel / CSV).
             </p>
 
             {error && (
