@@ -189,7 +189,7 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
   const { downloadInvoice, downloadingOrderId, downloadError } = useInvoices();
 
   const handleDownloadInvoice = (order: MyB2BOrder) => {
-    const items = buildInvoiceItems(order.order_items);
+    const items = buildInvoiceItems(order.order_items, { amount: order.late_fee_amount, days: order.late_fee_days });
     downloadInvoice(
       {
         id: order.id,
@@ -610,6 +610,12 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500">Remise</span>
                         <span className="text-gray-900">-{(Number(viewingOrder.discount_amount) + Number(viewingOrder.promo_discount_amount)).toFixed(2)} €</span>
+                      </div>
+                    )}
+                    {Number(viewingOrder.late_fee_amount) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-red-600">Pénalité de retard ({viewingOrder.late_fee_days} j × 5 %)</span>
+                        <span className="text-red-600">{Number(viewingOrder.late_fee_amount).toFixed(2)} €</span>
                       </div>
                     )}
                     <div className="flex justify-between text-base font-semibold border-t border-gray-100 pt-1.5">

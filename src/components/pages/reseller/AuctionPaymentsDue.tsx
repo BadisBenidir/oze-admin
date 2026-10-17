@@ -48,10 +48,20 @@ const PaymentRow: React.FC<PaymentRowProps> = ({ payment, walletBalance, onPay }
   const [submitting, setSubmitting] = useState<'wallet' | 'card' | 'mixed' | null>(null);
   const [error, setError] = useState('');
   const image = payment.images?.[0];
+  const lateFee = Number(payment.late_fee) || 0;
+  const lateDays = Number(payment.late_days) || 0;
   const canCoverFully = walletBalance >= payment.amount;
   const canCoverPartially = walletBalance > 0 && !canCoverFully;
 
   const handlePay = async (method: 'wallet' | 'card' | 'mixed') => {
+    if (
+      lateFee > 0 &&
+      !window.confirm(
+        `Paiement en retard de ${lateDays} jour${lateDays > 1 ? 's' : ''} : une pénalité de ${EUR(lateFee)} (5 % du prix du lot par jour, CGV art. 2 bis) s'ajoute au prix du lot.\n\nTotal à régler : ${EUR(payment.amount)}. Continuer ?`
+      )
+    ) {
+      return;
+    }
     setSubmitting(method);
     setError('');
     const result = await onPay(payment.order_id, method);
@@ -79,10 +89,27 @@ const PaymentRow: React.FC<PaymentRowProps> = ({ payment, walletBalance, onPay }
         </div>
         <div className="min-w-0">
           <p className="text-sm font-medium text-gray-900 truncate">{payment.title}</p>
-          <p className="text-xs text-gray-500">{payment.brand} · {EUR(payment.amount)}</p>
-          <p className={`text-xs mt-0.5 font-medium ${overdue || urgent ? 'text-red-600' : 'text-amber-700'}`}>
-            {overdue ? 'Délai de paiement dépassé — contactez OZË Paris' : `Payer avant ${formatCountdown(ms)}`}
+          <p className="text-xs text-gray-500">
+            {payment.brand} · {EUR(lateFee > 0 ? Number(payment.base_amount) : payment.amount)}
           </p>
+          {lateFee > 0 ? (
+            <div className="mt-1 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+              <p className="font-semibold">
+                Retard de paiement : {lateDays} jour{lateDays > 1 ? 's' : ''} — pénalité +{EUR(lateFee)}
+              </p>
+              <p>
+                5 % du prix du lot par jour de retard (CGV, art. 2 bis). Total à régler aujourd'hui : <strong>{EUR(payment.amount)}</strong>.
+                La pénalité augmente chaque jour et figure sur votre facture.
+              </p>
+            </div>
+          ) : (
+            <p className={`text-xs mt-0.5 font-medium ${overdue || urgent ? 'text-red-600' : 'text-amber-700'}`}>
+              {overdue ? 'Délai de paiement dépassé' : `Payer avant ${formatCountdown(ms)}`}
+              <span className="block font-normal text-gray-500">
+                Passé ce délai : pénalité de 5 % du prix du lot par jour de retard.
+              </span>
+            </p>
+          )}
           {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
         </div>
       </div>

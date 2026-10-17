@@ -9,8 +9,15 @@ export interface PendingAuctionPayment {
   images: string[];
   order_id: string;
   order_number: string;
+  /** Montant dû maintenant : prix du lot + pénalité de retard en cours (0210). */
   amount: number;
   payment_deadline: string | null;
+  /** Prix du lot, hors pénalité. */
+  base_amount?: number;
+  /** Jours de retard commencés au-delà de l'échéance de 24 h. */
+  late_days?: number;
+  /** Pénalité en cours : 5 % du prix du lot par jour de retard. */
+  late_fee?: number;
 }
 
 export interface PayAuctionResult {

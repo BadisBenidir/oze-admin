@@ -556,6 +556,18 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
     return { success: true, ...(data || {}) };
   };
 
+  const toggleLateFeeWaived = async () => {
+    const waive = !order.late_fee_waived;
+    if (!confirm(waive ? 'Annuler la pénalité de retard de ce lot ? Le membre ne paiera que le prix du lot.' : 'Rétablir la pénalité de retard de ce lot ?')) return;
+    const { error } = await supabase.rpc('admin_set_auction_late_fee_waived', { p_order_id: order.id, p_waived: waive });
+    if (error) {
+      setRefundNotice(`Impossible de modifier la pénalité : ${error.message}`);
+      return;
+    }
+    setRefundNotice(waive ? 'Pénalité de retard annulée pour ce lot.' : 'Pénalité de retard rétablie.');
+    onOrderUpdated();
+  };
+
   const handleOrderConfirmed = (result: { total_refund?: number; refund_status?: string; refund_method?: string | null; refund_error?: string }) => {
     setCancellingOrder(false);
     if (result.refund_status === 'succeeded') {
@@ -867,6 +879,25 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                       <span className="text-gray-500">Remise</span>
                       <span className="text-gray-900">-{(Number(order.discount_amount) + Number(order.promo_discount_amount)).toFixed(2)} €</span>
                     </div>
+                  )}
+                  {isAuctionOrder && (Number(order.late_fee_amount) > 0 || order.late_fee_waived) && (
+                    <div className="flex justify-between gap-2 text-sm">
+                      <span className="text-red-600">
+                        Pénalité de retard{Number(order.late_fee_amount) > 0 ? ` (${order.late_fee_days} j × 5 %)` : ''}
+                        {order.late_fee_waived && <span className="ml-1 text-xs text-gray-500">— annulée</span>}
+                      </span>
+                      <span className="text-red-600">{Number(order.late_fee_amount).toFixed(2)} €</span>
+                    </div>
+                  )}
+                  {isAuctionOrder && order.payment_status !== 'paid' && (
+                    <button
+                      type="button"
+                      onClick={toggleLateFeeWaived}
+                      className="text-xs text-gray-500 underline hover:text-gray-800"
+                      title="La pénalité de retard (5 % du prix du lot par jour au-delà de 24 h) est calculée au moment du paiement"
+                    >
+                      {order.late_fee_waived ? 'Rétablir la pénalité de retard' : 'Annuler la pénalité de retard pour ce lot'}
+                    </button>
                   )}
                   <div className="flex justify-between text-base font-semibold border-t border-gray-100 pt-2">
                     <span className="text-gray-900">Total net</span>

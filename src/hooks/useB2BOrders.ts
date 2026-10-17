@@ -71,6 +71,10 @@ export interface B2BOrder {
   entrupy_cost: number;
   discount_amount: number;
   promo_discount_amount: number;
+  /** Pénalité de retard de paiement d'un lot d'enchère, figée au paiement (0210). */
+  late_fee_amount: number;
+  late_fee_days: number;
+  late_fee_waived: boolean;
   total_amount: number;
   shipping_address: Record<string, unknown>;
   created_at: string;
@@ -159,7 +163,7 @@ export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: stri
       let query = supabase
         .from('orders')
         .select(
-          'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, insurance_cost, entrupy_cost, discount_amount, promo_discount_amount, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), ' +
+          'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, insurance_cost, entrupy_cost, discount_amount, promo_discount_amount, late_fee_amount, late_fee_days, late_fee_waived, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), ' +
           'placed_by:profiles!placed_by_profile_id(first_name, last_name, email), ' +
           'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg), shipment:shipments!order_items_shipment_id_fkey(delivery_type, parcel_point))'
         )

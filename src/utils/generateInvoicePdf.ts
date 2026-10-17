@@ -35,8 +35,12 @@ export interface InvoiceSourceItem {
  * sans lignes dédiées, ils étaient absorbés dans le reliquat "Livraison" et
  * rien n'indiquait sur la facture que l'article avait été assuré.
  */
-export const buildInvoiceItems = (items: InvoiceSourceItem[]): InvoiceLineItem[] =>
-  items
+export const buildInvoiceItems = (
+  items: InvoiceSourceItem[],
+  /** Pénalité de retard de paiement d'un lot d'enchère (0210), figée sur la commande. */
+  lateFee?: { amount?: number | null; days?: number | null } | null
+): InvoiceLineItem[] => [
+  ...items
     .filter((i) => i.status !== 'cancelled')
     .flatMap((i) => {
       const name = i.product_snapshot?.name || 'Article';
@@ -52,7 +56,16 @@ export const buildInvoiceItems = (items: InvoiceSourceItem[]): InvoiceLineItem[]
         lines.push({ description: `Certificat d'authenticité Entrupy — ${name}`, unitPrice: entrupy, quantity: 1, lineTotal: entrupy });
       }
       return lines;
-    });
+    }),
+  ...(Number(lateFee?.amount) > 0
+    ? [{
+        description: `Pénalité de retard de paiement (${lateFee!.days || 1} jour${(lateFee!.days || 1) > 1 ? 's' : ''} × 5 % du prix du lot)`,
+        unitPrice: Number(lateFee!.amount),
+        quantity: 1,
+        lineTotal: Number(lateFee!.amount),
+      }]
+    : []),
+];
 
 export interface InvoiceBillingDetails {
   name?: string | null;

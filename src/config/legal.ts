@@ -8,7 +8,7 @@
 /** Identifie la version des CGV acceptée par un revendeur (profiles.terms_version) —
  * incrémenter (ex: date de révision) à chaque changement substantiel du texte,
  * pour pouvoir un jour redemander un consentement explicite après mise à jour. */
-export const CGV_VERSION = '2026-10-08';
+export const CGV_VERSION = '2026-10-18';
 /** Date de la dernière version de la politique de confidentialité (PrivacyPolicy.tsx). */
 export const PRIVACY_VERSION = '2026-10-08';
 export const COMPANY_CONTACT_EMAIL = 'contact@ozeparis.com';

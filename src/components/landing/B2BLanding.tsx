@@ -152,7 +152,7 @@ const FAQ = [
   {
     q: 'Quels moyens de paiement sont acceptés ?',
     short: 'Quels moyens de paiement ?',
-    a: 'Carte bancaire (paiement sécurisé Stripe), solde de votre portefeuille B2B, ou une combinaison des deux. Le portefeuille se recharge par carte, avec 5 € offerts pour chaque tranche de 100 € rechargés. Une commande n\'est confirmée qu\'après encaissement effectif. Les lots remportés aux enchères sont à régler sous 24h.',
+    a: 'Carte bancaire (paiement sécurisé Stripe), solde de votre portefeuille B2B, ou une combinaison des deux. Le portefeuille se recharge par carte, avec 5 € offerts pour chaque tranche de 100 € rechargés. Une commande n\'est confirmée qu\'après encaissement effectif. Les lots remportés aux enchères sont à régler sous 24h, sous peine d\x27une pénalité de retard de 5 % du prix du lot par jour.',
   },
   {
     q: 'Y a-t-il des remises pour les commandes en volume ?',
@@ -167,7 +167,7 @@ const FAQ = [
   {
     q: 'Comment fonctionnent les enchères ?',
     short: 'Comment marchent les enchères ?',
-    a: 'Des sessions privées, réservées aux membres du Pass Revendeur, avec des lots dès 0€. Vous pouvez enchérir au fil de l\'eau ou définir un montant maximum : nous surenchérissons alors automatiquement pour vous, du pas minimal, uniquement si nécessaire. Une enchère placée dans les dernières minutes prolonge le lot, pour que chacun puisse répondre. Un lot remporté est à régler sous 24h.',
+    a: 'Des sessions privées, réservées aux membres du Pass Revendeur, avec des lots dès 0€. Vous pouvez enchérir au fil de l\'eau ou définir un montant maximum : nous surenchérissons alors automatiquement pour vous, du pas minimal, uniquement si nécessaire. Une enchère placée dans les dernières minutes prolonge le lot, pour que chacun puisse répondre. Un lot remporté est à régler sous 24h ; au-delà, une pénalité de 5 % du prix du lot s\x27applique par jour de retard.',
   },
   {
     q: 'Comment fonctionne le sourcing sur mesure ?',

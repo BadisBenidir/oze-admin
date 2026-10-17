@@ -110,9 +110,18 @@ export const Terms: React.FC = () => {
               <Section title="2 bis. Enchères">
                 <p>
                   Toute enchère portée sur le portail est ferme et engage son auteur. L'adjudicataire est tenu de régler
-                  le prix dans un délai de 48 heures suivant la clôture de l'enchère. À défaut de paiement dans ce délai,
-                  OZË Paris peut annuler l'adjudication, remettre l'article en vente et suspendre l'accès du client aux
-                  enchères, sans préjudice de tous dommages et intérêts.
+                  le prix de chaque article remporté dans un délai de <strong>24 heures</strong> suivant son adjudication.
+                </p>
+                <p>
+                  À défaut de paiement dans ce délai, une <strong>pénalité de retard égale à 5 % du prix d'adjudication
+                  de l'article, par jour de retard</strong> (tout jour commencé étant dû) et par article, est
+                  automatiquement appliquée jusqu'au complet paiement. Elle s'ajoute au prix de l'article, est réglée
+                  en même temps que lui et figure sur la facture correspondante.
+                </p>
+                <p>
+                  En outre, tant qu'un article remporté reste impayé au-delà de ce délai, l'accès du client aux achats
+                  et aux enchères peut être suspendu, et OZË Paris peut annuler l'adjudication et remettre l'article en
+                  vente, sans préjudice de tous dommages et intérêts.
                 </p>
               </Section>
               <Section title="3. Modalités de paiement">

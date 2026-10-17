@@ -62,7 +62,7 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
   const { downloadInvoice, emitQontoInvoice, downloadingOrderId } = useInvoices();
 
   const handleDownloadInvoice = async (order: OrderWithItems) => {
-    const items = buildInvoiceItems(order.order_items);
+    const items = buildInvoiceItems(order.order_items, { amount: (order as { late_fee_amount?: number }).late_fee_amount, days: (order as { late_fee_days?: number }).late_fee_days });
     const result = await downloadInvoice(
       {
         id: order.id,

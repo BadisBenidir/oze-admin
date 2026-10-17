@@ -21,6 +21,8 @@ interface OrderRow {
   created_at: string;
   stripe_payment_intent_id: string | null;
   order_items: InvoiceSourceItem[] | null;
+  late_fee_amount?: number | null;
+  late_fee_days?: number | null;
   invoice: InvoiceEmbed | InvoiceEmbed[] | null;
 }
 
@@ -44,7 +46,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
       const { data, error: fetchError } = await supabase
         .from('orders')
         .select(
-          'order_number, created_at, stripe_payment_intent_id, ' +
+          'order_number, created_at, stripe_payment_intent_id, late_fee_amount, late_fee_days, ' +
             'order_items(product_snapshot, unit_price, quantity, line_total, status, insured, insurance_cost, entrupy_requested, entrupy_cost), ' +
             'invoice:invoices!inner(invoice_number, issued_at, total_amount, legal_status, billing_details)'
         )
@@ -64,7 +66,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
         .map((row) => {
           const invoice = Array.isArray(row.invoice) ? row.invoice[0] : row.invoice;
           if (!invoice) return null;
-          const items = buildInvoiceItems(row.order_items || []);
+          const items = buildInvoiceItems(row.order_items || [], { amount: row.late_fee_amount, days: row.late_fee_days });
           const invoiceData: InvoiceData = {
             invoiceNumber: invoice.invoice_number,
             issuedAt: invoice.issued_at,

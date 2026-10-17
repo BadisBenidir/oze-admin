@@ -90,7 +90,14 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'STRIPE_SECRET_KEY manquant dans les secrets Supabase' }, 500);
     }
 
-    const totalAmount = Number(order.total_amount);
+    // Pénalité de retard (CGV : 5 % du prix du lot par jour de retard au-delà
+    // de 24 h, 0210) figée sur la commande AVANT de créer la session Stripe :
+    // le montant facturé et la facture incluent la pénalité.
+    const { data: feeData, error: feeError } = await adminClient.rpc('apply_auction_late_fee', { p_order_id: order_id });
+    if (feeError) return json({ error: feeError.message }, 400);
+    const fee = feeData as { total: number; late_fee: number; late_days: number } | null;
+
+    const totalAmount = Number(fee?.total ?? order.total_amount);
     let mixedWalletAmount = 0;
     let chargeAmount = totalAmount;
 
@@ -119,7 +126,12 @@ Deno.serve(async (req: Request) => {
       line_items: [{
         price_data: {
           currency: 'eur',
-          product_data: { name: `Lot d'enchère — commande ${order.order_number}` },
+          product_data: {
+            name: `Lot d'enchère — commande ${order.order_number}`,
+            ...(fee && Number(fee.late_fee) > 0
+              ? { description: `Dont pénalité de retard de paiement : ${Number(fee.late_fee).toFixed(2)} € (${fee.late_days} jour${fee.late_days > 1 ? 's' : ''} × 5 %)` }
+              : {}),
+          },
           unit_amount: Math.round(chargeAmount * 100),
         },
         quantity: 1,

@@ -42,7 +42,7 @@ export const B2BOrders: React.FC = () => {
   const { downloadInvoice, emitQontoInvoice, downloadingOrderId } = useInvoices();
 
   const handleDownloadInvoice = async (order: B2BOrder) => {
-    const items = buildInvoiceItems(order.order_items);
+    const items = buildInvoiceItems(order.order_items, { amount: order.late_fee_amount, days: order.late_fee_days });
     const result = await downloadInvoice(
       {
         id: order.id,

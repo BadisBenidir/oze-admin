@@ -391,7 +391,8 @@ export const Auctions: React.FC = () => {
               className="mt-0.5 h-4 w-4 rounded border-amber-300 text-gray-900 focus:ring-amber-400 flex-shrink-0"
             />
             <span className="text-xs text-amber-800">
-              J'accepte les Conditions Générales de Vente applicables aux enchères en ligne.
+              J'accepte les Conditions Générales de Vente applicables aux enchères en ligne, notamment le paiement de
+              chaque lot remporté sous 24 h, sous peine d'une pénalité de 5 % du prix du lot par jour de retard.
             </span>
           </label>
           <button

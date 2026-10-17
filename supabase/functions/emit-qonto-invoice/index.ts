@@ -231,6 +231,8 @@ Deno.serve(async (req: Request) => {
     // Commande déjà réglée : la facture Qonto est marquée payée juste après
     // son émission (sinon elle reste « À encaisser », puis « En retard »).
     let orderPaidAt: string | null = null;
+    // Pénalité de retard de paiement d'un lot d'enchère (0210), ligne à part.
+    let lateFee: { amount: number; days: number } | null = null;
     if (isAdvance) {
       const { data: mission } = await adminClient
         .from('b2b_sourcing_missions')
@@ -242,12 +244,15 @@ Deno.serve(async (req: Request) => {
     } else {
       const { data: order, error: orderError } = await adminClient
         .from('orders')
-        .select('id, order_number, created_at, paid_at, payment_status, status')
+        .select('id, order_number, created_at, paid_at, payment_status, status, late_fee_amount, late_fee_days')
         .eq('id', order_id)
         .single();
       if (orderError || !order) return json({ error: orderError?.message || 'Commande introuvable' }, 400);
       if (['paid', 'succeeded'].includes(order.payment_status || '') && !['cancelled', 'canceled'].includes(order.status || '')) {
         orderPaidAt = order.paid_at || order.created_at;
+      }
+      if (Number(order.late_fee_amount) > 0) {
+        lateFee = { amount: Number(order.late_fee_amount), days: Number(order.late_fee_days) || 1 };
       }
 
       const { data: items } = await adminClient
@@ -407,7 +412,12 @@ Deno.serve(async (req: Request) => {
           });
         }
         return lines;
-      }),
+      }).concat(lateFee ? [{
+        title: `Pénalité de retard de paiement (${lateFee.days} jour${lateFee.days > 1 ? 's' : ''} × 5 % du prix du lot)`,
+        quantity: '1',
+        unit_price: { value: lateFee.amount.toFixed(2), currency: 'EUR' },
+        vat_rate: '0',
+      }] : []),
       footer: VAT_NOTE,
       finalize: true,
     };
