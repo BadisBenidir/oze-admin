@@ -51,12 +51,16 @@ Deno.serve(async (req: Request) => {
       email: target.email,
       options: { redirectTo: `${PRO_URL}/catalogue` },
     });
-    if (error || !data?.properties?.action_link) {
+    const tokenHash = data?.properties?.hashed_token;
+    if (error || !tokenHash) {
       return json({ error: error?.message || 'Lien de connexion impossible à générer' }, 400);
     }
 
     console.log(`[impersonate-member] ${user.email} ouvre l'espace de ${target.email} (${profile_id})`);
-    return json({ url: data.properties.action_link });
+    // Lien direct vers le portail (jeton dans le fragment #, jamais envoyé à
+    // un serveur) : le portail valide lui-même le jeton (verifyOtp, main.tsx)
+    // — indépendant des « Redirect URLs » de Supabase Auth.
+    return json({ url: `${PRO_URL}/catalogue#oze_member_access=${encodeURIComponent(tokenHash)}` });
   } catch (err) {
     console.error('impersonate-member: erreur', err instanceof Error ? err.stack || err.message : err);
     return json({ error: err instanceof Error ? err.message : 'Erreur inconnue' }, 500);
