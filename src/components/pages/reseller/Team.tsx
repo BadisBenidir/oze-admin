@@ -10,7 +10,7 @@ import { generateSecurePassword } from '../../../utils/generatePassword';
 import { TeamMemberDetail } from './TeamMemberDetail';
 import { InviteLinkPanel } from '../../reseller/InviteLinkPanel';
 import {
-  Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check, Search, X, ShoppingBag, UserCheck, Clock,
+  Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check, Search, X, ShoppingBag, UserCheck,
 } from 'lucide-react';
 
 const INVITE_COOLDOWN_SECONDS = 30;
@@ -19,24 +19,24 @@ interface TeamProps {
   onOpenProduct: (productId: string) => void;
 }
 
-/** Activité d'achat d'un membre (commandes B2B payées et non annulées). */
+/** Activité d'un membre : a-t-il acheté, quand pour la dernière fois, et ce
+ * mois-ci — jamais le nombre de commandes ni les montants (non chargés). */
 interface MemberActivity {
   orders: number;
-  total: number;
   lastPurchase: string | null;
-  monthTotal: number;
+  boughtThisMonth: boolean;
 }
 
 type StatusFilter = 'all' | 'active' | 'pending' | 'buyers' | 'never';
-type SortKey = 'recent' | 'name' | 'last_purchase' | 'total';
+type SortKey = 'recent' | 'name' | 'last_purchase';
 
-const EUR = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 const initials = (m: TeamMember) => `${m.first_name?.[0] || ''}${m.last_name?.[0] || ''}`.toUpperCase() || '?';
 const normalize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /**
  * « Mon équipe » (contact principal d'une entreprise partenaire) : membres de
- * la communauté avec leur activité (commandes, dernier achat, total), recherche,
+ * la communauté (date d'inscription, dernier achat — jamais le nombre de
+ * commandes ni les montants dépensés), recherche,
  * filtres et tri ; ajout d'un membre (lien d'invitation, email ou mot de passe)
  * dans une fenêtre dédiée ; détail, nouveau mot de passe et suppression.
  */
@@ -81,7 +81,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
     let cancelled = false;
     supabase
       .from('orders')
-      .select('placed_by_profile_id, total_amount, created_at, status, payment_status')
+      .select('placed_by_profile_id, created_at, status, payment_status')
       .eq('reseller_id', profile.reseller_id)
       .eq('order_channel', 'b2b')
       .not('placed_by_profile_id', 'is', null)
@@ -89,13 +89,12 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
         if (cancelled) return;
         const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
         const next: Record<string, MemberActivity> = {};
-        for (const o of (data || []) as { placed_by_profile_id: string; total_amount: number; created_at: string; status: string; payment_status: string }[]) {
+        for (const o of (data || []) as { placed_by_profile_id: string; created_at: string; status: string; payment_status: string }[]) {
           const paid = ['paid', 'succeeded'].includes(o.payment_status) || ['shipped', 'delivered'].includes(o.status);
           if (!paid || ['cancelled', 'canceled'].includes(o.status)) continue;
-          const a = next[o.placed_by_profile_id] || { orders: 0, total: 0, lastPurchase: null, monthTotal: 0 };
+          const a = next[o.placed_by_profile_id] || { orders: 0, lastPurchase: null, boughtThisMonth: false };
           a.orders += 1;
-          a.total += Number(o.total_amount) || 0;
-          if (o.created_at >= monthStart) a.monthTotal += Number(o.total_amount) || 0;
+          if (o.created_at >= monthStart) a.boughtThisMonth = true;
           if (!a.lastPurchase || o.created_at > a.lastPurchase) a.lastPurchase = o.created_at;
           next[o.placed_by_profile_id] = a;
         }
@@ -108,9 +107,8 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
 
   const stats = useMemo(() => {
     const activeCount = members.filter((m) => m.activated_at).length;
-    const buyersThisMonth = members.filter((m) => (activity[m.profile_id]?.monthTotal || 0) > 0).length;
-    const monthTotal = members.reduce((s, m) => s + (activity[m.profile_id]?.monthTotal || 0), 0);
-    return { total: members.length, active: activeCount, pending: members.length - activeCount, buyersThisMonth, monthTotal };
+    const buyersThisMonth = members.filter((m) => activity[m.profile_id]?.boughtThisMonth).length;
+    return { total: members.length, active: activeCount, pending: members.length - activeCount, buyersThisMonth };
   }, [members, activity]);
 
   const visibleMembers = useMemo(() => {
@@ -131,7 +129,6 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
       const ax = activity[x.profile_id];
       const ay = activity[y.profile_id];
       if (sortKey === 'name') return byName(x, y);
-      if (sortKey === 'total') return (ay?.total || 0) - (ax?.total || 0) || byName(x, y);
       if (sortKey === 'last_purchase') return (ay?.lastPurchase || '').localeCompare(ax?.lastPurchase || '') || byName(x, y);
       return y.created_at.localeCompare(x.created_at);
     });
@@ -264,7 +261,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
       <button
         onClick={() => setViewingMember(m)}
         className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
-        title="Voir le détail et ses commandes"
+        title="Voir le détail"
       >
         <Eye className="h-4 w-4" />
       </button>
@@ -311,11 +308,10 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Kpi icon={Users} label="Membres" value={String(stats.total)} />
         <Kpi icon={UserCheck} label="Comptes actifs" value={String(stats.active)} hint={stats.pending ? `${stats.pending} invitation${stats.pending > 1 ? 's' : ''} en attente` : undefined} />
         <Kpi icon={ShoppingBag} label="Acheteurs ce mois" value={String(stats.buyersThisMonth)} />
-        <Kpi icon={Clock} label="Achats ce mois" value={EUR(stats.monthTotal)} hint="Commandes payées de la communauté" />
       </div>
 
       {resetResult && (
@@ -376,7 +372,6 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                 <option value="recent">Inscription récente</option>
                 <option value="name">Nom (A → Z)</option>
                 <option value="last_purchase">Dernier achat</option>
-                <option value="total">Total des achats</option>
               </select>
             </div>
           </div>
@@ -400,9 +395,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                       <th className="px-4 py-2.5 text-left font-medium">Téléphone</th>
                       <th className="px-4 py-2.5 text-left font-medium">Inscrit le</th>
                       <th className="px-4 py-2.5 text-left font-medium">Statut</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Commandes</th>
                       <th className="px-4 py-2.5 text-right font-medium">Dernier achat</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Total achats</th>
                       <th className="px-4 py-2.5" />
                     </tr>
                   </thead>
@@ -430,11 +423,9 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                           <td className="px-4 py-3">
                             {m.activated_at ? <Badge variant="success">Actif</Badge> : <Badge variant="warning">Invitation en attente</Badge>}
                           </td>
-                          <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-700">{a?.orders || 0}</td>
                           <td className="px-4 py-3 text-right text-sm text-gray-600">
                             {a?.lastPurchase ? new Date(a.lastPurchase).toLocaleDateString('fr-FR') : '—'}
                           </td>
-                          <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-gray-900">{a ? EUR(a.total) : '—'}</td>
                           <td className="px-4 py-3">{memberActions(m)}</td>
                         </tr>
                       );
@@ -460,7 +451,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                           </span>
                           <span className="block truncate text-xs text-gray-500">{m.email}</span>
                           <span className="block text-xs text-gray-500">
-                            {a?.orders ? `${a.orders} commande${a.orders > 1 ? 's' : ''} · ${EUR(a.total)}` : 'Aucun achat'}
+                            Inscrit le {new Date(m.created_at).toLocaleDateString('fr-FR')}{a?.lastPurchase ? ` · dernier achat le ${new Date(a.lastPurchase).toLocaleDateString('fr-FR')}` : ''}
                           </span>
                         </span>
                       </button>

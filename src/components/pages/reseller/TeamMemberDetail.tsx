@@ -2,18 +2,19 @@ import React from 'react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { TeamMember } from '../../../hooks/useResellerTeam';
-import { useMyB2BOrders } from '../../../hooks/useMyB2BOrders';
-import { B2BOrdersList } from './B2BOrdersList';
 import { ArrowLeft, Mail, Phone, Calendar, Crown, User } from 'lucide-react';
 
 interface TeamMemberDetailProps {
   member: TeamMember;
   onBack: () => void;
-  onOpenProduct: (productId: string) => void;
+  /** Conservé pour compatibilité : l'historique des commandes n'est plus affiché. */
+  onOpenProduct?: (productId: string) => void;
 }
 
-export const TeamMemberDetail: React.FC<TeamMemberDetailProps> = ({ member, onBack, onOpenProduct }) => {
-  const { orders, loading, error } = useMyB2BOrders(true, member.profile_id);
+/** Fiche d'un membre vue par le contact principal : identité et coordonnées
+ * uniquement — jamais ses commandes ni ses montants dépensés. */
+
+export const TeamMemberDetail: React.FC<TeamMemberDetailProps> = ({ member, onBack }) => {
 
   return (
     <div className="p-4 md:p-6 max-w-3xl">
@@ -66,19 +67,6 @@ export const TeamMemberDetail: React.FC<TeamMemberDetailProps> = ({ member, onBa
         </CardContent>
       </Card>
 
-      <div className="mb-3">
-        <h4 className="text-sm font-semibold text-gray-900">Historique des commandes</h4>
-        <p className="text-xs text-gray-500">{loading ? 'Chargement...' : `${orders.length} commande${orders.length > 1 ? 's' : ''} passée${orders.length > 1 ? 's' : ''} par ${member.first_name}`}</p>
-      </div>
-
-      <B2BOrdersList
-        orders={orders}
-        loading={loading}
-        error={error}
-        emptyTitle="Aucune commande"
-        emptyMessage={`${member.first_name} n'a pas encore passé de commande.`}
-        onOpenProduct={onOpenProduct}
-      />
     </div>
   );
 };
