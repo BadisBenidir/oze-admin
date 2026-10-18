@@ -15,11 +15,12 @@ import { SubscriberOverview } from './b2b/SubscriberOverview';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import { whatsappUrl } from '../../utils/whatsapp';
 import {
-  ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound,
+  ArrowLeft, Users, ShoppingBag, Banknote, Crown, AlertCircle, Mail, Key, Copy, Check, KeyRound, ExternalLink,
   Eye, Edit, Wallet, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, X, Search, EyeOff, Phone, CreditCard,
 } from 'lucide-react';
 import type { B2BOrder } from '../../hooks/useB2BOrders';
 import { fetchSourcingFulfillmentOrderIds } from '../../utils/sourcingFulfillment';
+import { openMemberSpace } from '../../utils/openMemberSpace';
 
 interface ResellerDetailProps {
   reseller: Reseller;
@@ -82,7 +83,11 @@ const orderStatusBadge = (status: string) => {
 };
 
 export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack, onResellerUpdated }) => {
-  const { isAdmin } = useAdminAuth();
+  const { isAdmin, isOwner } = useAdminAuth();
+  const handleOpenSpace = async (profileId: string, name: string) => {
+    const err = await openMemberSpace(profileId, name);
+    if (err) alert(err);
+  };
   const { fetchContacts, resetContactPassword, updateContactEmail, updateContactProfile, updateContactHideIdentity } = useResellers(false);
 
   // Masquer le nom, l'email et l'entreprise dans l'en-tête de l'espace de ce compte (0181).
@@ -425,6 +430,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
           onViewWallet={() => { if (subscriberContact) setSelectedContactId(subscriberContact.id); setActiveTab('wallet'); }}
           onToggleHideIdentity={() => subscriberContact && toggleHideIdentity(subscriberContact)}
           onResetPassword={() => subscriberContact && openResetModal(subscriberContact)}
+          onOpenSpace={isOwner && subscriberContact ? () => handleOpenSpace(subscriberContact.profile_id, `${subscriberContact.first_name || ''} ${subscriberContact.last_name || ''}`.trim() || subscriberContact.email || 'ce membre') : undefined}
         />
       )}
 
@@ -554,6 +560,15 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                             >
                               <Key className="h-4 w-4" />
                             </button>
+                            {isOwner && (
+                              <button
+                                onClick={() => handleOpenSpace(c.profile_id, `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email || 'ce membre')}
+                                className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                title="Voir son espace (portail pro connecté en tant que ce membre)"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

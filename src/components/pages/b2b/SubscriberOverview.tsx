@@ -51,10 +51,12 @@ interface SubscriberOverviewProps {
   onViewWallet: () => void;
   onToggleHideIdentity: () => void;
   onResetPassword: () => void;
+  /** « Voir son espace » (propriétaire uniquement). */
+  onOpenSpace?: () => void;
 }
 
 export const SubscriberOverview: React.FC<SubscriberOverviewProps> = ({
-  reseller, contact, onEdit, onViewOrders, onViewWallet, onToggleHideIdentity, onResetPassword,
+  reseller, contact, onEdit, onViewOrders, onViewWallet, onToggleHideIdentity, onResetPassword, onOpenSpace,
 }) => {
   const email = contact?.email || reseller.contact_email;
   const phone = contact?.phone || reseller.contact_phone;
@@ -167,6 +169,11 @@ export const SubscriberOverview: React.FC<SubscriberOverviewProps> = ({
             <button onClick={onResetPassword} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
               <Key className="h-4 w-4" /> Nouveau mot de passe
             </button>
+            {onOpenSpace && (
+              <button onClick={onOpenSpace} className="inline-flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-800 hover:bg-purple-100">
+                <ExternalLink className="h-4 w-4" /> Voir son espace
+              </button>
+            )}
           </CardContent>
         </Card>
       )}
