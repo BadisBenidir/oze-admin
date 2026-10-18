@@ -12,7 +12,7 @@ import { InviteLinkPanel } from '../../reseller/InviteLinkPanel';
 import { MEMBER_GROUPS, memberGroupOf } from '../../../config/memberGroups';
 import { useCommunityGroupPrices, DEFAULT_GROUP_PRICES, formatMonthlyPrice, formatPriceDate } from '../../../hooks/useCommunityGroupPrices';
 import {
-  Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check, Search, X, ShoppingBag, UserCheck,
+  Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check, Search, X, UserCheck,
 } from 'lucide-react';
 
 const INVITE_COOLDOWN_SECONDS = 30;
@@ -117,8 +117,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
 
   const stats = useMemo(() => {
     const activeCount = members.filter((m) => m.activated_at).length;
-    const buyersThisMonth = members.filter((m) => activity[m.profile_id]?.boughtThisMonth).length;
-    return { total: members.length, active: activeCount, pending: members.length - activeCount, buyersThisMonth };
+    return { total: members.length, active: activeCount, pending: members.length - activeCount };
   }, [members, activity]);
 
   const visibleMembers = useMemo(() => {
@@ -368,10 +367,9 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Kpi icon={Users} label="Membres" value={String(stats.total)} />
         <Kpi icon={UserCheck} label="Comptes actifs" value={String(stats.active)} hint={stats.pending ? `${stats.pending} invitation${stats.pending > 1 ? 's' : ''} en attente` : undefined} />
-        <Kpi icon={ShoppingBag} label="Acheteurs ce mois" value={String(stats.buyersThisMonth)} />
       </div>
 
       {resetResult && (
