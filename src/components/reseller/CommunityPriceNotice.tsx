@@ -28,7 +28,7 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined }> =
 
       const { data, error } = await supabase
         .from('community_group_prices')
-        .select('id, member_group, monthly_price, effective_from')
+        .select('id, member_group, monthly_price, effective_from, message')
         .eq('reseller_id', me.reseller_id)
         .eq('member_group', me.member_group);
       if (cancelled || error) return;
@@ -74,6 +74,12 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined }> =
           <p className="mt-2 text-3xl font-bold text-gray-900 tabular-nums">{formatMonthlyPrice(notice.row.monthly_price)}</p>
           {notice.previous !== null && (
             <p className="mt-1 text-xs text-gray-400">au lieu de {formatMonthlyPrice(notice.previous)} actuellement</p>
+          )}
+          {notice.row.message && (
+            <div className="mt-5 rounded-lg border border-gray-100 bg-gray-50 p-3 text-left">
+              <p className="whitespace-pre-line text-sm text-gray-700">{notice.row.message}</p>
+              <p className="mt-1 text-xs text-gray-400">L'équipe OZË PARIS</p>
+            </div>
           )}
         </div>
         <div className="px-6 pb-6">

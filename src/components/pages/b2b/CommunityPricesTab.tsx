@@ -28,6 +28,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
   const [prices, setPrices] = useState<Record<number, string>>(() =>
     Object.fromEntries(Object.entries(DEFAULT_GROUP_PRICES).map(([g, p]) => [g, String(p).replace('.', ',')]))
   );
+  const [messages, setMessages] = useState<Record<number, string>>({});
   const [selected, setSelected] = useState<Set<number>>(new Set([1, 2, 3, 4]));
   const [effectiveFrom, setEffectiveFrom] = useState(nextMonthStart);
   const [saving, setSaving] = useState(false);
@@ -67,6 +68,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
         member_group: l.g,
         monthly_price: Math.round(l.price * 100) / 100,
         effective_from: effectiveFrom,
+        message: (messages[l.g] || '').trim() || null,
         created_by: user?.id ?? null,
       })),
       { onConflict: 'reseller_id,member_group,effective_from' }
@@ -124,13 +126,14 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
               <CalendarClock className="h-4 w-4 text-gray-400" /> Programmer un changement de prix
             </p>
             <p className="text-xs text-gray-500">
-              Le nouveau prix s'applique à partir de la date choisie. Les membres du groupe sont prévenus à chaque connexion jusqu'à cette date.
+              Le nouveau prix s'applique à partir de la date choisie. Les membres du groupe sont prévenus à chaque connexion jusqu'à cette date, avec ton message s'il y en a un.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {MEMBER_GROUPS.map((g) => (
-              <label key={g.id} className={`flex items-center gap-3 rounded-lg border p-3 ${selected.has(g.id) ? 'border-gray-300' : 'border-gray-100 opacity-60'}`}>
+              <div key={g.id} className={`space-y-2 rounded-lg border p-3 ${selected.has(g.id) ? 'border-gray-300' : 'border-gray-100 opacity-60'}`}>
+              <label className="flex items-center gap-3">
                 <input type="checkbox" checked={selected.has(g.id)} onChange={() => toggle(g.id)} className="h-4 w-4 accent-gray-900" />
                 <span className="min-w-0 flex-1 text-sm text-gray-800">{g.label}</span>
                 <span className="relative">
@@ -144,6 +147,15 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
                 </span>
               </label>
+              <textarea
+                value={messages[g.id] ?? ''}
+                onChange={(e) => setMessages((m) => ({ ...m, [g.id]: e.target.value }))}
+                disabled={!selected.has(g.id)}
+                rows={3}
+                placeholder="Message aux membres de ce groupe (facultatif)"
+                className={`${input} w-full resize-y`}
+              />
+              </div>
             ))}
           </div>
 
@@ -181,6 +193,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
                 <li key={r.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                   <span className="text-gray-800">
                     Groupe {r.member_group} → <strong>{formatMonthlyPrice(r.monthly_price)}</strong> à partir du {formatPriceDate(r.effective_from)}
+                    {r.message && <span className="mt-0.5 block whitespace-pre-line text-xs text-gray-500">« {r.message} »</span>}
                   </span>
                   <button onClick={() => removeRow(r.id)} className="p-1 text-gray-400 hover:text-red-600" title="Supprimer ce changement">
                     <Trash2 className="h-4 w-4" />

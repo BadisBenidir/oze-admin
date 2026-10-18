@@ -10,6 +10,8 @@ export interface GroupPriceRow {
   member_group: number;
   monthly_price: number;
   effective_from: string; // YYYY-MM-DD
+  /** Message de l'admin affiché aux membres du groupe avec l'annonce (0213). */
+  message: string | null;
 }
 
 export interface GroupPriceInfo {
@@ -53,7 +55,7 @@ export const useCommunityGroupPrices = (resellerId: string | null | undefined) =
     setLoading(true);
     const { data, error } = await supabase
       .from('community_group_prices')
-      .select('id, member_group, monthly_price, effective_from')
+      .select('id, member_group, monthly_price, effective_from, message')
       .eq('reseller_id', resellerId)
       .order('effective_from', { ascending: true });
     setRows(error ? [] : ((data || []) as GroupPriceRow[]).map((r) => ({ ...r, monthly_price: Number(r.monthly_price) })));
