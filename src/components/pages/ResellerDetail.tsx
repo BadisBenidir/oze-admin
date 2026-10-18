@@ -21,6 +21,8 @@ import {
 import type { B2BOrder } from '../../hooks/useB2BOrders';
 import { fetchSourcingFulfillmentOrderIds } from '../../utils/sourcingFulfillment';
 import { openMemberSpace } from '../../utils/openMemberSpace';
+import { supabase } from '../../lib/supabase';
+import { MEMBER_GROUPS, memberGroupOf } from '../../config/memberGroups';
 
 interface ResellerDetailProps {
   reseller: Reseller;
@@ -84,6 +86,12 @@ const orderStatusBadge = (status: string) => {
 
 export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack, onResellerUpdated }) => {
   const { isAdmin, isOwner } = useAdminAuth();
+  const handleMemberGroup = async (c: ResellerContact, value: string) => {
+    const group = value ? Number(value) : null;
+    setContacts((prev) => prev.map((x) => (x.id === c.id ? { ...x, member_group: group } : x)));
+    const { error: rpcError } = await supabase.rpc('set_member_group', { p_contact_id: c.id, p_group: group });
+    if (rpcError) alert(rpcError.message);
+  };
   const handleOpenSpace = async (profileId: string, name: string) => {
     const err = await openMemberSpace(profileId, name);
     if (err) alert(err);
@@ -513,6 +521,19 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                         <td className="py-3 px-4 md:px-6">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <Badge variant={c.is_primary ? 'info' : 'default'}>{c.is_primary ? 'Principal' : 'Membre'}</Badge>
+                            {!c.is_primary && (
+                              <select
+                                value={c.member_group ?? ''}
+                                onChange={(e) => handleMemberGroup(c, e.target.value)}
+                                title="Groupe d'accès (défini par le contact principal, modifiable ici)"
+                                className={`rounded-full border px-2 py-0.5 text-xs font-medium ${memberGroupOf(c.member_group)?.className || 'border-dashed border-gray-300 bg-white text-gray-500'}`}
+                              >
+                                <option value="">Non classé</option>
+                                {MEMBER_GROUPS.map((g) => (
+                                  <option key={g.id} value={g.id}>{g.label}</option>
+                                ))}
+                              </select>
+                            )}
                             {legalStatusBadge(c.legal_status)}
                             {c.hide_identity && <Badge variant="default">Identité masquée</Badge>}
                           </div>

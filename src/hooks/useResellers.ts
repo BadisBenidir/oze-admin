@@ -69,6 +69,8 @@ export interface ResellerContact {
   can_preview_drops: boolean;
   /** Nom, email et entreprise masqués dans l'en-tête de l'espace revendeur (0181). */
   hide_identity: boolean;
+  /** Groupe d'accès choisi par le contact principal (0211). */
+  member_group: number | null;
   created_at: string;
   first_name: string;
   last_name: string;
@@ -269,7 +271,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
     const { data, error: fetchError } = await supabase
       .from('reseller_contacts')
       .select(`
-        id, reseller_id, profile_id, is_primary, can_preview_drops, hide_identity, created_at,
+        id, reseller_id, profile_id, is_primary, can_preview_drops, hide_identity, member_group, created_at,
         profiles!inner(
           first_name, last_name, email, phone, address, city, postal_code, country, wallet_balance,
           legal_status, legal_entity_name, siret, vat_number, legal_form, legal_address, legal_city, legal_postal_code, legal_country
@@ -288,6 +290,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       profile_id: string;
       is_primary: boolean;
       can_preview_drops: boolean;
+      member_group: number | null;
       hide_identity: boolean;
       created_at: string;
       profiles: {
@@ -305,6 +308,7 @@ export const useResellers = (isAuthenticated: boolean = false): UseResellersResu
       is_primary: c.is_primary,
       can_preview_drops: c.can_preview_drops,
       hide_identity: Boolean(c.hide_identity),
+      member_group: c.member_group ?? null,
       created_at: c.created_at,
       first_name: c.profiles.first_name,
       last_name: c.profiles.last_name,

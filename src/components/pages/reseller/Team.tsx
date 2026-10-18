@@ -9,6 +9,7 @@ import { useResellerTeam, TeamMember } from '../../../hooks/useResellerTeam';
 import { generateSecurePassword } from '../../../utils/generatePassword';
 import { TeamMemberDetail } from './TeamMemberDetail';
 import { InviteLinkPanel } from '../../reseller/InviteLinkPanel';
+import { MEMBER_GROUPS, memberGroupOf } from '../../../config/memberGroups';
 import {
   Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check, Search, X, ShoppingBag, UserCheck,
 } from 'lucide-react';
@@ -42,7 +43,14 @@ const normalize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLo
  */
 export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
   const { profile } = useResellerAuth();
-  const { members, loading, error, inviteTeammate, removeTeammate, resetTeammatePassword } = useResellerTeam(profile?.reseller_id);
+  const { members, loading, error, inviteTeammate, removeTeammate, resetTeammatePassword, setMemberGroup } = useResellerTeam(profile?.reseller_id);
+  const [groupFilter, setGroupFilter] = useState<'all' | 'none' | number>('all');
+  const [groupError, setGroupError] = useState<string | null>(null);
+  const handleGroupChange = async (m: TeamMember, value: string) => {
+    setGroupError(null);
+    const result = await setMemberGroup(m.id, value ? Number(value) : null);
+    if (!result.success) setGroupError(result.error || 'Impossible de changer le groupe');
+  };
 
   const [mode, setMode] = useState<'email' | 'password'>('email');
   const [form, setForm] = useState({ email: '', first_name: '', last_name: '', password: '', phone: '' });
@@ -119,6 +127,8 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
       if (statusFilter === 'pending' && m.activated_at) return false;
       if (statusFilter === 'buyers' && !a?.orders) return false;
       if (statusFilter === 'never' && a?.orders) return false;
+      if (groupFilter === 'none' && (m.is_primary || m.member_group)) return false;
+      if (typeof groupFilter === 'number' && m.member_group !== groupFilter) return false;
       if (!term) return true;
       return normalize(`${m.first_name} ${m.last_name} ${m.email} ${m.phone || ''}`).includes(term);
     });
@@ -132,7 +142,17 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
       if (sortKey === 'last_purchase') return (ay?.lastPurchase || '').localeCompare(ax?.lastPurchase || '') || byName(x, y);
       return y.created_at.localeCompare(x.created_at);
     });
-  }, [members, activity, search, statusFilter, sortKey]);
+  }, [members, activity, search, statusFilter, sortKey, groupFilter]);
+
+  const groupCounts = useMemo(() => {
+    const counts: Record<string, number> = { none: 0 };
+    for (const m of members) {
+      if (m.is_primary) continue;
+      const key = m.member_group ? String(m.member_group) : 'none';
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }, [members]);
 
   if (!profile?.is_primary) {
     return (
@@ -256,6 +276,24 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
     </Card>
   );
 
+  const groupSelect = (m: TeamMember) => {
+    if (m.is_primary) return <span className="text-xs text-gray-400">—</span>;
+    const g = memberGroupOf(m.member_group);
+    return (
+      <select
+        value={m.member_group ?? ''}
+        onChange={(e) => handleGroupChange(m, e.target.value)}
+        title={g?.hint || 'Choisir le groupe d\x27accès de ce membre'}
+        className={`rounded-full border px-2.5 py-1 text-xs font-medium focus:outline-none ${g ? g.className : 'border-dashed border-gray-300 bg-white text-gray-500'}`}
+      >
+        <option value="">Non classé</option>
+        {MEMBER_GROUPS.map((opt) => (
+          <option key={opt.id} value={opt.id}>{opt.label}</option>
+        ))}
+      </select>
+    );
+  };
+
   const memberActions = (m: TeamMember) => (
     <div className="flex items-center justify-end gap-1">
       <button
@@ -340,6 +378,35 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
       )}
 
       <Card>
+        <CardContent className="p-4">
+          <p className="text-sm font-medium text-gray-900">Groupes d'accès</p>
+          <p className="mb-3 text-xs text-gray-500">Classe chaque membre selon ce qu'il a payé pour accéder à l'écosystème luxe — ce groupe définira le prix de son abonnement.</p>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            {MEMBER_GROUPS.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => setGroupFilter(groupFilter === g.id ? 'all' : g.id)}
+                className={`rounded-lg border px-3 py-2 text-left transition-shadow ${g.className} ${groupFilter === g.id ? 'ring-2 ring-gray-900' : ''}`}
+              >
+                <span className="block text-xs font-semibold">{g.label}</span>
+                <span className="block text-lg font-semibold tabular-nums">{groupCounts[String(g.id)] || 0}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setGroupFilter(groupFilter === 'none' ? 'all' : 'none')}
+              className={`rounded-lg border border-dashed border-gray-300 bg-white px-3 py-2 text-left text-gray-600 ${groupFilter === 'none' ? 'ring-2 ring-gray-900' : ''}`}
+            >
+              <span className="block text-xs font-semibold">Non classés</span>
+              <span className="block text-lg font-semibold tabular-nums">{groupCounts.none || 0}</span>
+            </button>
+          </div>
+          {groupError && <p className="mt-2 text-sm text-red-600">{groupError}</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardContent className="p-0">
           <div className="flex flex-col gap-3 border-b border-gray-100 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="relative w-full lg:max-w-xs">
@@ -364,6 +431,17 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                   {f.label} <span className={statusFilter === f.id ? 'text-gray-300' : 'text-gray-400'}>{f.count}</span>
                 </button>
               ))}
+              <select
+                value={String(groupFilter)}
+                onChange={(e) => setGroupFilter(e.target.value === 'all' || e.target.value === 'none' ? e.target.value : Number(e.target.value))}
+                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 focus:border-gray-400 focus:outline-none"
+              >
+                <option value="all">Tous les groupes</option>
+                {MEMBER_GROUPS.map((g) => (
+                  <option key={g.id} value={g.id}>{g.label} ({groupCounts[String(g.id)] || 0})</option>
+                ))}
+                <option value="none">Non classés ({groupCounts.none || 0})</option>
+              </select>
               <select
                 value={sortKey}
                 onChange={(e) => setSortKey(e.target.value as SortKey)}
@@ -394,6 +472,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                       <th className="px-4 py-2.5 text-left font-medium">Membre</th>
                       <th className="px-4 py-2.5 text-left font-medium">Téléphone</th>
                       <th className="px-4 py-2.5 text-left font-medium">Inscrit le</th>
+                      <th className="px-4 py-2.5 text-left font-medium">Groupe</th>
                       <th className="px-4 py-2.5 text-left font-medium">Statut</th>
                       <th className="px-4 py-2.5 text-right font-medium">Dernier achat</th>
                       <th className="px-4 py-2.5" />
@@ -420,6 +499,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">{m.phone || '—'}</td>
                           <td className="px-4 py-3 text-sm text-gray-600">{new Date(m.created_at).toLocaleDateString('fr-FR')}</td>
+                          <td className="px-4 py-3">{groupSelect(m)}</td>
                           <td className="px-4 py-3">
                             {m.activated_at ? <Badge variant="success">Actif</Badge> : <Badge variant="warning">Invitation en attente</Badge>}
                           </td>
@@ -453,6 +533,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                           <span className="block text-xs text-gray-500">
                             Inscrit le {new Date(m.created_at).toLocaleDateString('fr-FR')}{a?.lastPurchase ? ` · dernier achat le ${new Date(a.lastPurchase).toLocaleDateString('fr-FR')}` : ''}
                           </span>
+                          {!m.is_primary && <span className="mt-1.5 block" onClick={(e) => e.stopPropagation()}>{groupSelect(m)}</span>}
                         </span>
                       </button>
                       {memberActions(m)}

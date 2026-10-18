@@ -13,6 +13,8 @@ export interface TeamMember {
   email: string;
   phone: string | null;
   activated_at: string | null;
+  /** Groupe d'accès (0211) : 1 offert, 2 = 300 €, 3 = 700 €, 4 nouveau ; null = non classé. */
+  member_group: number | null;
 }
 
 type ContactRow = {
@@ -20,6 +22,7 @@ type ContactRow = {
   profile_id: string;
   is_primary: boolean;
   created_at: string;
+  member_group: number | null;
   profiles: { first_name: string; last_name: string; email: string; phone: string | null; activated_at: string | null };
 };
 
@@ -40,7 +43,7 @@ export const useResellerTeam = (resellerId: string | undefined) => {
 
       const { data, error: fetchError } = await supabase
         .from('reseller_contacts')
-        .select('id, profile_id, is_primary, created_at, profiles!inner(first_name, last_name, email, phone, activated_at)')
+        .select('id, profile_id, is_primary, created_at, member_group, profiles!inner(first_name, last_name, email, phone, activated_at)')
         .eq('reseller_id', resellerId)
         .order('created_at', { ascending: true });
 
@@ -59,6 +62,7 @@ export const useResellerTeam = (resellerId: string | undefined) => {
           email: c.profiles.email,
           phone: c.profiles.phone,
           activated_at: c.profiles.activated_at,
+          member_group: c.member_group ?? null,
         }))
       );
     } catch (err) {
@@ -124,5 +128,16 @@ export const useResellerTeam = (resellerId: string | undefined) => {
     fetchTeam();
   }, [fetchTeam]);
 
-  return { members, loading, error, refresh: fetchTeam, inviteTeammate, removeTeammate, resetTeammatePassword };
+  /** Classe un membre dans un groupe d'accès (contact principal, 0211) — mise à jour immédiate de la liste. */
+  const setMemberGroup = async (contactId: string, group: number | null): Promise<{ success: boolean; error?: string }> => {
+    setMembers((prev) => prev.map((m) => (m.id === contactId ? { ...m, member_group: group } : m)));
+    const { error: rpcError } = await supabase.rpc('set_member_group', { p_contact_id: contactId, p_group: group });
+    if (rpcError) {
+      await fetchTeam();
+      return { success: false, error: rpcError.message };
+    }
+    return { success: true };
+  };
+
+  return { members, loading, error, refresh: fetchTeam, inviteTeammate, removeTeammate, resetTeammatePassword, setMemberGroup };
 };
