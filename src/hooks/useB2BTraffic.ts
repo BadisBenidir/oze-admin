@@ -23,6 +23,26 @@ export interface DailyVisitCount {
 
 const toDateKey = (d: Date) => d.toISOString().slice(0, 10);
 
+/** Toutes les lignes reseller_daily_sessions depuis `since`, par pages de
+ * 1000 : PostgREST plafonne chaque réponse à 1000 lignes, ce qui coupait
+ * silencieusement les jours les plus récents (une ligne par membre et par jour). */
+const fetchSessionDates = async (since: string) => {
+  const PAGE = 1000;
+  const all: { date: string }[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('reseller_daily_sessions')
+      .select('date')
+      .gte('date', since)
+      .order('date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) return { data: null, error };
+    all.push(...((data || []) as { date: string }[]));
+    if (!data || data.length < PAGE) return { data: all, error: null };
+  }
+};
+
 /**
  * Trafic du portail B2B pour l'onglet admin "Statistiques B2B" :
  *   - `onlineResellers` : lecture seule du canal Presence 'online-b2b-users'
@@ -86,11 +106,7 @@ export const useB2BTraffic = (isAdmin: boolean, historyDays: 14 | 30 = 30) => {
       windowStart.setDate(windowStart.getDate() - (historyDays - 1));
 
       const [realRes, backfillRes] = await Promise.all([
-        supabase
-          .from('reseller_daily_sessions')
-          .select('date')
-          .gte('date', toDateKey(windowStart))
-          .order('date', { ascending: true }),
+        fetchSessionDates(toDateKey(windowStart)),
         supabase.rpc('backfill_reseller_daily_activity', { p_days: historyDays }),
       ]);
       if (realRes.error) throw new Error(realRes.error.message);
