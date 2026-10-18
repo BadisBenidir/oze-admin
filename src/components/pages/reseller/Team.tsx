@@ -10,7 +10,7 @@ import { generateSecurePassword } from '../../../utils/generatePassword';
 import { TeamMemberDetail } from './TeamMemberDetail';
 import { InviteLinkPanel } from '../../reseller/InviteLinkPanel';
 import { MEMBER_GROUPS, memberGroupOf } from '../../../config/memberGroups';
-import { useCommunityGroupPrices, formatMonthlyPrice, formatPriceDate } from '../../../hooks/useCommunityGroupPrices';
+import { useCommunityGroupPrices, DEFAULT_GROUP_PRICES, formatMonthlyPrice, formatPriceDate } from '../../../hooks/useCommunityGroupPrices';
 import {
   Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check, Search, X, ShoppingBag, UserCheck,
 } from 'lucide-react';
@@ -294,19 +294,24 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
         ))}
       </select>
     );
-    const price = m.member_group ? groupPrices[m.member_group] : null;
-    if (!price || (!price.current && !price.upcoming)) return select;
+    return select;
+  };
+
+  /** Prix d'abonnement d'un groupe : prochain prix programmé, sinon prix en vigueur, sinon prix prévu par défaut. */
+  const groupPrice = (group: number) => {
+    const info = groupPrices[group];
+    if (info?.upcoming) return { amount: info.upcoming.monthly_price, from: info.upcoming.effective_from };
+    if (info?.current) return { amount: info.current.monthly_price, from: null };
+    return { amount: DEFAULT_GROUP_PRICES[group] ?? 0, from: null };
+  };
+
+  const priceLabel = (m: TeamMember) => {
+    if (m.is_primary || !m.member_group) return <span className="text-xs text-gray-400">—</span>;
+    const p = groupPrice(m.member_group);
     return (
-      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
-        {select}
-        <span className="text-xs tabular-nums text-gray-700">
-          {price.current ? formatMonthlyPrice(price.current.monthly_price) : null}
-          {price.upcoming && (
-            <span className="block text-[11px] text-amber-700">
-              {formatMonthlyPrice(price.upcoming.monthly_price)} dès le {formatPriceDate(price.upcoming.effective_from)}
-            </span>
-          )}
-        </span>
+      <span className="text-sm font-medium tabular-nums text-gray-900">
+        {formatMonthlyPrice(p.amount)}
+        {p.from && <span className="block text-[11px] font-normal text-gray-500">dès le {formatPriceDate(p.from)}</span>}
       </span>
     );
   };
@@ -408,6 +413,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
               >
                 <span className="block text-xs font-semibold">{g.label}</span>
                 <span className="block text-lg font-semibold tabular-nums">{groupCounts[String(g.id)] || 0}</span>
+                <span className="block text-xs font-medium tabular-nums opacity-80">{formatMonthlyPrice(groupPrice(g.id).amount)}</span>
               </button>
             ))}
             <button
@@ -491,6 +497,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                       <th className="px-4 py-2.5 text-left font-medium">Inscrit le</th>
                       <th className="px-4 py-2.5 text-left font-medium">Groupe</th>
                       <th className="px-4 py-2.5 text-left font-medium">Statut</th>
+                      <th className="px-4 py-2.5 text-left font-medium">Abonnement</th>
                       <th className="px-4 py-2.5 text-right font-medium">Dernier achat</th>
                       <th className="px-4 py-2.5" />
                     </tr>
@@ -520,6 +527,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                           <td className="px-4 py-3">
                             {m.activated_at ? <Badge variant="success">Actif</Badge> : <Badge variant="warning">Invitation en attente</Badge>}
                           </td>
+                          <td className="px-4 py-3">{priceLabel(m)}</td>
                           <td className="px-4 py-3 text-right text-sm text-gray-600">
                             {a?.lastPurchase ? new Date(a.lastPurchase).toLocaleDateString('fr-FR') : '—'}
                           </td>
@@ -550,7 +558,12 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
                           <span className="block text-xs text-gray-500">
                             Inscrit le {new Date(m.created_at).toLocaleDateString('fr-FR')}{a?.lastPurchase ? ` · dernier achat le ${new Date(a.lastPurchase).toLocaleDateString('fr-FR')}` : ''}
                           </span>
-                          {!m.is_primary && <span className="mt-1.5 block" onClick={(e) => e.stopPropagation()}>{groupSelect(m)}</span>}
+                          {!m.is_primary && (
+                            <span className="mt-1.5 flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              {groupSelect(m)}
+                              {m.member_group ? priceLabel(m) : null}
+                            </span>
+                          )}
                         </span>
                       </button>
                       {memberActions(m)}
