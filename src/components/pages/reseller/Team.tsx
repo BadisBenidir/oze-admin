@@ -10,6 +10,7 @@ import { generateSecurePassword } from '../../../utils/generatePassword';
 import { TeamMemberDetail } from './TeamMemberDetail';
 import { InviteLinkPanel } from '../../reseller/InviteLinkPanel';
 import { MEMBER_GROUPS, memberGroupOf } from '../../../config/memberGroups';
+import { useCommunityGroupPrices, formatMonthlyPrice, formatPriceDate } from '../../../hooks/useCommunityGroupPrices';
 import {
   Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check, Search, X, ShoppingBag, UserCheck,
 } from 'lucide-react';
@@ -44,6 +45,7 @@ const normalize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLo
 export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
   const { profile } = useResellerAuth();
   const { members, loading, error, inviteTeammate, removeTeammate, resetTeammatePassword, setMemberGroup } = useResellerTeam(profile?.reseller_id);
+  const { info: groupPrices } = useCommunityGroupPrices(profile?.is_primary ? profile?.reseller_id : null);
   const [groupFilter, setGroupFilter] = useState<'all' | 'none' | number>('all');
   const [groupError, setGroupError] = useState<string | null>(null);
   const handleGroupChange = async (m: TeamMember, value: string) => {
@@ -279,7 +281,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
   const groupSelect = (m: TeamMember) => {
     if (m.is_primary) return <span className="text-xs text-gray-400">—</span>;
     const g = memberGroupOf(m.member_group);
-    return (
+    const select = (
       <select
         value={m.member_group ?? ''}
         onChange={(e) => handleGroupChange(m, e.target.value)}
@@ -291,6 +293,21 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
           <option key={opt.id} value={opt.id}>{opt.label}</option>
         ))}
       </select>
+    );
+    const price = m.member_group ? groupPrices[m.member_group] : null;
+    if (!price || (!price.current && !price.upcoming)) return select;
+    return (
+      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        {select}
+        <span className="text-xs tabular-nums text-gray-700">
+          {price.current ? formatMonthlyPrice(price.current.monthly_price) : null}
+          {price.upcoming && (
+            <span className="block text-[11px] text-amber-700">
+              {formatMonthlyPrice(price.upcoming.monthly_price)} dès le {formatPriceDate(price.upcoming.effective_from)}
+            </span>
+          )}
+        </span>
+      </span>
     );
   };
 

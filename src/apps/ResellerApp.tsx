@@ -28,6 +28,7 @@ import { PrivacyPolicy } from '../components/pages/reseller/PrivacyPolicy';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 import { ShoppingCart, Wallet, X } from 'lucide-react';
 import { WalletCreditNotice } from '../components/reseller/WalletCreditNotice';
+import { CommunityPriceNotice } from '../components/reseller/CommunityPriceNotice';
 
 // Deux routes "réelles" (URL adressables) hors du système d'onglets : la
 // fiche produit du catalogue B2B et le panier. Le reste — dont "Enchères",
@@ -341,6 +342,7 @@ function ResellerApp() {
       >
         <ResellerNotificationsBanner notifications={notifications} onDismiss={markNotificationRead} />
         <WalletCreditNotice profileId={profile?.id} onAcknowledged={wallet.refresh} />
+        <CommunityPriceNotice profileId={profile?.id} />
         {/* Abonné dont le prélèvement mensuel a échoué (Stripe retente) : accès maintenu, carte à mettre à jour. */}
         {profile?.account_type === 'subscriber' && profile.subscription_status === 'past_due' && currentTab !== 'profile' && (
           <div className="m-4 md:m-6 bg-red-50 border border-red-200 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3">

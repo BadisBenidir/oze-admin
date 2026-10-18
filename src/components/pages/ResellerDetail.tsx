@@ -12,6 +12,7 @@ import { WalletAdjustModal } from './b2b/WalletAdjustModal';
 import { ResellerContactEditModal } from './b2b/ResellerContactEditModal';
 import { SourcingMissionsTab } from './b2b/SourcingMissionsTab';
 import { SubscriberOverview } from './b2b/SubscriberOverview';
+import { CommunityPricesTab } from './b2b/CommunityPricesTab';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import { whatsappUrl } from '../../utils/whatsapp';
 import {
@@ -139,7 +140,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   const [contactsLoading, setContactsLoading] = useState(true);
   const [contactsError, setContactsError] = useState<string | null>(null);
   const [contactSearch, setContactSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'team' | 'orders' | 'wallet' | 'sourcing'>('team');
+  const [activeTab, setActiveTab] = useState<'team' | 'orders' | 'wallet' | 'sourcing' | 'subscriptions'>('team');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
 
@@ -427,6 +428,16 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
         >
           Sourcing sur mesure
         </button>
+        {!isSubscriber && (
+          <button
+            onClick={() => setActiveTab('subscriptions')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'subscriptions' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Abonnements
+          </button>
+        )}
       </div>
 
       {activeTab === 'team' && isSubscriber && (
@@ -846,6 +857,10 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
 
       {activeTab === 'sourcing' && (
         <SourcingMissionsTab resellerId={currentReseller.id} resellerName={currentReseller.company_name} isAdmin={isAdmin} />
+      )}
+
+      {activeTab === 'subscriptions' && !isSubscriber && (
+        <CommunityPricesTab resellerId={currentReseller.id} contacts={contacts} />
       )}
 
       {/* Modal réinitialisation mot de passe */}
