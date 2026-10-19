@@ -18,7 +18,8 @@ import { useProducts, ProductFilters } from '../../hooks/useProducts';
 import { useDashboardStats } from '../../hooks/useDashboardStats';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useProductFulfillment, FULFILLMENT_LABELS } from '../../hooks/useProductFulfillment';
-import { Plus, Edit, Trash2, Eye, Package, AlertCircle, TrendingUp, Tag, Download, Archive, ArchiveRestore } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Package, AlertCircle, TrendingUp, Tag, Download, Archive, ArchiveRestore, StickyNote } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 interface ProductsProps {
   activeSubTab: string;
@@ -103,6 +104,26 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
 
   // État pour la modale d'étiquette (QR/code-barres) depuis la liste
   const [labelProduct, setLabelProduct] = useState<{ name: string; reference: string; brandName?: string } | null>(null)
+  // Note interne d'un article (products.internal_comments), jamais visible des clients.
+  const [noteProduct, setNoteProduct] = useState<{ id: string; name: string } | null>(null)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
+  const [noteError, setNoteError] = useState<string | null>(null)
+  const openNote = (product: { id: string; name: string; internal_comments?: string | null }) => {
+    setNoteProduct({ id: product.id, name: product.name })
+    setNoteDraft(product.internal_comments || '')
+    setNoteError(null)
+  }
+  const saveNote = async () => {
+    if (!noteProduct) return
+    setNoteSaving(true)
+    setNoteError(null)
+    const { error } = await supabase.from('products').update({ internal_comments: noteDraft.trim() || null }).eq('id', noteProduct.id)
+    setNoteSaving(false)
+    if (error) return setNoteError(error.message)
+    setNoteProduct(null)
+    refreshProducts()
+  }
 
   // Fonctions pour les catégories
   const handleCreateCategory = () => {
@@ -1192,6 +1213,13 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
                             <Tag className="h-4 w-4" />
                           </button>
                           <button
+                            onClick={() => openNote(product)}
+                            className={`p-2 md:p-1 transition-colors touch-manipulation min-h-[44px] md:min-h-0 flex items-center justify-center ${product.internal_comments ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-amber-600'}`}
+                            title={product.internal_comments ? `Note interne : ${product.internal_comments}` : 'Ajouter une note interne'}
+                          >
+                            <StickyNote className="h-4 w-4" />
+                          </button>
+                          <button
                             onClick={() => handleEditProduct(product.id)}
                             className="p-2 md:p-1 text-gray-400 hover:text-green-600 transition-colors touch-manipulation min-h-[44px] md:min-h-0 flex items-center justify-center"
                             title="Modifier"
@@ -1266,6 +1294,36 @@ export const Products: React.FC<ProductsProps> = ({ activeSubTab }) => {
           </div>
         </div>
       )}
+
+      {/* Note interne d'un article */}
+      <Modal isOpen={Boolean(noteProduct)} onClose={() => setNoteProduct(null)} title="Note interne">
+        {noteProduct && (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">{noteProduct.name}</p>
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              rows={5}
+              autoFocus
+              placeholder="Visible uniquement par l'équipe OZË (jamais par les clients)"
+              className="w-full resize-y rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+            />
+            {noteError && <p className="text-sm text-red-600">{noteError}</p>}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setNoteProduct(null)} className="rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                Annuler
+              </button>
+              <button
+                onClick={saveNote}
+                disabled={noteSaving}
+                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {noteSaving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Modale d'étiquette (impression + téléchargement PDF) */}
       <Modal
