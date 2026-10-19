@@ -15,9 +15,13 @@ const PAYING_STATUSES = new Set(['active', 'trialing', 'past_due']);
  * 0214) ni souscrit son abonnement — le bouton principal ouvre directement le
  * paiement Stripe (community-subscription). Rien pour le contact principal,
  * un membre non classé ou un prix inchangé.
+ * Fenêtre fermée (croix) ou « Ne plus afficher » : un bandeau compact reste
+ * en haut de l'espace jusqu'au paiement (rappel du prix, message rouvrable,
+ * bouton de paiement).
  */
 export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; firstName?: string | null }> = ({ profileId, firstName }) => {
   const [notice, setNotice] = useState<{ row: GroupPriceRow; previous: number | null } | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -53,8 +57,9 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
         .eq('profile_id', profileId)
         .eq('price_id', upcoming.id)
         .maybeSingle();
-      if (cancelled || dismissed) return;
+      if (cancelled) return;
       setNotice({ row: upcoming, previous: current?.monthly_price ?? null });
+      setModalOpen(!dismissed);
     })();
     return () => {
       cancelled = true;
@@ -64,10 +69,9 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
   if (!notice) return null;
 
   const close = async () => {
-    const priceId = notice.row.id;
-    setNotice(null);
+    setModalOpen(false);
     if (dontShowAgain && profileId) {
-      await supabase.from('community_price_notice_dismissals').insert({ profile_id: profileId, price_id: priceId });
+      await supabase.from('community_price_notice_dismissals').upsert({ profile_id: profileId, price_id: notice.row.id }, { ignoreDuplicates: true });
     }
   };
 
@@ -84,6 +88,48 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
   };
 
   const canPay = notice.row.monthly_price > 0;
+  const preview = notice.row.message ? personalizeMessage(notice.row.message, firstName).replace(/s+/g, ' ').trim() : '';
+
+  if (!modalOpen) {
+    return (
+      <div className="mx-4 mt-4 md:mx-6 md:mt-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <CalendarClock className="hidden h-5 w-5 flex-shrink-0 text-amber-600 sm:block" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900">
+            Dès le {formatPriceDate(notice.row.effective_from)}, votre abonnement OZË PARIS passe à {formatMonthlyPrice(notice.row.monthly_price)}
+          </p>
+          {preview && (
+            <p className="truncate text-sm text-gray-600">
+              {preview}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          {preview && (
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-amber-100"
+            >
+              Lire le message
+            </button>
+          )}
+          {canPay && (
+            <button
+              type="button"
+              onClick={subscribe}
+              disabled={paying}
+              className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-60"
+            >
+              <CreditCard className="h-4 w-4" />
+              {paying ? 'Ouverture…' : 'Activer mon abonnement'}
+            </button>
+          )}
+        </div>
+        {payError && <p className="text-sm text-red-600 sm:basis-full">{payError}</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
