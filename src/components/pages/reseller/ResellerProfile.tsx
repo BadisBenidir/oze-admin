@@ -8,6 +8,7 @@ import { ChronopostPickupPoint } from '../../../services/chronopostService';
 import { Building2, CheckCircle2, AlertCircle, Lock, Eye, EyeOff, Check, Circle, Truck, Package, MapPin, Scale } from 'lucide-react';
 import { isPlausiblePhone } from '../../../utils/phoneValidation';
 import { SubscriptionSection } from './Subscription';
+import { CommunityMembershipSection } from './CommunityMembership';
 
 export const ResellerProfile: React.FC = () => {
   const { profile, updateLegalInfo } = useResellerAuth();
@@ -135,6 +136,10 @@ export const ResellerProfile: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {profile.account_type !== 'subscriber' && !profile.is_primary && (
+        <CommunityMembershipSection companyName={profile.company_name} />
       )}
 
       <LegalStatusSection profile={profile} updateLegalInfo={updateLegalInfo} />
