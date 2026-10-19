@@ -143,7 +143,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
               <CalendarClock className="h-4 w-4 text-gray-400" /> Programmer un changement de prix
             </p>
             <p className="text-xs text-gray-500">
-              Le nouveau prix s'applique à partir de la date choisie. Les membres du groupe sont prévenus à chaque connexion jusqu'à cette date, avec ton message s'il y en a un. Écris {'{prénom}'} dans le message : il sera remplacé par le prénom de chaque membre.
+              Le nouveau prix s'applique à partir de la date choisie. Les membres du groupe sont prévenus à chaque connexion jusqu'à cette date, avec ton message s'il y en a un. Écris {'{prénom}'} dans le message : il sera remplacé par le prénom de chaque membre. Les membres déjà abonnés passent automatiquement au nouveau prix à leur prochaine échéance après cette date.
             </p>
           </div>
 

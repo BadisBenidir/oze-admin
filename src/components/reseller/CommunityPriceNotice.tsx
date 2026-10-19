@@ -20,7 +20,7 @@ const PAYING_STATUSES = new Set(['active', 'trialing', 'past_due']);
  * bouton de paiement).
  */
 export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; firstName?: string | null }> = ({ profileId, firstName }) => {
-  const [notice, setNotice] = useState<{ row: GroupPriceRow; previous: number | null } | null>(null);
+  const [notice, setNotice] = useState<{ row: GroupPriceRow; previous: number | null; subscriber: boolean } | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
@@ -35,13 +35,15 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
     (async () => {
       const { data: me } = await supabase
         .from('reseller_contacts')
-        .select('reseller_id, member_group, is_primary, community_sub_status, community_sub_stripe_subscription_id')
+        .select('reseller_id, member_group, is_primary, community_sub_status, community_sub_stripe_subscription_id, community_sub_price')
         .eq('profile_id', profileId)
         .maybeSingle();
       if (!me || me.is_primary || !me.member_group) return;
-      if (me.community_sub_status && PAYING_STATUSES.has(me.community_sub_status)) return;
+      // Abonné en cours : prévenu (sans bouton de paiement) que son prix change
+      // à la prochaine échéance après la date (apply-community-prices, 0215).
+      const subscriber = Boolean(me.community_sub_status && PAYING_STATUSES.has(me.community_sub_status));
       // Ancien abonné (résilié) : réabonnement au prix public depuis Mon profil, pas d'annonce de prix de groupe.
-      if (me.community_sub_stripe_subscription_id) return;
+      if (!subscriber && me.community_sub_stripe_subscription_id) return;
 
       const { data, error } = await supabase
         .from('community_group_prices')
@@ -52,7 +54,8 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
 
       const rows = ((data || []) as GroupPriceRow[]).map((r) => ({ ...r, monthly_price: Number(r.monthly_price) }));
       const { current, upcoming } = groupPriceInfo(rows)[me.member_group];
-      if (!upcoming || upcoming.monthly_price === (current?.monthly_price ?? 0)) return;
+      const paidPrice = subscriber ? Number(me.community_sub_price ?? 0) : null;
+      if (!upcoming || upcoming.monthly_price === (paidPrice ?? current?.monthly_price ?? 0)) return;
 
       const { data: dismissed } = await supabase
         .from('community_price_notice_dismissals')
@@ -60,8 +63,8 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
         .eq('profile_id', profileId)
         .eq('price_id', upcoming.id)
         .maybeSingle();
-      if (cancelled) return;
-      setNotice({ row: upcoming, previous: current?.monthly_price ?? null });
+      if (cancelled || (subscriber && dismissed)) return;
+      setNotice({ row: upcoming, previous: paidPrice ?? current?.monthly_price ?? null, subscriber });
       setModalOpen(!dismissed);
     })();
     return () => {
@@ -90,8 +93,11 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
     window.location.href = data.url;
   };
 
-  const canPay = notice.row.monthly_price > 0;
+  const canPay = !notice.subscriber && notice.row.monthly_price > 0;
   const preview = notice.row.message ? personalizeMessage(notice.row.message, firstName).replace(/\s+/g, ' ').trim() : '';
+
+  // Abonné : simple information, pas de bandeau de paiement une fois fermée.
+  if (!modalOpen && notice.subscriber) return null;
 
   if (!modalOpen) {
     return (
@@ -166,7 +172,9 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
             </div>
             <h3 className="text-xl font-semibold text-gray-900">Évolution de votre abonnement</h3>
             <p className="mt-2 text-sm text-gray-500">
-              À partir du <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, votre abonnement OZË PARIS passe à
+              {notice.subscriber
+                ? <>À partir de votre première échéance après le <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, votre abonnement OZË PARIS passe à</>
+                : <>À partir du <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, votre abonnement OZË PARIS passe à</>}
             </p>
             <p className="mt-2 text-4xl font-bold tabular-nums text-gray-900">{formatMonthlyPrice(notice.row.monthly_price)}</p>
             {notice.previous !== null && (
