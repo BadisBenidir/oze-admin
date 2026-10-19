@@ -514,7 +514,7 @@ Deno.serve(async (req: Request) => {
       qonto_invoice_number: qontoInvoiceNumber,
       pdf_url: pdfUrl,
       transmission_status: transmissionStatus,
-      internal_invoice_number: genData?.invoice_number || invoiceRow.invoice_number,
+      internal_invoice_number: invoiceRow.invoice_number,
     });
   } catch (err) {
     console.error('emit-qonto-invoice: erreur non gérée', err instanceof Error ? err.stack || err.message : err);
