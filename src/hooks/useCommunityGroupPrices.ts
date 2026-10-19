@@ -41,8 +41,8 @@ export const groupPriceInfo = (rows: GroupPriceRow[]): Record<number, GroupPrice
 export const personalizeMessage = (message: string, firstName: string | null | undefined) => {
   const name = (firstName || '').trim();
   return name
-    ? message.replace(/\{\s*pr[ée]nom\s*\}/gi, name)
-    : message.replace(/[ \t]?\{\s*pr[ée]nom\s*\}/gi, '');
+    ? message.replace(/[{[]\s*pr[ée]nom\s*[}\]]/gi, name)
+    : message.replace(/[ \t]?[{[]\s*pr[ée]nom\s*[}\]]/gi, '');
 };
 
 export const formatMonthlyPrice = (n: number) =>

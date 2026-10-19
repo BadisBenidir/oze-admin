@@ -108,33 +108,31 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
           <div className="min-w-0 flex-1">
             <p className="text-base font-semibold">Votre abonnement OZË PARIS évolue</p>
             {preview && (
-              <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-300">
-                {preview}
-              </p>
+              <>
+                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-300">
+                  {preview}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(true)}
+                  className="mt-1 text-xs font-medium text-white underline underline-offset-2 hover:text-gray-300"
+                >
+                  Lire le message
+                </button>
+              </>
             )}
           </div>
-          <div className="flex flex-shrink-0 flex-col gap-2 sm:flex-row md:flex-col lg:flex-row">
-            {canPay && (
-              <button
-                type="button"
-                onClick={subscribe}
-                disabled={paying}
-                className="flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-100 disabled:opacity-60"
-              >
-                <CreditCard className="h-4 w-4" />
-                {paying ? 'Ouverture du paiement…' : 'Activer mon abonnement'}
-              </button>
-            )}
-            {preview && (
-              <button
-                type="button"
-                onClick={() => setModalOpen(true)}
-                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
-              >
-                Lire le message
-              </button>
-            )}
-          </div>
+          {canPay && (
+            <button
+              type="button"
+              onClick={subscribe}
+              disabled={paying}
+              className="flex flex-shrink-0 items-center justify-center gap-2.5 rounded-xl bg-white px-8 py-4 text-base font-semibold text-gray-900 shadow-sm transition-colors hover:bg-gray-100 disabled:opacity-60 md:min-w-[280px]"
+            >
+              <CreditCard className="h-5 w-5" />
+              {paying ? 'Ouverture du paiement…' : 'Activer mon abonnement'}
+            </button>
+          )}
         </div>
         {payError && <p className="border-t border-white/10 px-6 py-2 text-sm text-red-300">{payError}</p>}
       </div>
