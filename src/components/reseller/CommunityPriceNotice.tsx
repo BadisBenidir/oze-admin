@@ -22,6 +22,7 @@ const PAYING_STATUSES = new Set(['active', 'trialing', 'past_due']);
 export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; firstName?: string | null }> = ({ profileId, firstName }) => {
   const [notice, setNotice] = useState<{ row: GroupPriceRow; previous: number | null } | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -93,7 +94,7 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
   if (!modalOpen) {
     return (
       <div className="mx-4 mt-4 md:mx-6 md:mt-6 overflow-hidden rounded-2xl bg-gray-900 text-white shadow-lg">
-        <div className="flex flex-col gap-5 p-5 md:flex-row md:items-center md:gap-8 md:p-6">
+        <div className={`flex flex-col gap-5 p-5 md:flex-row md:gap-8 md:p-6 ${expanded ? 'md:items-start' : 'md:items-center'}`}>
           <div className="flex items-center gap-4 md:border-r md:border-white/10 md:pr-8">
             <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-white/10">
               <CalendarClock className="h-6 w-6 text-white" />
@@ -109,15 +110,19 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
             <p className="text-base font-semibold">Votre abonnement OZË PARIS évolue</p>
             {preview && (
               <>
-                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-300">
-                  {preview}
-                </p>
+                {expanded ? (
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-200">
+                    {personalizeMessage(notice.row.message || '', firstName)}
+                  </p>
+                ) : (
+                  <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-300">{preview}</p>
+                )}
                 <button
                   type="button"
-                  onClick={() => setModalOpen(true)}
+                  onClick={() => setExpanded((v) => !v)}
                   className="mt-1 text-xs font-medium text-white underline underline-offset-2 hover:text-gray-300"
                 >
-                  Lire le message
+                  {expanded ? 'Réduire' : 'Lire le message'}
                 </button>
               </>
             )}
