@@ -4,6 +4,7 @@ import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { supabase } from '../../../lib/supabase';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
+import { PromoCodeGroups, PromoCodeGroup } from './PromoCodeGroups';
 
 /**
  * Codes promo des abonnements Club B2B (page « Codes promo Club »), gérés ici
@@ -28,6 +29,8 @@ interface ClubPromoCode {
   created_at: string;
   /** Partenaire (influenceur) à qui revient le CA des abonnements souscrits avec ce code (0217). */
   partner_name: string | null;
+  /** Code individuel d'un groupe de codes (0218) : affiché dans son groupe. */
+  group_id?: string | null;
 }
 
 interface PaymentRow {
@@ -312,7 +315,10 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
 };
 
 export const SubscriptionPromoCodes: React.FC = () => {
-  const [codes, setCodes] = useState<ClubPromoCode[]>([]);
+  const [allCodes, setAllCodes] = useState<ClubPromoCode[]>([]);
+  const [groups, setGroups] = useState<PromoCodeGroup[]>([]);
+  // Codes « simples » ; les codes individuels des groupes sont listés dans leur groupe.
+  const codes = useMemo(() => allCodes.filter((c) => !c.group_id), [allCodes]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -326,15 +332,18 @@ export const SubscriptionPromoCodes: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [codesRes, paymentsRes] = await Promise.all([
+    const [codesRes, paymentsRes, groupsRes] = await Promise.all([
       supabase.from('club_promo_codes').select('*').order('created_at', { ascending: false }),
       supabase
         .from('b2b_subscription_payments')
         .select('promo_code, reseller_id, stripe_customer_id, amount, discount_amount, paid_at, reseller:resellers(company_name, contact_email)')
         .not('promo_code', 'is', null),
+      supabase.from('club_promo_code_groups').select('*').order('created_at', { ascending: false }),
     ]);
     if (codesRes.error) setError(codesRes.error.message);
-    else setCodes((codesRes.data || []) as ClubPromoCode[]);
+    else setAllCodes((codesRes.data || []) as ClubPromoCode[]);
+    // Lecture tolérante : table absente avant la migration 0218.
+    setGroups(groupsRes.error ? [] : ((groupsRes.data || []) as PromoCodeGroup[]));
     if (paymentsRes.error) setError(paymentsRes.error.message);
     else setPayments((paymentsRes.data || []) as unknown as PaymentRow[]);
     setLoading(false);
@@ -384,12 +393,12 @@ export const SubscriptionPromoCodes: React.FC = () => {
   const totals = useMemo(() => {
     const members = new Set(payments.map((p) => p.reseller_id || p.stripe_customer_id));
     return {
-      activeCodes: codes.filter((c) => c.status === 'active').length,
+      activeCodes: allCodes.filter((c) => c.status === 'active').length,
       members: members.size,
       revenue: payments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
       discount: payments.reduce((s, p) => s + (Number(p.discount_amount) || 0), 0),
     };
-  }, [codes, payments]);
+  }, [allCodes, payments]);
 
   const toggleStatus = async (c: ClubPromoCode) => {
     setBusyId(c.id);
@@ -469,6 +478,13 @@ export const SubscriptionPromoCodes: React.FC = () => {
           </Card>
         ))}
       </div>
+
+      <PromoCodeGroups
+        groups={groups}
+        codes={allCodes.filter((c) => c.group_id).map((c) => ({ id: c.id, code: c.code, status: c.status, group_id: c.group_id ?? null, created_at: c.created_at }))}
+        usesByCode={statsByCode}
+        onChanged={load}
+      />
 
       <Card>
         <CardContent className="p-0">
