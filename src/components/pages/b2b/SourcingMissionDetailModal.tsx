@@ -4,7 +4,7 @@ import { Badge } from '../../ui/Badge';
 import { Toast } from '../../ui/Toast';
 import { SourcingMission, SourcingMissionInput } from '../../../hooks/useSourcingMissions';
 import { useSourcingItems, SourcingItem } from '../../../hooks/useSourcingItems';
-import { useInvoices, useOrderInvoiceBadges, useAdvanceInvoice, resendAdvanceInvoiceEmail } from '../../../hooks/useInvoices';
+import { useInvoices, useOrderInvoiceBadges, useAdvanceInvoices, resendAdvanceInvoiceEmail } from '../../../hooks/useInvoices';
 import { AddSourcingItemModal } from './AddSourcingItemModal';
 import { CreateSourcingMissionModal } from './CreateSourcingMissionModal';
 import { LinkSourcingProductModal } from './LinkSourcingProductModal';
@@ -142,20 +142,27 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   const [successToast, setSuccessToast] = useState('');
   const { emitQontoInvoice, downloadingOrderId } = useInvoices();
   const { badges: invoiceBadges, refresh: refreshInvoiceBadges } = useOrderInvoiceBadges(mission?.order_id ? [mission.order_id] : []);
+  // Factures d'avance (0220) : plusieurs par mission, jusqu'au budget total.
   const {
-    invoice: advanceInvoice,
+    invoices: advanceInvoices,
     emitting: emittingAdvance,
     emit: emitAdvance,
     download: downloadAdvanceInvoice,
-  } = useAdvanceInvoice(mission?.id ?? null);
+  } = useAdvanceInvoices(mission?.id ?? null);
+  const advanceInvoice = advanceInvoices[0] ?? null;
+  const [advanceAmountInput, setAdvanceAmountInput] = useState('');
+  const [showAdvanceForm, setShowAdvanceForm] = useState(false);
 
-  const handleEmitAdvance = async () => {
-    if (!confirm("Émettre la facture d'avance sur Qonto ? Une facture finalisée ne peut plus être modifiée.")) return;
-    const result = await emitAdvance();
+  const handleEmitAdvance = async (opts: { amount?: number; invoiceId?: string } = {}) => {
+    const label = opts.amount !== undefined ? `de ${opts.amount.toFixed(2)} € ` : '';
+    if (!confirm(`Émettre la facture d'avance ${label}sur Qonto ? Une facture finalisée ne peut plus être modifiée.`)) return;
+    const result = await emitAdvance(opts);
     if (!result.success) {
       alert(result.error);
       return;
     }
+    setShowAdvanceForm(false);
+    setAdvanceAmountInput('');
     if (result.email_error) {
       alert(`Facture émise, mais l'email au membre n'est pas parti : ${result.email_error}`);
       return;
@@ -163,12 +170,12 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     setSuccessToast(`Facture d'avance émise sur Qonto${result.qonto_invoice_number ? ` (n° ${result.qonto_invoice_number})` : ''} et envoyée au membre par email.`);
   };
 
-  const [resendingEmail, setResendingEmail] = useState(false);
-  const handleResendAdvanceEmail = async () => {
+  const [resendingEmail, setResendingEmail] = useState<string | null>(null);
+  const handleResendAdvanceEmail = async (invoiceId: string) => {
     if (!mission) return;
-    setResendingEmail(true);
-    const result = await resendAdvanceInvoiceEmail(mission.id);
-    setResendingEmail(false);
+    setResendingEmail(invoiceId);
+    const result = await resendAdvanceInvoiceEmail(mission.id, invoiceId);
+    setResendingEmail(null);
     if (!result.success) {
       alert(result.error);
       return;
@@ -178,6 +185,8 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
 
   useEffect(() => {
     setStatusError('');
+    setShowAdvanceForm(false);
+    setAdvanceAmountInput('');
   }, [mission?.id]);
 
   if (!mission) return null;
@@ -443,59 +452,132 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
               </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-3">
-              <div className="flex items-center gap-2 text-sm">
-                <FileText className="h-4 w-4 text-gray-400" />
-                <span className="font-medium text-gray-900">Facture d'avance</span>
-                {advanceInvoice ? (
-                  <>
-                    <span className="text-gray-500">{advanceInvoice.qontoInvoiceNumber || advanceInvoice.invoiceNumber} · {advanceInvoice.totalAmount.toFixed(2)} €</span>
-                    {mission.paid_at || advanceInvoice.transmissionStatus === 'paid' ? (
-                      <Badge variant="success">Payée</Badge>
-                    ) : advanceInvoice.qontoEmitted ? (
-                      <Badge variant="warning">En attente de paiement</Badge>
+            {(() => {
+              const invoiced = advanceInvoices.filter((i) => i.transmissionStatus !== 'cancelled').reduce((sum, i) => sum + i.totalAmount, 0);
+              const paid = advanceInvoices.filter((i) => i.transmissionStatus === 'paid').reduce((sum, i) => sum + i.totalAmount, 0);
+              const remaining = Math.max(0, Math.round((mission.advance_amount - invoiced) * 100) / 100);
+              const pendingDraft = advanceInvoices.find((i) => !i.qontoEmitted);
+              const canAdd = mission.status !== 'cancelled' && remaining > 0 && !pendingDraft;
+              const submitAmount = () => {
+                const value = Number(advanceAmountInput.replace(',', '.'));
+                if (!value || value <= 0) return alert('Indique le montant de la facture');
+                if (value > remaining + 0.001) return alert(`Il reste ${remaining.toFixed(2)} € à facturer sur cette mission`);
+                handleEmitAdvance({ amount: Math.round(value * 100) / 100 });
+              };
+              return (
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <FileText className="h-4 w-4 text-gray-400" />
+                      <span className="font-medium text-gray-900">Factures d'avance</span>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Facturé <strong className="text-gray-900">{invoiced.toFixed(2)} €</strong> / {mission.advance_amount.toFixed(2)} €
+                      {' · '}encaissé <strong className="text-emerald-700">{paid.toFixed(2)} €</strong>
+                      {remaining > 0 && <> · reste <strong className="text-gray-900">{remaining.toFixed(2)} €</strong> à facturer</>}
+                    </p>
+                  </div>
+
+                  {advanceInvoices.length === 0 ? (
+                    <p className="mt-2 text-sm text-gray-500">Aucune facture d'avance pour l'instant.</p>
+                  ) : (
+                    <ul className="mt-2 divide-y divide-gray-100">
+                      {advanceInvoices.map((inv, index) => (
+                        <li key={inv.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="text-gray-700">Avance n°{index + 1}</span>
+                            <span className="text-gray-500">{inv.qontoInvoiceNumber || inv.invoiceNumber} · {inv.totalAmount.toFixed(2)} € · {new Date(inv.issuedAt).toLocaleDateString('fr-FR')}</span>
+                            {inv.transmissionStatus === 'paid' ? (
+                              <Badge variant="success">Payée</Badge>
+                            ) : inv.transmissionStatus === 'cancelled' ? (
+                              <Badge variant="default">Annulée</Badge>
+                            ) : inv.qontoEmitted ? (
+                              <Badge variant="warning">En attente de paiement</Badge>
+                            ) : (
+                              <Badge variant="default">Non émise sur Qonto</Badge>
+                            )}
+                          </span>
+                          <span className="flex items-center gap-3">
+                            <button type="button" onClick={() => downloadAdvanceInvoice(inv.id)} className="text-xs font-medium text-gray-700 underline hover:text-gray-900">
+                              {inv.pdfUrl ? 'Voir la facture Qonto' : 'Télécharger le PDF'}
+                            </button>
+                            {inv.qontoEmitted && inv.transmissionStatus !== 'paid' && (
+                              <button
+                                type="button"
+                                onClick={() => handleResendAdvanceEmail(inv.id)}
+                                disabled={resendingEmail === inv.id}
+                                title="Renvoie au membre l'email de la facture (depuis nepasrepondre@ozeparis.com)"
+                                className="text-xs font-medium text-gray-700 underline hover:text-gray-900 disabled:opacity-50"
+                              >
+                                {resendingEmail === inv.id ? 'Envoi...' : "Renvoyer l'email"}
+                              </button>
+                            )}
+                            {!inv.qontoEmitted && mission.status !== 'cancelled' && (
+                              <button
+                                type="button"
+                                onClick={() => handleEmitAdvance({ invoiceId: inv.id })}
+                                disabled={emittingAdvance}
+                                className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                              >
+                                <Send className="h-3.5 w-3.5" /> {emittingAdvance ? 'Émission...' : 'Émettre sur Qonto'}
+                              </button>
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {canAdd && (
+                    showAdvanceForm ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 p-3">
+                        <span className="text-sm text-gray-700">Nouvelle facture de</span>
+                        <span className="relative">
+                          <input
+                            value={advanceAmountInput}
+                            onChange={(e) => setAdvanceAmountInput(e.target.value)}
+                            inputMode="decimal"
+                            autoFocus
+                            placeholder={remaining.toFixed(2)}
+                            className="w-32 rounded-lg border border-gray-200 py-1.5 pl-3 pr-7 text-right text-sm tabular-nums focus:border-gray-400 focus:outline-none"
+                          />
+                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setAdvanceAmountInput(remaining.toFixed(2))}
+                          className="text-xs text-gray-500 underline hover:text-gray-800"
+                        >
+                          Tout le reste ({remaining.toFixed(2)} €)
+                        </button>
+                        <span className="ml-auto flex gap-2">
+                          <button type="button" onClick={() => setShowAdvanceForm(false)} className="rounded-lg px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100">
+                            Annuler
+                          </button>
+                          <button
+                            type="button"
+                            onClick={submitAmount}
+                            disabled={emittingAdvance}
+                            className="flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                          >
+                            <Send className="h-3.5 w-3.5" /> {emittingAdvance ? 'Émission...' : 'Émettre et envoyer'}
+                          </button>
+                        </span>
+                      </div>
                     ) : (
-                      <Badge variant="default">Non émise sur Qonto</Badge>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-gray-500">aucune</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {advanceInvoice && (
-                  <button
-                    type="button"
-                    onClick={downloadAdvanceInvoice}
-                    className="text-xs font-medium text-gray-700 hover:text-gray-900 underline"
-                  >
-                    {advanceInvoice.pdfUrl ? 'Voir la facture Qonto' : 'Télécharger le PDF'}
-                  </button>
-                )}
-                {advanceInvoice?.qontoEmitted && (
-                  <button
-                    type="button"
-                    onClick={handleResendAdvanceEmail}
-                    disabled={resendingEmail}
-                    title="Renvoie au membre l'email de la facture (depuis nepasrepondre@ozeparis.com)"
-                    className="text-xs font-medium text-gray-700 hover:text-gray-900 underline disabled:opacity-50"
-                  >
-                    {resendingEmail ? 'Envoi...' : "Renvoyer l'email"}
-                  </button>
-                )}
-                {!advanceInvoice?.qontoEmitted && mission.status !== 'cancelled' && (
-                  <button
-                    type="button"
-                    onClick={handleEmitAdvance}
-                    disabled={emittingAdvance}
-                    className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    {emittingAdvance ? 'Émission...' : "Émettre la facture d'avance sur Qonto"}
-                  </button>
-                )}
-              </div>
-            </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvanceForm(true)}
+                        className="mt-3 flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        {advanceInvoices.length === 0 ? "Émettre une facture d'avance" : "Nouvelle facture d'avance"}
+                      </button>
+                    )
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center mb-3">

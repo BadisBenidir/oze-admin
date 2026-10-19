@@ -109,8 +109,12 @@ Deno.serve(async (req: Request) => {
     // commande pour demander le paiement de l'avance.
     // resend_email : renvoie seulement l'email de la facture d'avance déjà
     // émise (aucune nouvelle émission Qonto).
-    const { order_id, sourcing_mission_id, resend_email } = await req.json();
-    if (!order_id && !sourcing_mission_id) return json({ error: 'order_id ou sourcing_mission_id est requis' }, 400);
+    // Avance en plusieurs fois (0220) : amount = montant de la nouvelle
+    // facture d'avance (défaut : tout le reste à facturer) ; invoice_id =
+    // facture d'avance précise (renvoi d'email, ou émission d'une facture
+    // déjà générée).
+    const { order_id, sourcing_mission_id, resend_email, invoice_id, amount } = await req.json();
+    if (!order_id && !sourcing_mission_id && !invoice_id) return json({ error: 'order_id, sourcing_mission_id ou invoice_id est requis' }, 400);
 
     const secretKey = Deno.env.get('QONTO_SECRET_KEY');
     const orgSlug = Deno.env.get('QONTO_ORGANIZATION_SLUG');
@@ -129,15 +133,23 @@ Deno.serve(async (req: Request) => {
     // le téléchargement jsPDF (generate_invoice_for_order, 0115/0117),
     // appelé via le jeton de l'admin (pas service-role) pour que
     // public.is_admin() y voie bien un admin.
-    const { data: genData, error: genError } = sourcing_mission_id
-      ? await callerClient.rpc('generate_advance_invoice_for_mission', { p_mission_id: sourcing_mission_id })
-      : await callerClient.rpc('generate_invoice_for_order', { p_order_id: order_id });
-    if (genError) return json({ error: genError.message }, 400);
+    let targetInvoiceId: string | null = invoice_id || null;
+    if (!targetInvoiceId) {
+      const { data: genData, error: genError } = sourcing_mission_id
+        ? await callerClient.rpc('generate_advance_invoice_for_mission', {
+            p_mission_id: sourcing_mission_id,
+            ...(amount !== undefined && amount !== null && amount !== '' ? { p_amount: Number(amount) } : {}),
+          })
+        : await callerClient.rpc('generate_invoice_for_order', { p_order_id: order_id });
+      if (genError) return json({ error: genError.message }, 400);
+      targetInvoiceId = (genData as { invoice_id?: string } | null)?.invoice_id ?? null;
+    }
+    if (!targetInvoiceId) return json({ error: 'Facture introuvable après génération' }, 400);
 
     const { data: invoiceRow, error: invoiceFetchError } = await adminClient
       .from('invoices')
-      .select('id, invoice_number, legal_status, profile_id, qonto_invoice_id, pdf_url, kind, sourcing_mission_id, total_amount')
-      .eq(sourcing_mission_id ? 'sourcing_mission_id' : 'order_id', sourcing_mission_id || order_id)
+      .select('id, invoice_number, legal_status, profile_id, qonto_invoice_id, pdf_url, kind, sourcing_mission_id, total_amount, issued_at')
+      .eq('id', targetInvoiceId)
       .single();
     if (invoiceFetchError || !invoiceRow) {
       return json({ error: invoiceFetchError?.message || 'Facture introuvable après génération' }, 400);
@@ -234,12 +246,23 @@ Deno.serve(async (req: Request) => {
     // Pénalité de retard de paiement d'un lot d'enchère (0210), ligne à part.
     let lateFee: { amount: number; days: number } | null = null;
     if (isAdvance) {
-      const { data: mission } = await adminClient
-        .from('b2b_sourcing_missions')
-        .select('reference, title')
-        .eq('id', invoiceRow.sourcing_mission_id)
-        .maybeSingle();
-      const rawTitle = ['Avance — Sourcing sur mesure', mission?.reference, mission?.title].filter(Boolean).join(' — ');
+      const [{ data: mission }, { count: rank }] = await Promise.all([
+        adminClient
+          .from('b2b_sourcing_missions')
+          .select('reference, title, advance_amount')
+          .eq('id', invoiceRow.sourcing_mission_id)
+          .maybeSingle(),
+        adminClient
+          .from('invoices')
+          .select('id', { count: 'exact', head: true })
+          .eq('sourcing_mission_id', invoiceRow.sourcing_mission_id)
+          .eq('kind', 'advance')
+          .lte('issued_at', invoiceRow.issued_at),
+      ]);
+      // Avance en plusieurs fois (0220) : « Avance n°2 », etc.
+      const partial = (rank ?? 1) > 1 || Number(invoiceRow.total_amount) < Number(mission?.advance_amount ?? 0);
+      const label = partial ? `Avance n°${rank ?? 1} — Sourcing sur mesure` : 'Avance — Sourcing sur mesure';
+      const rawTitle = [label, mission?.reference, mission?.title].filter(Boolean).join(' — ');
       advanceLine = { title: rawTitle.length > 120 ? rawTitle.slice(0, 119) + '…' : rawTitle, amount: Number(invoiceRow.total_amount) };
     } else {
       const { data: order, error: orderError } = await adminClient

@@ -64,8 +64,11 @@ export const B2BSourcing: React.FC = () => {
   const activeMissions = missions.filter((m) => m.status !== 'cancelled');
   // Encaissée = date de paiement connue (saisie, ou posée par qonto-sync quand
   // la facture d'avance est payée). Les avances facturées non payées à part.
-  const totalAdvance = activeMissions.filter((m) => m.paid_at).reduce((sum, m) => sum + m.advance_amount, 0);
-  const totalAdvancePending = activeMissions.filter((m) => !m.paid_at).reduce((sum, m) => sum + m.advance_amount, 0);
+  // Avance en plusieurs fois (0220) : les factures déjà payées comptent
+  // dans l'encaissé, le reste du budget dans « en attente ».
+  const encaisse = (m: (typeof activeMissions)[number]) => (m.paid_at ? m.advance_amount : Math.min(m.advance_amount, Number(m.paid_amount) || 0));
+  const totalAdvance = activeMissions.reduce((sum, m) => sum + encaisse(m), 0);
+  const totalAdvancePending = activeMissions.reduce((sum, m) => sum + (m.advance_amount - encaisse(m)), 0);
   const totalCostBudget = activeMissions.reduce((sum, m) => sum + getSourcingMissionMetrics(m).envelope, 0);
   const totalConsumed = activeMissions.reduce((sum, m) => sum + m.consumed_cost_amount, 0);
   // Une mission terminée n'a plus d'enveloppe "restante" à engager — seules

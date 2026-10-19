@@ -91,7 +91,11 @@ export const SourcingMissionsTab: React.FC<SourcingMissionsTabProps> = ({ resell
                       {mission.reference && <p className="text-xs text-gray-400 font-mono">{mission.reference}</p>}
                       <p className="text-xs text-gray-500">
                         Avance {mission.advance_amount.toFixed(2)} € · {mission.items_count} pièce{mission.items_count > 1 ? 's' : ''} sourcée{mission.items_count > 1 ? 's' : ''}
-                        {mission.paid_at && <> · Payée le {new Date(mission.paid_at).toLocaleDateString('fr-FR')}</>}
+                        {mission.paid_at ? (
+                          <> · Payée le {new Date(mission.paid_at).toLocaleDateString('fr-FR')}</>
+                        ) : Number(mission.paid_amount) > 0 ? (
+                          <> · Encaissé {Number(mission.paid_amount).toFixed(2)} €</>
+                        ) : null}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">

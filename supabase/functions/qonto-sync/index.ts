@@ -241,19 +241,39 @@ Deno.serve(async (req: Request) => {
       const status: string | undefined = qontoInvoice?.status;
       if (!status || status === inv.transmission_status) continue;
 
-      await adminClient.from('invoices').update({ transmission_status: status }).eq('id', inv.id);
+      // Qonto écrit « canceled » ; la base n'accepte que « cancelled ».
+      const stored = status === 'canceled' ? 'cancelled' : status;
+      await adminClient.from('invoices').update({ transmission_status: stored }).eq('id', inv.id);
       if (status === 'paid' && inv.sourcing_mission_id) {
-        const { data: mission } = await adminClient
-          .from('b2b_sourcing_missions')
-          .select('paid_at, payment_method')
-          .eq('id', inv.sourcing_mission_id)
-          .maybeSingle();
-        if (mission && !mission.paid_at) {
+        // Avance en plusieurs fois (0220) : encaissé = somme des factures
+        // d'avance payées ; l'avance n'est « encaissée » (paid_at) qu'une fois
+        // le budget total de la mission payé.
+        const [{ data: mission }, { data: paidInvoices }] = await Promise.all([
+          adminClient
+            .from('b2b_sourcing_missions')
+            .select('paid_at, payment_method, advance_amount')
+            .eq('id', inv.sourcing_mission_id)
+            .maybeSingle(),
+          adminClient
+            .from('invoices')
+            .select('total_amount')
+            .eq('sourcing_mission_id', inv.sourcing_mission_id)
+            .eq('kind', 'advance')
+            .eq('transmission_status', 'paid'),
+        ]);
+        if (mission) {
+          const paidAmount = Math.round((paidInvoices || []).reduce((sum, i) => sum + Number(i.total_amount || 0), 0) * 100) / 100;
+          const fullyPaid = paidAmount >= Number(mission.advance_amount || 0) - 0.005;
           await adminClient
             .from('b2b_sourcing_missions')
             .update({
-              paid_at: qontoInvoice?.paid_at || new Date().toISOString(),
-              payment_method: mission.payment_method || 'Virement (facture Qonto)',
+              paid_amount: paidAmount,
+              ...(fullyPaid && !mission.paid_at
+                ? {
+                    paid_at: qontoInvoice?.paid_at || new Date().toISOString(),
+                    payment_method: mission.payment_method || 'Virement (facture Qonto)',
+                  }
+                : {}),
             })
             .eq('id', inv.sourcing_mission_id);
         }

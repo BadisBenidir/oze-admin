@@ -118,36 +118,41 @@ export const useInvoices = () => {
       const { error: genError } = await supabase.rpc('generate_invoice_for_order', { p_order_id: order.id });
       if (genError) throw new Error(genError.message);
 
-      const { data: invoice, error: fetchError } = await supabase
+      // Une facture de commande, ou les factures d'avance de la mission de
+      // sourcing (plusieurs depuis 0220, avance en plusieurs fois).
+      const { data: rows, error: fetchError } = await supabase
         .from('invoices')
         .select('invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, kind, sourcing_mission:b2b_sourcing_missions(reference, title)')
         .eq('order_id', order.id)
-        .single();
-      if (fetchError || !invoice) {
+        .order('issued_at', { ascending: true });
+      if (fetchError || !rows?.length) {
         throw new Error(fetchError?.message || 'Facture introuvable après génération');
       }
+      const orderInvoice = rows.find((r) => r.kind === 'order');
+      const invoices = orderInvoice ? [orderInvoice] : rows;
 
-      // Une fois la facture officielle émise sur Qonto (voir
-      // emit-qonto-invoice), son PDF certifié remplace le PDF jsPDF généré
-      // à la volée — jamais l'inverse.
-      if (invoice.pdf_url) {
-        window.open(invoice.pdf_url, '_blank', 'noopener,noreferrer');
-        return { success: true as const };
+      for (const invoice of invoices) {
+        // Une fois la facture officielle émise sur Qonto (voir
+        // emit-qonto-invoice), son PDF certifié remplace le PDF jsPDF généré
+        // à la volée — jamais l'inverse.
+        if (invoice.pdf_url) {
+          window.open(invoice.pdf_url, '_blank', 'noopener,noreferrer');
+          continue;
+        }
+        await generateInvoicePdf({
+          invoiceNumber: invoice.invoice_number,
+          issuedAt: invoice.issued_at,
+          orderNumber: order.order_number,
+          orderDate: order.created_at,
+          totalAmount: Number(invoice.total_amount),
+          legalStatus: invoice.legal_status as 'individual' | 'sole_proprietorship' | 'company',
+          billingDetails: (invoice.billing_details || {}) as InvoiceBillingDetails,
+          paymentMethod: order.paymentMethod,
+          // Facture d'avance de sourcing rattachée à la commande (0196) : elle
+          // ne facture que l'avance, jamais le détail des pièces.
+          items: invoice.kind === 'advance' ? advanceInvoiceItems(invoice) : items,
+        });
       }
-
-      await generateInvoicePdf({
-        invoiceNumber: invoice.invoice_number,
-        issuedAt: invoice.issued_at,
-        orderNumber: order.order_number,
-        orderDate: order.created_at,
-        totalAmount: Number(invoice.total_amount),
-        legalStatus: invoice.legal_status as 'individual' | 'sole_proprietorship' | 'company',
-        billingDetails: (invoice.billing_details || {}) as InvoiceBillingDetails,
-        paymentMethod: order.paymentMethod,
-        // Facture d'avance de sourcing rattachée à la commande (0196) : elle
-        // ne facture que l'avance, jamais le détail des pièces.
-        items: invoice.kind === 'advance' ? advanceInvoiceItems(invoice) : items,
-      });
 
       return { success: true as const };
     } catch (err) {
@@ -193,12 +198,14 @@ export const useInvoices = () => {
   return { downloadInvoice, backfillMissingInvoices, emitQontoInvoice, downloadingOrderId, downloadError };
 };
 
-/** Facture d'avance d'une mission de sourcing (0196) : une seule facture par
- * mission, du montant de l'avance, émise sur Qonto pour en demander le
- * paiement par virement. transmissionStatus = statut Qonto ('unpaid' →
- * 'paid', relu par qonto-sync qui marque alors l'avance encaissée). */
+/** Facture d'avance d'une mission de sourcing (0196) — plusieurs par mission
+ * depuis 0220 (avance en plusieurs fois, jusqu'au budget total), émises sur
+ * Qonto pour en demander le paiement par virement. transmissionStatus = statut
+ * Qonto ('unpaid' → 'paid', relu par qonto-sync qui met à jour l'encaissé). */
 export interface AdvanceInvoice {
+  id: string;
   invoiceNumber: string;
+  issuedAt: string;
   totalAmount: number;
   transmissionStatus: string;
   qontoEmitted: boolean;
@@ -206,9 +213,19 @@ export interface AdvanceInvoice {
   pdfUrl: string | null;
 }
 
-export const emitAdvanceInvoice = async (missionId: string) => {
+/**
+ * Émet une facture d'avance sur Qonto : nouvelle facture de `amount` € (par
+ * défaut, tout le reste à facturer), ou facture déjà générée `invoiceId`.
+ */
+export const emitAdvanceInvoice = async (missionId: string, opts: { amount?: number; invoiceId?: string } = {}) => {
   try {
-    const { data, error } = await supabase.functions.invoke('emit-qonto-invoice', { body: { sourcing_mission_id: missionId } });
+    const { data, error } = await supabase.functions.invoke('emit-qonto-invoice', {
+      body: {
+        sourcing_mission_id: missionId,
+        ...(opts.amount !== undefined ? { amount: opts.amount } : {}),
+        ...(opts.invoiceId ? { invoice_id: opts.invoiceId } : {}),
+      },
+    });
     if (error) throw new Error(await extractFunctionErrorMessage(error, "Échec de l'émission sur Qonto"));
     const result = data as {
       already_emitted?: boolean;
@@ -224,11 +241,11 @@ export const emitAdvanceInvoice = async (missionId: string) => {
   }
 };
 
-/** Renvoie au membre l'email de sa facture d'avance déjà émise (sans nouvelle émission Qonto). */
-export const resendAdvanceInvoiceEmail = async (missionId: string) => {
+/** Renvoie au membre l'email d'une facture d'avance déjà émise (sans nouvelle émission Qonto). */
+export const resendAdvanceInvoiceEmail = async (missionId: string, invoiceId?: string) => {
   try {
     const { error } = await supabase.functions.invoke('emit-qonto-invoice', {
-      body: { sourcing_mission_id: missionId, resend_email: true },
+      body: { sourcing_mission_id: missionId, resend_email: true, ...(invoiceId ? { invoice_id: invoiceId } : {}) },
     });
     if (error) throw new Error(await extractFunctionErrorMessage(error, "Échec de l'envoi de l'email"));
     return { success: true as const };
@@ -237,31 +254,32 @@ export const resendAdvanceInvoiceEmail = async (missionId: string) => {
   }
 };
 
-export const useAdvanceInvoice = (missionId: string | null) => {
-  const [invoice, setInvoice] = useState<AdvanceInvoice | null>(null);
+export const useAdvanceInvoices = (missionId: string | null) => {
+  const [invoices, setInvoices] = useState<AdvanceInvoice[]>([]);
   const [emitting, setEmitting] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!missionId) {
-      setInvoice(null);
+      setInvoices([]);
       return;
     }
     const { data } = await supabase
       .from('invoices')
-      .select('invoice_number, total_amount, transmission_status, qonto_invoice_id, qonto_invoice_number, pdf_url')
+      .select('id, invoice_number, issued_at, total_amount, transmission_status, qonto_invoice_id, qonto_invoice_number, pdf_url')
       .eq('sourcing_mission_id', missionId)
-      .maybeSingle();
-    setInvoice(
-      data
-        ? {
-            invoiceNumber: data.invoice_number,
-            totalAmount: Number(data.total_amount),
-            transmissionStatus: data.transmission_status,
-            qontoEmitted: Boolean(data.qonto_invoice_id),
-            qontoInvoiceNumber: data.qonto_invoice_number,
-            pdfUrl: data.pdf_url,
-          }
-        : null
+      .eq('kind', 'advance')
+      .order('issued_at', { ascending: true });
+    setInvoices(
+      (data || []).map((d) => ({
+        id: d.id,
+        invoiceNumber: d.invoice_number,
+        issuedAt: d.issued_at,
+        totalAmount: Number(d.total_amount),
+        transmissionStatus: d.transmission_status,
+        qontoEmitted: Boolean(d.qonto_invoice_id),
+        qontoInvoiceNumber: d.qonto_invoice_number,
+        pdfUrl: d.pdf_url,
+      }))
     );
   }, [missionId]);
 
@@ -270,12 +288,11 @@ export const useAdvanceInvoice = (missionId: string | null) => {
   }, [refresh]);
 
   /** PDF officiel Qonto s'il existe, sinon PDF généré localement (jsPDF). */
-  const download = async () => {
-    if (!missionId) return;
+  const download = async (invoiceId: string) => {
     const { data } = await supabase
       .from('invoices')
       .select('invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, transmission_status, sourcing_mission:b2b_sourcing_missions(reference, title, created_at, paid_at)')
-      .eq('sourcing_mission_id', missionId)
+      .eq('id', invoiceId)
       .maybeSingle();
     if (!data) return;
     if (data.pdf_url) {
@@ -285,7 +302,6 @@ export const useAdvanceInvoice = (missionId: string | null) => {
     const mission = (Array.isArray(data.sourcing_mission) ? data.sourcing_mission[0] : data.sourcing_mission) as
       | (MissionEmbed & { created_at: string; paid_at: string | null })
       | null;
-    const paidAt = mission?.paid_at;
     await generateInvoicePdf({
       invoiceNumber: data.invoice_number,
       issuedAt: data.issued_at,
@@ -296,18 +312,19 @@ export const useAdvanceInvoice = (missionId: string | null) => {
       billingDetails: (data.billing_details || {}) as InvoiceBillingDetails,
       paymentMethod: 'virement bancaire',
       items: advanceInvoiceItems(data),
-      paid: Boolean(paidAt) || data.transmission_status === 'paid',
+      paid: data.transmission_status === 'paid',
     });
   };
 
-  const emit = async () => {
+  /** Nouvelle facture (`amount`, défaut : reste à facturer) ou émission d'une facture déjà générée. */
+  const emit = async (opts: { amount?: number; invoiceId?: string } = {}) => {
     if (!missionId) return { success: false as const, error: 'Mission introuvable' };
     setEmitting(true);
-    const result = await emitAdvanceInvoice(missionId);
+    const result = await emitAdvanceInvoice(missionId, opts);
     setEmitting(false);
     await refresh();
     return result;
   };
 
-  return { invoice, emitting, emit, download, refresh };
+  return { invoices, emitting, emit, download, refresh };
 };

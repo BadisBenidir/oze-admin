@@ -36,6 +36,8 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
   const [notes, setNotes] = useState('');
   // Création : facture d'avance émise sur Qonto pour demander le paiement (0196).
   const [emitAdvanceInvoice, setEmitAdvanceInvoice] = useState(true);
+  // Avance en plusieurs fois (0220) : montant de cette première facture, vide = tout le budget.
+  const [firstInvoiceAmount, setFirstInvoiceAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -49,6 +51,7 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
     setPaidAt(toDateInputValue(editingMission?.paid_at || null));
     setNotes(editingMission?.notes || '');
     setEmitAdvanceInvoice(!editingMission);
+    setFirstInvoiceAmount('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, editingMission]);
 
@@ -136,6 +139,18 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
       return;
     }
 
+    const parsedFirstInvoice = firstInvoiceAmount.trim() ? Number(firstInvoiceAmount.replace(',', '.')) : undefined;
+    if (!editingMission && emitAdvanceInvoice && parsedFirstInvoice !== undefined) {
+      if (!parsedFirstInvoice || parsedFirstInvoice <= 0) {
+        setError('Le montant de la première facture est invalide');
+        return;
+      }
+      if (parsedFirstInvoice > parsedAdvance) {
+        setError("La première facture ne peut pas dépasser le montant total de l'avance");
+        return;
+      }
+    }
+
     setSubmitting(true);
     setError('');
     const result = await onSubmit({
@@ -148,6 +163,7 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
       paid_at: paidAt ? new Date(paidAt).toISOString() : undefined,
       notes: notes.trim() || undefined,
       emit_advance_invoice: !editingMission && emitAdvanceInvoice,
+      advance_invoice_amount: !editingMission && emitAdvanceInvoice && parsedFirstInvoice !== undefined ? Math.round(parsedFirstInvoice * 100) / 100 : undefined,
     });
     setSubmitting(false);
 
@@ -338,9 +354,26 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
                 <span>
                   Émettre la facture d'avance sur Qonto
                   <span className="block text-xs text-gray-500">
-                    Facture du montant de l'avance, à régler par virement sous 7 jours, envoyée au membre par email depuis nepasrepondre@ozeparis.com (inutile de l'envoyer depuis Qonto).
-                    L'avance passe en « encaissée » automatiquement quand Qonto la voit payée.
+                    Facture à régler par virement sous 7 jours, envoyée au membre par email depuis nepasrepondre@ozeparis.com (inutile de l'envoyer depuis Qonto).
+                    Tu peux ne facturer qu'une partie : les factures suivantes s'émettent depuis la fiche de la mission, jusqu'au montant total.
+                    L'avance passe en « encaissée » quand Qonto voit tout le montant payé.
                   </span>
+                  {emitAdvanceInvoice && (
+                    <span className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-medium text-gray-700">Montant de cette facture</span>
+                      <span className="relative">
+                        <input
+                          value={firstInvoiceAmount}
+                          onChange={(e) => setFirstInvoiceAmount(e.target.value)}
+                          inputMode="decimal"
+                          placeholder={advanceAmount || 'Tout'}
+                          className="w-32 rounded-lg border border-gray-300 bg-white py-1.5 pl-3 pr-7 text-right text-sm tabular-nums focus:border-gray-400 focus:outline-none"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
+                      </span>
+                      <span className="text-xs text-gray-500">vide = tout le montant de l'avance</span>
+                    </span>
+                  )}
                 </span>
               </label>
             )}

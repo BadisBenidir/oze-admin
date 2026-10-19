@@ -24,6 +24,9 @@ export interface SourcingMission {
   status: 'active' | 'completed' | 'cancelled';
   payment_method: string | null;
   paid_at: string | null;
+  /** Avance en plusieurs fois (0220) : somme des factures d'avance payées.
+   * paid_at n'est posé qu'une fois tout advance_amount encaissé. */
+  paid_amount?: number | string | null;
   notes: string | null;
   created_at: string;
   /** Commande B2B réelle créée à la validation par le revendeur — voir
@@ -105,6 +108,8 @@ export interface SourcingMissionInput {
   /** Création uniquement : génère la facture d'avance (0196) et l'émet sur
    * Qonto juste après la création, pour en demander le paiement. */
   emit_advance_invoice?: boolean;
+  /** Montant de cette première facture d'avance (0220) — défaut : tout le budget. */
+  advance_invoice_amount?: number;
 }
 
 interface UseSourcingMissionsResult {
@@ -248,6 +253,8 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
       allocated_cost_budget: input.allocated_cost_budget,
       payment_method: input.payment_method?.trim() || null,
       paid_at: input.paid_at || null,
+      // Avance déjà encaissée (saisie manuelle) : tout le budget est payé.
+      paid_amount: input.paid_at ? input.advance_amount : 0,
       notes: input.notes?.trim() || null,
     }).select('id').single();
 
@@ -258,7 +265,10 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
     // réémet depuis le détail de la mission.
     let warning: string | undefined;
     if (input.emit_advance_invoice && created?.id) {
-      const result = await emitAdvanceInvoice(created.id);
+      const result = await emitAdvanceInvoice(
+        created.id,
+        input.advance_invoice_amount !== undefined ? { amount: input.advance_invoice_amount } : {}
+      );
       if (!result.success) warning = `Mission créée, mais la facture d'avance n'a pas pu être émise : ${result.error}`;
       else if (result.email_error) warning = `Facture d'avance émise, mais l'email au membre n'est pas parti : ${result.email_error}`;
     }
@@ -275,6 +285,7 @@ export const useSourcingMissions = (resellerId?: string | null, isAdmin: boolean
       allocated_cost_budget: input.allocated_cost_budget,
       payment_method: input.payment_method?.trim() || null,
       paid_at: input.paid_at || null,
+      ...(input.paid_at ? { paid_amount: input.advance_amount } : {}),
       notes: input.notes?.trim() || null,
     }).eq('id', id);
 
