@@ -123,13 +123,16 @@ const UpgradeButton: React.FC<{ className?: string }> = ({ className = '' }) => 
 };
 
 /** Écran affiché à la place des Enchères / du Sourcing pour un abonné Pass Drops. */
-export const PlanLockedScreen: React.FC<{ feature: 'auctions' | 'sourcing' }> = ({ feature }) => {
+/** `community` : membre de communauté passé au Pass Drops (0216) — pas de
+ * passage au Pass Revendeur du Club depuis cet écran. */
+export const PlanLockedScreen: React.FC<{ feature: 'auctions' | 'sourcing'; community?: boolean }> = ({ feature, community }) => {
   const Icon = feature === 'auctions' ? Gavel : PackageSearch;
   const title = feature === 'auctions' ? 'Enchères B2B' : 'Sourcing sur mesure';
+  const fullOffer = community ? 'à l\'abonnement complet de votre communauté' : 'au Pass Revendeur';
   const text =
     feature === 'auctions'
-      ? 'Les sessions d\'enchères privées, avec des lots dès 0 €, sont réservées au Pass Revendeur.'
-      : 'Le sourcing sur mesure, avec un accompagnateur dédié qui sélectionne vos pièces avec vous, est réservé au Pass Revendeur.';
+      ? `Les sessions d'enchères privées, avec des lots dès 0 €, sont réservées ${fullOffer}.`
+      : `Le sourcing sur mesure, avec un accompagnateur dédié qui sélectionne vos pièces avec vous, est réservé ${fullOffer}.`;
 
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-12">
@@ -143,16 +146,20 @@ export const PlanLockedScreen: React.FC<{ feature: 'auctions' | 'sourcing' }> = 
           </div>
           <h3 className="mt-5 text-lg font-semibold text-gray-900">{title} : non inclus dans votre Pass Drops</h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">{text}</p>
-          <ul className="mx-auto mt-6 max-w-xs space-y-2 text-left text-sm text-gray-700">
-            {PLANS.find((p) => p.id === 'revendeur')?.features.map((f) => (
-              <li key={f.label} className="flex items-start gap-2">
-                <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-900" /> {f.label}
-              </li>
-            ))}
-          </ul>
-          <div className="mt-6 flex justify-center">
-            <UpgradeButton />
-          </div>
+          {!community && (
+            <>
+              <ul className="mx-auto mt-6 max-w-xs space-y-2 text-left text-sm text-gray-700">
+                {PLANS.find((p) => p.id === 'revendeur')?.features.map((f) => (
+                  <li key={f.label} className="flex items-start gap-2">
+                    <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-900" /> {f.label}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-6 flex justify-center">
+                <UpgradeButton />
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

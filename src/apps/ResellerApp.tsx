@@ -62,7 +62,7 @@ function ResellerApp() {
   const wallet = useWallet(profile?.id);
   const { notifications, markRead: markNotificationRead } = useResellerNotifications(profile?.id);
   const currentTab = activeTab || 'catalog';
-  const isDropsPlan = profile?.account_type === 'subscriber' && profile.subscription_plan === 'drops';
+  const isDropsPlan = (profile?.account_type === 'subscriber' && profile.subscription_plan === 'drops') || Boolean(profile?.community_drops);
   // Pass Drops avec un accès enchères offert par l'admin (auction_access,
   // 0193) : la page Enchères est débloquée jusqu'à la fin de l'accès.
   const [auctionsUnlocked, setAuctionsUnlocked] = useState(false);
@@ -245,9 +245,9 @@ function ResellerApp() {
       // Pass Drops (abonnés, 0167) : onglets visibles et cliquables, mais
       // remplacés par l'écran de passage au Pass Revendeur.
       case 'sourcing':
-        return isDropsPlan ? <PlanLockedScreen feature="sourcing" /> : <SourcingSurMesure />;
+        return isDropsPlan ? <PlanLockedScreen feature="sourcing" community={profile?.community_drops} /> : <SourcingSurMesure />;
       case 'auctions':
-        return isDropsPlan && !auctionsUnlocked ? <PlanLockedScreen feature="auctions" /> : <Auctions />;
+        return isDropsPlan && !auctionsUnlocked ? <PlanLockedScreen feature="auctions" community={profile?.community_drops} /> : <Auctions />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':

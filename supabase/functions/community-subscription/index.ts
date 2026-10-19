@@ -12,14 +12,19 @@
 //   - action "portal"   : portail client Stripe (changer de carte, factures) ;
 //   - action "cancel"   : résiliation à la fin du mois déjà payé ;
 //   - action "resume"   : annule une résiliation programmée ;
-//   - action "invoices" : factures Stripe du membre.
+//   - action "invoices" : factures Stripe du membre ;
+//   - action "downgrade" : passage au Pass Drops à la prochaine échéance, au
+//                         prix public du Pass Drops (STRIPE_PRICE_DROPS), via
+//                         un planning Stripe ; le webhook enregistre
+//                         community_sub_plan = 'drops' le jour venu (0216) ;
+//   - action "cancel_downgrade" : annule ce passage programmé.
 //
 // Prix : premier abonnement = prix du groupe (prochain prix programmé, sinon
 // prix en vigueur). Réabonnement après une résiliation = jamais moins que le
 // prix public des nouveaux membres (groupe 4) : un tarif réduit est perdu
 // dès que l'abonnement s'arrête, et suit le prix du groupe 4 s'il évolue.
 //
-// Secrets : STRIPE_SECRET_KEY
+// Secrets : STRIPE_SECRET_KEY, STRIPE_PRICE_DROPS
 // Déploiement : `supabase functions deploy community-subscription`
 
 import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2';
@@ -29,7 +34,16 @@ import { siteOrigin } from '../_shared/subscriptionCheckout.ts';
 const ONGOING_STATUSES = new Set(['active', 'trialing', 'past_due']);
 /** Groupe des nouveaux membres : son prix est le prix public de la communauté. */
 const PUBLIC_GROUP = 4;
-const ACTIONS = ['status', 'checkout', 'portal', 'cancel', 'resume', 'invoices'];
+const ACTIONS = ['status', 'checkout', 'portal', 'cancel', 'resume', 'invoices', 'downgrade', 'cancel_downgrade'];
+
+/** Prix public du Pass Drops (prix Stripe du Club), en euros, et son produit. */
+const dropsPublicPrice = async (stripe: Stripe) => {
+  const id = Deno.env.get('STRIPE_PRICE_DROPS');
+  if (!id) return null;
+  const price = await stripe.prices.retrieve(id);
+  if (!price.unit_amount) return null;
+  return { cents: price.unit_amount, amount: price.unit_amount / 100, currency: price.currency, product: typeof price.product === 'string' ? price.product : price.product.id };
+};
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -84,7 +98,7 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: contact } = await admin
       .from('reseller_contacts')
-      .select('id, reseller_id, is_primary, member_group, community_sub_status, community_sub_stripe_subscription_id, community_sub_stripe_customer_id, resellers!inner(company_name, account_type), profiles!inner(first_name, last_name, email)')
+      .select('id, reseller_id, is_primary, member_group, community_sub_status, community_sub_plan, community_sub_pending_plan, community_sub_stripe_subscription_id, community_sub_stripe_customer_id, resellers!inner(company_name, account_type), profiles!inner(first_name, last_name, email)')
       .eq('profile_id', user.id)
       .maybeSingle();
     if (!contact) return reply({ error: 'Compte membre introuvable' }, 404);
@@ -138,7 +152,10 @@ Deno.serve(async (req: Request) => {
       return reply({
         ...base,
         resubscribe: everSubscribed && !ONGOING_STATUSES.has(sub.status),
+        drops_price: (await dropsPublicPrice(stripe))?.amount ?? null,
         subscription: {
+          plan: contact.community_sub_plan === 'drops' ? 'drops' : 'community',
+          pending_plan: contact.community_sub_pending_plan,
           status: sub.status,
           monthly_price: (sub.items.data[0]?.price?.unit_amount ?? 0) / 100,
           current_period_end: periodEnd(sub),
@@ -176,6 +193,60 @@ Deno.serve(async (req: Request) => {
         locale: 'fr',
       });
       return reply({ url: session.url });
+    }
+
+    if (action === 'downgrade') {
+      if (!contact.community_sub_stripe_subscription_id || !ongoing) return reply({ error: 'Aucun abonnement en cours' }, 400);
+      if (contact.community_sub_plan === 'drops') return reply({ error: 'Vous avez déjà le Pass Drops' }, 400);
+      const drops = await dropsPublicPrice(stripe);
+      if (!drops) return reply({ error: 'Configuration serveur manquante (prix Pass Drops)' }, 500);
+      const current = await stripe.subscriptions.retrieve(contact.community_sub_stripe_subscription_id);
+      if (current.cancel_at_period_end) return reply({ error: 'Votre abonnement est déjà résilié à l\'échéance' }, 400);
+      const scheduleId = typeof current.schedule === 'string' ? current.schedule : current.schedule?.id;
+      const { error: pendingError } = await admin.from('reseller_contacts').update({ community_sub_pending_plan: 'drops' }).eq('id', contact.id);
+      if (pendingError) return reply({ error: pendingError.message }, 500);
+      try {
+        const schedule = scheduleId
+          ? await stripe.subscriptionSchedules.retrieve(scheduleId)
+          : await stripe.subscriptionSchedules.create({ from_subscription: current.id });
+        const phase = schedule.phases[schedule.phases.length - 1];
+        await stripe.subscriptionSchedules.update(schedule.id, {
+          end_behavior: 'release',
+          proration_behavior: 'none',
+          phases: [
+            {
+              items: [{ price: current.items.data[0].price.id, quantity: 1 }],
+              start_date: phase.start_date,
+              end_date: phase.end_date,
+              metadata: current.metadata,
+            },
+            {
+              items: [{
+                price_data: { currency: drops.currency, unit_amount: drops.cents, recurring: { interval: 'month' }, product: drops.product },
+                quantity: 1,
+              }],
+              iterations: 1,
+              metadata: { ...current.metadata, community_plan: 'drops', monthly_price: drops.amount.toFixed(2) },
+            },
+          ],
+        });
+      } catch (err) {
+        await admin.from('reseller_contacts').update({ community_sub_pending_plan: null }).eq('id', contact.id);
+        return reply({ error: `Changement d'offre impossible : ${err instanceof Error ? err.message : 'erreur inconnue'}` }, 500);
+      }
+      return reply({ success: true, pending_plan: 'drops' });
+    }
+
+    // Toute autre action sur l'abonnement annule d'abord un passage au Pass
+    // Drops programmé (un planning Stripe bloque la modification directe).
+    if ((action === 'cancel_downgrade' || action === 'cancel' || action === 'resume') && contact.community_sub_stripe_subscription_id) {
+      const current = await stripe.subscriptions.retrieve(contact.community_sub_stripe_subscription_id);
+      const scheduleId = typeof current.schedule === 'string' ? current.schedule : current.schedule?.id;
+      if (scheduleId) await stripe.subscriptionSchedules.release(scheduleId);
+      if (scheduleId || contact.community_sub_pending_plan) {
+        await admin.from('reseller_contacts').update({ community_sub_pending_plan: null }).eq('id', contact.id);
+      }
+      if (action === 'cancel_downgrade') return reply({ success: true, pending_plan: null });
     }
 
     if (action === 'cancel' || action === 'resume') {

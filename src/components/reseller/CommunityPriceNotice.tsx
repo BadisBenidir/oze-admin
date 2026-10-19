@@ -35,7 +35,7 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
     (async () => {
       const { data: me } = await supabase
         .from('reseller_contacts')
-        .select('reseller_id, member_group, is_primary, community_sub_status, community_sub_stripe_subscription_id, community_sub_price')
+        .select('reseller_id, member_group, is_primary, community_sub_status, community_sub_stripe_subscription_id, community_sub_price, community_sub_plan')
         .eq('profile_id', profileId)
         .maybeSingle();
       if (!me || me.is_primary || !me.member_group) return;
@@ -44,6 +44,8 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
       const subscriber = Boolean(me.community_sub_status && PAYING_STATUSES.has(me.community_sub_status));
       // Ancien abonné (résilié) : réabonnement au prix public depuis Mon profil, pas d'annonce de prix de groupe.
       if (!subscriber && me.community_sub_stripe_subscription_id) return;
+      // Passé au Pass Drops : son prix ne suit plus celui de son groupe.
+      if (subscriber && me.community_sub_plan === 'drops') return;
 
       const { data, error } = await supabase
         .from('community_group_prices')

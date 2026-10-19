@@ -5,6 +5,7 @@
 // date d'application passée, le prix de leur abonnement Stripe est modifié
 // sans prorata — la prochaine échéance est prélevée au nouveau prix.
 //
+// Membres passés au Pass Drops (0216) : jamais touchés.
 // Prix cible d'un abonné = prix en vigueur de son groupe ; pour un
 // réabonnement (metadata.resubscribe), jamais moins que le prix public des
 // nouveaux membres (groupe 4). Seul un changement entré en vigueur APRÈS le
@@ -38,7 +39,7 @@ Deno.serve(async () => {
 
   const { data: members, error } = await admin
     .from('reseller_contacts')
-    .select('id, reseller_id, member_group, community_sub_stripe_subscription_id')
+    .select('id, reseller_id, member_group, community_sub_plan, community_sub_pending_plan, community_sub_stripe_subscription_id')
     .in('community_sub_status', ONGOING_STATUSES)
     .not('community_sub_stripe_subscription_id', 'is', null);
   if (error) return json({ error: error.message }, 500);
@@ -60,9 +61,10 @@ Deno.serve(async () => {
 
   for (const m of members) {
     try {
-      if (!m.member_group) continue;
+      // Membre passé (ou passant) au Pass Drops : son prix est celui du Pass Drops.
+      if (!m.member_group || m.community_sub_plan === 'drops' || m.community_sub_pending_plan) continue;
       const sub = await stripe.subscriptions.retrieve(m.community_sub_stripe_subscription_id!);
-      if (!ONGOING_STATUSES.includes(sub.status)) continue;
+      if (!ONGOING_STATUSES.includes(sub.status) || sub.schedule) continue;
       const item = sub.items.data[0];
       if (!item?.price) continue;
       const startedOn = new Date(sub.start_date * 1000).toISOString().slice(0, 10);

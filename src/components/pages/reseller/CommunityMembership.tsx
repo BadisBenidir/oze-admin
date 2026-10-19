@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, CalendarClock, CreditCard, Download, ExternalLink, FileText } from 'lucide-react';
+import { AlertCircle, ArrowDownCircle, CalendarClock, CreditCard, Download, ExternalLink, FileText } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 import { formatMonthlyPrice } from '../../../hooks/useCommunityGroupPrices';
@@ -10,7 +10,8 @@ import { formatMonthlyPrice } from '../../../hooks/useCommunityGroupPrices';
  * Stripe), résiliation / reprise, (ré)abonnement. Tout passe par l'Edge
  * Function community-subscription. Un réabonnement après résiliation se fait
  * au prix public des nouveaux membres (groupe 4) si le tarif du membre était
- * inférieur.
+ * inférieur. « Passer au Pass Drops » : à la prochaine échéance, au prix
+ * public du Pass Drops, sans enchères ni sourcing (0216).
  */
 
 interface MembershipStatus {
@@ -18,7 +19,10 @@ interface MembershipStatus {
   public_price: number | null;
   resubscribe: boolean;
   subscribe_price: number | null;
+  drops_price?: number | null;
   subscription: {
+    plan: 'community' | 'drops';
+    pending_plan: 'drops' | null;
     status: string;
     monthly_price: number;
     current_period_end: string | null;
@@ -53,6 +57,7 @@ export const CommunityMembershipSection: React.FC<{ companyName: string }> = ({ 
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDrops, setConfirmDrops] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[] | null>(null);
   const [showInvoices, setShowInvoices] = useState(false);
   const justPaid = new URLSearchParams(window.location.search).get('abonnement_membre') === 'ok';
@@ -72,7 +77,7 @@ export const CommunityMembershipSection: React.FC<{ companyName: string }> = ({ 
     return () => clearTimeout(t);
   }, [load, justPaid]);
 
-  const run = async (action: 'checkout' | 'portal' | 'cancel' | 'resume') => {
+  const run = async (action: 'checkout' | 'portal' | 'cancel' | 'resume' | 'downgrade' | 'cancel_downgrade') => {
     setPending(action);
     setError(null);
     const { data, error: err } = await invokeEdgeFunction<{ url?: string }>('community-subscription', { action });
@@ -83,6 +88,9 @@ export const CommunityMembershipSection: React.FC<{ companyName: string }> = ({ 
     setPending(null);
     if (err) return setError(err);
     setConfirmCancel(false);
+    setConfirmDrops(false);
+    // Changement d'offre : rechargement pour que menus et accès suivent.
+    if (action === 'downgrade' || action === 'cancel_downgrade') return window.location.reload();
     load();
   };
 
@@ -118,6 +126,9 @@ export const CommunityMembershipSection: React.FC<{ companyName: string }> = ({ 
   const pastDue = sub?.status === 'past_due';
   const cancelling = Boolean(sub?.cancel_at_period_end);
   const losesDiscount = Boolean(sub && status.public_price && sub.monthly_price < status.public_price);
+  const isDrops = sub?.plan === 'drops';
+  const dropsScheduled = sub?.pending_plan === 'drops' && !isDrops;
+  const dropsPrice = status.drops_price ?? null;
 
   return (
     <Card className="mb-6">
@@ -127,7 +138,9 @@ export const CommunityMembershipSection: React.FC<{ companyName: string }> = ({ 
             <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
               <CreditCard className="h-4 w-4 text-gray-400" /> Mon abonnement
             </h4>
-            <p className="mt-2 text-base font-semibold text-gray-900">Abonnement OZË PARIS — {companyName}</p>
+            <p className="mt-2 text-base font-semibold text-gray-900">
+              {ongoing && isDrops ? 'Pass Drops OZË PARIS' : `Abonnement OZË PARIS — ${companyName}`}
+            </p>
             <p className="text-sm text-gray-500">
               {ongoing && sub ? formatMonthlyPrice(sub.monthly_price) : status.subscribe_price ? formatMonthlyPrice(status.subscribe_price) : ''} · sans engagement
             </p>
@@ -188,6 +201,22 @@ export const CommunityMembershipSection: React.FC<{ companyName: string }> = ({ 
           </div>
         )}
 
+        {dropsScheduled && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p className="text-sm text-gray-700">
+              Passage au <strong>Pass Drops</strong>{dropsPrice ? <> ({formatMonthlyPrice(dropsPrice)})</> : ''} programmé
+              {endDate ? <> le <strong>{endDate}</strong></> : ' à la prochaine échéance'}. D'ici là, vous gardez l'accès complet.
+            </p>
+            <button
+              onClick={() => run('cancel_downgrade')}
+              disabled={pending !== null}
+              className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-800 ring-1 ring-gray-200 hover:bg-gray-100 disabled:opacity-50"
+            >
+              {pending === 'cancel_downgrade' ? 'Un instant…' : 'Garder mon abonnement actuel'}
+            </button>
+          </div>
+        )}
+
         {!ongoing && status.subscribe_price && (
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
             <p className="text-sm text-gray-700">
@@ -229,6 +258,46 @@ export const CommunityMembershipSection: React.FC<{ companyName: string }> = ({ 
             >
               <FileText className="h-4 w-4" /> {showInvoices ? 'Masquer mes factures' : 'Mes factures'}
             </button>
+
+            {ongoing && !cancelling && !isDrops && !dropsScheduled && dropsPrice && !confirmDrops && (
+              <button
+                onClick={() => setConfirmDrops(true)}
+                className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-gray-800 ring-1 ring-gray-200 hover:bg-gray-50"
+              >
+                <ArrowDownCircle className="h-4 w-4" /> Passer au Pass Drops
+              </button>
+            )}
+
+            {confirmDrops && dropsPrice && (
+              <div className="w-full space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <p className="text-sm text-gray-700">
+                  À votre prochaine échéance{endDate ? <> (le <strong>{endDate}</strong>)</> : ''}, votre abonnement passera au{' '}
+                  <strong>Pass Drops</strong> à <strong>{formatMonthlyPrice(dropsPrice)}</strong>. Jusque-là, vous gardez l'accès complet ;
+                  ensuite, seuls le catalogue et les drops restent inclus (plus d'enchères ni de sourcing sur mesure).
+                </p>
+                {losesDiscount && status.public_price && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    Votre tarif actuel de <strong>{formatMonthlyPrice(sub!.monthly_price)}</strong> ne pourra plus être retrouvé ensuite.
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => run('downgrade')}
+                    disabled={pending !== null}
+                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    {pending === 'downgrade' ? 'Un instant…' : 'Confirmer le passage au Pass Drops'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDrops(false)}
+                    disabled={pending !== null}
+                    className="rounded-lg bg-white px-4 py-2 text-sm text-gray-700 ring-1 ring-gray-200 hover:bg-gray-100"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            )}
 
             {ongoing && cancelling && (
               <button

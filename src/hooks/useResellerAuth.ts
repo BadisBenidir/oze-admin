@@ -72,6 +72,8 @@ export interface ResellerProfile {
   subscription_status: string | null
   subscription_current_period_end: string | null
   subscription_cancel_at_period_end: boolean
+  /** Membre de communauté abonné passé au Pass Drops (0216) : ni enchères ni sourcing. */
+  community_drops: boolean
 }
 
 export interface LegalInfoInput {
@@ -169,6 +171,16 @@ export const useResellerAuth = () => {
         subscription_cancel_at_period_end: boolean
       }>
 
+      // Offre de l'abonnement membre de communauté (0216), lue à part comme ci-dessus.
+      const { data: community } = await supabase
+        .from('reseller_contacts')
+        .select('community_sub_plan, community_sub_status')
+        .eq('profile_id', data.id)
+        .maybeSingle()
+      const communityDrops =
+        community?.community_sub_plan === 'drops' &&
+        ['active', 'trialing', 'past_due'].includes(community?.community_sub_status ?? '')
+
       return {
         profile: {
           id: data.id,
@@ -205,6 +217,7 @@ export const useResellerAuth = () => {
           subscription_status: sub.subscription_status || null,
           subscription_current_period_end: sub.subscription_current_period_end || null,
           subscription_cancel_at_period_end: Boolean(sub.subscription_cancel_at_period_end),
+          community_drops: communityDrops,
         },
         pendingReason: null,
       }

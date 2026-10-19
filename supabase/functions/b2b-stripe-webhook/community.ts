@@ -24,10 +24,15 @@ const periodEnd = (subscription: Stripe.Subscription): string | null => {
   return raw ? new Date(raw * 1000).toISOString() : null;
 };
 
+/** Offre en cours : 'drops' une fois la phase Pass Drops du planning
+ * Stripe commencée (metadata.community_plan, posée par community-subscription). */
+const planOf = (subscription: Stripe.Subscription) => (subscription.metadata?.community_plan === 'drops' ? 'drops' : 'community');
+
 const subscriptionColumns = (subscription: Stripe.Subscription) => ({
   community_sub_status: subscription.status,
   community_sub_current_period_end: periodEnd(subscription),
   community_sub_price: (subscription.items.data[0]?.price?.unit_amount ?? 0) / 100,
+  community_sub_plan: planOf(subscription),
 });
 
 /** Paiement de l'abonnement d'un membre réussi. Idempotent. */
@@ -54,6 +59,7 @@ export async function handleCommunityCheckout(
       community_sub_stripe_subscription_id: subscriptionId,
       community_sub_stripe_customer_id: customerId ?? null,
       community_sub_started_at: new Date().toISOString(),
+      community_sub_pending_plan: null,
     })
     .eq('id', contactId);
   if (error) {
@@ -72,8 +78,10 @@ export async function handleCommunitySubscriptionChange(
   serviceRoleKey: string,
 ): Promise<Response> {
   const admin = createClient(supabaseUrl, serviceRoleKey);
-  const columns = subscriptionColumns(subscription);
+  const columns: Record<string, unknown> = subscriptionColumns(subscription);
   if (deleted) columns.community_sub_status = 'canceled';
+  // Passage au Pass Drops effectif (ou abonnement terminé) : plus rien de programmé.
+  if (deleted || columns.community_sub_plan === 'drops') columns.community_sub_pending_plan = null;
   const { data, error } = await admin
     .from('reseller_contacts')
     .update(columns)
