@@ -126,7 +126,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
               <CalendarClock className="h-4 w-4 text-gray-400" /> Programmer un changement de prix
             </p>
             <p className="text-xs text-gray-500">
-              Le nouveau prix s'applique à partir de la date choisie. Les membres du groupe sont prévenus à chaque connexion jusqu'à cette date, avec ton message s'il y en a un.
+              Le nouveau prix s'applique à partir de la date choisie. Les membres du groupe sont prévenus à chaque connexion jusqu'à cette date, avec ton message s'il y en a un. Écris {'{prénom}'} dans le message : il sera remplacé par le prénom de chaque membre.
             </p>
           </div>
 
@@ -152,7 +152,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
                 onChange={(e) => setMessages((m) => ({ ...m, [g.id]: e.target.value }))}
                 disabled={!selected.has(g.id)}
                 rows={3}
-                placeholder="Message aux membres de ce groupe (facultatif)"
+                placeholder="Message aux membres de ce groupe (facultatif) — ex. : Bonjour {prénom}, …"
                 className={`${input} w-full resize-y`}
               />
               </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { groupPriceInfo, formatMonthlyPrice, formatPriceDate, GroupPriceRow } from '../../hooks/useCommunityGroupPrices';
+import { groupPriceInfo, formatMonthlyPrice, formatPriceDate, personalizeMessage, GroupPriceRow } from '../../hooks/useCommunityGroupPrices';
 
 const DISMISS_KEY = (priceId: string) => `oze_price_notice_${priceId}`;
 
@@ -12,7 +12,7 @@ const DISMISS_KEY = (priceId: string) => `oze_price_notice_${priceId}`;
  * la masque pour la session en cours. Rien pour le contact principal, un
  * membre non classé ou un prix inchangé. Lecture tolérante avant 0212.
  */
-export const CommunityPriceNotice: React.FC<{ profileId: string | undefined }> = ({ profileId }) => {
+export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; firstName?: string | null }> = ({ profileId, firstName }) => {
   const [notice, setNotice] = useState<{ row: GroupPriceRow; previous: number | null } | null>(null);
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined }> =
           )}
           {notice.row.message && (
             <div className="mt-5 rounded-lg border border-gray-100 bg-gray-50 p-3 text-left">
-              <p className="whitespace-pre-line text-sm text-gray-700">{notice.row.message}</p>
+              <p className="whitespace-pre-line text-sm text-gray-700">{personalizeMessage(notice.row.message, firstName)}</p>
               <p className="mt-1 text-xs text-gray-400">L'équipe OZË PARIS</p>
             </div>
           )}

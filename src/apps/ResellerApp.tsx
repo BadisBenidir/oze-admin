@@ -342,7 +342,7 @@ function ResellerApp() {
       >
         <ResellerNotificationsBanner notifications={notifications} onDismiss={markNotificationRead} />
         <WalletCreditNotice profileId={profile?.id} onAcknowledged={wallet.refresh} />
-        <CommunityPriceNotice profileId={profile?.id} />
+        <CommunityPriceNotice profileId={profile?.id} firstName={profile?.first_name} />
         {/* Abonné dont le prélèvement mensuel a échoué (Stripe retente) : accès maintenu, carte à mettre à jour. */}
         {profile?.account_type === 'subscriber' && profile.subscription_status === 'past_due' && currentTab !== 'profile' && (
           <div className="m-4 md:m-6 bg-red-50 border border-red-200 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3">

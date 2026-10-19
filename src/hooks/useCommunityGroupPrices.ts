@@ -36,6 +36,15 @@ export const groupPriceInfo = (rows: GroupPriceRow[]): Record<number, GroupPrice
   return out;
 };
 
+/** Personnalise le message de l'admin : {prénom} / {prenom} (toute casse) devient le
+ * prénom du membre — retiré avec l'espace qui le précède si le prénom est inconnu. */
+export const personalizeMessage = (message: string, firstName: string | null | undefined) => {
+  const name = (firstName || '').trim();
+  return name
+    ? message.replace(/{s*pr[ée]noms*}/gi, name)
+    : message.replace(/[ 	]?{s*pr[ée]noms*}/gi, '');
+};
+
 export const formatMonthlyPrice = (n: number) =>
   `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/mois`;
 
