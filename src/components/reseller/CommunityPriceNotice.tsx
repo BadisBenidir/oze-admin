@@ -1,63 +1,83 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarClock, CreditCard, X } from 'lucide-react';
+import { CalendarClock, CreditCard, Lock, LogOut, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 import { groupPriceInfo, formatMonthlyPrice, formatPriceDate, personalizeMessage, GroupPriceRow } from '../../hooks/useCommunityGroupPrices';
 
-/** Abonnement Stripe du membre encore en cours : plus d'annonce. */
+/** Abonnement Stripe du membre encore en cours : plus d'annonce ni de coupure. */
 const PAYING_STATUSES = new Set(['active', 'trialing', 'past_due']);
 
+type NoticeState =
+  /** Prix à venir : fenêtre à la connexion puis bandeau, coupure annoncée si le prix est payant. */
+  | { mode: 'announce'; row: GroupPriceRow; previous: number | null; subscriber: boolean; dismissed: boolean }
+  /** Date passée, groupe payant, pas d'abonnement : accès suspendu jusqu'au paiement. */
+  | { mode: 'blocked'; row: GroupPriceRow; price: number };
+
 /**
- * Annonce au membre d'une communauté partenaire le prochain prix mensuel de
- * son groupe d'accès (community_group_prices, 0212), avec le message de
- * l'admin ({prénom} personnalisé). Réaffichée à chaque connexion tant que le
- * membre n'a ni coché « Ne plus afficher » (community_price_notice_dismissals,
- * 0214) ni souscrit son abonnement — le bouton principal ouvre directement le
- * paiement Stripe (community-subscription). Rien pour le contact principal,
- * un membre non classé ou un prix inchangé.
- * Fenêtre fermée (croix) ou « Ne plus afficher » : un bandeau compact reste
- * en haut de l'espace jusqu'au paiement (rappel du prix, message rouvrable,
- * bouton de paiement).
+ * Abonnement des membres d'une communauté partenaire (community_group_prices,
+ * 0212 ; abonnement 0214) :
+ *   - AVANT la date d'un nouveau prix : fenêtre à chaque connexion (message de
+ *     l'admin, {prénom} personnalisé, bouton de paiement Stripe), puis bandeau
+ *     en haut de l'espace jusqu'au paiement. « Ne plus afficher » ne masque
+ *     que la fenêtre. Groupe à 0 € : la fenêtre (message seul), sans paiement.
+ *     Coupure annoncée : sans abonnement à la date, l'accès est suspendu.
+ *   - À PARTIR de la date : un membre d'un groupe payant sans abonnement en
+ *     cours voit un écran « Accès suspendu » à la place de son espace, avec le
+ *     paiement (côté base : community_access_blocked, 0221).
+ * Jamais pour le contact principal ni un membre non classé.
  */
 export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; firstName?: string | null }> = ({ profileId, firstName }) => {
-  const [notice, setNotice] = useState<{ row: GroupPriceRow; previous: number | null; subscriber: boolean } | null>(null);
+  const [notice, setNotice] = useState<NoticeState | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  const [activating, setActivating] = useState(false);
 
   useEffect(() => {
     if (!profileId) return;
-    // Retour du paiement Stripe : l'abonnement est en cours d'enregistrement.
-    if (new URLSearchParams(window.location.search).get('abonnement_membre') === 'ok') return;
     let cancelled = false;
-    (async () => {
+    const justPaid = new URLSearchParams(window.location.search).get('abonnement_membre') === 'ok';
+
+    const load = async (): Promise<boolean> => {
       const { data: me } = await supabase
         .from('reseller_contacts')
         .select('reseller_id, member_group, is_primary, community_sub_status, community_sub_stripe_subscription_id, community_sub_price, community_sub_plan')
         .eq('profile_id', profileId)
         .maybeSingle();
-      if (!me || me.is_primary || !me.member_group) return;
-      // Abonné en cours : prévenu (sans bouton de paiement) que son prix change
-      // à la prochaine échéance après la date (apply-community-prices, 0215).
+      if (!me || me.is_primary || !me.member_group) return true;
       const subscriber = Boolean(me.community_sub_status && PAYING_STATUSES.has(me.community_sub_status));
-      // Ancien abonné (résilié) : réabonnement au prix public depuis Mon profil, pas d'annonce de prix de groupe.
-      if (!subscriber && me.community_sub_stripe_subscription_id) return;
       // Passé au Pass Drops : son prix ne suit plus celui de son groupe.
-      if (subscriber && me.community_sub_plan === 'drops') return;
+      if (subscriber && me.community_sub_plan === 'drops') return true;
 
       const { data, error } = await supabase
         .from('community_group_prices')
         .select('id, member_group, monthly_price, effective_from, message')
         .eq('reseller_id', me.reseller_id)
         .eq('member_group', me.member_group);
-      if (cancelled || error) return;
-
+      if (cancelled || error) return true;
       const rows = ((data || []) as GroupPriceRow[]).map((r) => ({ ...r, monthly_price: Number(r.monthly_price) }));
       const { current, upcoming } = groupPriceInfo(rows)[me.member_group];
+
+      // Coupure : prix en vigueur payant et aucun abonnement en cours.
+      if (!subscriber && current && current.monthly_price > 0) {
+        if (justPaid) return false; // paiement en cours d'enregistrement : on attend le webhook
+        // Prix réel d'un (ré)abonnement (un ancien abonné repaie au moins le prix public).
+        const { data: status } = await invokeEdgeFunction<{ subscribe_price: number | null }>('community-subscription', { action: 'status' });
+        if (cancelled) return true;
+        setNotice({ mode: 'blocked', row: current, price: status?.subscribe_price ?? current.monthly_price });
+        return true;
+      }
+
+      if (!upcoming) return true;
+      // Ancien abonné (résilié) : se réabonne depuis Mon profil, pas d'annonce.
+      if (!subscriber && me.community_sub_stripe_subscription_id) return true;
       const paidPrice = subscriber ? Number(me.community_sub_price ?? 0) : null;
-      if (!upcoming || upcoming.monthly_price === (paidPrice ?? current?.monthly_price ?? 0)) return;
+      const unchanged = upcoming.monthly_price === (paidPrice ?? current?.monthly_price ?? 0);
+      // Prix inchangé : rien, sauf un message de l'admin (ex. groupe à 0 €).
+      if (unchanged && !upcoming.message) return true;
+      if (justPaid && !subscriber && upcoming.monthly_price > 0) return false;
 
       const { data: dismissed } = await supabase
         .from('community_price_notice_dismissals')
@@ -65,23 +85,28 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
         .eq('profile_id', profileId)
         .eq('price_id', upcoming.id)
         .maybeSingle();
-      if (cancelled || (subscriber && dismissed)) return;
-      setNotice({ row: upcoming, previous: paidPrice ?? current?.monthly_price ?? null, subscriber });
+      if (cancelled) return true;
+      const informOnly = subscriber || upcoming.monthly_price <= 0;
+      if (informOnly && dismissed) return true;
+      setNotice({ mode: 'announce', row: upcoming, previous: paidPrice ?? current?.monthly_price ?? null, subscriber, dismissed: Boolean(dismissed) });
       setModalOpen(!dismissed);
+      return true;
+    };
+
+    (async () => {
+      // Retour du paiement Stripe : le webhook enregistre l'abonnement en quelques secondes.
+      if (justPaid) setActivating(true);
+      for (let attempt = 0; attempt < (justPaid ? 8 : 1); attempt++) {
+        if (cancelled) return;
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 2500));
+        if (await load()) break;
+      }
+      if (!cancelled) setActivating(false);
     })();
     return () => {
       cancelled = true;
     };
   }, [profileId]);
-
-  if (!notice) return null;
-
-  const close = async () => {
-    setModalOpen(false);
-    if (dontShowAgain && profileId) {
-      await supabase.from('community_price_notice_dismissals').upsert({ profile_id: profileId, price_id: notice.row.id }, { ignoreDuplicates: true });
-    }
-  };
 
   const subscribe = async () => {
     setPaying(true);
@@ -95,11 +120,86 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
     window.location.href = data.url;
   };
 
-  const canPay = !notice.subscriber && notice.row.monthly_price > 0;
-  const preview = notice.row.message ? personalizeMessage(notice.row.message, firstName).replace(/\s+/g, ' ').trim() : '';
+  if (activating && !notice) {
+    return (
+      <div className="mx-4 mt-4 md:mx-6 md:mt-6 rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-sm text-green-800">
+        Paiement reçu : votre abonnement s'active, un instant…
+      </div>
+    );
+  }
+  if (!notice) return null;
 
-  // Abonné : simple information, pas de bandeau de paiement une fois fermée.
-  if (!modalOpen && notice.subscriber) return null;
+  const message = notice.row.message ? personalizeMessage(notice.row.message, firstName) : '';
+
+  // ---- Accès suspendu (date passée, pas d'abonnement) ----
+  if (notice.mode === 'blocked') {
+    return (
+      <div className="fixed inset-0 z-[95] overflow-y-auto bg-gray-50">
+        <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-10">
+          <div className="overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="px-6 pb-4 pt-8 text-center sm:px-10">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-900">
+                <Lock className="h-6 w-6 text-white" />
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-900">Votre accès est suspendu</h2>
+              <p className="mt-2 text-sm text-gray-500">
+                Depuis le <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, l'accès à votre espace OZË PARIS
+                nécessite un abonnement actif.
+              </p>
+              <p className="mt-4 text-4xl font-bold tabular-nums text-gray-900">{formatMonthlyPrice(notice.price)}</p>
+              <p className="text-xs text-gray-400">sans engagement · accès rétabli dès le paiement</p>
+            </div>
+            {message && (
+              <div className="mx-6 mb-2 rounded-xl border border-gray-100 bg-gray-50 px-5 py-4 sm:mx-10">
+                <p className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words text-[15px] leading-relaxed text-gray-800">{message}</p>
+                <p className="mt-3 text-sm font-medium text-gray-500">— L'équipe OZË PARIS</p>
+              </div>
+            )}
+            <div className="space-y-3 px-6 py-6 sm:px-10">
+              <button
+                type="button"
+                onClick={subscribe}
+                disabled={paying}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3.5 text-base font-semibold text-white hover:bg-gray-800 disabled:opacity-60"
+              >
+                <CreditCard className="h-5 w-5" />
+                {paying ? 'Ouverture du paiement…' : 'Activer mon abonnement'}
+              </button>
+              {payError && <p className="text-center text-sm text-red-600">{payError}</p>}
+              <button
+                type="button"
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  window.location.reload();
+                }}
+                className="mx-auto flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800"
+              >
+                <LogOut className="h-4 w-4" /> Se déconnecter
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Annonce d'un prix à venir ----
+  const close = async () => {
+    setModalOpen(false);
+    if (dontShowAgain && profileId) {
+      await supabase.from('community_price_notice_dismissals').upsert({ profile_id: profileId, price_id: notice.row.id }, { ignoreDuplicates: true });
+    }
+  };
+
+  const free = notice.row.monthly_price <= 0;
+  const canPay = !notice.subscriber && !free;
+  const cutoffWarning = canPay
+    ? `Sans abonnement actif le ${formatPriceDate(notice.row.effective_from)}, votre accès à l'espace OZË PARIS sera suspendu.`
+    : null;
+  const preview = message.replace(/\s+/g, ' ').trim();
+
+  // Abonné ou groupe à 0 € : simple information, pas de bandeau une fois fermée.
+  if (!modalOpen && !canPay) return null;
 
   if (!modalOpen) {
     return (
@@ -118,12 +218,11 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-base font-semibold">Votre abonnement OZË PARIS évolue</p>
+            {cutoffWarning && <p className="mt-0.5 text-sm font-medium text-amber-300">{cutoffWarning}</p>}
             {preview && (
               <>
                 {expanded ? (
-                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-200">
-                    {personalizeMessage(notice.row.message || '', firstName)}
-                  </p>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-200">{message}</p>
                 ) : (
                   <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-300">{preview}</p>
                 )}
@@ -137,17 +236,15 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
               </>
             )}
           </div>
-          {canPay && (
-            <button
-              type="button"
-              onClick={subscribe}
-              disabled={paying}
-              className="flex flex-shrink-0 items-center justify-center gap-2.5 rounded-xl bg-white px-8 py-4 text-base font-semibold text-gray-900 shadow-sm transition-colors hover:bg-gray-100 disabled:opacity-60 md:min-w-[280px]"
-            >
-              <CreditCard className="h-5 w-5" />
-              {paying ? 'Ouverture du paiement…' : 'Activer mon abonnement'}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={subscribe}
+            disabled={paying}
+            className="flex flex-shrink-0 items-center justify-center gap-2.5 rounded-xl bg-white px-8 py-4 text-base font-semibold text-gray-900 shadow-sm transition-colors hover:bg-gray-100 disabled:opacity-60 md:min-w-[280px]"
+          >
+            <CreditCard className="h-5 w-5" />
+            {paying ? 'Ouverture du paiement…' : 'Activer mon abonnement'}
+          </button>
         </div>
         {payError && <p className="border-t border-white/10 px-6 py-2 text-sm text-red-300">{payError}</p>}
       </div>
@@ -172,23 +269,32 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-50">
               <CalendarClock className="h-6 w-6 text-amber-600" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900">Évolution de votre abonnement</h3>
-            <p className="mt-2 text-sm text-gray-500">
-              {notice.subscriber
-                ? <>À partir de votre première échéance après le <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, votre abonnement OZË PARIS passe à</>
-                : <>À partir du <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, votre abonnement OZË PARIS passe à</>}
-            </p>
-            <p className="mt-2 text-4xl font-bold tabular-nums text-gray-900">{formatMonthlyPrice(notice.row.monthly_price)}</p>
-            {notice.previous !== null && (
-              <p className="mt-1 text-xs text-gray-400">au lieu de {formatMonthlyPrice(notice.previous)} actuellement</p>
+            <h3 className="text-xl font-semibold text-gray-900">{free ? 'Votre accès OZË PARIS' : 'Évolution de votre abonnement'}</h3>
+            {free ? (
+              <p className="mt-2 text-sm text-gray-500">
+                À partir du <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, votre accès reste <strong className="text-gray-900">offert</strong>.
+              </p>
+            ) : (
+              <>
+                <p className="mt-2 text-sm text-gray-500">
+                  {notice.subscriber
+                    ? <>À partir de votre première échéance après le <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, votre abonnement OZË PARIS passe à</>
+                    : <>À partir du <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, votre abonnement OZË PARIS passe à</>}
+                </p>
+                <p className="mt-2 text-4xl font-bold tabular-nums text-gray-900">{formatMonthlyPrice(notice.row.monthly_price)}</p>
+                {notice.previous !== null && notice.previous > 0 && (
+                  <p className="mt-1 text-xs text-gray-400">au lieu de {formatMonthlyPrice(notice.previous)} actuellement</p>
+                )}
+                {cutoffWarning && (
+                  <p className="mx-auto mt-3 max-w-md rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">{cutoffWarning}</p>
+                )}
+              </>
             )}
           </div>
 
-          {notice.row.message && (
+          {message && (
             <div className="mt-6 rounded-xl border border-gray-100 bg-gray-50 px-5 py-4">
-              <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-gray-800">
-                {personalizeMessage(notice.row.message, firstName)}
-              </p>
+              <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-gray-800">{message}</p>
               <p className="mt-3 text-sm font-medium text-gray-500">— L'équipe OZË PARIS</p>
             </div>
           )}
