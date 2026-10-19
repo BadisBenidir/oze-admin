@@ -30,7 +30,7 @@ import {
   handleSubscriptionPaymentFailed,
 } from './subscriptions.ts';
 import { recordSubscriptionInvoice } from '../_shared/subscriptionPayments.ts';
-import { handleCommunityCheckout, handleCommunitySubscriptionChange, isCommunitySubscription } from './community.ts';
+import { handleCommunityCheckout, handleCommunitySubscriptionChange, isCommunitySubscription, recordCommunityInvoice } from './community.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook]';
 
@@ -157,6 +157,14 @@ Deno.serve(async (req: Request) => {
       await recordSubscriptionInvoice(createClient(supabaseUrl, serviceRoleKey), invoice, stripe);
     } catch (err) {
       console.error(`${LOG_PREFIX} Enregistrement paiement d'abonnement (${event.id}):`, err instanceof Error ? err.message : err);
+    }
+    // Abonnement d'un membre de communauté (0217) : CA attribué à l'entreprise partenaire.
+    try {
+      if (await recordCommunityInvoice(invoice, stripe, supabaseUrl, serviceRoleKey)) {
+        return new Response(JSON.stringify({ received: true }), { status: 200 });
+      }
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Enregistrement paiement membre (${event.id}):`, err instanceof Error ? err.message : err);
     }
     try {
       return await handleSubscriptionInvoicePaid(invoice, supabaseUrl, serviceRoleKey);

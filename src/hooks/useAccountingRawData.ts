@@ -55,12 +55,19 @@ export interface AccountingGiftReward {
   created_at: string;
 }
 
-/** Paiement d'un abonnement Club B2B (pass mensuel, 0185) — 100 % de marge. */
+/** Paiement d'un abonnement — Club B2B (pass mensuel, 0185) ou membre de
+ * communauté partenaire (0217) — 100 % de marge. `source` : à qui revient
+ * ce CA (SUBSCRIPTION_SOURCE_CLIENTS, partenaire du code promo Club utilisé
+ * à la souscription, ou entreprise de la communauté). */
 export interface AccountingSubscriptionPayment {
   amount: number;
   paid_at: string;
   plan: string | null;
+  source: string;
 }
+
+/** Abonnés Club sans code promo de partenaire. */
+export const SUBSCRIPTION_SOURCE_CLIENTS = 'Clients';
 
 export interface AccountingRawData {
   orders: AccountingOrder[];
@@ -68,6 +75,8 @@ export interface AccountingRawData {
   sourcingAdvances: AccountingSourcingAdvance[];
   giftRewards: AccountingGiftReward[];
   subscriptionPayments: AccountingSubscriptionPayment[];
+  /** Sources de CA d'abonnement à afficher, même à 0 (clients, communautés, partenaires). */
+  subscriptionSources: string[];
 }
 
 /** Prédicat "encaissé" partagé avec useSalesJournalExport.ts / Accounting.tsx
@@ -89,7 +98,7 @@ export const isOrderPaid = (o: Pick<AccountingOrder, 'payment_status' | 'status'
  * en mémoire plutôt que de refaire une requête par sélection de période ou
  * de comparaison, ce qui rend le changement de période instantané. */
 export const useAccountingRawData = (isAdmin: boolean = false) => {
-  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [], subscriptionPayments: [] });
+  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [], subscriptionPayments: [], subscriptionSources: [SUBSCRIPTION_SOURCE_CLIENTS] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -216,15 +225,60 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         }
       }
 
-      // Abonnements Club B2B (0185) : lecture tolérante (table absente avant la migration).
-      const { data: subsData, error: subsError } = await supabase
-        .from('b2b_subscription_payments')
-        .select('amount, paid_at, plan');
-      const subscriptionPayments: AccountingSubscriptionPayment[] = subsError
-        ? []
-        : (subsData || []).map((p) => ({ amount: Number(p.amount) || 0, paid_at: p.paid_at as string, plan: (p.plan as string) ?? null }));
+      // Abonnements (0185, 0217) : lecture tolérante (tables absentes avant les migrations).
+      const [subsRes, codesRes, communityRes, communityPricesRes] = await Promise.all([
+        supabase.from('b2b_subscription_payments').select('amount, paid_at, plan, promo_code, stripe_subscription_id'),
+        supabase.from('club_promo_codes').select('code, partner_name'),
+        supabase.from('community_subscription_payments').select('amount, paid_at, plan, reseller_id, resellers(company_name)'),
+        supabase.from('community_group_prices').select('reseller_id, resellers(company_name)'),
+      ]);
+      const partnerByCode = new Map<string, string>();
+      for (const c of (codesRes.error ? [] : codesRes.data || []) as { code: string; partner_name: string | null }[]) {
+        if (c.partner_name?.trim()) partnerByCode.set(c.code.toUpperCase(), c.partner_name.trim());
+      }
+      // Tout le CA d'un abonnement Club (renouvellements compris) revient au
+      // partenaire du code promo utilisé sur l'une de ses factures.
+      type ClubPaymentRow = { amount: number; paid_at: string; plan: string | null; promo_code: string | null; stripe_subscription_id: string | null };
+      const clubRows = (subsRes.error ? [] : subsRes.data || []) as ClubPaymentRow[];
+      const partnerBySubscription = new Map<string, string>();
+      for (const p of clubRows) {
+        const partner = p.promo_code ? partnerByCode.get(p.promo_code.toUpperCase()) : undefined;
+        if (partner && p.stripe_subscription_id && !partnerBySubscription.has(p.stripe_subscription_id)) partnerBySubscription.set(p.stripe_subscription_id, partner);
+      }
+      const companyOf = (r: unknown) => {
+        const reseller = Array.isArray(r) ? r[0] : r;
+        return ((reseller as { company_name?: string } | null)?.company_name || 'Communauté').trim();
+      };
+      type CommunityPaymentRow = { amount: number; paid_at: string; plan: string | null; resellers: unknown };
+      const subscriptionPayments: AccountingSubscriptionPayment[] = [
+        ...clubRows.map((p) => ({
+          amount: Number(p.amount) || 0,
+          paid_at: p.paid_at,
+          plan: p.plan ?? null,
+          source:
+            (p.stripe_subscription_id && partnerBySubscription.get(p.stripe_subscription_id)) ||
+            (p.promo_code && partnerByCode.get(p.promo_code.toUpperCase())) ||
+            SUBSCRIPTION_SOURCE_CLIENTS,
+        })),
+        ...((communityRes.error ? [] : communityRes.data || []) as CommunityPaymentRow[]).map((p) => ({
+          amount: Number(p.amount) || 0,
+          paid_at: p.paid_at,
+          plan: p.plan ?? null,
+          source: companyOf(p.resellers),
+        })),
+      ];
+      // Sources affichées même sans CA : communautés avec des prix programmés, partenaires des codes.
+      const communities = new Set<string>();
+      for (const r of (communityPricesRes.error ? [] : communityPricesRes.data || []) as { resellers: unknown }[]) communities.add(companyOf(r.resellers));
+      const partners = new Set(partnerByCode.values());
+      for (const p of subscriptionPayments) if (p.source !== SUBSCRIPTION_SOURCE_CLIENTS && !partners.has(p.source)) communities.add(p.source);
+      const subscriptionSources = [
+        SUBSCRIPTION_SOURCE_CLIENTS,
+        ...[...communities].sort((a, b) => a.localeCompare(b, 'fr')),
+        ...[...partners].filter((p) => !communities.has(p)).sort((a, b) => a.localeCompare(b, 'fr')),
+      ];
 
-      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments });
+      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments, subscriptionSources });
     } catch (err) {
       console.error('Erreur lors du chargement des données comptables:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');

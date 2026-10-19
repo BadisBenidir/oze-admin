@@ -308,7 +308,11 @@ class OrderService {
     const { data: subscriptionPayments } = await supabase
       .from('b2b_subscription_payments')
       .select('amount');
-    const subscriptionRevenue = (subscriptionPayments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    // + abonnements des membres de communautés partenaires (0217).
+    const { data: communityPayments } = await supabase
+      .from('community_subscription_payments')
+      .select('amount');
+    const subscriptionRevenue = [...(subscriptionPayments || []), ...(communityPayments || [])].reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
         // ... après avoir récupéré les orders
     const { count: productCount } = await supabase

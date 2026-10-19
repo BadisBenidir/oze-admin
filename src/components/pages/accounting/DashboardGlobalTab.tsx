@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
 import { AccountingRawData } from '../../../hooks/useAccountingRawData';
 import { AccountingPeriod, isWithinRange, monthKeyLabel } from '../../../utils/accountingPeriods';
-import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, combineTotals, computeMonthlySeries } from '../../../utils/accountingCalc';
+import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries } from '../../../utils/accountingCalc';
+import { SUBSCRIPTION_SOURCE_CLIENTS } from '../../../hooks/useAccountingRawData';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 const pct = (current: number, previous: number): number | null => (previous ? ((current - previous) / Math.abs(previous)) * 100 : null);
@@ -24,9 +25,13 @@ const MONTHLY_TOOLTIP_ROWS: { key: 'web' | 'b2b' | 'live' | 'subscriptions' | 'c
   { key: 'margin', label: 'Marge brute', color: '#16a34a' },
 ];
 
-const MonthlyTooltip: React.FC<{ active?: boolean; label?: string; payload?: { payload: Record<string, number> }[] }> = ({ active, label, payload }) => {
+/** Libellé d'une source de CA d'abonnement. */
+const subscriptionLabel = (source: string) =>
+  source === SUBSCRIPTION_SOURCE_CLIENTS ? 'CA abonnement client' : `CA abonnement ${source}`;
+
+const MonthlyTooltip: React.FC<{ active?: boolean; label?: string; payload?: { payload: Record<string, unknown> }[]; sources: string[] }> = ({ active, label, payload, sources }) => {
   if (!active || !payload || payload.length === 0) return null;
-  const row = payload[0].payload;
+  const row = payload[0].payload as Record<string, number> & { subsBySource?: Record<string, number> };
   const total = (row.web || 0) + (row.b2b || 0) + (row.live || 0) + (row.subscriptions || 0);
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-md">
@@ -36,16 +41,27 @@ const MonthlyTooltip: React.FC<{ active?: boolean; label?: string; payload?: { p
         <span className="tabular-nums">{EUR(total)}</span>
       </p>
       {MONTHLY_TOOLTIP_ROWS.map((r) => (
-        <p key={r.key} className="flex justify-between gap-6" style={{ color: r.color }}>
-          <span>{r.label}</span>
-          <span className="tabular-nums">{EUR(row[r.key] || 0)}</span>
-        </p>
+        <React.Fragment key={r.key}>
+          <p className="flex justify-between gap-6" style={{ color: r.color }}>
+            <span>{r.label}</span>
+            <span className="tabular-nums">{EUR(row[r.key] || 0)}</span>
+          </p>
+          {r.key === 'subscriptions' &&
+            sources.map((s) => (
+              <p key={s} className="flex justify-between gap-6 pl-3 text-xs" style={{ color: r.color }}>
+                <span>{subscriptionLabel(s)}</span>
+                <span className="tabular-nums">{EUR(row.subsBySource?.[s] || 0)}</span>
+              </p>
+            ))}
+        </React.Fragment>
       ))}
     </div>
   );
 };
 
 const CHANNEL_COLORS = { web: '#2563eb', b2b: '#7c3aed', live: '#d97706', subscriptions: '#059669' };
+/** Nuances de vert des sources d'abonnement (répartition du CA). */
+const SUBSCRIPTION_SHADES = ['#059669', '#10b981', '#34d399', '#047857', '#6ee7b7', '#065f46', '#a7f3d0'];
 
 interface DashboardGlobalTabProps {
   data: AccountingRawData;
@@ -78,15 +94,24 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
   }, [data, period.yoyRange]);
 
   const monthly = useMemo(() => computeMonthlySeries(data, 12), [data]);
+  const sources = data.subscriptionSources;
+  const subsBySource = useMemo(
+    () => computeSubscriptionBySource(data.subscriptionPayments, sources, period.range),
+    [data.subscriptionPayments, sources, period.range]
+  );
 
   const donutData = useMemo(
     () => [
       { name: 'B2C', value: current.web.revenue, color: CHANNEL_COLORS.web },
       { name: 'B2B', value: current.b2b.revenue, color: CHANNEL_COLORS.b2b },
       { name: 'Lives', value: current.live.revenue, color: CHANNEL_COLORS.live },
-      { name: 'Abonnements', value: current.subscriptions.revenue, color: CHANNEL_COLORS.subscriptions },
+      ...subsBySource.map((s, i) => ({
+        name: subscriptionLabel(s.source).replace(/^CA a/, 'A'),
+        value: s.revenue,
+        color: SUBSCRIPTION_SHADES[i % SUBSCRIPTION_SHADES.length],
+      })),
     ].filter((d) => d.value > 0),
-    [current]
+    [current, subsBySource]
   );
 
   // Trésorerie & fiscalité — voir accountingCalc.ts / useSalesJournalExport.ts
@@ -150,7 +175,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} width={70} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k€`} />
-                <Tooltip content={<MonthlyTooltip />} />
+                <Tooltip content={<MonthlyTooltip sources={sources} />} />
                 <Legend />
                 <Bar dataKey="web" stackId="ca" name="CA B2C" fill={CHANNEL_COLORS.web} radius={[0, 0, 0, 0]} />
                 <Bar dataKey="b2b" stackId="ca" name="CA B2B" fill={CHANNEL_COLORS.b2b} />
@@ -206,7 +231,9 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA B2C</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA B2B</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA Lives</th>
-                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA Abonnements</th>
+                  {sources.map((s) => (
+                    <th key={s} className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">{subscriptionLabel(s)}</th>
+                  ))}
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA Total</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Coût d'achat</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Marge brute</th>
@@ -225,7 +252,9 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.web)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.b2b)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.live)}</td>
-                      <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.subscriptions)}</td>
+                      {sources.map((s) => (
+                        <td key={s} className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.subsBySource[s] || 0)}</td>
+                      ))}
                       <td className="py-2.5 px-4 text-right text-sm font-medium text-gray-900 tabular-nums">{EUR(m.total)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.cogs)}</td>
                       <td className={`py-2.5 px-4 text-right text-sm font-medium tabular-nums ${m.margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>{EUR(m.margin)}</td>

@@ -94,3 +94,44 @@ export async function handleCommunitySubscriptionChange(
   if (!data?.length) return json({ received: true, skipped: 'unknown_subscription' });
   return json({ received: true });
 }
+
+/**
+ * Facture payée d'un abonnement membre (invoice.paid) : enregistrée dans
+ * community_subscription_payments (0217) pour le CA par partenaire. Ignore
+ * tout autre abonnement. Idempotent (une ligne par facture).
+ */
+export async function recordCommunityInvoice(
+  invoice: Stripe.Invoice,
+  stripe: Stripe,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<boolean> {
+  const subscriptionId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
+  if (!subscriptionId || invoice.status !== 'paid' || !invoice.amount_paid) return false;
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  if (!isCommunitySubscription(subscription.metadata)) return false;
+
+  const metadata = subscription.metadata || {};
+  const paidAt = invoice.status_transitions?.paid_at ?? invoice.created;
+  const admin = createClient(supabaseUrl, serviceRoleKey);
+  const { error } = await admin.from('community_subscription_payments').upsert(
+    {
+      stripe_invoice_id: invoice.id,
+      stripe_subscription_id: subscriptionId,
+      stripe_customer_id: typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id ?? null,
+      reseller_id: metadata.reseller_id || null,
+      contact_id: metadata.contact_id || null,
+      profile_id: metadata.profile_id || null,
+      amount: invoice.amount_paid / 100,
+      currency: invoice.currency || 'eur',
+      plan: planOf(subscription),
+      billing_reason: invoice.billing_reason ?? null,
+      invoice_number: invoice.number ?? null,
+      paid_at: new Date(paidAt * 1000).toISOString(),
+    },
+    { onConflict: 'stripe_invoice_id' },
+  );
+  if (error) throw new Error(`paiement membre ${invoice.id} : ${error.message}`);
+  console.log(`${LOG_PREFIX} Facture ${invoice.id} (${invoice.amount_paid / 100} €) enregistrée pour le membre ${metadata.contact_id}`);
+  return true;
+}

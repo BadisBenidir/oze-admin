@@ -26,6 +26,8 @@ interface ClubPromoCode {
   valid_until: string | null;
   status: 'active' | 'inactive';
   created_at: string;
+  /** Partenaire (influenceur) à qui revient le CA des abonnements souscrits avec ce code (0217). */
+  partner_name: string | null;
 }
 
 interface PaymentRow {
@@ -74,6 +76,7 @@ const EMPTY_FORM = {
   plans: ['drops', 'revendeur'] as Plan[],
   max_uses: '',
   valid_until: '',
+  partner_name: '',
 };
 
 /** Création, ou modification d'un code existant (editing) — même s'il est
@@ -93,6 +96,7 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
           plans: editing.plans,
           max_uses: editing.max_uses ? String(editing.max_uses) : '',
           valid_until: editing.valid_until ? editing.valid_until.slice(0, 10) : '',
+          partner_name: editing.partner_name || '',
         }
       : EMPTY_FORM
   );
@@ -123,6 +127,7 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
           plans: form.plans,
           max_uses: form.max_uses ? Number(form.max_uses) : null,
           valid_until: form.valid_until ? new Date(`${form.valid_until}T23:59:59`).toISOString() : null,
+          partner_name: form.partner_name.trim() || null,
         })
         .eq('id', editing.id);
       setSaving(false);
@@ -145,6 +150,7 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
       max_uses: form.max_uses ? Number(form.max_uses) : null,
       valid_until: form.valid_until ? new Date(`${form.valid_until}T23:59:59`).toISOString() : null,
       created_by: userData?.user?.id ?? null,
+      partner_name: form.partner_name.trim() || null,
     });
     setSaving(false);
     if (insertError) {
@@ -183,6 +189,18 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
                   Déjà utilisé par {usedCount} membre{usedCount > 1 ? 's' : ''} : {usedCount > 1 ? 'ils gardent' : 'il garde'} la remise de leur inscription. Les nouvelles conditions s'appliquent aux prochaines inscriptions.
                 </p>
               )}
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Partenaire (facultatif)</label>
+              <input
+                value={form.partner_name}
+                onChange={(e) => setForm({ ...form, partner_name: e.target.value })}
+                placeholder="Ex. Julia, Dawsell, Homade"
+                className={input}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Le CA des abonnements souscrits avec ce code apparaît en « CA abonnement {form.partner_name.trim() || '…'} » dans la comptabilité.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -488,6 +506,7 @@ export const SubscriptionPromoCodes: React.FC = () => {
                               {open ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
                               {c.code}
                             </span>
+                            {c.partner_name && <span className="ml-5 block font-sans text-xs font-normal text-gray-500">{c.partner_name}</span>}
                           </td>
                           <td className="px-4 py-3 text-gray-700">{discountLabel(c)}</td>
                           <td className="px-4 py-3 text-xs text-gray-600">

@@ -69,6 +69,13 @@ export const computeSubscriptionTotals = (payments: AccountingSubscriptionPaymen
   };
 };
 
+/** CA d'abonnement par source sur une plage (toutes les sources connues, même à 0). */
+export const computeSubscriptionBySource = (payments: AccountingSubscriptionPayment[], sources: string[], range: DateRange): { source: string; revenue: number }[] => {
+  const totals = new Map<string, number>(sources.map((s) => [s, 0]));
+  for (const p of payments) if (isWithinRange(p.paid_at, range)) totals.set(p.source, (totals.get(p.source) || 0) + p.amount);
+  return [...totals.entries()].map(([source, revenue]) => ({ source, revenue }));
+};
+
 export const combineTotals = (...parts: ChannelTotals[]): ChannelTotals => {
   const revenue = parts.reduce((s, p) => s + p.revenue, 0);
   const cogs = parts.reduce((s, p) => s + p.cogs, 0);
@@ -90,6 +97,8 @@ export interface MonthlyChannelRow {
   b2b: number;
   live: number;
   subscriptions: number;
+  /** CA d'abonnement du mois par source (clients, communautés, partenaires). */
+  subsBySource: Record<string, number>;
   total: number;
   cogs: number;
   margin: number;
@@ -113,7 +122,7 @@ export const computeMonthlySeries = (data: AccountingRawData, months: number): M
     if (key >= COMPANY_ACTIVITY_START_MONTH) keys.push(key);
   }
 
-  const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, subscriptions: 0, total: 0, cogs: 0, margin: 0 }]));
+  const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, subscriptions: 0, subsBySource: {}, total: 0, cogs: 0, margin: 0 }]));
 
   data.orders.filter(isOrderPaid).forEach((o) => {
     const key = monthKey(o.created_at);
@@ -142,6 +151,7 @@ export const computeMonthlySeries = (data: AccountingRawData, months: number): M
     const row = rows.get(monthKey(p.paid_at));
     if (!row) return;
     row.subscriptions += p.amount;
+    row.subsBySource[p.source] = (row.subsBySource[p.source] || 0) + p.amount;
     row.total += p.amount;
     row.margin += p.amount;
   });
