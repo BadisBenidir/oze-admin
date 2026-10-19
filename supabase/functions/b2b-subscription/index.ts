@@ -32,6 +32,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import { createSubscriptionCheckout, isSubscriptionPlan, siteOrigin } from '../_shared/subscriptionCheckout.ts';
 import { syncStripeBillingIdentity } from '../_shared/stripeBilling.ts';
+import { targetPriceId } from '../_shared/clubPlans.ts';
 
 /** Statuts Stripe d'un abonnement encore en cours (donc pas de réabonnement possible). */
 const ONGOING_STATUSES = new Set(['active', 'trialing', 'past_due']);
@@ -182,7 +183,8 @@ Deno.serve(async (req: Request) => {
     if (action === 'downgrade') {
       if (reseller.subscription_plan !== 'revendeur') return reply({ error: 'Vous avez déjà le Pass Drops' }, 400);
       if (current.cancel_at_period_end) return reply({ error: 'Votre abonnement est déjà résilié à l\'échéance' }, 400);
-      const dropsPrice = Deno.env.get('STRIPE_PRICE_DROPS');
+      // Abonné à l'ancien tarif : il garde l'ancien tarif du Pass Drops.
+      const dropsPrice = targetPriceId('drops', current.items.data[0]?.price?.id);
       if (!dropsPrice) return reply({ error: 'Configuration serveur manquante (prix Pass Drops)' }, 500);
 
       const { error: pendingError } = await admin.from('resellers').update({ subscription_pending_plan: 'drops' }).eq('id', reseller.id);
@@ -224,7 +226,8 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'upgrade') {
       if (reseller.subscription_plan !== 'drops') return reply({ error: 'Vous avez déjà le Pass Revendeur' }, 400);
-      const revendeurPrice = Deno.env.get('STRIPE_PRICE_REVENDEUR');
+      // Abonné à l'ancien tarif : il garde l'ancien tarif du Pass Revendeur.
+      const revendeurPrice = targetPriceId('revendeur', current.items.data[0]?.price?.id);
       if (!revendeurPrice) return reply({ error: 'Configuration serveur manquante (prix Pass Revendeur)' }, 500);
       try {
         updated = await stripe.subscriptions.update(current.id, {
@@ -248,6 +251,7 @@ Deno.serve(async (req: Request) => {
       subscription_status: updated.status,
       subscription_current_period_end: periodEnd(updated),
       subscription_cancel_at_period_end: Boolean(updated.cancel_at_period_end),
+      subscription_amount: (updated.items.data[0]?.price?.unit_amount ?? 0) / 100 || null,
     };
     const { error: updateError } = await admin.from('resellers').update(columns).eq('id', reseller.id);
     if (updateError) return reply({ error: updateError.message }, 500);

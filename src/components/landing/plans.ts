@@ -6,8 +6,11 @@
  * Stripe Checkout ouverte côté serveur (Edge Function b2b-signup, prix Stripe
  * STRIPE_PRICE_DROPS / STRIPE_PRICE_REVENDEUR côté Supabase) — voir 0167.
  * Les prix affichés ici doivent correspondre à ceux configurés dans Stripe.
- *   VITE_B2B_PASS_DROPS_PRICE             remplace le prix par défaut (39,90 €)
- *   VITE_B2B_SUBSCRIPTION_PRICE           remplace le prix par défaut (69,90 €)
+ * Prix publics : PASS_PRICE_VALUES ci-dessous (Pass Drops 49,90 €, Pass
+ * Revendeur 79,90 € depuis la hausse d'octobre 2026). Les abonnés inscrits
+ * avant gardent l'ancien tarif (LEGACY_PASS_PRICE_VALUES, prix Stripe
+ * STRIPE_PRICE_*_LEGACY) : leur espace affiche le prix de leur abonnement
+ * (resellers.subscription_amount, 0219).
  *   VITE_B2B_SUBSCRIPTION_PERIOD          remplace "/ mois" (commun aux deux pass)
  *   VITE_B2B_WHATSAPP_NUMBER              remplace le numéro WhatsApp par défaut (international, ex. 33612345678)
  *                                         (Pass Boutiques ; sinon repli sur l'email)
@@ -16,6 +19,27 @@
 const env = (key: string) => ((import.meta.env[key] as string | undefined) ?? '').trim();
 
 export const PERIOD = env('VITE_B2B_SUBSCRIPTION_PERIOD') || '/ mois';
+
+/** Prix publics actuels des pass (nouveaux abonnés). */
+export const PASS_PRICE_VALUES = { drops: 49.9, revendeur: 79.9 } as const;
+/** Anciens tarifs, conservés par les abonnés inscrits avant la hausse. */
+export const LEGACY_PASS_PRICE_VALUES = { drops: 39.9, revendeur: 69.9 } as const;
+
+export const formatPassPrice = (n: number) =>
+  `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+
+/**
+ * Prix d'un pass pour un abonné : un abonné à l'ancien tarif (montant payé
+ * inférieur au prix public de son pass) garde l'ancien tarif, y compris s'il
+ * change de pass ; sinon, prix public.
+ */
+export const passPriceFor = (
+  target: 'drops' | 'revendeur',
+  current?: { plan: 'drops' | 'revendeur' | null; amount: number | null } | null
+): string => {
+  const legacy = Boolean(current?.plan && current.amount && current.amount < PASS_PRICE_VALUES[current.plan]);
+  return formatPassPrice(legacy ? LEGACY_PASS_PRICE_VALUES[target] : PASS_PRICE_VALUES[target]);
+};
 export const DISCORD_URL = env('VITE_B2B_DISCORD_URL') || 'https://discord.gg/qVX3ueywBu';
 // Numéro WhatsApp des agents (Pass Boutiques, « Parler à un agent ») : format wa.me et format affiché.
 export const WHATSAPP_NUMBER = (env('VITE_B2B_WHATSAPP_NUMBER') || '33743701734').replace(/\D/g, '');
@@ -49,7 +73,7 @@ export const PLANS: Plan[] = [
     id: 'drops',
     name: 'Pass Drops',
     pitch: 'Pour acheter sur le catalogue et les drops, à l\'unité.',
-    price: env('VITE_B2B_PASS_DROPS_PRICE') || '39,90 €',
+    price: formatPassPrice(PASS_PRICE_VALUES.drops),
     features: [
       { label: 'Drops & catalogue B2B, achat à l\'unité', included: true },
       { label: 'Certificats Entrupy disponibles', included: true },
@@ -62,7 +86,7 @@ export const PLANS: Plan[] = [
     id: 'revendeur',
     name: 'Pass Revendeur',
     pitch: 'L\'accès complet à la plateforme pour les revendeurs.',
-    price: env('VITE_B2B_SUBSCRIPTION_PRICE') || '69,90 €',
+    price: formatPassPrice(PASS_PRICE_VALUES.revendeur),
     featured: true,
     badge: 'Accès complet',
     features: [

@@ -44,7 +44,10 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[]; promoData: S
   const paying = subscribers.filter((r) => r.status === 'active' && ONGOING.has(r.subscription_status || ''));
   const drops = paying.filter((r) => r.subscription_plan === 'drops');
   const revendeur = paying.filter((r) => r.subscription_plan === 'revendeur');
-  const catalogueMrr = drops.length * planPriceValue('drops') + revendeur.length * planPriceValue('revendeur');
+  const catalogueMrr = [...drops, ...revendeur].reduce(
+    (sum, r) => sum + (Number(r.subscription_amount) || planPriceValue(r.subscription_plan === 'drops' ? 'drops' : 'revendeur')),
+    0
+  );
   // Tant que promoData est null (chargement / erreur), on retombe sur le prix catalogue.
   const expected = promoData ? paying.map((r) => expectedMonthlyAmount(r, promoData)) : null;
   const mrr = expected ? expected.reduce((sum, n) => sum + n, 0) : catalogueMrr;

@@ -5,13 +5,7 @@
 
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-
-const planFromPrice = (priceId: string | undefined): string | null => {
-  if (!priceId) return null;
-  if (priceId === Deno.env.get('STRIPE_PRICE_REVENDEUR')) return 'revendeur';
-  if (priceId === Deno.env.get('STRIPE_PRICE_DROPS')) return 'drops';
-  return null;
-};
+import { planFromPriceId } from './clubPlans.ts';
 
 /** Code promo (et remise) d'une facture (0191). La facture est relue avec ses
  * remises développées : la forme du payload webhook dépend de la version d'API
@@ -53,7 +47,7 @@ export async function recordSubscriptionInvoice(admin: SupabaseClient, invoice: 
 
   const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id ?? null;
   const line = invoice.lines?.data?.find((l) => l.price?.id) || invoice.lines?.data?.[0];
-  const plan = planFromPrice(line?.price?.id);
+  const plan = planFromPriceId(line?.price?.id, line?.price?.metadata);
   // Uniquement les pass du Club B2B (pas un autre abonnement Stripe du compte).
   if (!plan) return false;
 

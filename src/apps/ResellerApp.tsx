@@ -245,9 +245,9 @@ function ResellerApp() {
       // Pass Drops (abonnés, 0167) : onglets visibles et cliquables, mais
       // remplacés par l'écran de passage au Pass Revendeur.
       case 'sourcing':
-        return isDropsPlan ? <PlanLockedScreen feature="sourcing" community={profile?.community_drops} /> : <SourcingSurMesure />;
+        return isDropsPlan ? <PlanLockedScreen feature="sourcing" community={profile?.community_drops} currentAmount={profile?.subscription_amount} /> : <SourcingSurMesure />;
       case 'auctions':
-        return isDropsPlan && !auctionsUnlocked ? <PlanLockedScreen feature="auctions" community={profile?.community_drops} /> : <Auctions />;
+        return isDropsPlan && !auctionsUnlocked ? <PlanLockedScreen feature="auctions" community={profile?.community_drops} currentAmount={profile?.subscription_amount} /> : <Auctions />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':

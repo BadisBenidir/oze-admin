@@ -21,6 +21,7 @@ import { sendSubscriptionWelcomeEmail } from './welcomeEmail.ts';
 import { sendAbandonedSignupEmail, sendPaymentFailedEmail, sendSubscriptionInvoiceEmail } from './subscriptionEmails.ts';
 import { syncStripeBillingIdentity } from '../_shared/stripeBilling.ts';
 import { finalizePendingSignup } from '../_shared/pendingSignup.ts';
+import { planFromPriceId } from '../_shared/clubPlans.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook:subscription]';
 
@@ -28,13 +29,10 @@ type Plan = 'drops' | 'revendeur';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
-/** Pass correspondant au prix de l'abonnement, ou null si prix inconnu. */
+/** Pass correspondant au prix de l'abonnement (prix actuel ou ancien tarif), ou null si prix inconnu. */
 const planFromSubscription = (subscription: Stripe.Subscription): Plan | null => {
-  const priceId = subscription.items.data[0]?.price?.id;
-  if (!priceId) return null;
-  if (priceId === Deno.env.get('STRIPE_PRICE_REVENDEUR')) return 'revendeur';
-  if (priceId === Deno.env.get('STRIPE_PRICE_DROPS')) return 'drops';
-  return null;
+  const price = subscription.items.data[0]?.price;
+  return planFromPriceId(price?.id, price?.metadata);
 };
 
 /** Fin de la période en cours (champ déplacé sur les items dans les versions d'API récentes). */
@@ -53,6 +51,8 @@ const subscriptionColumns = (subscription: Stripe.Subscription, fallbackPlan: Pl
   subscription_status: subscription.status,
   subscription_current_period_end: periodEnd(subscription),
   subscription_cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+  // Prix mensuel réellement payé (hors remise) : un abonné garde son tarif après une hausse (0219).
+  subscription_amount: (subscription.items.data[0]?.price?.unit_amount ?? 0) / 100 || null,
 });
 
 /**

@@ -52,7 +52,8 @@ const paymentsOf = (r: Reseller, payments: SubscriptionPaymentRow[]) =>
  * est supposée reconduite : on reprend le montant réellement payé.
  */
 export const expectedMonthlyAmount = (r: Reseller, { payments, promos }: SubscriptionPromoData): number => {
-  const catalogue = planPriceValue(r.subscription_plan === 'drops' ? 'drops' : 'revendeur');
+  // Prix de SON abonnement (ancien tarif conservé après une hausse), sinon prix public.
+  const catalogue = Number(r.subscription_amount) || planPriceValue(r.subscription_plan === 'drops' ? 'drops' : 'revendeur');
   const own = paymentsOf(r, payments);
   const latest = own[0];
   if (!latest?.promo_code) return catalogue;

@@ -4,7 +4,7 @@ import { Card, CardContent } from '../../ui/Card';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 import { supabase } from '../../../lib/supabase';
 import type { ResellerProfile } from '../../../hooks/useResellerAuth';
-import { PERIOD, PLANS } from '../../landing/plans';
+import { PERIOD, PLANS, passPriceFor, formatPassPrice } from '../../landing/plans';
 
 /**
  * Abonnements Club B2B (0167) côté abonné : écran « non inclus dans votre
@@ -76,7 +76,10 @@ const useSubscriptionAction = () => {
   return { pending, error, run };
 };
 
-const UpgradeButton: React.FC<{ className?: string }> = ({ className = '' }) => {
+/** Abonnement actuel (pass + prix payé), pour le prix d'un changement de pass. */
+type CurrentSub = { plan: 'drops' | 'revendeur' | null; amount: number | null } | null;
+
+const UpgradeButton: React.FC<{ className?: string; current?: CurrentSub }> = ({ className = '', current = null }) => {
   const { pending, error, run } = useSubscriptionAction();
   const [confirming, setConfirming] = useState(false);
 
@@ -95,7 +98,7 @@ const UpgradeButton: React.FC<{ className?: string }> = ({ className = '' }) => 
     <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-left">
       <p className="text-sm text-gray-700">
         La différence entre vos deux pass est prélevée <strong>maintenant</strong>, au prorata des jours restants de votre
-        mois, sur la carte de votre abonnement. Ensuite, {planPrice('revendeur')} {PERIOD}.
+        mois, sur la carte de votre abonnement. Ensuite, {passPriceFor('revendeur', current)} {PERIOD}.
       </p>
       {error && (
         <p className="flex items-start gap-2 text-sm text-red-700">
@@ -125,7 +128,7 @@ const UpgradeButton: React.FC<{ className?: string }> = ({ className = '' }) => 
 /** Écran affiché à la place des Enchères / du Sourcing pour un abonné Pass Drops. */
 /** `community` : membre de communauté passé au Pass Drops (0216) — pas de
  * passage au Pass Revendeur du Club depuis cet écran. */
-export const PlanLockedScreen: React.FC<{ feature: 'auctions' | 'sourcing'; community?: boolean }> = ({ feature, community }) => {
+export const PlanLockedScreen: React.FC<{ feature: 'auctions' | 'sourcing'; community?: boolean; currentAmount?: number | null }> = ({ feature, community, currentAmount = null }) => {
   const Icon = feature === 'auctions' ? Gavel : PackageSearch;
   const title = feature === 'auctions' ? 'Enchères B2B' : 'Sourcing sur mesure';
   const fullOffer = community ? 'à l\'abonnement complet de votre communauté' : 'au Pass Revendeur';
@@ -156,7 +159,7 @@ export const PlanLockedScreen: React.FC<{ feature: 'auctions' | 'sourcing'; comm
                 ))}
               </ul>
               <div className="mt-6 flex justify-center">
-                <UpgradeButton />
+                <UpgradeButton current={{ plan: 'drops', amount: currentAmount }} />
               </div>
             </>
           )}
@@ -272,6 +275,7 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
   const cancelling = profile.subscription_cancel_at_period_end;
   const pastDue = profile.subscription_status === 'past_due';
   const downgradeScheduled = pendingPlan === 'drops' && plan === 'revendeur';
+  const currentSub: CurrentSub = { plan, amount: profile.subscription_amount };
 
   return (
     <Card className="mb-6">
@@ -283,7 +287,7 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
             </h4>
             <p className="mt-2 text-base font-semibold text-gray-900">{PLAN_NAME[plan]}</p>
             <p className="text-sm text-gray-500">
-              {planPrice(plan)} {PERIOD} · sans engagement
+              {profile.subscription_amount ? formatPassPrice(profile.subscription_amount) : planPrice(plan)} {PERIOD} · sans engagement
             </p>
           </div>
           {pastDue ? (
@@ -329,7 +333,7 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
         {downgradeScheduled && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
             <p className="text-sm text-gray-700">
-              Passage au <strong>Pass Drops</strong> ({planPrice('drops')} {PERIOD}) programmé{endDate ? <> le <strong>{endDate}</strong></> : ' à la prochaine échéance'}.
+              Passage au <strong>Pass Drops</strong> ({passPriceFor('drops', currentSub)} {PERIOD}) programmé{endDate ? <> le <strong>{endDate}</strong></> : ' à la prochaine échéance'}.
               D'ici là, vous gardez l'accès complet.
             </p>
             <button
@@ -349,7 +353,7 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
         )}
 
         <div className="flex flex-wrap items-start gap-3 border-t border-gray-100 pt-4">
-          {plan === 'drops' && !cancelling && <UpgradeButton />}
+          {plan === 'drops' && !cancelling && <UpgradeButton current={currentSub} />}
 
           <button
             onClick={openPortal}
@@ -363,7 +367,7 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
             confirmDowngrade ? (
               <div className="w-full space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
                 <p className="text-sm text-gray-700">
-                  Vous passerez au Pass Drops ({planPrice('drops')} {PERIOD}) à votre prochain renouvellement
+                  Vous passerez au Pass Drops ({passPriceFor('drops', currentSub)} {PERIOD}) à votre prochain renouvellement
                   {endDate ? <> le <strong>{endDate}</strong></> : ''}. Jusque-là, vous gardez les enchères et le sourcing sur mesure ;
                   ensuite, seuls le catalogue et les drops restent inclus.
                 </p>

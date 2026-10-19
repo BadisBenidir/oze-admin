@@ -5,7 +5,7 @@ import {
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import type { Reseller, ResellerContact } from '../../../hooks/useResellers';
-import { PERIOD, PLANS } from '../../landing/plans';
+import { PERIOD, PLANS, formatPassPrice } from '../../landing/plans';
 import { whatsappUrl } from '../../../utils/whatsapp';
 
 /**
@@ -105,7 +105,11 @@ export const SubscriberOverview: React.FC<SubscriberOverviewProps> = ({
               {subscriptionBadge(reseller)}
             </div>
             <p className="text-lg font-semibold text-gray-900">{plan ? PLAN_NAME[plan] : '—'}</p>
-            {plan && <p className="text-sm text-gray-500">{planPrice(plan)} {PERIOD} · sans engagement</p>}
+            {plan && (
+              <p className="text-sm text-gray-500">
+                {Number(reseller.subscription_amount) ? formatPassPrice(Number(reseller.subscription_amount)) : planPrice(plan)} {PERIOD} · sans engagement
+              </p>
+            )}
 
             <div className="mt-3 divide-y divide-gray-100">
               <Row icon={CalendarClock} label={reseller.subscription_cancel_at_period_end ? 'Accès coupé le' : 'Prochain renouvellement'}>

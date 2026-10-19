@@ -72,6 +72,8 @@ export interface ResellerProfile {
   subscription_status: string | null
   subscription_current_period_end: string | null
   subscription_cancel_at_period_end: boolean
+  /** Prix mensuel de son abonnement (hors remise) : l'ancien tarif s'il s'est inscrit avant une hausse (0219). */
+  subscription_amount: number | null
   /** Membre de communauté abonné passé au Pass Drops (0216) : ni enchères ni sourcing. */
   community_drops: boolean
 }
@@ -160,7 +162,7 @@ export const useResellerAuth = () => {
       // on retombe alors sur un compte "entreprise" sans restriction.
       const { data: subscription } = await supabase
         .from('resellers')
-        .select('account_type, subscription_plan, subscription_status, subscription_current_period_end, subscription_cancel_at_period_end')
+        .select('account_type, subscription_plan, subscription_status, subscription_current_period_end, subscription_cancel_at_period_end, subscription_amount')
         .eq('id', contact.reseller_id)
         .maybeSingle()
       const sub = (subscription || {}) as Partial<{
@@ -169,6 +171,7 @@ export const useResellerAuth = () => {
         subscription_status: string | null
         subscription_current_period_end: string | null
         subscription_cancel_at_period_end: boolean
+        subscription_amount: number | string | null
       }>
 
       // Offre de l'abonnement membre de communauté (0216), lue à part comme ci-dessus.
@@ -217,6 +220,7 @@ export const useResellerAuth = () => {
           subscription_status: sub.subscription_status || null,
           subscription_current_period_end: sub.subscription_current_period_end || null,
           subscription_cancel_at_period_end: Boolean(sub.subscription_cancel_at_period_end),
+          subscription_amount: sub.subscription_amount != null ? Number(sub.subscription_amount) : null,
           community_drops: communityDrops,
         },
         pendingReason: null,
