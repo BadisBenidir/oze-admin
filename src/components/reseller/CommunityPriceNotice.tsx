@@ -88,45 +88,55 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
   };
 
   const canPay = notice.row.monthly_price > 0;
-  const preview = notice.row.message ? personalizeMessage(notice.row.message, firstName).replace(/s+/g, ' ').trim() : '';
+  const preview = notice.row.message ? personalizeMessage(notice.row.message, firstName).replace(/\s+/g, ' ').trim() : '';
 
   if (!modalOpen) {
     return (
-      <div className="mx-4 mt-4 md:mx-6 md:mt-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <CalendarClock className="hidden h-5 w-5 flex-shrink-0 text-amber-600 sm:block" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-gray-900">
-            Dès le {formatPriceDate(notice.row.effective_from)}, votre abonnement OZË PARIS passe à {formatMonthlyPrice(notice.row.monthly_price)}
-          </p>
-          {preview && (
-            <p className="truncate text-sm text-gray-600">
-              {preview}
-            </p>
-          )}
+      <div className="mx-4 mt-4 md:mx-6 md:mt-6 overflow-hidden rounded-2xl bg-gray-900 text-white shadow-lg">
+        <div className="flex flex-col gap-5 p-5 md:flex-row md:items-center md:gap-8 md:p-6">
+          <div className="flex items-center gap-4 md:border-r md:border-white/10 md:pr-8">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-white/10">
+              <CalendarClock className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
+                Dès le {formatPriceDate(notice.row.effective_from)}
+              </p>
+              <p className="text-2xl font-bold tabular-nums">{formatMonthlyPrice(notice.row.monthly_price)}</p>
+            </div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-semibold">Votre abonnement OZË PARIS évolue</p>
+            {preview && (
+              <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-300">
+                {preview}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-shrink-0 flex-col gap-2 sm:flex-row md:flex-col lg:flex-row">
+            {canPay && (
+              <button
+                type="button"
+                onClick={subscribe}
+                disabled={paying}
+                className="flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-100 disabled:opacity-60"
+              >
+                <CreditCard className="h-4 w-4" />
+                {paying ? 'Ouverture du paiement…' : 'Activer mon abonnement'}
+              </button>
+            )}
+            {preview && (
+              <button
+                type="button"
+                onClick={() => setModalOpen(true)}
+                className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
+              >
+                Lire le message
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex flex-shrink-0 items-center gap-2">
-          {preview && (
-            <button
-              type="button"
-              onClick={() => setModalOpen(true)}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-amber-100"
-            >
-              Lire le message
-            </button>
-          )}
-          {canPay && (
-            <button
-              type="button"
-              onClick={subscribe}
-              disabled={paying}
-              className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-60"
-            >
-              <CreditCard className="h-4 w-4" />
-              {paying ? 'Ouverture…' : 'Activer mon abonnement'}
-            </button>
-          )}
-        </div>
-        {payError && <p className="text-sm text-red-600 sm:basis-full">{payError}</p>}
+        {payError && <p className="border-t border-white/10 px-6 py-2 text-sm text-red-300">{payError}</p>}
       </div>
     );
   }
