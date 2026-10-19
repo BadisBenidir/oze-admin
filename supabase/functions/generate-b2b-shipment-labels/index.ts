@@ -104,10 +104,16 @@ const truncate = (value: unknown, maxLength: number): string =>
 // le numéro de rue sont dissociés — "12 Rue de la Paix" -> house_number "12",
 // address_line_1 "Rue de la Paix". Sans numéro détectable, house_number reste
 // vide (Sendcloud l'accepte, une adresse sans numéro n'est pas invalide en soi).
+// Numéro en FIN d'adresse aussi (format Mondial Relay : "RUE DU 8 MAI 1945 7"
+// -> "RUE DU 8 MAI 1945" + "7") : sans numéro séparé, Sendcloud découpait
+// lui-même à partir du premier chiffre ("8 MAI 1945 7", 12 caractères) et
+// refusait l'étiquette (house_number limité à 8 caractères).
 const splitAddress = (raw: string | null | undefined): { line1: string; houseNumber: string } => {
   const s = String(raw || '').trim();
-  const m = s.match(/^(\d+\s?(?:bis|ter|quater)?)\b[,\s]+(.+)$/i);
-  if (m) return { houseNumber: m[1].trim(), line1: m[2].trim() };
+  const leading = s.match(/^(\d+\s?(?:bis|ter|quater)?)\b[,\s]+(.+)$/i);
+  if (leading) return { houseNumber: leading[1].trim().slice(0, 8), line1: leading[2].trim() };
+  const trailing = s.match(/^(.*[A-Za-zÀ-ÿ].*?)[,\s]+(\d{1,5}\s?(?:bis|ter|quater|[A-Z])?)$/i);
+  if (trailing) return { houseNumber: trailing[2].trim().slice(0, 8), line1: trailing[1].trim() };
   return { line1: s, houseNumber: '' };
 };
 
