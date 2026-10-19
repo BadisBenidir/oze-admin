@@ -30,6 +30,7 @@ import {
   handleSubscriptionPaymentFailed,
 } from './subscriptions.ts';
 import { recordSubscriptionInvoice } from '../_shared/subscriptionPayments.ts';
+import { handleCommunityCheckout, handleCommunitySubscriptionChange, isCommunitySubscription } from './community.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook]';
 
@@ -106,6 +107,11 @@ Deno.serve(async (req: Request) => {
   // l'échéance, de la résiliation et coupure de l'accès en fin d'abonnement.
   if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
     try {
+      // Abonnement d'un membre de communauté partenaire (community.ts, 0214).
+      const changed = event.data.object as Stripe.Subscription;
+      if (isCommunitySubscription(changed.metadata)) {
+        return await handleCommunitySubscriptionChange(changed, event.type === 'customer.subscription.deleted', supabaseUrl, serviceRoleKey);
+      }
       return await handleSubscriptionChange(
         event.data.object as Stripe.Subscription,
         event.type === 'customer.subscription.deleted',
@@ -171,6 +177,10 @@ Deno.serve(async (req: Request) => {
   // commande à confirmer, création du compte abonné.
   if (session.mode === 'subscription') {
     try {
+      // Abonnement d'un membre de communauté partenaire (community.ts, 0214).
+      if (isCommunitySubscription(metadata)) {
+        return await handleCommunityCheckout(session, stripe, supabaseUrl, serviceRoleKey);
+      }
       return await handleSubscriptionCheckout(session, stripe, supabaseUrl, serviceRoleKey);
     } catch (err) {
       console.error(`${LOG_PREFIX} Erreur non gérée souscription (session ${session.id}):`, err instanceof Error ? err.stack || err.message : err);

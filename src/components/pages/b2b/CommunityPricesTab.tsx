@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CalendarClock, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { supabase } from '../../../lib/supabase';
@@ -40,6 +40,20 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
     for (const m of contacts) if (!m.is_primary && m.member_group) c[m.member_group] = (c[m.member_group] || 0) + 1;
     return c;
   }, [contacts]);
+  // Membres abonnés (paiement Stripe en cours, 0214) par groupe.
+  const [paying, setPaying] = useState<Record<number, number>>({});
+  useEffect(() => {
+    supabase
+      .from('reseller_contacts')
+      .select('member_group, community_sub_status')
+      .eq('reseller_id', resellerId)
+      .in('community_sub_status', ['active', 'trialing', 'past_due'])
+      .then(({ data }) => {
+        const c: Record<number, number> = {};
+        for (const r of (data || []) as { member_group: number | null }[]) if (r.member_group) c[r.member_group] = (c[r.member_group] || 0) + 1;
+        setPaying(c);
+      });
+  }, [resellerId]);
   const unclassified = contacts.filter((m) => !m.is_primary && !m.member_group).length;
 
   const toggle = (g: number) =>
@@ -99,7 +113,10 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
             <Card key={g.id}>
               <CardContent className="p-4">
                 <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${g.className}`}>{g.label}</span>
-                <p className="mt-2 text-xs text-gray-500">{counts[g.id] || 0} membre{(counts[g.id] || 0) > 1 ? 's' : ''}</p>
+                <p className="mt-2 text-xs text-gray-500">
+                  {counts[g.id] || 0} membre{(counts[g.id] || 0) > 1 ? 's' : ''}
+                  {paying[g.id] ? <span className="ml-1 font-medium text-green-700">· {paying[g.id]} abonné{paying[g.id] > 1 ? 's' : ''}</span> : null}
+                </p>
                 <p className="mt-2 text-lg font-semibold text-gray-900">
                   {i.current ? formatMonthlyPrice(i.current.monthly_price) : <span className="text-sm font-normal text-gray-400">Aucun prix en vigueur</span>}
                 </p>
