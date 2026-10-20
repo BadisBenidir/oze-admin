@@ -9,6 +9,7 @@ import { useResellerTeam, TeamMember } from '../../../hooks/useResellerTeam';
 import { generateSecurePassword } from '../../../utils/generatePassword';
 import { TeamMemberDetail } from './TeamMemberDetail';
 import { InviteLinkPanel } from '../../reseller/InviteLinkPanel';
+import { MemberInviteLinks } from '../../reseller/MemberInviteLinks';
 import { MEMBER_GROUPS, memberGroupOf, OFFER_GROUP } from '../../../config/memberGroups';
 import { useCommunityGroupPrices, DEFAULT_GROUP_PRICES, formatMonthlyPrice, formatPriceDate } from '../../../hooks/useCommunityGroupPrices';
 import {
@@ -405,6 +406,8 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
           </button>
         </div>
       )}
+
+      {profile.reseller_id && <MemberInviteLinks resellerId={profile.reseller_id} />}
 
       <Card>
         <CardContent className="p-4">

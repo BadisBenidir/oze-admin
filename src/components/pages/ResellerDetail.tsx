@@ -13,6 +13,7 @@ import { ResellerContactEditModal } from './b2b/ResellerContactEditModal';
 import { SourcingMissionsTab } from './b2b/SourcingMissionsTab';
 import { SubscriberOverview } from './b2b/SubscriberOverview';
 import { CommunityPricesTab } from './b2b/CommunityPricesTab';
+import { MemberInviteLinks } from '../reseller/MemberInviteLinks';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import { whatsappUrl } from '../../utils/whatsapp';
 import {
@@ -451,6 +452,12 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
           onResetPassword={() => subscriberContact && openResetModal(subscriberContact)}
           onOpenSpace={isOwner && subscriberContact ? () => handleOpenSpace(subscriberContact.profile_id, `${subscriberContact.first_name || ''} ${subscriberContact.last_name || ''}`.trim() || subscriberContact.email || 'ce membre') : undefined}
         />
+      )}
+
+      {activeTab === 'team' && !isSubscriber && (
+        <div className="mb-4">
+          <MemberInviteLinks resellerId={currentReseller.id} />
+        </div>
       )}
 
       {activeTab === 'team' && !isSubscriber && (

@@ -55,18 +55,26 @@ export const useResellerInviteLinks = (resellerId: string | undefined) => {
     }
   }, [resellerId]);
 
-  const createLink = async (memberGroup?: number): Promise<{ success: boolean; error?: string }> => {
+  /** memberGroup : groupe donné aux inscrits (0222) ; maxUses = 1 : lien unique (une seule inscription). */
+  const createLink = async (memberGroup?: number, maxUses?: number): Promise<{ success: boolean; error?: string; link?: ResellerInviteLink }> => {
     if (!resellerId) return { success: false, error: 'Entreprise introuvable' };
     const { data: userData } = await supabase.auth.getUser();
-    const { error: insertError } = await supabase
+    const { data: created, error: insertError } = await supabase
       .from('reseller_invite_links')
-      .insert({ reseller_id: resellerId, created_by: userData?.user?.id ?? null, ...(memberGroup ? { member_group: memberGroup } : {}) });
+      .insert({
+        reseller_id: resellerId,
+        created_by: userData?.user?.id ?? null,
+        ...(memberGroup ? { member_group: memberGroup } : {}),
+        ...(maxUses ? { max_uses: maxUses } : {}),
+      })
+      .select('*')
+      .single();
 
     if (insertError) {
       return { success: false, error: insertError.message };
     }
     await fetchLinks();
-    return { success: true };
+    return { success: true, link: created as ResellerInviteLink };
   };
 
   const setLinkActive = async (linkId: string, isActive: boolean): Promise<{ success: boolean; error?: string }> => {

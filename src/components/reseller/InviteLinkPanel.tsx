@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link2, Copy, Check, Plus } from 'lucide-react';
 import { useResellerInviteLinks, buildResellerInviteUrl, ResellerInviteLink } from '../../hooks/useResellerInviteLinks';
-import { memberGroupOf, OFFER_GROUP, NEW_MEMBER_GROUP } from '../../config/memberGroups';
+import { memberGroupOf } from '../../config/memberGroups';
 
 interface InviteLinkPanelProps {
   resellerId: string;
@@ -20,8 +20,6 @@ export const InviteLinkPanel: React.FC<InviteLinkPanelProps> = ({ resellerId }) 
   const [actionError, setActionError] = useState<string | null>(null);
 
   const handleCreate = async (memberGroup?: number) => {
-    if (memberGroup === NEW_MEMBER_GROUP && !window.confirm("Créer un lien « Nouveaux membres » ? Chaque personne qui s'inscrit avec ce lien rejoint le groupe 4 et doit activer son abonnement (prix du groupe 4) pour accéder à la plateforme.")) return;
-    if (memberGroup === OFFER_GROUP && !window.confirm("Créer un lien « Offre 2 000 € » ? Chaque personne qui s'inscrit avec ce lien rejoint le groupe 5 : accès offert 6 mois à partir de son inscription, et 300 € sont dus à OZË PARIS pour chacune.")) return;
     setCreating(true);
     setActionError(null);
     const result = await createLink(memberGroup);
@@ -60,26 +58,6 @@ export const InviteLinkPanel: React.FC<InviteLinkPanelProps> = ({ resellerId }) 
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => handleCreate(NEW_MEMBER_GROUP)}
-            disabled={creating}
-            title="Lien pour les nouveaux membres : groupe 4, abonnement à payer pour accéder à la plateforme"
-            className="flex items-center space-x-1.5 px-3 py-1.5 border border-amber-200 bg-amber-50 text-amber-800 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-50 text-xs"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>Lien « Nouveaux membres »</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleCreate(OFFER_GROUP)}
-            disabled={creating}
-            title="Lien à donner au moment du paiement de l'offre à 2 000 € : groupe 5, accès offert 6 mois à partir de l'inscription"
-            className="flex items-center space-x-1.5 px-3 py-1.5 border border-teal-200 bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors disabled:opacity-50 text-xs"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>Lien « Offre 2 000 € »</span>
-          </button>
-          <button
-            type="button"
             onClick={() => handleCreate()}
             disabled={creating}
             className="flex items-center space-x-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-xs"
@@ -99,7 +77,7 @@ export const InviteLinkPanel: React.FC<InviteLinkPanelProps> = ({ resellerId }) 
       )}
 
       <div className="space-y-2">
-        {links.map((link) => {
+        {links.filter((l) => !(l.member_group && l.max_uses === 1)).map((link) => {
           const url = buildResellerInviteUrl(link.token);
           const group = memberGroupOf(link.member_group);
           return (
