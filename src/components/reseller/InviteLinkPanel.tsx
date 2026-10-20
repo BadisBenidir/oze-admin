@@ -21,7 +21,7 @@ export const InviteLinkPanel: React.FC<InviteLinkPanelProps> = ({ resellerId }) 
 
   const handleCreate = async (memberGroup?: number) => {
     if (memberGroup === NEW_MEMBER_GROUP && !window.confirm("Créer un lien « Nouveaux membres » ? Chaque personne qui s'inscrit avec ce lien rejoint le groupe 4 et doit activer son abonnement (prix du groupe 4) pour accéder à la plateforme.")) return;
-    if (memberGroup === OFFER_GROUP && !window.confirm("Créer un lien « Offre 2 000 € » ? Chaque personne qui s'inscrit avec ce lien rejoint le groupe 5 : accès offert 6 mois, et 300 € sont dus à OZË PARIS pour chacune.")) return;
+    if (memberGroup === OFFER_GROUP && !window.confirm("Créer un lien « Offre 2 000 € » ? Chaque personne qui s'inscrit avec ce lien rejoint le groupe 5 : accès offert 6 mois à partir de son inscription, et 300 € sont dus à OZË PARIS pour chacune.")) return;
     setCreating(true);
     setActionError(null);
     const result = await createLink(memberGroup);
@@ -72,7 +72,7 @@ export const InviteLinkPanel: React.FC<InviteLinkPanelProps> = ({ resellerId }) 
             type="button"
             onClick={() => handleCreate(OFFER_GROUP)}
             disabled={creating}
-            title="Lien à donner au moment du paiement de l'offre à 2 000 € : groupe 5, accès offert 6 mois"
+            title="Lien à donner au moment du paiement de l'offre à 2 000 € : groupe 5, accès offert 6 mois à partir de l'inscription"
             className="flex items-center space-x-1.5 px-3 py-1.5 border border-teal-200 bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors disabled:opacity-50 text-xs"
           >
             <Plus className="h-3.5 w-3.5" />

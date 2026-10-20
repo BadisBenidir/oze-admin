@@ -11,7 +11,7 @@ export const MEMBER_GROUPS: { id: MemberGroup; label: string; short: string; hin
   { id: 3, label: 'Groupe 3 — 700 €', short: 'Groupe 3', hint: 'A payé 700 € pour accéder', className: 'bg-purple-50 text-purple-700 border-purple-200' },
   { id: 4, label: 'Groupe 4 — Nouveau', short: 'Groupe 4', hint: 'Nouveau membre', className: 'bg-amber-50 text-amber-800 border-amber-200' },
   // Offre à 2 000 € du partenaire (0222) : 300 € versés à OZË par membre, accès offert 6 mois.
-  { id: 5, label: 'Groupe 5 — Offre 2 000 €', short: 'Groupe 5', hint: "A pris l'offre à 2 000 € : accès offert 6 mois", className: 'bg-teal-50 text-teal-700 border-teal-200' },
+  { id: 5, label: 'Groupe 5 — Offre 2 000 €', short: 'Groupe 5', hint: "A pris l'offre à 2 000 € : accès offert 6 mois à partir de son inscription", className: 'bg-teal-50 text-teal-700 border-teal-200' },
 ];
 
 /** Groupe de l'offre à 2 000 € (lien d'invitation dédié, accès offert 6 mois). */
