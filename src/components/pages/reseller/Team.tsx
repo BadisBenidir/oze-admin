@@ -9,7 +9,7 @@ import { useResellerTeam, TeamMember } from '../../../hooks/useResellerTeam';
 import { generateSecurePassword } from '../../../utils/generatePassword';
 import { TeamMemberDetail } from './TeamMemberDetail';
 import { InviteLinkPanel } from '../../reseller/InviteLinkPanel';
-import { MEMBER_GROUPS, memberGroupOf } from '../../../config/memberGroups';
+import { MEMBER_GROUPS, memberGroupOf, OFFER_GROUP } from '../../../config/memberGroups';
 import { useCommunityGroupPrices, DEFAULT_GROUP_PRICES, formatMonthlyPrice, formatPriceDate } from '../../../hooks/useCommunityGroupPrices';
 import {
   Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check, Search, X, UserCheck,
@@ -306,6 +306,15 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
 
   const priceLabel = (m: TeamMember) => {
     if (m.is_primary || !m.member_group) return <span className="text-xs text-gray-400">—</span>;
+    // Offre 2 000 € (groupe 5) : accès offert jusqu'à la date.
+    if (m.free_access_until && new Date(m.free_access_until).getTime() > Date.now()) {
+      return (
+        <span className="text-sm font-medium text-teal-700">
+          Offert
+          <span className="block text-[11px] font-normal text-gray-500">jusqu'au {new Date(m.free_access_until).toLocaleDateString('fr-FR')}</span>
+        </span>
+      );
+    }
     const p = groupPrice(m.member_group);
     return (
       <span className="text-sm font-medium tabular-nums text-gray-900">
@@ -401,7 +410,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
         <CardContent className="p-4">
           <p className="text-sm font-medium text-gray-900">Groupes d'accès</p>
           <p className="mb-3 text-xs text-gray-500">Classe chaque membre selon ce qu'il a payé pour accéder à l'écosystème luxe — ce groupe définira le prix de son abonnement.</p>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
             {MEMBER_GROUPS.map((g) => (
               <button
                 key={g.id}
@@ -411,7 +420,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
               >
                 <span className="block text-xs font-semibold">{g.label}</span>
                 <span className="block text-lg font-semibold tabular-nums">{groupCounts[String(g.id)] || 0}</span>
-                <span className="block text-xs font-medium tabular-nums opacity-80">{formatMonthlyPrice(groupPrice(g.id).amount)}</span>
+                <span className="block text-xs font-medium tabular-nums opacity-80">{g.id === OFFER_GROUP ? 'Offert 6 mois' : formatMonthlyPrice(groupPrice(g.id).amount)}</span>
               </button>
             ))}
             <button

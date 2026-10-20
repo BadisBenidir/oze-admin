@@ -19,8 +19,8 @@ export interface GroupPriceInfo {
   upcoming: GroupPriceRow | null;
 }
 
-/** Prix d'abonnement suggérés par groupe (1 = 0 €, 2 = 300 €, 3 = 700 € payés à l'entrée, 4 = nouveau). */
-export const DEFAULT_GROUP_PRICES: Record<number, number> = { 1: 49.9, 2: 44.9, 3: 0, 4: 49.9 };
+/** Prix d'abonnement suggérés par groupe (1 = 0 €, 2 = 300 €, 3 = 700 € payés à l'entrée, 4 = nouveau, 5 = offre 2 000 €, accès offert 6 mois). */
+export const DEFAULT_GROUP_PRICES: Record<number, number> = { 1: 49.9, 2: 44.9, 3: 0, 4: 49.9, 5: 0 };
 
 const todayKey = () => new Date().toLocaleDateString('en-CA');
 
@@ -28,7 +28,7 @@ const todayKey = () => new Date().toLocaleDateString('en-CA');
 export const groupPriceInfo = (rows: GroupPriceRow[]): Record<number, GroupPriceInfo> => {
   const today = todayKey();
   const out: Record<number, GroupPriceInfo> = {};
-  for (const g of [1, 2, 3, 4]) {
+  for (const g of [1, 2, 3, 4, 5]) {
     const list = rows.filter((r) => r.member_group === g).sort((a, b) => a.effective_from.localeCompare(b.effective_from));
     const past = list.filter((r) => r.effective_from <= today);
     out[g] = { current: past[past.length - 1] || null, upcoming: list.find((r) => r.effective_from > today) || null };

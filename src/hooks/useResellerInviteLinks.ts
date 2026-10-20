@@ -11,6 +11,8 @@ export interface ResellerInviteLink {
   created_by: string | null;
   created_at: string;
   revoked_at: string | null;
+  /** Groupe d'accès donné aux membres inscrits par ce lien (0222) — 5 = offre 2 000 €. */
+  member_group?: number | null;
 }
 
 // Toujours pro.ozeparis.com, même quand le lien est généré depuis
@@ -53,12 +55,12 @@ export const useResellerInviteLinks = (resellerId: string | undefined) => {
     }
   }, [resellerId]);
 
-  const createLink = async (): Promise<{ success: boolean; error?: string }> => {
+  const createLink = async (memberGroup?: number): Promise<{ success: boolean; error?: string }> => {
     if (!resellerId) return { success: false, error: 'Entreprise introuvable' };
     const { data: userData } = await supabase.auth.getUser();
     const { error: insertError } = await supabase
       .from('reseller_invite_links')
-      .insert({ reseller_id: resellerId, created_by: userData?.user?.id ?? null });
+      .insert({ reseller_id: resellerId, created_by: userData?.user?.id ?? null, ...(memberGroup ? { member_group: memberGroup } : {}) });
 
     if (insertError) {
       return { success: false, error: insertError.message };

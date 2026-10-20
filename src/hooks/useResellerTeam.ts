@@ -15,6 +15,8 @@ export interface TeamMember {
   activated_at: string | null;
   /** Groupe d'accès (0211) : 1 offert, 2 = 300 €, 3 = 700 €, 4 nouveau ; null = non classé. */
   member_group: number | null;
+  /** Fin de l'accès offert (groupe 5, offre 2 000 €, 0222). */
+  free_access_until: string | null;
 }
 
 type ContactRow = {
@@ -23,6 +25,7 @@ type ContactRow = {
   is_primary: boolean;
   created_at: string;
   member_group: number | null;
+  free_access_until?: string | null;
   profiles: { first_name: string; last_name: string; email: string; phone: string | null; activated_at: string | null };
 };
 
@@ -43,7 +46,7 @@ export const useResellerTeam = (resellerId: string | undefined) => {
 
       const { data, error: fetchError } = await supabase
         .from('reseller_contacts')
-        .select('id, profile_id, is_primary, created_at, member_group, profiles!inner(first_name, last_name, email, phone, activated_at)')
+        .select('id, profile_id, is_primary, created_at, member_group, free_access_until, profiles!inner(first_name, last_name, email, phone, activated_at)')
         .eq('reseller_id', resellerId)
         .order('created_at', { ascending: true });
 
@@ -63,6 +66,7 @@ export const useResellerTeam = (resellerId: string | undefined) => {
           phone: c.profiles.phone,
           activated_at: c.profiles.activated_at,
           member_group: c.member_group ?? null,
+          free_access_until: c.free_access_until ?? null,
         }))
       );
     } catch (err) {

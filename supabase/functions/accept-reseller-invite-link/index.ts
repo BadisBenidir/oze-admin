@@ -40,7 +40,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: link, error: linkError } = await adminClient
       .from('reseller_invite_links')
-      .select('id, reseller_id, is_active, max_uses, use_count')
+      .select('id, reseller_id, is_active, max_uses, use_count, member_group')
       .eq('token', token)
       .maybeSingle();
 
@@ -118,7 +118,14 @@ Deno.serve(async (req: Request) => {
 
     const { error: contactError } = await adminClient
       .from('reseller_contacts')
-      .insert({ reseller_id: link.reseller_id, profile_id: created.user.id, is_primary: false });
+      .insert({
+        reseller_id: link.reseller_id,
+        profile_id: created.user.id,
+        is_primary: false,
+        // Lien d'un groupe d'accès (0222, ex. « Offre 2 000 € » = groupe 5 :
+        // accès offert 6 mois + 300 € au CA de la communauté, par trigger).
+        ...(link.member_group ? { member_group: link.member_group, member_group_updated_at: new Date().toISOString() } : {}),
+      });
     if (contactError) {
       await adminClient.auth.admin.deleteUser(created.user.id);
       return new Response(JSON.stringify({ error: contactError.message }), {

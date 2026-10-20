@@ -11,7 +11,7 @@ type NoticeState =
   /** Prix à venir : fenêtre à la connexion puis bandeau, coupure annoncée si le prix est payant. */
   | { mode: 'announce'; row: GroupPriceRow; previous: number | null; subscriber: boolean; dismissed: boolean }
   /** Date passée, groupe payant, pas d'abonnement : accès suspendu jusqu'au paiement. */
-  | { mode: 'blocked'; row: GroupPriceRow; price: number };
+  | { mode: 'blocked'; row: GroupPriceRow; price: number; newcomer: boolean };
 
 /**
  * Abonnement des membres d'une communauté partenaire (community_group_prices,
@@ -43,10 +43,12 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
     const load = async (): Promise<boolean> => {
       const { data: me } = await supabase
         .from('reseller_contacts')
-        .select('reseller_id, member_group, is_primary, community_sub_status, community_sub_stripe_subscription_id, community_sub_price, community_sub_plan')
+        .select('reseller_id, member_group, is_primary, community_sub_status, community_sub_stripe_subscription_id, community_sub_price, community_sub_plan, free_access_until, created_at')
         .eq('profile_id', profileId)
         .maybeSingle();
       if (!me || me.is_primary || !me.member_group) return true;
+      // Accès offert en cours (groupe 5, offre 2 000 €) : ni annonce ni coupure.
+      if (me.free_access_until && new Date(me.free_access_until).getTime() > Date.now()) return true;
       const subscriber = Boolean(me.community_sub_status && PAYING_STATUSES.has(me.community_sub_status));
       // Passé au Pass Drops : son prix ne suit plus celui de son groupe.
       if (subscriber && me.community_sub_plan === 'drops') return true;
@@ -66,7 +68,9 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
         // Prix réel d'un (ré)abonnement (un ancien abonné repaie au moins le prix public).
         const { data: status } = await invokeEdgeFunction<{ subscribe_price: number | null }>('community-subscription', { action: 'status' });
         if (cancelled) return true;
-        setNotice({ mode: 'blocked', row: current, price: status?.subscribe_price ?? current.monthly_price });
+        // Inscrit après l'entrée en vigueur du prix (ex. lien « Nouveaux membres ») : accueil, pas « suspendu ».
+        const newcomer = !me.community_sub_stripe_subscription_id && new Date(me.created_at).toLocaleDateString('en-CA') >= current.effective_from;
+        setNotice({ mode: 'blocked', row: current, price: status?.subscribe_price ?? current.monthly_price, newcomer });
         return true;
       }
 
@@ -141,13 +145,24 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-900">
                 <Lock className="h-6 w-6 text-white" />
               </div>
-              <h2 className="text-2xl font-semibold text-gray-900">Votre accès est suspendu</h2>
-              <p className="mt-2 text-sm text-gray-500">
-                Depuis le <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, l'accès à votre espace OZË PARIS
-                nécessite un abonnement actif.
-              </p>
+              {notice.newcomer ? (
+                <>
+                  <h2 className="text-2xl font-semibold text-gray-900">{firstName ? `Bienvenue ${firstName} !` : 'Bienvenue !'}</h2>
+                  <p className="mt-2 text-sm text-gray-500">
+                    Activez votre abonnement pour accéder à votre espace OZË PARIS : catalogue, drops, enchères et sourcing sur mesure.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-semibold text-gray-900">Votre accès est suspendu</h2>
+                  <p className="mt-2 text-sm text-gray-500">
+                    Depuis le <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, l'accès à votre espace OZË PARIS
+                    nécessite un abonnement actif.
+                  </p>
+                </>
+              )}
               <p className="mt-4 text-4xl font-bold tabular-nums text-gray-900">{formatMonthlyPrice(notice.price)}</p>
-              <p className="text-xs text-gray-400">sans engagement · accès rétabli dès le paiement</p>
+              <p className="text-xs text-gray-400">sans engagement · {notice.newcomer ? 'accès ouvert dès le paiement' : 'accès rétabli dès le paiement'}</p>
             </div>
             {message && (
               <div className="mx-6 mb-2 rounded-xl border border-gray-100 bg-gray-50 px-5 py-4 sm:mx-10">
