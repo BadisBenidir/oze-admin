@@ -496,6 +496,50 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
     onOrderUpdated();
   };
 
+  // Article remboursé en crédit : remboursement par carte à la place (convert-item-refund-to-card).
+  const [convertingItemId, setConvertingItemId] = useState<string | null>(null);
+  const handleConvertToCard = async (itemId: string) => {
+    setConvertingItemId(itemId);
+    const { data: preview, error: previewError } = await invokeEdgeFunction<{ suggested_amount: number; wallet_balance: number }>(
+      'convert-item-refund-to-card',
+      { action: 'preview', order_item_id: itemId }
+    );
+    if (previewError || !preview) {
+      setConvertingItemId(null);
+      alert(previewError || 'Impossible de préparer le remboursement');
+      return;
+    }
+    const answer = window.prompt(
+      `Montant à rembourser par carte et à retirer du portefeuille du membre (solde actuel : ${preview.wallet_balance.toFixed(2)} €) :`,
+      preview.suggested_amount.toFixed(2)
+    );
+    const amount = answer ? Number(answer.replace(',', '.')) : NaN;
+    if (!answer || !amount || amount <= 0) {
+      setConvertingItemId(null);
+      return;
+    }
+    if (!window.confirm(`Rembourser ${amount.toFixed(2)} € par carte (Stripe) et retirer ${amount.toFixed(2)} € de son portefeuille ?`)) {
+      setConvertingItemId(null);
+      return;
+    }
+    const { data, error } = await invokeEdgeFunction<{ refunded_amount: number; wallet_recredited: number }>('convert-item-refund-to-card', {
+      action: 'convert',
+      order_item_id: itemId,
+      amount,
+    });
+    setConvertingItemId(null);
+    if (error || !data) {
+      alert(error || 'Remboursement impossible');
+      return;
+    }
+    setRefundNotice(
+      data.wallet_recredited > 0
+        ? `${data.refunded_amount.toFixed(2)} € remboursés par carte ; ${data.wallet_recredited.toFixed(2)} € n'ont pas pu l'être et restent en crédit portefeuille.`
+        : `${data.refunded_amount.toFixed(2)} € remboursés par carte et retirés du portefeuille du membre.`
+    );
+    onOrderUpdated();
+  };
+
   const handleItemConfirmed = (result: { refund_status?: string; refund_method?: string | null; refund_error?: string }) => {
     setCancellingItem(null);
     if (result.refund_status === 'succeeded') {
@@ -787,6 +831,16 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                       )}
                                       {item.refund_status === 'succeeded' && (
                                         <span className="text-xs text-green-600">Remboursé ({refundMethodLabel(item.refund_method)})</span>
+                                      )}
+                                      {item.refund_status === 'succeeded' && item.refund_method === 'wallet' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleConvertToCard(item.id)}
+                                          disabled={convertingItemId !== null}
+                                          className="text-xs font-medium text-gray-700 underline hover:text-gray-900 disabled:opacity-50"
+                                        >
+                                          {convertingItemId === item.id ? 'Remboursement…' : 'Rembourser par carte à la place'}
+                                        </button>
                                       )}
                                       {item.refund_status === 'failed' && (
                                         <span className="text-xs text-red-600">Échec du remboursement</span>
