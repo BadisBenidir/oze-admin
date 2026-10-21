@@ -37,23 +37,12 @@
 // sécurité vient de la vérification de signature ci-dessous)
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { classifySendcloudStatus } from '../_shared/sendcloudStatus.ts';
 
 const LOG_PREFIX = '[sendcloud-webhook]';
 
-// Copie identique de sendcloud-sync-tracking/index.ts.
+// Classement commun avec sendcloud-sync-tracking : _shared/sendcloudStatus.ts.
 const STATUS_RANK: Record<string, number> = { label_created: 1, shipped: 2, delivered: 3 };
-
-function classifySendcloudStatus(description: string | null | undefined): 'label_created' | 'shipped' | 'delivered' | null {
-  const d = (description || '').toLowerCase();
-  if (!d) return null;
-  if (/(delivered|livr[ée]|remis au destinataire|collected by (the )?(consignee|recipient|customer))/.test(d)) {
-    return 'delivered';
-  }
-  if (/(in transit|en route|transit|collected|picked ?up|sorting|hub|customs|dispatch(ed)?|forwarded|out for delivery|arrived at|handed over)/.test(d)) {
-    return 'shipped';
-  }
-  return null;
-}
 
 interface SendcloudTrackingEvent {
   event_at?: string;
@@ -64,7 +53,7 @@ interface SendcloudTrackingEvent {
 function pickBestClassification(events: SendcloudTrackingEvent[]): 'label_created' | 'shipped' | 'delivered' | null {
   let best: 'label_created' | 'shipped' | 'delivered' | null = null;
   for (const e of events) {
-    const c = classifySendcloudStatus(e.status_description);
+    const c = classifySendcloudStatus(e.status_code ?? null, e.status_description);
     if (c && (!best || STATUS_RANK[c] > STATUS_RANK[best])) best = c;
   }
   return best;

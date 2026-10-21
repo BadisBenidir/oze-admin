@@ -36,6 +36,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { hasAdminAccess } from '../_shared/adminAccess.ts';
+import { classifySendcloudStatus } from '../_shared/sendcloudStatus.ts';
 
 const LOG_PREFIX = '[sendcloud-sync-tracking]';
 
@@ -56,21 +57,7 @@ const THROTTLE_MS = 150;
 // (150s) : on s'arrête proprement avant, jamais coupé en pleine écriture.
 const MAX_DURATION_MS = 100_000;
 
-// Mots-clés en repli du code numérique (id === 11 = "Delivered", convention
-// Sendcloud v2 de longue date mais non retrouvée verbatim dans la doc
-// actuelle) : si jamais l'id diffère de ce qu'on attend, le message texte
-// reste une deuxième chance de classer correctement plutôt que de rater
-// silencieusement l'événement.
-function classifySendcloudStatus(statusId: number | null, message: string | null | undefined): 'label_created' | 'shipped' | 'delivered' | null {
-  const m = (message || '').toLowerCase();
-  if (statusId === 11 || /(delivered|livr[ée]|remis au destinataire|collected by (the )?(consignee|recipient|customer))/.test(m)) {
-    return 'delivered';
-  }
-  if (/(in transit|en route|transit|collected|picked ?up|sorting|hub|customs|dispatch(ed)?|forwarded|out for delivery|arrived at|handed over)/.test(m)) {
-    return 'shipped';
-  }
-  return null;
-}
+// Classement des statuts transporteur : _shared/sendcloudStatus.ts (commun au webhook).
 
 Deno.serve(async (req: Request) => {
   console.log(`${LOG_PREFIX} invoked, method=${req.method}`);
