@@ -27,6 +27,21 @@ interface ShipmentSummary {
  * le paiement et ne bouge plus jamais ensuite). Fusionne ici ce qu'affichait
  * l'ex-onglet "Suivi livraisons" (statut + tracking) directement dans "Mes
  * commandes", au lieu d'un onglet séparé. */
+/** Étape de livraison d'UN article (une commande peut partir en plusieurs colis). */
+const ITEM_STAGE: Record<string, { label: string; variant: 'default' | 'warning' | 'info' | 'success' }> = {
+  ordered: { label: 'Commandé', variant: 'default' },
+  received: { label: 'Reçu chez OZË', variant: 'default' },
+  ready_to_ship: { label: 'Prêt à expédier', variant: 'default' },
+  delivery_requested: { label: 'Livraison demandée', variant: 'warning' },
+  label_created: { label: 'En préparation', variant: 'warning' },
+  shipped: { label: 'Expédié / En transit', variant: 'info' },
+  delivered: { label: 'Livré', variant: 'success' },
+};
+
+/** Les articles actifs d'une commande sont-ils à des étapes différentes ? */
+const hasMixedStages = (order: MyB2BOrder) =>
+  new Set(order.order_items.filter((i) => i.status === 'active').map((i) => i.fulfillment_status)).size > 1;
+
 const computeShipmentSummary = (order: MyB2BOrder): ShipmentSummary => {
   if (order.status === 'cancelled') return { status: 'cancelled', trackingNumber: null, trackingUrl: null };
   if (order.payment_status !== 'paid') return { status: 'unpaid', trackingNumber: null, trackingUrl: null };
@@ -314,6 +329,9 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                           </span>
                           {item.is_loyalty_gift && <Badge variant="warning">🎁 Cadeau</Badge>}
                           {isCancelled && <Badge variant="danger">Annulé</Badge>}
+                          {!isCancelled && hasMixedStages(order) && ITEM_STAGE[item.fulfillment_status] && (
+                            <Badge variant={ITEM_STAGE[item.fulfillment_status].variant}>{ITEM_STAGE[item.fulfillment_status].label}</Badge>
+                          )}
                         </div>
                       );
                     })}
@@ -497,11 +515,9 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
                                         </button>
                                       </div>
                                     )}
-                                    {!isCancelled && ['label_created', 'shipped', 'delivered'].includes(item.fulfillment_status) && (
+                                    {!isCancelled && ITEM_STAGE[item.fulfillment_status] && (
                                       <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                                        {item.fulfillment_status === 'label_created' && <Badge variant="warning">En préparation</Badge>}
-                                        {item.fulfillment_status === 'shipped' && <Badge variant="info">Expédié / En transit</Badge>}
-                                        {item.fulfillment_status === 'delivered' && <Badge variant="success">Livré</Badge>}
+                                        <Badge variant={ITEM_STAGE[item.fulfillment_status].variant}>{ITEM_STAGE[item.fulfillment_status].label}</Badge>
                                         {item.shipment_parcel?.tracking_number && (
                                           <span className="text-xs text-gray-500" onClick={(e) => e.stopPropagation()}>
                                             {item.shipment_parcel.tracking_number}
