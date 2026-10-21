@@ -36,9 +36,12 @@ export const INSURANCE_RATE = 0.006;
  * affichage uniquement ici, jamais accepté tel quel du client. */
 export const ENTRUPY_CERTIFICATE_PRICE = 19.99;
 
-/** Timer global de réservation du panier (voir cart_add_item côté serveur :
- * réinitialisé à 10 min pour TOUT le panier à chaque ajout réussi). */
-export const RESERVATION_SESSION_MS = 10 * 60 * 1000;
+/** Timer global de réservation du panier (voir cart_add_item côté serveur,
+ * 0225) : réinitialisé à 15 min pour TOUT le panier à chaque ajout réussi,
+ * sans jamais dépasser RESERVATION_HARD_CAP_MS après le premier ajout. */
+export const RESERVATION_SESSION_MS = 15 * 60 * 1000;
+/** Plafond absolu de réservation d'une session de panier (à partir du premier ajout). */
+export const RESERVATION_HARD_CAP_MS = 35 * 60 * 1000;
 
 export interface CartDropInfo {
   active: boolean;
@@ -125,6 +128,8 @@ export const useB2BCart = (profileId: string | undefined, legalStatusComplete: b
   const [items, setItems] = useState<B2BCartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [globalExpiresAt, setGlobalExpiresAt] = useState<number | null>(null);
+  // Échéance maximale de la session de panier (premier ajout + 35 min, 0225).
+  const [hardCapAt, setHardCapAt] = useState<number | null>(null);
   const [dropInfo, setDropInfo] = useState<CartDropInfo>({ active: false, freeSlotsRemaining: 3, nextAddAvailableAt: null });
   const [blockingError, setBlockingError] = useState<CartBlockingError | null>(null);
   const [cartExpired, setCartExpired] = useState(false);
@@ -176,6 +181,7 @@ export const useB2BCart = (profileId: string | undefined, legalStatusComplete: b
 
     setItems(nextItems);
     setGlobalExpiresAt(toLocalDeadline(data?.global_expires_at, data?.server_now));
+    setHardCapAt(toLocalDeadline(data?.hard_cap_at, data?.server_now));
     setDropInfo({
       active: Boolean(data?.drop?.active),
       freeSlotsRemaining: data?.drop?.free_slots_remaining ?? 3,
@@ -367,6 +373,7 @@ export const useB2BCart = (profileId: string | undefined, legalStatusComplete: b
     items,
     loading,
     globalExpiresAt,
+    hardCapAt,
     dropInfo,
     blockingError,
     dismissBlockingError,

@@ -464,6 +464,19 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Paiement en cours : les articles payés restent réservés jusqu'à
+    // l'expiration de la session Stripe (0225) — jamais libérés à un autre
+    // client pendant le paiement. Non bloquant.
+    try {
+      await adminClient.rpc('cart_hold_for_checkout', {
+        p_user_id: user.id,
+        p_product_ids: products.map((p: { id: string }) => p.id),
+        p_until: new Date((session.expires_at ?? Math.floor(Date.now() / 1000) + 30 * 60) * 1000).toISOString(),
+      });
+    } catch (err) {
+      console.error('b2b-checkout: prolongation de la réservation impossible', err);
+    }
+
     return new Response(JSON.stringify({ url: session.url, unavailable_ids: unavailableIds }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

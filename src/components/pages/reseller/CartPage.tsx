@@ -104,6 +104,9 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
 
   const globalRemainingMs = cart.globalExpiresAt !== null ? cart.globalExpiresAt - Date.now() : null;
   const globalUrgent = globalRemainingMs !== null && globalRemainingMs < 2 * 60 * 1000;
+  // Plafond absolu (0225) : 35 min après le premier ajout, les ajouts ne relancent plus le timer au-delà.
+  const capRemainingMs = cart.hardCapAt !== null ? cart.hardCapAt - Date.now() : null;
+  const capReached = capRemainingMs !== null && globalRemainingMs !== null && capRemainingMs - globalRemainingMs < 1000;
 
   if (cart.items.length === 0) {
     return (
@@ -143,11 +146,20 @@ export const CartPage: React.FC<CartPageProps> = ({ cart, wallet, onBack, onWall
           <p className="text-sm text-gray-500">{cart.items.length} article{cart.items.length > 1 ? 's' : ''} réservé{cart.items.length > 1 ? 's' : ''}</p>
         </div>
         {globalRemainingMs !== null && (
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium tabular-nums ${
-            globalUrgent ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-gray-50 text-gray-700 border border-gray-200'
-          }`}>
-            <Clock className="h-4 w-4 flex-shrink-0" />
-            Panier réservé encore {formatCountdown(globalRemainingMs)}
+          <div className="flex flex-col items-end gap-1">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium tabular-nums ${
+              globalUrgent ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-gray-50 text-gray-700 border border-gray-200'
+            }`}>
+              <Clock className="h-4 w-4 flex-shrink-0" />
+              Panier réservé encore {formatCountdown(globalRemainingMs)}
+            </div>
+            {capRemainingMs !== null && capRemainingMs > 0 && (
+              <p className="text-xs text-gray-500 tabular-nums">
+                {capReached
+                  ? 'Durée maximale de réservation atteinte : finalisez votre commande avant la fin du compte à rebours.'
+                  : `Chaque ajout relance 15 min · réservation maximale encore ${formatCountdown(capRemainingMs)}`}
+              </p>
+            )}
           </div>
         )}
       </div>
