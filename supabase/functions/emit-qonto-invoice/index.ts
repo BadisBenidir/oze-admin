@@ -148,7 +148,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: invoiceRow, error: invoiceFetchError } = await adminClient
       .from('invoices')
-      .select('id, invoice_number, legal_status, profile_id, qonto_invoice_id, pdf_url, kind, sourcing_mission_id, total_amount, issued_at')
+      .select('id, invoice_number, legal_status, profile_id, qonto_invoice_id, pdf_url, kind, sourcing_mission_id, total_amount, issued_at, merged_into_invoice_id')
       .eq('id', targetInvoiceId)
       .single();
     if (invoiceFetchError || !invoiceRow) {
@@ -203,6 +203,18 @@ Deno.serve(async (req: Request) => {
       const emailError = await emailAdvanceInvoice(invoiceRow.qonto_invoice_id, invoiceRow.profile_id, invoiceRow.sourcing_mission_id);
       if (emailError) return json({ error: emailError }, 502);
       return json({ success: true, email_sent: true });
+    }
+
+    // Facture commune à plusieurs commandes (0227) : Qonto ne facturerait
+    // qu'une commande — émission refusée plutôt qu'une facture incomplète.
+    if (!invoiceRow.qonto_invoice_id && invoiceRow.kind === 'order') {
+      const { count: children } = await adminClient
+        .from('invoices')
+        .select('id', { count: 'exact', head: true })
+        .eq('merged_into_invoice_id', invoiceRow.id);
+      if (invoiceRow.merged_into_invoice_id || (children ?? 0) > 0) {
+        return json({ error: 'Facture commune à plusieurs commandes : émission sur Qonto non prise en charge (déliez les commandes pour émettre chacune).' }, 400);
+      }
     }
 
     // Idempotent : jamais de double émission.

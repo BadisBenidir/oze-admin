@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { generateInvoicePdf, InvoiceLineItem, InvoiceBillingDetails } from '../utils/generateInvoicePdf';
+import { generateInvoicePdf, buildInvoiceItems, InvoiceLineItem, InvoiceBillingDetails, InvoiceSourceItem } from '../utils/generateInvoicePdf';
 import { extractFunctionErrorMessage } from '../utils/edgeFunctionError';
 
 export interface OrderInvoiceBadge {
@@ -79,6 +79,45 @@ export const advanceInvoiceItems = (invoice: {
   }];
 };
 
+/**
+ * Facture commune (0227) : commandes du même acheteur parties ensemble.
+ * Renvoie la facture principale du groupe de `invoiceId` et les lignes de
+ * TOUTES ses commandes (préfixées par leur numéro), ou null hors groupe.
+ */
+export const loadSharedInvoice = async (invoiceId: string, mergedIntoId: string | null) => {
+  const primaryId = mergedIntoId || invoiceId;
+  const { data: group } = await supabase
+    .from('invoices')
+    .select('id, order_id, invoice_number, issued_at, legal_status, billing_details, pdf_url, merged_into_invoice_id')
+    .or(`id.eq.${primaryId},merged_into_invoice_id.eq.${primaryId}`);
+  if (!group || group.length < 2) return null;
+  const primary = group.find((g) => g.id === primaryId);
+  if (!primary) return null;
+
+  const { data: orders } = await supabase
+    .from('orders')
+    .select('id, order_number, created_at, total_amount, late_fee_amount, late_fee_days, order_items(product_snapshot, unit_price, quantity, line_total, status, insured, insurance_cost, entrupy_requested, entrupy_cost)')
+    .in('id', group.map((g) => g.order_id).filter(Boolean) as string[])
+    .order('created_at', { ascending: true });
+  if (!orders?.length) return null;
+
+  type GroupOrder = { order_number: string; created_at: string; total_amount: number; late_fee_amount: number | null; late_fee_days: number | null; order_items: InvoiceSourceItem[] };
+  const list = orders as unknown as GroupOrder[];
+  const items: InvoiceLineItem[] = list.flatMap((o) =>
+    buildInvoiceItems(o.order_items || [], { amount: o.late_fee_amount, days: o.late_fee_days }).map((line) => ({
+      ...line,
+      description: `${o.order_number} — ${line.description}`,
+    }))
+  );
+  return {
+    primary,
+    items,
+    orderNumbers: list.map((o) => o.order_number),
+    firstOrderDate: list[0].created_at,
+    totalAmount: list.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0),
+  };
+};
+
 export interface InvoiceOrderInput {
   id: string;
   order_number: string;
@@ -122,13 +161,36 @@ export const useInvoices = () => {
       // sourcing (plusieurs depuis 0220, avance en plusieurs fois).
       const { data: rows, error: fetchError } = await supabase
         .from('invoices')
-        .select('invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, kind, sourcing_mission:b2b_sourcing_missions(reference, title)')
+        .select('id, invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, kind, merged_into_invoice_id, sourcing_mission:b2b_sourcing_missions(reference, title)')
         .eq('order_id', order.id)
         .order('issued_at', { ascending: true });
       if (fetchError || !rows?.length) {
         throw new Error(fetchError?.message || 'Facture introuvable après génération');
       }
       const orderInvoice = rows.find((r) => r.kind === 'order');
+
+      // Facture commune à plusieurs commandes (0227) : un seul PDF pour tout le groupe.
+      if (orderInvoice) {
+        const shared = await loadSharedInvoice(orderInvoice.id, orderInvoice.merged_into_invoice_id ?? null);
+        if (shared) {
+          if (shared.primary.pdf_url) {
+            window.open(shared.primary.pdf_url, '_blank', 'noopener,noreferrer');
+            return { success: true as const };
+          }
+          await generateInvoicePdf({
+            invoiceNumber: shared.primary.invoice_number,
+            issuedAt: shared.primary.issued_at,
+            orderNumber: shared.orderNumbers.join(' + '),
+            orderDate: shared.firstOrderDate,
+            totalAmount: Math.round(shared.totalAmount * 100) / 100,
+            legalStatus: shared.primary.legal_status as 'individual' | 'sole_proprietorship' | 'company',
+            billingDetails: (shared.primary.billing_details || {}) as InvoiceBillingDetails,
+            paymentMethod: order.paymentMethod,
+            items: shared.items,
+          });
+          return { success: true as const };
+        }
+      }
       const invoices = orderInvoice ? [orderInvoice] : rows;
 
       for (const invoice of invoices) {

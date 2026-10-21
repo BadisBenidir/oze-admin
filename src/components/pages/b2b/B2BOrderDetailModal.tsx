@@ -426,6 +426,41 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const [convertingItemId, setConvertingItemId] = useState<string | null>(null);
   // Article prêt à expédier sans demande : remis en « livraison demandée » (0226).
   const [requestingDeliveryId, setRequestingDeliveryId] = useState<string | null>(null);
+  // Facture commune avec d'autres commandes du même acheteur (0227).
+  const [sharedInvoice, setSharedInvoice] = useState<{ number: string; orders: string[] } | null>(null);
+  const [linkCandidates, setLinkCandidates] = useState<{ id: string; order_number: string; created_at: string; total_amount: number }[] | null>(null);
+  const [linkTarget, setLinkTarget] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
+  const loadSharedInvoiceInfo = useCallback(async () => {
+    setSharedInvoice(null);
+    if (!order) return;
+    const { data: inv } = await supabase
+      .from('invoices')
+      .select('id, merged_into_invoice_id')
+      .eq('order_id', order.id)
+      .eq('kind', 'order')
+      .maybeSingle();
+    if (!inv) return;
+    const primaryId = inv.merged_into_invoice_id || inv.id;
+    const { data: group } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, order:orders(order_number)')
+      .or(`id.eq.${primaryId},merged_into_invoice_id.eq.${primaryId}`);
+    if (!group || group.length < 2) return;
+    const primary = group.find((g) => g.id === primaryId);
+    setSharedInvoice({
+      number: primary?.invoice_number || '',
+      orders: group.map((g) => {
+        const o = Array.isArray(g.order) ? g.order[0] : g.order;
+        return (o as { order_number?: string } | null)?.order_number || '';
+      }).filter(Boolean),
+    });
+  }, [order]);
+  useEffect(() => {
+    loadSharedInvoiceInfo();
+    setLinkCandidates(null);
+    setLinkTarget('');
+  }, [loadSharedInvoiceInfo]);
   const pendingGiftQuantity = pendingGifts.reduce((sum, g) => sum + g.quantity, 0);
 
   // Rappel visuel "n'oublie pas le portefeuille offert" — voir
@@ -559,6 +594,49 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
         : `Demande de livraison créée (${result?.delivery_type === 'point_relais' ? 'point relais' : 'domicile'}) : elle apparaît dans Demandes de livraison › En attente.`
     );
     onOrderUpdated();
+  };
+
+  const openLinkCandidates = async () => {
+    if (!order?.placed_by_profile_id) {
+      alert("Acheteur inconnu pour cette commande : impossible de la lier à une autre.");
+      return;
+    }
+    const { data } = await supabase
+      .from('orders')
+      .select('id, order_number, created_at, total_amount, status')
+      .eq('placed_by_profile_id', order.placed_by_profile_id)
+      .eq('order_channel', 'b2b')
+      .neq('id', order.id)
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false });
+    setLinkCandidates(((data || []) as { id: string; order_number: string; created_at: string; total_amount: number }[]));
+  };
+
+  const handleLinkInvoice = async () => {
+    if (!order || !linkTarget) return;
+    setLinkBusy(true);
+    const { data, error } = await supabase.rpc('admin_link_order_invoices', { p_order_ids: [order.id, linkTarget] });
+    setLinkBusy(false);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setLinkCandidates(null);
+    setLinkTarget('');
+    setRefundNotice(`Facture commune : ${(data as { primary_invoice_number?: string } | null)?.primary_invoice_number || ''} reprend désormais les articles des commandes liées.`);
+    loadSharedInvoiceInfo();
+  };
+
+  const handleUnlinkInvoice = async () => {
+    if (!order || !window.confirm('Retirer cette commande de la facture commune ? Elle retrouvera sa propre facture.')) return;
+    setLinkBusy(true);
+    const { error } = await supabase.rpc('admin_unlink_order_invoice', { p_order_id: order.id });
+    setLinkBusy(false);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    loadSharedInvoiceInfo();
   };
 
   const handleItemConfirmed = (result: { refund_status?: string; refund_method?: string | null; refund_error?: string }) => {
@@ -935,6 +1013,51 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              <div className="mb-4 rounded-lg border border-gray-200 p-3 text-sm">
+                {sharedInvoice ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-gray-700">
+                      Facture commune <strong>{sharedInvoice.number}</strong> avec : {sharedInvoice.orders.filter((n) => n !== order.order_number).join(', ')}
+                    </p>
+                    <button type="button" onClick={handleUnlinkInvoice} disabled={linkBusy} className="text-xs text-gray-500 underline hover:text-red-600 disabled:opacity-50">
+                      Délier
+                    </button>
+                  </div>
+                ) : linkCandidates ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-gray-700">Facture commune avec</span>
+                    <select
+                      value={linkTarget}
+                      onChange={(e) => setLinkTarget(e.target.value)}
+                      className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm focus:outline-none"
+                    >
+                      <option value="">Choisir une commande du même acheteur…</option>
+                      {linkCandidates.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.order_number} — {new Date(c.created_at).toLocaleDateString('fr-FR')} — {Number(c.total_amount).toFixed(2)} €
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleLinkInvoice}
+                      disabled={!linkTarget || linkBusy}
+                      className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      {linkBusy ? 'Un instant…' : 'Lier'}
+                    </button>
+                    <button type="button" onClick={() => setLinkCandidates(null)} className="text-xs text-gray-500 hover:text-gray-800">
+                      Annuler
+                    </button>
+                    {linkCandidates.length === 0 && <span className="text-xs text-gray-400">Aucune autre commande de cet acheteur.</span>}
+                  </div>
+                ) : (
+                  <button type="button" onClick={openLinkCandidates} className="text-xs font-medium text-gray-700 underline hover:text-gray-900">
+                    Facture commune avec une autre commande (même colis)
+                  </button>
+                )}
               </div>
 
               <div className="flex justify-end">
