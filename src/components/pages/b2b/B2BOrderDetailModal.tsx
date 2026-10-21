@@ -424,6 +424,8 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const [cancellingEntrupyId, setCancellingEntrupyId] = useState<string | null>(null);
   // Article remboursé en crédit : remboursement par carte à la place (convert-item-refund-to-card).
   const [convertingItemId, setConvertingItemId] = useState<string | null>(null);
+  // Article prêt à expédier sans demande : remis en « livraison demandée » (0226).
+  const [requestingDeliveryId, setRequestingDeliveryId] = useState<string | null>(null);
   const pendingGiftQuantity = pendingGifts.reduce((sum, g) => sum + g.quantity, 0);
 
   // Rappel visuel "n'oublie pas le portefeuille offert" — voir
@@ -537,6 +539,24 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
       data.wallet_recredited > 0
         ? `${data.refunded_amount.toFixed(2)} € remboursés par carte ; ${data.wallet_recredited.toFixed(2)} € n'ont pas pu l'être et restent en crédit portefeuille.`
         : `${data.refunded_amount.toFixed(2)} € remboursés par carte et retirés du portefeuille du membre.`
+    );
+    onOrderUpdated();
+  };
+
+  const handleRequestDelivery = async (itemId: string) => {
+    if (!window.confirm("Remettre cet article en « Livraison demandée » ? Une demande de livraison est créée pour l'acheteur, vers la même destination que sa dernière demande (frais de port 0 €), ou l'article est ajouté à sa demande déjà en attente.")) return;
+    setRequestingDeliveryId(itemId);
+    const { data, error } = await supabase.rpc('admin_request_delivery_for_item', { p_item_id: itemId });
+    setRequestingDeliveryId(null);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    const result = data as { added_to_existing?: boolean; delivery_type?: string } | null;
+    setRefundNotice(
+      result?.added_to_existing
+        ? "Article ajouté à la demande de livraison déjà en attente de l'acheteur."
+        : `Demande de livraison créée (${result?.delivery_type === 'point_relais' ? 'point relais' : 'domicile'}) : elle apparaît dans Demandes de livraison › En attente.`
     );
     onOrderUpdated();
   };
@@ -796,6 +816,16 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                   {!isCancelled && fulfillmentBadge(item.fulfillment_status) && (
                                     <div className="mt-1 flex items-center gap-2 flex-wrap">
                                       {fulfillmentBadge(item.fulfillment_status)}
+                                      {!item.shipment_id && ['ordered', 'received', 'ready_to_ship'].includes(item.fulfillment_status) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRequestDelivery(item.id)}
+                                          disabled={requestingDeliveryId !== null}
+                                          className="text-xs font-medium text-gray-700 underline hover:text-gray-900 disabled:opacity-50"
+                                        >
+                                          {requestingDeliveryId === item.id ? 'Un instant…' : 'Demander la livraison'}
+                                        </button>
+                                      )}
                                       {item.shipment_id && ['label_created', 'shipped'].includes(item.fulfillment_status) && (
                                         <button
                                           type="button"
