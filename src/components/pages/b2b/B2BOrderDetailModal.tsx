@@ -422,6 +422,8 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const [pendingGifts, setPendingGifts] = useState<{ id: string; quantity: number }[]>([]);
   const [deferringGiftId, setDeferringGiftId] = useState<string | null>(null);
   const [cancellingEntrupyId, setCancellingEntrupyId] = useState<string | null>(null);
+  // Article remboursé en crédit : remboursement par carte à la place (convert-item-refund-to-card).
+  const [convertingItemId, setConvertingItemId] = useState<string | null>(null);
   const pendingGiftQuantity = pendingGifts.reduce((sum, g) => sum + g.quantity, 0);
 
   // Rappel visuel "n'oublie pas le portefeuille offert" — voir
@@ -497,7 +499,6 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   };
 
   // Article remboursé en crédit : remboursement par carte à la place (convert-item-refund-to-card).
-  const [convertingItemId, setConvertingItemId] = useState<string | null>(null);
   const handleConvertToCard = async (itemId: string) => {
     setConvertingItemId(itemId);
     const { data: preview, error: previewError } = await invokeEdgeFunction<{ suggested_amount: number; wallet_balance: number }>(
