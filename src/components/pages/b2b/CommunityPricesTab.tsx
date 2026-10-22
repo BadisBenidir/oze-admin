@@ -93,6 +93,62 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
     refresh();
   };
 
+  // Modification d'un changement programmé (date, prix, message).
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editMessage, setEditMessage] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  // Déplacement de tous les changements d'une même date.
+  const [moveFrom, setMoveFrom] = useState<string | null>(null);
+  const [moveTo, setMoveTo] = useState('');
+
+  const startEdit = (r: { id: string; effective_from: string; monthly_price: number; message: string | null }) => {
+    setEditingId(r.id);
+    setEditDate(r.effective_from);
+    setEditPrice(String(r.monthly_price).replace('.', ','));
+    setEditMessage(r.message || '');
+    setError(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const price = Number(editPrice.replace(',', '.'));
+    if (!editDate) return setError("Choisis la date d'application");
+    if (!Number.isFinite(price) || price < 0) return setError('Prix invalide');
+    setEditSaving(true);
+    const { error: updateError } = await supabase
+      .from('community_group_prices')
+      .update({ effective_from: editDate, monthly_price: Math.round(price * 100) / 100, message: editMessage.trim() || null })
+      .eq('id', editingId);
+    setEditSaving(false);
+    if (updateError) {
+      return setError(updateError.code === '23505' ? 'Ce groupe a déjà un changement programmé à cette date.' : updateError.message);
+    }
+    setEditingId(null);
+    setNotice('Changement de prix modifié : les membres concernés verront la nouvelle date et le nouveau prix à leur prochaine connexion.');
+    refresh();
+  };
+
+  const moveDate = async () => {
+    if (!moveFrom || !moveTo) return;
+    if (!confirm(`Déplacer tous les changements du ${formatPriceDate(moveFrom)} au ${formatPriceDate(moveTo)} ?`)) return;
+    setEditSaving(true);
+    const { error: updateError } = await supabase
+      .from('community_group_prices')
+      .update({ effective_from: moveTo })
+      .eq('reseller_id', resellerId)
+      .eq('effective_from', moveFrom);
+    setEditSaving(false);
+    if (updateError) {
+      return setError(updateError.code === '23505' ? 'Un des groupes a déjà un changement programmé à cette nouvelle date.' : updateError.message);
+    }
+    setMoveFrom(null);
+    setMoveTo('');
+    setNotice(`Changements déplacés au ${formatPriceDate(moveTo)}.`);
+    refresh();
+  };
+
   const removeRow = async (id: string) => {
     if (!confirm('Supprimer ce changement de prix programmé ?')) return;
     const { error: deleteError } = await supabase.from('community_group_prices').delete().eq('id', id);
@@ -205,19 +261,106 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
         <Card>
           <CardContent className="p-4">
             <p className="mb-3 text-sm font-semibold text-gray-900">Changements programmés</p>
-            <ul className="divide-y divide-gray-100">
-              {upcomingRows.map((r) => (
-                <li key={r.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                  <span className="text-gray-800">
-                    Groupe {r.member_group} → <strong>{formatMonthlyPrice(r.monthly_price)}</strong> à partir du {formatPriceDate(r.effective_from)}
-                    {r.message && <span className="mt-0.5 block whitespace-pre-line text-xs text-gray-500">« {r.message} »</span>}
+
+            {/* Déplacer d'un coup tous les changements d'une même date */}
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 p-3 text-sm">
+              {[...new Set(upcomingRows.map((r) => r.effective_from))].map((d) => {
+                const count = upcomingRows.filter((r) => r.effective_from === d).length;
+                return moveFrom === d ? (
+                  <span key={d} className="flex flex-wrap items-center gap-2">
+                    <span className="text-gray-700">Déplacer les {count} changement{count > 1 ? 's' : ''} du {formatPriceDate(d)} au</span>
+                    <input type="date" value={moveTo} onChange={(e) => setMoveTo(e.target.value)} className={input} />
+                    <button
+                      type="button"
+                      onClick={moveDate}
+                      disabled={!moveTo || editSaving}
+                      className="rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      Déplacer
+                    </button>
+                    <button type="button" onClick={() => setMoveFrom(null)} className="text-xs text-gray-500 hover:text-gray-800">
+                      Annuler
+                    </button>
                   </span>
-                  <button onClick={() => removeRow(r.id)} className="p-1 text-gray-400 hover:text-red-600" title="Supprimer ce changement">
-                    <Trash2 className="h-4 w-4" />
+                ) : (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => {
+                      setMoveFrom(d);
+                      setMoveTo(d);
+                    }}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                  >
+                    Changer la date du {formatPriceDate(d)} ({count} groupe{count > 1 ? 's' : ''})
                   </button>
-                </li>
-              ))}
+                );
+              })}
+            </div>
+
+            <ul className="divide-y divide-gray-100">
+              {upcomingRows.map((r) =>
+                editingId === r.id ? (
+                  <li key={r.id} className="space-y-2 py-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-gray-800">Groupe {r.member_group}</span>
+                      <span className="relative">
+                        <input
+                          value={editPrice}
+                          onChange={(e) => setEditPrice(e.target.value)}
+                          inputMode="decimal"
+                          className={`${input} w-28 pr-7 text-right tabular-nums`}
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
+                      </span>
+                      <span className="text-gray-600">/mois à partir du</span>
+                      <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className={input} />
+                    </div>
+                    <textarea
+                      value={editMessage}
+                      onChange={(e) => setEditMessage(e.target.value)}
+                      rows={4}
+                      placeholder="Message aux membres de ce groupe (facultatif)"
+                      className={`${input} w-full resize-y`}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={saveEdit}
+                        disabled={editSaving}
+                        className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        {editSaving ? 'Enregistrement…' : 'Enregistrer'}
+                      </button>
+                      <button type="button" onClick={() => setEditingId(null)} className="rounded-lg px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100">
+                        Annuler
+                      </button>
+                    </div>
+                  </li>
+                ) : (
+                  <li key={r.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <span className="text-gray-800">
+                      Groupe {r.member_group} → <strong>{formatMonthlyPrice(r.monthly_price)}</strong> à partir du {formatPriceDate(r.effective_from)}
+                      {r.message && <span className="mt-0.5 block whitespace-pre-line text-xs text-gray-500">« {r.message} »</span>}
+                    </span>
+                    <span className="flex flex-shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(r)}
+                        className="rounded-lg px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
+                      >
+                        Modifier
+                      </button>
+                      <button onClick={() => removeRow(r.id)} className="p-1 text-gray-400 hover:text-red-600" title="Supprimer ce changement">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </span>
+                  </li>
+                )
+              )}
             </ul>
+            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+            {notice && <p className="mt-2 text-sm text-green-700">{notice}</p>}
           </CardContent>
         </Card>
       )}
