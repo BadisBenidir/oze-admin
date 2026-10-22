@@ -75,6 +75,17 @@ Deno.serve(async (req: Request) => {
     // Défaut de paiement d'enchère > 24h (0166) : aucun nouvel achat tant que
     // le lot en retard n'est pas payé ou annulé. `=== false` : une erreur
     // RPC (migration pas encore appliquée) ne bloque personne.
+    // Membre de communauté sans abonnement après la date de son prix (0221) :
+    // accès en consultation seulement — message dédié (sinon can_user_purchase
+    // ci-dessous refuserait avec le message des lots d'enchère impayés).
+    const { data: subscriptionMissing } = await callerClient.rpc('community_access_blocked', { p_user_id: user.id });
+    if (subscriptionMissing === true) {
+      return new Response(JSON.stringify({ error: 'Activez votre abonnement OZË PARIS pour commander : le bouton est en haut de votre espace.' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { data: canPurchase } = await callerClient.rpc('can_user_purchase');
     if (canPurchase === false) {
       return new Response(JSON.stringify({ error: 'Votre compte est temporairement restreint : vous avez un lot remporté non payé depuis plus de 24h. Veuillez régulariser votre situation (page Enchères) pour passer commande.' }), {

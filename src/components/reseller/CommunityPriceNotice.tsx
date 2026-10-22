@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarClock, CreditCard, Lock, LogOut, X } from 'lucide-react';
+import { CalendarClock, CreditCard, Lock, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 import { groupPriceInfo, formatMonthlyPrice, formatPriceDate, personalizeMessage, GroupPriceRow } from '../../hooks/useCommunityGroupPrices';
@@ -22,8 +22,9 @@ type NoticeState =
  *     que la fenêtre. Groupe à 0 € : la fenêtre (message seul), sans paiement.
  *     Coupure annoncée : sans abonnement à la date, l'accès est suspendu.
  *   - À PARTIR de la date : un membre d'un groupe payant sans abonnement en
- *     cours voit un écran « Accès suspendu » à la place de son espace, avec le
- *     paiement (côté base : community_access_blocked, 0221).
+ *     cours garde l'accès à tout en consultation, avec un bandeau permanent et
+ *     le paiement ; commander / enchérir / sourcing sont refusés côté serveur
+ *     (community_access_blocked, 0221 / 0228).
  * Jamais pour le contact principal ni un membre non classé.
  */
 export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; firstName?: string | null }> = ({ profileId, firstName }) => {
@@ -135,65 +136,59 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
 
   const message = notice.row.message ? personalizeMessage(notice.row.message, firstName) : '';
 
-  // ---- Accès suspendu (date passée, pas d'abonnement) ----
+  // ---- Abonnement non actif (date passée) : consultation seulement ----
+  // Le membre garde l'accès à tout (catalogue, commandes, factures,
+  // portefeuille, suivi) ; commander / enchérir / sourcing sont refusés côté
+  // serveur (0228) jusqu'au paiement. Bandeau permanent, non fermable.
   if (notice.mode === 'blocked') {
     return (
-      <div className="fixed inset-0 z-[95] overflow-y-auto bg-gray-50">
-        <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-10">
-          <div className="overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="px-6 pb-4 pt-8 text-center sm:px-10">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-900">
-                <Lock className="h-6 w-6 text-white" />
-              </div>
-              {notice.newcomer ? (
-                <>
-                  <h2 className="text-2xl font-semibold text-gray-900">{firstName ? `Bienvenue ${firstName} !` : 'Bienvenue !'}</h2>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Activez votre abonnement pour accéder à votre espace OZË PARIS : catalogue, drops, enchères et sourcing sur mesure.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h2 className="text-2xl font-semibold text-gray-900">Votre accès est suspendu</h2>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Depuis le <strong className="text-gray-900">{formatPriceDate(notice.row.effective_from)}</strong>, l'accès à votre espace OZË PARIS
-                    nécessite un abonnement actif.
-                  </p>
-                </>
-              )}
-              <p className="mt-4 text-4xl font-bold tabular-nums text-gray-900">{formatMonthlyPrice(notice.price)}</p>
-              <p className="text-xs text-gray-400">sans engagement · {notice.newcomer ? 'accès ouvert dès le paiement' : 'accès rétabli dès le paiement'}</p>
+      <div className="mx-4 mt-4 md:mx-6 md:mt-6 overflow-hidden rounded-2xl bg-gray-900 text-white shadow-lg">
+        <div className={`flex flex-col gap-5 p-5 md:flex-row md:gap-8 md:p-6 ${expanded ? 'md:items-start' : 'md:items-center'}`}>
+          <div className="flex items-center gap-4 md:border-r md:border-white/10 md:pr-8">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-white/10">
+              <Lock className="h-6 w-6 text-white" />
             </div>
-            {message && (
-              <div className="mx-6 mb-2 rounded-xl border border-gray-100 bg-gray-50 px-5 py-4 sm:mx-10">
-                <p className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words text-[15px] leading-relaxed text-gray-800">{message}</p>
-                <p className="mt-3 text-sm font-medium text-gray-500">— L'équipe OZË PARIS</p>
-              </div>
-            )}
-            <div className="space-y-3 px-6 py-6 sm:px-10">
-              <button
-                type="button"
-                onClick={subscribe}
-                disabled={paying}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-3.5 text-base font-semibold text-white hover:bg-gray-800 disabled:opacity-60"
-              >
-                <CreditCard className="h-5 w-5" />
-                {paying ? 'Ouverture du paiement…' : 'Activer mon abonnement'}
-              </button>
-              {payError && <p className="text-center text-sm text-red-600">{payError}</p>}
-              <button
-                type="button"
-                onClick={async () => {
-                  await supabase.auth.signOut();
-                  window.location.reload();
-                }}
-                className="mx-auto flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800"
-              >
-                <LogOut className="h-4 w-4" /> Se déconnecter
-              </button>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Votre abonnement</p>
+              <p className="text-2xl font-bold tabular-nums">{formatMonthlyPrice(notice.price)}</p>
             </div>
           </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-semibold">
+              {notice.newcomer
+                ? `Bienvenue${firstName ? ` ${firstName}` : ''} ! Activez votre abonnement pour commander`
+                : "Votre abonnement OZË PARIS n'est pas encore actif"}
+            </p>
+            <p className="mt-0.5 text-sm text-gray-300">
+              Vous gardez l'accès à votre espace, vos commandes, vos factures et votre portefeuille. Pour commander, enchérir ou
+              lancer un sourcing, activez votre abonnement.
+            </p>
+            {message && (
+              <>
+                {expanded ? (
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-200">{message}</p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setExpanded((v) => !v)}
+                  className="mt-1 text-xs font-medium text-white underline underline-offset-2 hover:text-gray-300"
+                >
+                  {expanded ? 'Réduire' : 'Lire le message'}
+                </button>
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={subscribe}
+            disabled={paying}
+            className="flex flex-shrink-0 items-center justify-center gap-2.5 rounded-xl bg-white px-8 py-4 text-base font-semibold text-gray-900 shadow-sm transition-colors hover:bg-gray-100 disabled:opacity-60 md:min-w-[280px]"
+          >
+            <CreditCard className="h-5 w-5" />
+            {paying ? 'Ouverture du paiement…' : 'Activer mon abonnement'}
+          </button>
         </div>
+        {payError && <p className="border-t border-white/10 px-6 py-2 text-sm text-red-300">{payError}</p>}
       </div>
     );
   }
