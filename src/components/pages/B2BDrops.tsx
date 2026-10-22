@@ -6,7 +6,8 @@ import { useDrops, Drop } from '../../hooks/useDrops';
 import { CreateDropModal } from './b2b/CreateDropModal';
 import { DropDetailModal } from './b2b/DropDetailModal';
 import { PreviewLinksModal } from './b2b/PreviewLinksModal';
-import { Rocket, Plus, AlertCircle, Package, Pencil, Ban, Eye, GitMerge, X, Trash2, Link2 } from 'lucide-react';
+import { DropTikTokCoverModal } from './b2b/DropTikTokCoverModal';
+import { Rocket, Plus, AlertCircle, Package, Pencil, Ban, Eye, GitMerge, X, Trash2, Link2, Smartphone } from 'lucide-react';
 
 const statusBadge = (status: Drop['status']) => {
   switch (status) {
@@ -108,6 +109,8 @@ export const B2BDrops: React.FC = () => {
   // avoir à la refermer/rouvrir.
   const viewingDrop = drops.find((d) => d.id === viewingDropId) || null;
   const [previewLinksDropId, setPreviewLinksDropId] = useState<string | null>(null);
+  // Image de couverture TikTok d'un drop (générée dans le navigateur).
+  const [tiktokDropId, setTiktokDropId] = useState<string | null>(null);
   const previewLinksDrop = drops.find((d) => d.id === previewLinksDropId) || null;
 
   const handleCreate = () => {
@@ -228,6 +231,13 @@ export const B2BDrops: React.FC = () => {
                         <Eye className="h-4 w-4" />
                       </button>
                       <button
+                        onClick={() => setTiktokDropId(drop.id)}
+                        className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-colors"
+                        title="Image TikTok du drop"
+                      >
+                        <Smartphone className="h-4 w-4" />
+                      </button>
+                      <button
                         onClick={() => setPreviewLinksDropId(drop.id)}
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Liens d'avant-première (Discord)"
@@ -324,6 +334,13 @@ export const B2BDrops: React.FC = () => {
                             >
                               <span className="text-xs font-semibold">Aa</span>
                             </button>
+                            <button
+                              onClick={() => setTiktokDropId(drop.id)}
+                              className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-colors"
+                              title="Image TikTok du drop"
+                            >
+                              <Smartphone className="h-4 w-4" />
+                            </button>
                             {drop.status === 'publie' && (
                               <button
                                 onClick={() => setPreviewLinksDropId(drop.id)}
@@ -395,6 +412,10 @@ export const B2BDrops: React.FC = () => {
         onSetFeatured={setFeaturedProducts}
         onSetLockCancellation={setLockCancellation}
       />
+
+      {tiktokDropId && drops.find((d) => d.id === tiktokDropId) && (
+        <DropTikTokCoverModal drop={drops.find((d) => d.id === tiktokDropId)!} onClose={() => setTiktokDropId(null)} />
+      )}
 
       {previewLinksDrop && (
         <PreviewLinksModal
