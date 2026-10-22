@@ -3,6 +3,7 @@ import { X, Package, ImageOff, Trash2, Star, Lock, Unlock } from 'lucide-react';
 import { Drop } from '../../../hooks/useDrops';
 import { useDropProducts } from '../../../hooks/useDropProducts';
 import { useHideFigures } from '../../../hooks/useHideFigures';
+import { ProductDetail } from '../ProductDetail';
 
 const formatDateTime = (iso: string): string =>
   new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -39,6 +40,8 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
   const [featuredSaving, setFeaturedSaving] = useState(false);
   const [featuredError, setFeaturedError] = useState<string | null>(null);
   const [lockSaving, setLockSaving] = useState(false);
+  // Fiche produit ouverte par-dessus le drop (même principe que la fiche mission de sourcing).
+  const [viewingProductId, setViewingProductId] = useState<string | null>(null);
 
   if (!drop) return null;
 
@@ -208,17 +211,24 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
                                   <Star className={`h-4 w-4 ${featured.includes(p.id) ? 'fill-amber-400 text-amber-500' : 'text-gray-300'}`} />
                                 </button>
                               )}
-                              <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-                                {image ? (
-                                  <img src={image} alt={p.name} className="h-full w-full object-cover" />
-                                ) : (
-                                  <ImageOff className="h-4 w-4 text-gray-300" />
-                                )}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
-                                <p className="text-xs text-gray-400 font-mono">{p.product_code}</p>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setViewingProductId(p.id)}
+                                title="Ouvrir la fiche de l'article"
+                                className="flex min-w-0 items-center gap-3 text-left group"
+                              >
+                                <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                                  {image ? (
+                                    <img src={image} alt={p.name} className="h-full w-full object-cover" />
+                                  ) : (
+                                    <ImageOff className="h-4 w-4 text-gray-300" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate group-hover:underline">{p.name}</p>
+                                  <p className="text-xs text-gray-400 font-mono">{p.product_code}</p>
+                                </div>
+                              </button>
                             </div>
                           </td>
                           <td className="py-3 px-4 text-right text-sm text-gray-700">
@@ -277,6 +287,12 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
           </div>
         </div>
       </div>
+
+      {viewingProductId && (
+        <div className="fixed inset-0 z-[80] bg-white overflow-y-auto">
+          <ProductDetail productId={viewingProductId} onBack={() => setViewingProductId(null)} />
+        </div>
+      )}
     </div>
   );
 };
