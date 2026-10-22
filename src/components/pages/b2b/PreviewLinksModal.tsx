@@ -40,7 +40,20 @@ const usePreviewItems = (target: PreviewTarget | null, productIds: string[]) => 
     let cancelled = false;
     const load = async () => {
       setLoading(true);
-      if (target.kind === 'drop') {
+      if (target.kind === 'catalog') {
+        // Catalogue (0229) : pièces actuellement en vente B2B.
+        const { data } = await supabase
+          .from('products')
+          .select('id, name, images, main_image_index, brand:brands(name)')
+          .eq('status', 'for-sale-b2b')
+          .order('created_at', { ascending: false });
+        if (!cancelled) {
+          setItems((data || []).map((p) => {
+            const brand = p.brand as unknown as { name: string } | null;
+            return { id: p.id, name: p.name, brand: brand?.name ?? null, image: p.images?.[p.main_image_index ?? 0] || p.images?.[0] || null };
+          }));
+        }
+      } else if (target.kind === 'drop') {
         if (productIds.length === 0) {
           setItems([]);
           setLoading(false);
@@ -234,7 +247,7 @@ export const PreviewLinksModal: React.FC<PreviewLinksModalProps> = ({ target, ti
                     ))}
                   </div>
                   {mode === 'all' && (
-                    <p className="text-xs text-gray-400 mt-1.5">Les pièces ajoutées plus tard apparaîtront aussi.</p>
+                    <p className="text-xs text-gray-400 mt-1.5">{target.kind === 'catalog' ? 'Liste toujours à jour : les pièces vendues disparaissent, les nouvelles apparaissent.' : 'Les pièces ajoutées plus tard apparaîtront aussi.'}</p>
                   )}
                   {mode === 'some' && (
                     <div className="mt-3">
@@ -359,7 +372,7 @@ export const PreviewLinksModal: React.FC<PreviewLinksModalProps> = ({ target, ti
                               {state === 'expired' && <Badge variant="warning">Expiré</Badge>}
                             </div>
                             <p className="text-xs text-gray-500 mt-0.5">
-                              {link.item_ids ? `${link.item_ids.length} pièce${link.item_ids.length > 1 ? 's' : ''}` : 'Toutes les pièces'}
+                              {link.item_ids ? `${link.item_ids.length} pièce${link.item_ids.length > 1 ? 's' : ''}` : target.kind === 'catalog' ? 'Toutes les pièces en vente' : 'Toutes les pièces'}
                               {' · '}{link.session_id && link.price_mode
                                 ? { start: 'prix de départ', final: 'prix final', both: 'prix de départ et final', none: 'sans prix' }[link.price_mode]
                                 : link.show_prices ? 'prix affichés' : 'sans prix'}

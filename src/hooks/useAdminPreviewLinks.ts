@@ -7,7 +7,9 @@ export interface PreviewLink {
   label: string | null;
   drop_id: string | null;
   session_id: string | null;
-  /** null = toutes les pièces du drop / de la session. */
+  /** Lien du catalogue en vente B2B (0229). */
+  catalog?: boolean;
+  /** null = toutes les pièces du drop / de la session (catalogue : toutes les pièces en vente, toujours à jour). */
   item_ids: string[] | null;
   show_prices: boolean;
   /** Sessions d'enchères (0195) : prix affichés — départ, final (adjugé), les deux ou aucun. */
@@ -21,7 +23,7 @@ export interface PreviewLink {
 
 export type AuctionPriceMode = 'none' | 'start' | 'final' | 'both';
 
-export type PreviewTarget = { kind: 'drop'; id: string } | { kind: 'auction'; id: string };
+export type PreviewTarget = { kind: 'drop'; id: string } | { kind: 'auction'; id: string } | { kind: 'catalog'; id: 'catalog' };
 
 export interface PreviewLinkInput {
   label?: string;
@@ -38,14 +40,16 @@ const PREVIEW_LINK_ORIGIN = 'https://pro.ozeparis.com';
 
 export const buildPreviewLinkUrl = (token: string): string => `${PREVIEW_LINK_ORIGIN}/avant-premiere/${token}`;
 
-/** Liens d'avant-première d'un drop ou d'une session d'enchères (preview_links, 0169). */
+/** Liens d'avant-première d'un drop, d'une session d'enchères (preview_links, 0169) ou du catalogue en vente (0229). */
 export const useAdminPreviewLinks = (target: PreviewTarget | null) => {
   const [links, setLinks] = useState<PreviewLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const column = target?.kind === 'drop' ? 'drop_id' : 'session_id';
+  const column = target?.kind === 'drop' ? 'drop_id' : target?.kind === 'catalog' ? 'catalog' : 'session_id';
   const targetId = target?.id ?? null;
+  // Catalogue : pas d'id cible, une simple case « catalog » sur le lien.
+  const targetValue: string | boolean | null = target?.kind === 'catalog' ? true : targetId;
 
   const fetchLinks = useCallback(async () => {
     if (!targetId) return;
@@ -55,7 +59,7 @@ export const useAdminPreviewLinks = (target: PreviewTarget | null) => {
       const { data, error: fetchError } = await supabase
         .from('preview_links')
         .select('*')
-        .eq(column, targetId)
+        .eq(column, targetValue as string | boolean)
         .order('created_at', { ascending: false });
       if (fetchError) throw new Error(fetchError.message);
       setLinks(data || []);
@@ -65,7 +69,7 @@ export const useAdminPreviewLinks = (target: PreviewTarget | null) => {
     } finally {
       setLoading(false);
     }
-  }, [column, targetId]);
+  }, [column, targetId, targetValue]);
 
   const createLink = async (input: PreviewLinkInput): Promise<{ success: boolean; error?: string; link?: PreviewLink }> => {
     if (!targetId) return { success: false, error: 'Cible manquante' };
@@ -73,7 +77,7 @@ export const useAdminPreviewLinks = (target: PreviewTarget | null) => {
     const { data, error: insertError } = await supabase
       .from('preview_links')
       .insert({
-        [column]: targetId,
+        [column]: targetValue,
         label: input.label?.trim() || null,
         item_ids: input.item_ids,
         show_prices: input.show_prices,

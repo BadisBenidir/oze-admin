@@ -5,7 +5,8 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useProducts } from '../../hooks/useProducts';
 import { CreateProduct } from './CreateProduct';
 import { ProductDetail } from './ProductDetail';
-import { Package, Plus, Search, Trash2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, Plus, Search, Trash2, AlertCircle, ChevronLeft, ChevronRight, Link2 } from 'lucide-react';
+import { PreviewLinksModal } from './b2b/PreviewLinksModal';
 
 const statusOptions = [
   { value: 'draft-b2b', label: 'Brouillon' },
@@ -71,6 +72,8 @@ export const B2BProducts: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState(ALL_STATUSES_VALUE);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  // Liens d'aperçu du catalogue en vente (0229).
+  const [showPreviewLinks, setShowPreviewLinks] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
 
   const statusForQuery = (value: string) => (value === ALL_STATUSES_VALUE ? ALL_B2B_STATUSES : value);
@@ -137,13 +140,23 @@ export const B2BProducts: React.FC = () => {
           <h3 className="text-lg font-semibold text-gray-900">Produits B2B</h3>
           <p className="text-sm text-gray-500">Pièces réservées aux revendeurs, jamais visibles sur le site public</p>
         </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors self-start md:self-auto"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Nouveau produit B2B</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          <button
+            onClick={() => setShowPreviewLinks(true)}
+            title="Lien public (sans compte) vers les pièces en vente, à partager sur Discord"
+            className="flex items-center space-x-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Link2 className="h-4 w-4" />
+            <span>Lien d'aperçu</span>
+          </button>
+          <button
+            onClick={handleCreate}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Nouveau produit B2B</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -274,6 +287,13 @@ export const B2BProducts: React.FC = () => {
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
+      )}
+      {showPreviewLinks && (
+        <PreviewLinksModal
+          target={{ kind: 'catalog', id: 'catalog' }}
+          title="Catalogue en vente"
+          onClose={() => setShowPreviewLinks(false)}
+        />
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Gavel, Rocket, ImageOff, LogIn, Lock } from 'lucide-react';
+import { Gavel, Rocket, ImageOff, LogIn, Lock, ShoppingBag } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ImageLightbox } from '../ui/ImageLightbox';
 import { isGrade } from '../../utils/productGrade';
@@ -28,7 +28,7 @@ interface PreviewItem {
 
 interface PreviewData {
   status: 'ok';
-  kind: 'drop' | 'auction';
+  kind: 'drop' | 'auction' | 'catalog';
   label: string | null;
   title: string | null;
   starts_at: string;
@@ -122,7 +122,9 @@ export const PreviewLinkPage: React.FC = () => {
 
   useEffect(() => {
     if (data) {
-      document.title = `Avant-première · ${data.title || (data.kind === 'drop' ? 'Prochain drop' : 'Enchères')} — OZË Paris`;
+      document.title = data.kind === 'catalog'
+        ? 'Aperçu du catalogue — OZË Paris'
+        : `Avant-première · ${data.title || (data.kind === 'drop' ? 'Prochain drop' : 'Enchères')} — OZË Paris`;
     }
   }, [data]);
 
@@ -163,8 +165,10 @@ export const PreviewLinkPage: React.FC = () => {
     );
   }
 
-  const isDrop = data.kind === 'drop';
-  const Icon = isDrop ? Rocket : Gavel;
+  // Catalogue (0229) : pièces en vente maintenant — pas de date ni de compte à rebours.
+  const isCatalog = data.kind === 'catalog';
+  const isDrop = data.kind === 'drop' || isCatalog;
+  const Icon = isCatalog ? ShoppingBag : isDrop ? Rocket : Gavel;
   const started = done || data.event_status === 'publie' || data.event_status === 'live' || data.event_status === 'closed';
   const ended = data.event_status === 'closed';
   const date = new Date(data.starts_at);
@@ -180,13 +184,19 @@ export const PreviewLinkPage: React.FC = () => {
         <div className="mx-auto max-w-6xl px-4 py-8 sm:py-12">
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/60">
             <Icon className="h-3.5 w-3.5" />
-            {started ? 'Aperçu' : 'Avant-première'} · {isDrop ? 'Drop' : 'Session d\'enchères'}
+            {isCatalog ? 'Aperçu · Catalogue B2B' : <>{started ? 'Aperçu' : 'Avant-première'} · {isDrop ? 'Drop' : 'Session d\'enchères'}</>}
           </div>
-          <h1 className="mt-2 text-2xl font-light tracking-tight sm:text-4xl">
-            {data.title ? <span className="font-semibold">{data.title}</span> : null}
-            {data.title ? ' · ' : ''}
-            <span className="capitalize">{dateLabel}</span> à <span className="font-semibold">{timeLabel}</span>
-          </h1>
+          {isCatalog ? (
+            <h1 className="mt-2 text-2xl font-light tracking-tight sm:text-4xl">
+              Les pièces <span className="font-semibold">disponibles en ce moment</span>
+            </h1>
+          ) : (
+            <h1 className="mt-2 text-2xl font-light tracking-tight sm:text-4xl">
+              {data.title ? <span className="font-semibold">{data.title}</span> : null}
+              {data.title ? ' · ' : ''}
+              <span className="capitalize">{dateLabel}</span> à <span className="font-semibold">{timeLabel}</span>
+            </h1>
+          )}
           <p className="mt-2 text-sm text-white/60">
             {hiddenCount === 0 && 'Aperçu · '}
             {data.total_count} pièce{data.total_count > 1 ? 's' : ''}
@@ -194,7 +204,11 @@ export const PreviewLinkPage: React.FC = () => {
             {data.label && ` · ${data.label}`}
           </p>
 
-          {started ? (
+          {isCatalog ? (
+            <p className="mt-5 inline-flex items-center rounded-lg bg-white px-3 py-2 text-sm font-semibold text-black">
+              En vente maintenant · premier arrivé, premier servi
+            </p>
+          ) : started ? (
             <p className="mt-5 inline-flex items-center rounded-lg bg-white px-3 py-2 text-sm font-semibold text-black">
               {ended ? 'Cette session est terminée' : isDrop ? 'Le drop est en ligne !' : 'Les enchères sont ouvertes !'}
             </p>
@@ -229,7 +243,9 @@ export const PreviewLinkPage: React.FC = () => {
 
       <main className="mx-auto max-w-6xl px-4 py-8">
         {data.items.length === 0 ? (
-          <p className="py-12 text-center text-sm text-neutral-500">Les pièces seront dévoilées très bientôt.</p>
+          <p className="py-12 text-center text-sm text-neutral-500">
+            {isCatalog ? 'Toutes les pièces sont parties : de nouvelles arrivent très vite.' : 'Les pièces seront dévoilées très bientôt.'}
+          </p>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
             {data.items.map((item) => {
