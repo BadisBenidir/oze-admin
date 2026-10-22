@@ -278,7 +278,7 @@ export const DropTikTokCoverModal: React.FC<{ drop: Drop; onClose: () => void }>
         ctx.fillText(`${count} pièce${count > 1 ? 's' : ''} de luxe${brands.length ? ` · ${brands.join(' · ')}` : ''}`, W / 2, 1520);
         ctx.fillStyle = inkMuted;
         ctx.font = '400 34px Helvetica, Arial, sans-serif';
-        ctx.fillText('Réservé aux revendeurs · pro.ozeparis.com', W / 2, 1578);
+        ctx.fillText('Réservé aux revendeurs · b2b.ozeparis.com', W / 2, 1578);
       }
 
       setPreview(canvas.toDataURL('image/png'));
