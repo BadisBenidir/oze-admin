@@ -3,10 +3,12 @@ import { Check, Download, ImageOff, Loader2, X } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import type { Drop } from '../../../hooks/useDrops';
 import logoWhite from '../../landing/assets/logo_oze_paris_b2b_white.png';
+import logoBlack from '../../landing/assets/logo_oze_paris_b2b.png';
 
 /**
  * Image de couverture TikTok d'un drop (1080 × 1920), générée dans le
- * navigateur (canvas) à partir des photos des pièces : fond noir, logo OZË,
+ * navigateur (canvas) à partir des photos des pièces : fond au choix (crème,
+ * photo floutée, blanc, noir), logo OZË,
  * « DROP B2B », titre, date, mosaïque de 1 à 6 photos, nombre de pièces.
  * Les informations restent hors des zones recouvertes par l'interface TikTok
  * (bas de l'écran, colonne d'icônes à droite). Options : photos floutées
@@ -14,6 +16,15 @@ import logoWhite from '../../landing/assets/logo_oze_paris_b2b_white.png';
  * Les photos du stockage Supabase sont servies avec CORS (*) : le canvas
  * reste exportable en PNG.
  */
+
+/** Styles de fond : couleurs du texte et des tuiles associées. */
+type Theme = 'cream' | 'photo' | 'white' | 'black';
+const THEMES: { id: Theme; label: string; dark: boolean; swatch: string }[] = [
+  { id: 'cream', label: 'Crème', dark: false, swatch: '#efe8dc' },
+  { id: 'photo', label: 'Photo floutée', dark: true, swatch: 'linear-gradient(135deg,#6b5a48,#1f1a15)' },
+  { id: 'white', label: 'Blanc', dark: false, swatch: '#ffffff' },
+  { id: 'black', label: 'Noir', dark: true, swatch: '#0a0a0a' },
+];
 
 const W = 1080;
 const H = 1920;
@@ -46,11 +57,21 @@ const roundRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 };
 
 /** Photo en « cover » dans une tuile arrondie à fond blanc. */
-const drawTile = (ctx: CanvasRenderingContext2D, img: HTMLImageElement | null, x: number, y: number, w: number, h: number, blur: boolean) => {
+const drawTile = (ctx: CanvasRenderingContext2D, img: HTMLImageElement | null, x: number, y: number, w: number, h: number, blur: boolean, shadow = false) => {
+  if (shadow) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(60, 45, 30, 0.18)';
+    ctx.shadowBlur = 40;
+    ctx.shadowOffsetY = 14;
+    roundRect(ctx, x, y, w, h, 28);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.restore();
+  }
   ctx.save();
   roundRect(ctx, x, y, w, h, 28);
   ctx.clip();
-  ctx.fillStyle = '#f4f4f2';
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(x, y, w, h);
   if (img) {
     const scale = Math.max(w / img.width, h / img.height) * 0.92;
@@ -119,6 +140,7 @@ export const DropTikTokCoverModal: React.FC<{ drop: Drop; onClose: () => void }>
   const [subtitle, setSubtitle] = useState(defaultSubtitle.charAt(0).toUpperCase() + defaultSubtitle.slice(1));
   const [blur, setBlur] = useState(false);
   const [noText, setNoText] = useState(false);
+  const [theme, setTheme] = useState<Theme>('cream');
   const [preview, setPreview] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -177,16 +199,46 @@ export const DropTikTokCoverModal: React.FC<{ drop: Drop; onClose: () => void }>
       };
       const chosen = selected.map((id) => pieces.find((p) => p.id === id)).filter((p): p is DropPiece => Boolean(p));
       const imgs = await Promise.all(chosen.map((p) => (p.image ? getImg(p.image) : Promise.resolve(null))));
-      const logo = await getImg(logoWhite);
+      const dark = THEMES.find((t) => t.id === theme)?.dark ?? false;
+      const logo = await getImg(dark ? logoWhite : logoBlack);
       if (cancelled) return;
 
-      // Fond noir avec léger dégradé.
-      const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, '#141414');
-      bg.addColorStop(0.5, '#0a0a0a');
-      bg.addColorStop(1, '#000000');
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, W, H);
+      // Fond selon le style choisi.
+      if (theme === 'photo') {
+        ctx.fillStyle = '#1a1612';
+        ctx.fillRect(0, 0, W, H);
+        const hero = imgs.find(Boolean) || null;
+        if (hero) {
+          const scale = Math.max(W / hero.width, H / hero.height) * 1.15;
+          ctx.filter = 'blur(48px) saturate(1.1)';
+          ctx.drawImage(hero, (W - hero.width * scale) / 2, (H - hero.height * scale) / 2, hero.width * scale, hero.height * scale);
+          ctx.filter = 'none';
+        }
+        const veil = ctx.createLinearGradient(0, 0, 0, H);
+        veil.addColorStop(0, 'rgba(0,0,0,0.55)');
+        veil.addColorStop(0.45, 'rgba(0,0,0,0.30)');
+        veil.addColorStop(1, 'rgba(0,0,0,0.65)');
+        ctx.fillStyle = veil;
+        ctx.fillRect(0, 0, W, H);
+      } else if (theme === 'cream') {
+        const bg = ctx.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, '#f5efe5');
+        bg.addColorStop(1, '#e8dfd0');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+      } else if (theme === 'white') {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, W, H);
+      } else {
+        const bg = ctx.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, '#141414');
+        bg.addColorStop(1, '#000000');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+      }
+      const ink = dark ? '#ffffff' : '#1a1714';
+      const inkSoft = dark ? 'rgba(255,255,255,0.85)' : 'rgba(26,23,20,0.78)';
+      const inkMuted = dark ? 'rgba(255,255,255,0.6)' : 'rgba(26,23,20,0.55)';
 
       // Logo en haut.
       if (logo) {
@@ -198,17 +250,17 @@ export const DropTikTokCoverModal: React.FC<{ drop: Drop; onClose: () => void }>
       ctx.textAlign = 'center';
       let photosTop = 330;
       if (!noText) {
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillStyle = inkMuted;
         ctx.font = '600 34px Helvetica, Arial, sans-serif';
         ctx.fillText('D R O P   B 2 B', W / 2, 330);
 
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = ink;
         ctx.font = '700 104px Georgia, "Times New Roman", serif';
         const lines = wrapText(ctx, headline || 'Nouveau drop', 940);
         lines.forEach((l, i) => ctx.fillText(l, W / 2, 450 + i * 112));
         const afterTitle = 450 + (lines.length - 1) * 112;
 
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillStyle = inkSoft;
         ctx.font = '400 46px Helvetica, Arial, sans-serif';
         ctx.fillText(subtitle, W / 2, afterTitle + 78);
         photosTop = afterTitle + 140;
@@ -217,14 +269,14 @@ export const DropTikTokCoverModal: React.FC<{ drop: Drop; onClose: () => void }>
       // Mosaïque (bas de la zone sûre TikTok ≈ 1560).
       const photosBottom = noText ? 1560 : 1440;
       const tiles = layoutTiles(Math.max(1, chosen.length), photosTop, photosBottom);
-      tiles.forEach((t, i) => drawTile(ctx, imgs[i] ?? null, t.x, t.y, t.w, t.h, blur));
+      tiles.forEach((t, i) => drawTile(ctx, imgs[i] ?? null, t.x, t.y, t.w, t.h, blur, !dark));
 
       if (!noText) {
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = ink;
         ctx.font = '600 44px Helvetica, Arial, sans-serif';
         const count = drop.product_ids.length;
         ctx.fillText(`${count} pièce${count > 1 ? 's' : ''} de luxe${brands.length ? ` · ${brands.join(' · ')}` : ''}`, W / 2, 1520);
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.fillStyle = inkMuted;
         ctx.font = '400 34px Helvetica, Arial, sans-serif';
         ctx.fillText('Réservé aux revendeurs · pro.ozeparis.com', W / 2, 1578);
       }
@@ -235,7 +287,7 @@ export const DropTikTokCoverModal: React.FC<{ drop: Drop; onClose: () => void }>
     return () => {
       cancelled = true;
     };
-  }, [loading, selected, headline, subtitle, blur, noText, pieces, brands, drop.product_ids.length]);
+  }, [loading, selected, headline, subtitle, blur, noText, theme, pieces, brands, drop.product_ids.length]);
 
   const toggle = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= MAX_PHOTOS ? prev : [...prev, id]));
@@ -283,6 +335,22 @@ export const DropTikTokCoverModal: React.FC<{ drop: Drop; onClose: () => void }>
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto p-5" style={{ maxHeight: '70vh' }}>
+              <div>
+                <p className="mb-2 text-xs font-medium text-gray-600">Style</p>
+                <div className="flex flex-wrap gap-2">
+                  {THEMES.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setTheme(t.id)}
+                      className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${theme === t.id ? 'border-gray-900 text-gray-900' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      <span className="h-4 w-4 rounded-full ring-1 ring-gray-300" style={{ background: t.swatch }} />
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={noText} onChange={(e) => setNoText(e.target.checked)} className="h-4 w-4 accent-gray-900" />
                 Sans texte (j'écris par-dessus dans TikTok)
