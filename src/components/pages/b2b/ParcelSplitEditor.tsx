@@ -254,9 +254,17 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                             </p>
                             {item.entrupy_requested && (
                               <div className="mt-1 flex items-center gap-1.5">
-                                <Badge variant="purple">
-                                  <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy à joindre
-                                </Badge>
+                                {item.entrupy_status === 'completed' && item.entrupy_cert_url ? (
+                                  <a href={item.entrupy_cert_url} target="_blank" rel="noopener noreferrer" title="Ouvrir le certificat">
+                                    <Badge variant="success">
+                                      <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy joint
+                                    </Badge>
+                                  </a>
+                                ) : (
+                                  <Badge variant="purple">
+                                    <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy à joindre
+                                  </Badge>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => handleCancelEntrupy(item.id)}
