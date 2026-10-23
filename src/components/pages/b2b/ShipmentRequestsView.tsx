@@ -27,6 +27,20 @@ const shipmentHaystack = (s: AdminShipment): string => {
   ].filter(Boolean).join(' '));
 };
 
+/** Transporteur d'une demande : réseau du point relais choisi, ou domicile. */
+type CarrierFilter = 'all' | 'mondial_relay' | 'colissimo' | 'domicile';
+const carrierOf = (s: AdminShipment): Exclude<CarrierFilter, 'all'> => {
+  if (s.delivery_type === 'domicile') return 'domicile';
+  const network = String(((s.parcel_point || {}) as Record<string, unknown>).network || '').toLowerCase();
+  return network.includes('mondial') ? 'mondial_relay' : 'colissimo';
+};
+const CARRIER_FILTERS: { id: CarrierFilter; label: string }[] = [
+  { id: 'all', label: 'Tous' },
+  { id: 'mondial_relay', label: 'Mondial Relay' },
+  { id: 'colissimo', label: 'Colissimo' },
+  { id: 'domicile', label: 'Domicile' },
+];
+
 const statusBadge = (status: AdminShipment['status']) => {
   if (status === 'preparing') return <Badge variant="warning">En préparation</Badge>;
   if (status === 'in_transit') return <Badge variant="info">Expédié / En transit</Badge>;
@@ -79,17 +93,20 @@ export const ShipmentRequestsView: React.FC = () => {
   };
   const { shipments: tabShipments, loading, error } = dataByTab[tab];
   const [search, setSearch] = useState('');
+  const [carrier, setCarrier] = useState<CarrierFilter>('all');
+  const matches = (s: AdminShipment, query: string) =>
+    (carrier === 'all' || carrierOf(s) === carrier) && (!query || shipmentHaystack(s).includes(query));
   const shipments = useMemo(() => {
     const query = normalizeSearch(search);
-    if (!query) return tabShipments;
-    return tabShipments.filter((s) => shipmentHaystack(s).includes(query));
-  }, [tabShipments, search]);
+    return tabShipments.filter((s) => matches(s, query));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabShipments, search, carrier]);
   // Pendant une recherche, chaque onglet affiche son nombre de résultats —
   // permet de voir tout de suite dans quel onglet se trouve la demande.
   const countFor = (t: Tab) => {
     const query = normalizeSearch(search);
     const list = dataByTab[t].shipments;
-    return query ? list.filter((s) => shipmentHaystack(s).includes(query)).length : list.length;
+    return query || carrier !== 'all' ? list.filter((s) => matches(s, query)).length : list.length;
   };
 
   const refreshAll = () => {
@@ -201,7 +218,8 @@ export const ShipmentRequestsView: React.FC = () => {
         ))}
       </div>
 
-      <div className="mb-4 relative max-w-md">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="relative w-full max-w-md">
         <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
         <input
           type="text"
@@ -215,6 +233,24 @@ export const ShipmentRequestsView: React.FC = () => {
             <X className="h-4 w-4" />
           </button>
         )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {CARRIER_FILTERS.map((f) => {
+          const count = f.id === 'all' ? tabShipments.length : tabShipments.filter((s) => carrierOf(s) === f.id).length;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setCarrier(f.id)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                carrier === f.id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {f.label} <span className={carrier === f.id ? 'text-gray-300' : 'text-gray-400'}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
       </div>
 
       {error && (
