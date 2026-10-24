@@ -4,6 +4,7 @@ import { Badge } from '../../ui/Badge';
 import { AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { useGenerateShipmentLabels, ParcelResult, CarrierOverride } from '../../../hooks/useGenerateShipmentLabels';
 import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
+import { LabelShareModal } from './LabelShareModal';
 import { ProductDetail } from '../ProductDetail';
 import { isPlausiblePhone } from '../../../utils/phoneValidation';
 import { cancelEntrupyCertificate } from '../../../hooks/useCancelOrderItem';
@@ -36,7 +37,7 @@ const itemRef = (item: AdminShipmentItem) =>
 
 export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId, items, requesterPhone, deliveryType, parcelPointNetwork, parcelPointCountry, onGenerated, onCancelItem, onRevertItem, revertingItemId }) => {
   const { generate } = useGenerateShipmentLabels();
-  const { download: downloadLabel, downloadingUrl } = useDownloadShipmentLabel();
+  const { download: downloadLabel, downloadingUrl, pendingFile: pendingLabel, clearPendingFile: clearPendingLabel } = useDownloadShipmentLabel();
   const [parcels, setParcels] = useState<ParcelDraft[]>([{ items: items.map((i) => i.id) }]);
   const [generating, setGenerating] = useState(false);
   const [results, setResults] = useState<ParcelResult[] | null>(null);
@@ -159,6 +160,8 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
           <p className="text-sm text-red-700">{error}</p>
         </div>
       )}
+
+      <LabelShareModal file={pendingLabel} onClose={clearPendingLabel} />
 
       {downloadError && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">

@@ -7,6 +7,7 @@ import { CancelDeliveryRequestModal } from './CancelDeliveryRequestModal';
 import { CancelShipmentItemsModal } from './CancelShipmentItemsModal';
 import { MergeShipmentsModal } from './MergeShipmentsModal';
 import { useDownloadShipmentLabel } from '../../../hooks/useDownloadShipmentLabel';
+import { LabelShareModal } from './LabelShareModal';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 import { supabase } from '../../../lib/supabase';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
@@ -129,7 +130,7 @@ const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, reverti
 };
 
 export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipment, onClose, onGenerated, activeShipments = [] }) => {
-  const { download: downloadLabel, downloadingUrl } = useDownloadShipmentLabel();
+  const { download: downloadLabel, downloadingUrl, pendingFile: pendingLabel, clearPendingFile: clearPendingLabel } = useDownloadShipmentLabel();
   const { sync: syncSendcloud } = useSendcloudSync();
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -334,6 +335,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
+      <LabelShareModal file={pendingLabel} onClose={clearPendingLabel} />
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="fixed inset-0 bg-black bg-opacity-25" onClick={onClose} />
 
@@ -614,7 +616,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                       {p.label_url && (
                         <button
                           type="button"
-                          onClick={() => downloadLabel(p.label_url!)}
+                          onClick={() => downloadLabel(p.label_url!, `bordereau-${p.tracking_number || p.parcel_index}.pdf`)}
                           disabled={downloadingUrl === p.label_url}
                           className="flex items-center gap-1 text-xs text-gray-600 underline hover:text-gray-900 disabled:opacity-50"
                         >
