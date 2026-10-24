@@ -70,9 +70,21 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'label_url invalide' }, 400);
     }
 
-    const upstream = await fetch(label_url, {
-      headers: { Authorization: 'Basic ' + btoa(`${sendcloudPublicKey}:${sendcloudSecretKey}`) },
-    });
+    // Format étiquette 10 × 15 cm (A6) pour les imprimantes thermiques
+    // (Munbyn…) : sans paramètre, Sendcloud renvoie une page de taille
+    // standard que les applications d'impression thermique refusent ou
+    // impriment mal. Repli sur le format par défaut si Sendcloud refuse A6.
+    const authHeaders = {
+      Authorization: 'Basic ' + btoa(`${sendcloudPublicKey}:${sendcloudSecretKey}`),
+      Accept: 'application/pdf',
+    };
+    const a6Url = new URL(label_url);
+    a6Url.searchParams.set('paper_size', 'A6');
+    let upstream = await fetch(a6Url.toString(), { headers: authHeaders });
+    if (!upstream.ok) {
+      console.warn('sendcloud-download-label: A6 refusé, repli sur le format par défaut', upstream.status, await upstream.text().catch(() => ''));
+      upstream = await fetch(label_url, { headers: authHeaders });
+    }
 
     if (!upstream.ok) {
       const detail = await upstream.text().catch(() => '');
