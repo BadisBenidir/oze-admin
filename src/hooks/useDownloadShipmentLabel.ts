@@ -64,14 +64,13 @@ export const useDownloadShipmentLabel = () => {
 
       const blob = await res.blob();
 
+      // Téléphone / tablette : choix de l'envoi (enregistrer le PDF, image
+      // pour imprimante thermique, partage…) dans LabelShareModal — le partage
+      // direct d'un PDF depuis la page n'est pas accepté par toutes les
+      // applications d'imprimante (Munbyn).
       if (isTouchDevice()) {
-        const file = new File([blob], fileName, { type: 'application/pdf' });
-        const outcome = await shareLabelFile(file);
-        if (outcome === 'shared' || outcome === 'cancelled') return { success: true };
-        if (outcome === 'needs_tap') {
-          setPendingFile(file);
-          return { success: true };
-        }
+        setPendingFile(new File([blob], fileName, { type: 'application/pdf' }));
+        return { success: true };
       }
 
       const objectUrl = URL.createObjectURL(blob);
