@@ -311,7 +311,8 @@ class OrderService {
     // + abonnements des membres de communautés partenaires (0217).
     const { data: communityPayments } = await supabase
       .from('community_subscription_payments')
-      .select('amount');
+      .select('amount')
+      .eq('awaiting_payment', false);
     const subscriptionRevenue = [...(subscriptionPayments || []), ...(communityPayments || [])].reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
         // ... après avoir récupéré les orders

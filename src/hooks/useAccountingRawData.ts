@@ -229,7 +229,8 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
       const [subsRes, codesRes, communityRes, communityPricesRes] = await Promise.all([
         supabase.from('b2b_subscription_payments').select('amount, paid_at, plan, promo_code, stripe_subscription_id'),
         supabase.from('club_promo_codes').select('code, partner_name'),
-        supabase.from('community_subscription_payments').select('amount, paid_at, plan, reseller_id, resellers(company_name)'),
+        // Offre 2 000 € (0231) : les 300 € du partenaire comptent une fois reçus.
+        supabase.from('community_subscription_payments').select('amount, paid_at, plan, reseller_id, resellers(company_name)').eq('awaiting_payment', false),
         supabase.from('community_group_prices').select('reseller_id, resellers(company_name)'),
       ]);
       const partnerByCode = new Map<string, string>();

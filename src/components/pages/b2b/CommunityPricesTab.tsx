@@ -10,6 +10,7 @@ import {
   formatPriceDate,
 } from '../../../hooks/useCommunityGroupPrices';
 import type { ResellerContact } from '../../../hooks/useResellers';
+import { CommunityOfferFeesCard } from './CommunityOfferFeesCard';
 
 /** 1er du mois suivant (date par défaut d'un changement de prix). */
 const nextMonthStart = () => {
@@ -186,6 +187,8 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
           );
         })}
       </div>
+      <CommunityOfferFeesCard resellerId={resellerId} />
+
       {unclassified > 0 && (
         <p className="text-xs text-amber-700">
           {unclassified} membre{unclassified > 1 ? 's ne sont' : " n'est"} pas encore classé{unclassified > 1 ? 's' : ''} dans un groupe : aucun prix ne {unclassified > 1 ? 'leur' : 'lui'} sera annoncé.
