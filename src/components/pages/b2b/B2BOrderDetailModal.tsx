@@ -817,13 +817,14 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Articles</p>
-                  {hasActiveItems && !order.order_number?.startsWith('AUC-') && !['shipped', 'delivered', 'cancelled'].includes(order.computedStatus) && (
+                  {/* Expédiée / livrée : retour du client — annulation + remboursement (portefeuille ou carte). */}
+                  {hasActiveItems && !order.order_number?.startsWith('AUC-') && order.computedStatus !== 'cancelled' && (
                     <button
                       onClick={() => setCancellingOrder(true)}
                       className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-800 transition-colors"
                     >
                       <Ban className="h-3.5 w-3.5" />
-                      Annuler toute la commande
+                      {['shipped', 'delivered'].includes(order.computedStatus) ? 'Retour : annuler et rembourser la commande' : 'Annuler toute la commande'}
                     </button>
                   )}
                   {isAuctionOrder && hasActiveItems && order.computedStatus !== 'cancelled' && (
@@ -967,7 +968,7 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                 <button
                                   onClick={() => setCancellingItem(item)}
                                   className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Annuler cet article"
+                                  title={['shipped', 'delivered'].includes(item.fulfillment_status) ? 'Retour : annuler et rembourser cet article' : 'Annuler cet article'}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
