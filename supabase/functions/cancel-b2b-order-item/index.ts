@@ -11,8 +11,8 @@
 // Déploiement : `supabase functions deploy cancel-b2b-order-item`
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import { hasAdminAccess } from '../_shared/adminAccess.ts';
+import { refundCardThenWallet } from '../_shared/cardRefund.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -89,24 +89,21 @@ Deno.serve(async (req: Request) => {
         if (!result?.stripe_payment_intent_id) {
           return json({ error: "Aucun paiement Stripe à rembourser sur cette commande — choisissez le portefeuille." }, 400);
         }
-        const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
-        if (!stripeSecretKey) {
-          refundStatus = 'failed';
-          refundError = 'STRIPE_SECRET_KEY manquant côté serveur';
-        } else {
-          try {
-            const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
-            const refund = await stripe.refunds.create({
-              payment_intent: result.stripe_payment_intent_id,
-              amount: Math.round(Number(result.refund_amount) * 100),
-            });
-            refundStatus = 'succeeded';
-            refundId = refund.id;
-          } catch (err) {
-            refundStatus = 'failed';
-            refundError = err instanceof Error ? err.message : 'Erreur Stripe inconnue';
-          }
-        }
+        // Paiement mixte carte + portefeuille : la part non remboursable par
+        // carte revient sur le portefeuille.
+        const r = await refundCardThenWallet(adminClient, {
+          paymentIntentId: result.stripe_payment_intent_id,
+          amount: Number(result.refund_amount),
+          profileId: result.placed_by_profile_id,
+          resellerId: result.reseller_id,
+          orderId: result.order_id,
+          orderLabel: `commande ${result.order_id}`,
+          metadata: { type: 'b2b_item_cancel', order_item_id },
+        });
+        refundStatus = r.status;
+        refundId = r.refundId;
+        refundError = r.message;
+        appliedMethod = r.method;
       } else {
         // wallet
         const { error: walletError } = await adminClient.rpc('credit_order_item_refund_to_wallet', {

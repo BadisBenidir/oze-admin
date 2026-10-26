@@ -9,7 +9,10 @@
 //     rembourse par Stripe — sur le paiement carte de la commande s'il existe,
 //     sinon sur les recharges de portefeuille payées par carte, de la plus
 //     récente à la plus ancienne. Si Stripe ne peut pas tout rembourser, le
-//     reste est recrédité sur le portefeuille.
+//     reste est recrédité sur le portefeuille ;
+//   - action "retry" : article annulé dont le remboursement a échoué —
+//     rembourse par carte la part payée par carte, le reste (payé avec le
+//     portefeuille) est recrédité sur le portefeuille.
 // Réservé aux admins avec le droit « refunds ».
 //
 // Déploiement : `supabase functions deploy convert-item-refund-to-card`
@@ -17,6 +20,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import { hasAdminAccess } from '../_shared/adminAccess.ts';
+import { refundCardThenWallet } from '../_shared/cardRefund.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -45,7 +49,7 @@ Deno.serve(async (req: Request) => {
     if (!(await hasAdminAccess(callerClient, user.id, 'refunds'))) return json({ error: 'Action réservée aux administrateurs' }, 403);
 
     const { action, order_item_id, amount } = await req.json();
-    if (!order_item_id || !['preview', 'convert'].includes(action)) return json({ error: 'Requête invalide' }, 400);
+    if (!order_item_id || !['preview', 'convert', 'retry'].includes(action)) return json({ error: 'Requête invalide' }, 400);
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: item } = await admin
@@ -54,6 +58,46 @@ Deno.serve(async (req: Request) => {
       .eq('id', order_item_id)
       .maybeSingle();
     if (!item) return json({ error: 'Article introuvable' }, 404);
+
+    if (action === 'retry') {
+      if (!item.cancelled_at || item.refund_status !== 'failed') return json({ error: "Seul un article annulé dont le remboursement a échoué peut être relancé" }, 400);
+      const { data: o } = await admin
+        .from('orders')
+        .select('id, order_number, placed_by_profile_id, reseller_id, stripe_payment_intent_id, payment_status')
+        .eq('id', item.order_id)
+        .maybeSingle();
+      if (!o?.placed_by_profile_id || o.payment_status !== 'paid') return json({ error: 'Commande non payée ou membre introuvable' }, 400);
+      const retryAmount = round2(Number(item.line_total || 0) + (item.insured ? Number(item.insurance_cost || 0) : 0));
+      let r: { status: 'succeeded' | 'failed'; method: string; refundId?: string; message?: string; cardAmount: number; walletAmount: number };
+      if (o.stripe_payment_intent_id) {
+        r = await refundCardThenWallet(admin, {
+          paymentIntentId: o.stripe_payment_intent_id,
+          amount: retryAmount,
+          profileId: o.placed_by_profile_id,
+          resellerId: o.reseller_id,
+          orderId: o.id,
+          orderLabel: `commande ${o.order_number}`,
+          metadata: { type: 'b2b_item_refund_retry', order_item_id: item.id },
+        });
+      } else {
+        const { error: walletError } = await admin.rpc('credit_order_item_refund_to_wallet', {
+          p_profile_id: o.placed_by_profile_id,
+          p_reseller_id: o.reseller_id,
+          p_amount: retryAmount,
+          p_order_id: o.id,
+          p_note: `Remboursement (article annulé) — commande ${o.order_number}`,
+        });
+        r = walletError
+          ? { status: 'failed', method: 'wallet', message: walletError.message, cardAmount: 0, walletAmount: 0 }
+          : { status: 'succeeded', method: 'wallet', cardAmount: 0, walletAmount: retryAmount };
+      }
+      await admin
+        .from('order_items')
+        .update({ refund_status: r.status, refund_method: r.method, stripe_refund_id: r.refundId ?? null, refund_error: r.message ?? null })
+        .eq('id', item.id);
+      if (r.status === 'failed') return json({ error: r.message || 'Remboursement impossible' }, 400);
+      return json({ success: true, refunded_amount: r.cardAmount, wallet_recredited: r.walletAmount });
+    }
     if (!item.cancelled_at || item.refund_method !== 'wallet' || item.refund_status !== 'succeeded') {
       return json({ error: "Seul un article annulé et remboursé en crédit portefeuille peut être remboursé par carte" }, 400);
     }

@@ -578,6 +578,29 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
     onOrderUpdated();
   };
 
+  // Remboursement en échec (ex. paiement mixte carte + portefeuille) : carte
+  // pour la part payée par carte, le reste recrédité sur le portefeuille.
+  const handleRetryRefund = async (itemId: string) => {
+    if (!window.confirm('Relancer le remboursement ? La part payée par carte est remboursée sur la carte, la part payée avec le portefeuille est recréditée sur le portefeuille.')) return;
+    setConvertingItemId(itemId);
+    const { data, error } = await invokeEdgeFunction<{ refunded_amount: number; wallet_recredited: number }>('convert-item-refund-to-card', {
+      action: 'retry',
+      order_item_id: itemId,
+    });
+    setConvertingItemId(null);
+    if (error || !data) {
+      alert(error || 'Remboursement impossible');
+      return;
+    }
+    setRefundNotice(
+      [
+        data.refunded_amount > 0 ? `${data.refunded_amount.toFixed(2)} € remboursés par carte` : null,
+        data.wallet_recredited > 0 ? `${data.wallet_recredited.toFixed(2)} € recrédités sur le portefeuille` : null,
+      ].filter(Boolean).join(' ; ') + '.'
+    );
+    onOrderUpdated();
+  };
+
   const handleRequestDelivery = async (itemId: string) => {
     if (!window.confirm("Remettre cet article en « Livraison demandée » ? Une demande de livraison est créée pour l'acheteur, vers la même destination que sa dernière demande (frais de port 0 €), ou l'article est ajouté à sa demande déjà en attente.")) return;
     setRequestingDeliveryId(itemId);
@@ -642,7 +665,7 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const handleItemConfirmed = (result: { refund_status?: string; refund_method?: string | null; refund_error?: string }) => {
     setCancellingItem(null);
     if (result.refund_status === 'succeeded') {
-      setRefundNotice(`Article annulé et remboursement effectué avec succès (${refundMethodLabel(result.refund_method)}).`);
+      setRefundNotice(result.refund_error ? `Article annulé : ${result.refund_error}.` : `Article annulé et remboursement effectué avec succès (${refundMethodLabel(result.refund_method)}).`);
     } else if (result.refund_status === 'failed') {
       setRefundNotice(`Article annulé, mais le remboursement a échoué (${result.refund_error || 'erreur inconnue'}) — à traiter manuellement.`);
     } else {
@@ -714,7 +737,7 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const handleOrderConfirmed = (result: { total_refund?: number; refund_status?: string; refund_method?: string | null; refund_error?: string }) => {
     setCancellingOrder(false);
     if (result.refund_status === 'succeeded') {
-      setRefundNotice(`Commande annulée et ${(result.total_refund || 0).toFixed(0)} € remboursés avec succès (${refundMethodLabel(result.refund_method)}).`);
+      setRefundNotice(result.refund_error ? `Commande annulée : ${result.refund_error}.` : `Commande annulée et ${(result.total_refund || 0).toFixed(0)} € remboursés avec succès (${refundMethodLabel(result.refund_method)}).`);
     } else if (result.refund_status === 'failed') {
       setRefundNotice(`Commande annulée, mais le remboursement a échoué (${result.refund_error || 'erreur inconnue'}) — à traiter manuellement.`);
     } else {
@@ -952,8 +975,21 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                           {convertingItemId === item.id ? 'Remboursement…' : 'Rembourser par carte à la place'}
                                         </button>
                                       )}
+                                      {item.refund_status === 'succeeded' && item.refund_error && (
+                                        <span className="text-xs text-gray-500">{item.refund_error}</span>
+                                      )}
                                       {item.refund_status === 'failed' && (
-                                        <span className="text-xs text-red-600">Échec du remboursement</span>
+                                        <>
+                                          <span className="text-xs text-red-600" title={item.refund_error || undefined}>Échec du remboursement</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRetryRefund(item.id)}
+                                            disabled={convertingItemId !== null}
+                                            className="text-xs font-medium text-gray-700 underline hover:text-gray-900 disabled:opacity-50"
+                                          >
+                                            {convertingItemId === item.id ? 'Remboursement…' : 'Relancer le remboursement'}
+                                          </button>
+                                        </>
                                       )}
                                     </div>
                                   )}
