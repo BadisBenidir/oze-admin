@@ -22,6 +22,7 @@ export interface InvoiceSourceItem {
   quantity: number;
   line_total: number;
   status?: string | null;
+  cancelled_at?: string | null;
   insured?: boolean | null;
   insurance_cost?: number | null;
   entrupy_requested?: boolean | null;
@@ -38,10 +39,13 @@ export interface InvoiceSourceItem {
 export const buildInvoiceItems = (
   items: InvoiceSourceItem[],
   /** Pénalité de retard de paiement d'un lot d'enchère (0210), figée sur la commande. */
-  lateFee?: { amount?: number | null; days?: number | null } | null
+  lateFee?: { amount?: number | null; days?: number | null } | null,
+  /** Date d'émission de la facture : un article annulé APRÈS reste sur la
+   * facture figée (il fait l'objet d'un avoir, 0232). */
+  invoiceIssuedAt?: string | null
 ): InvoiceLineItem[] => [
   ...items
-    .filter((i) => i.status !== 'cancelled')
+    .filter((i) => i.status !== 'cancelled' || (!!invoiceIssuedAt && !!i.cancelled_at && i.cancelled_at > invoiceIssuedAt))
     .flatMap((i) => {
       const name = i.product_snapshot?.name || 'Article';
       const lines: InvoiceLineItem[] = [
@@ -92,6 +96,8 @@ export interface InvoiceData {
   /** false : facture à régler (ex. facture d'avance de sourcing pas encore
    * payée) — sinon « Facture acquittée ». */
   paid?: boolean;
+  /** Avoir (0232) : titre « AVOIR », référence à la facture d'origine. */
+  creditNote?: { invoiceNumber: string; reason?: string | null; refundMethod: string };
 }
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -122,13 +128,19 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
   // Titre facture + références, aligné à droite — même hauteur que le logo.
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
-  doc.text('FACTURE', pageWidth - marginX, 20, { align: 'right' });
+  doc.text(data.creditNote ? 'AVOIR' : 'FACTURE', pageWidth - marginX, 20, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(110);
   doc.text(`N° ${data.invoiceNumber}`, pageWidth - marginX, 27, { align: 'right' });
-  doc.text(`Commande : ${data.orderNumber}`, pageWidth - marginX, 32, { align: 'right' });
-  doc.text(`Date : ${dateStr(data.orderDate)}`, pageWidth - marginX, 37, { align: 'right' });
+  if (data.creditNote) {
+    doc.text(`Sur facture : ${data.creditNote.invoiceNumber}`, pageWidth - marginX, 32, { align: 'right' });
+    doc.text(`Commande : ${data.orderNumber}`, pageWidth - marginX, 37, { align: 'right' });
+    doc.text(`Date : ${dateStr(data.issuedAt)}`, pageWidth - marginX, 42, { align: 'right' });
+  } else {
+    doc.text(`Commande : ${data.orderNumber}`, pageWidth - marginX, 32, { align: 'right' });
+    doc.text(`Date : ${dateStr(data.orderDate)}`, pageWidth - marginX, 37, { align: 'right' });
+  }
   doc.setTextColor(0);
 
   let y = 12 + logoH + 16;
@@ -225,20 +237,33 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.text('TOTAL', pageWidth - 60, y);
+  doc.text(data.creditNote ? 'TOTAL AVOIR' : 'TOTAL', pageWidth - 60, y);
   doc.text(EUR(data.totalAmount), pageWidth - marginX, y, { align: 'right' });
   y += 12;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(
-    data.paid === false
-      ? `Facture à régler par ${data.paymentMethod} à réception.`
-      : `Facture acquittée — paiement par ${data.paymentMethod}.`,
-    marginX,
-    y
-  );
-  y += 6;
+  if (data.creditNote) {
+    const lines = [
+      `Avoir émis suite à l'annulation de l'article${data.creditNote.reason ? ` (${data.creditNote.reason})` : ''}.`,
+      `Montant remboursé — ${data.creditNote.refundMethod}.`,
+    ];
+    lines.forEach((line) => {
+      const wrapped = doc.splitTextToSize(line, pageWidth - marginX * 2);
+      doc.text(wrapped, marginX, y);
+      y += 5 * wrapped.length;
+    });
+    y += 1;
+  } else {
+    doc.text(
+      data.paid === false
+        ? `Facture à régler par ${data.paymentMethod} à réception.`
+        : `Facture acquittée — paiement par ${data.paymentMethod}.`,
+      marginX,
+      y
+    );
+    y += 6;
+  }
 
   // Mention légale de TVA — franchise en base (art. 293 B), jamais un
   // régime de marge qui ne s'applique pas à OZË Paris actuellement.
@@ -264,7 +289,7 @@ export const generateInvoicePdf = async (data: InvoiceData): Promise<void> => {
   // un client qui télécharge sa facture ne doit pas voir, rien qu'en
   // regardant son dossier Téléchargements, combien de factures ont déjà été
   // émises au total (référence à la commande uniquement, pas au rang global).
-  doc.save(`OZE-Paris_Facture_${data.orderNumber}.pdf`);
+  doc.save(`OZE-Paris_${data.creditNote ? 'Avoir' : 'Facture'}_${data.orderNumber}.pdf`);
 };
 
 /**

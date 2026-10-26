@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { generateInvoicesBulkPdf, buildInvoiceItems, InvoiceData, InvoiceBillingDetails, InvoiceSourceItem } from '../../../utils/generateInvoicePdf';
-import { loadSharedInvoice } from '../../../hooks/useInvoices';
+import { loadSharedInvoice, CREDIT_NOTE_SELECT, CreditNoteRow, creditNotePdfData } from '../../../hooks/useInvoices';
 import { AccountingPeriod } from '../../../utils/accountingPeriods';
 import { FileDown, Loader2 } from 'lucide-react';
 
@@ -39,6 +39,33 @@ interface OrderRow {
 export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportingCredit, setExportingCredit] = useState(false);
+
+  // Avoirs (0232) émis sur la période — un PDF multi-pages.
+  const handleExportCreditNotes = async () => {
+    setExportingCredit(true);
+    setError(null);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('credit_notes')
+        .select(CREDIT_NOTE_SELECT)
+        .gte('issued_at', period.range.start.toISOString())
+        .lte('issued_at', period.range.end.toISOString())
+        .order('issued_at', { ascending: true });
+      if (fetchError) throw new Error(fetchError.message);
+      const rows = (data || []) as unknown as CreditNoteRow[];
+      if (rows.length === 0) {
+        setError('Aucun avoir émis sur cette période.');
+        return;
+      }
+      const safeLabel = period.label.replace(/[^\w-]+/g, '_');
+      await generateInvoicesBulkPdf(rows.map(creditNotePdfData), `Avoirs_${safeLabel}.pdf`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur lors de l'export des avoirs");
+    } finally {
+      setExportingCredit(false);
+    }
+  };
 
   const handleExport = async () => {
     setLoading(true);
@@ -48,7 +75,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
         .from('orders')
         .select(
           'order_number, created_at, stripe_payment_intent_id, late_fee_amount, late_fee_days, ' +
-            'order_items(product_snapshot, unit_price, quantity, line_total, status, insured, insurance_cost, entrupy_requested, entrupy_cost), ' +
+            'order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost), ' +
             'invoice:invoices!inner(id, kind, merged_into_invoice_id, invoice_number, issued_at, total_amount, legal_status, billing_details)'
         )
         .gte('created_at', period.range.start.toISOString())
@@ -97,7 +124,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
             };
             return groupData;
           }
-          const items = buildInvoiceItems(row.order_items || [], { amount: row.late_fee_amount, days: row.late_fee_days });
+          const items = buildInvoiceItems(row.order_items || [], { amount: row.late_fee_amount, days: row.late_fee_days }, invoice.issued_at);
           const invoiceData: InvoiceData = {
             invoiceNumber: invoice.invoice_number,
             issuedAt: invoice.issued_at,
@@ -124,6 +151,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
 
   return (
     <div className="mb-6">
+      <div className="flex flex-wrap gap-2">
       <button
         onClick={handleExport}
         disabled={loading}
@@ -132,6 +160,15 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
         <span>Export groupé des factures ({period.label})</span>
       </button>
+      <button
+        onClick={handleExportCreditNotes}
+        disabled={exportingCredit}
+        className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm disabled:opacity-50"
+      >
+        {exportingCredit ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+        <span>Export groupé des avoirs ({period.label})</span>
+      </button>
+      </div>
       {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
     </div>
   );

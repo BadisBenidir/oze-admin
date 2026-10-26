@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { generateInvoicePdf, buildInvoiceItems, InvoiceLineItem, InvoiceBillingDetails, InvoiceSourceItem } from '../utils/generateInvoicePdf';
+import { generateInvoicePdf, buildInvoiceItems, InvoiceData, InvoiceLineItem, InvoiceBillingDetails, InvoiceSourceItem } from '../utils/generateInvoicePdf';
 import { extractFunctionErrorMessage } from '../utils/edgeFunctionError';
 
 export interface OrderInvoiceBadge {
@@ -88,7 +88,7 @@ export const loadSharedInvoice = async (invoiceId: string, mergedIntoId: string 
   const primaryId = mergedIntoId || invoiceId;
   const { data: group } = await supabase
     .from('invoices')
-    .select('id, order_id, invoice_number, issued_at, legal_status, billing_details, pdf_url, merged_into_invoice_id')
+    .select('id, order_id, invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, merged_into_invoice_id')
     .or(`id.eq.${primaryId},merged_into_invoice_id.eq.${primaryId}`);
   if (!group || group.length < 2) return null;
   const primary = group.find((g) => g.id === primaryId);
@@ -96,15 +96,15 @@ export const loadSharedInvoice = async (invoiceId: string, mergedIntoId: string 
 
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, order_number, created_at, total_amount, late_fee_amount, late_fee_days, order_items(product_snapshot, unit_price, quantity, line_total, status, insured, insurance_cost, entrupy_requested, entrupy_cost)')
+    .select('id, order_number, created_at, total_amount, late_fee_amount, late_fee_days, order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost)')
     .in('id', group.map((g) => g.order_id).filter(Boolean) as string[])
     .order('created_at', { ascending: true });
   if (!orders?.length) return null;
 
-  type GroupOrder = { order_number: string; created_at: string; total_amount: number; late_fee_amount: number | null; late_fee_days: number | null; order_items: InvoiceSourceItem[] };
+  type GroupOrder = { id: string; order_number: string; created_at: string; total_amount: number; late_fee_amount: number | null; late_fee_days: number | null; order_items: InvoiceSourceItem[] };
   const list = orders as unknown as GroupOrder[];
   const items: InvoiceLineItem[] = list.flatMap((o) =>
-    buildInvoiceItems(o.order_items || [], { amount: o.late_fee_amount, days: o.late_fee_days }).map((line) => ({
+    buildInvoiceItems(o.order_items || [], { amount: o.late_fee_amount, days: o.late_fee_days }, group.find((g) => g.order_id === o.id)?.issued_at).map((line) => ({
       ...line,
       description: `${o.order_number} — ${line.description}`,
     }))
@@ -114,7 +114,9 @@ export const loadSharedInvoice = async (invoiceId: string, mergedIntoId: string 
     items,
     orderNumbers: list.map((o) => o.order_number),
     firstOrderDate: list[0].created_at,
-    totalAmount: list.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0),
+    // Totaux figés des factures du groupe (un article annulé après émission
+    // reste facturé, il fait l'objet d'un avoir — 0232).
+    totalAmount: group.reduce((sum, g) => sum + (Number(g.total_amount) || 0), 0),
   };
 };
 
@@ -193,6 +195,21 @@ export const useInvoices = () => {
       }
       const invoices = orderInvoice ? [orderInvoice] : rows;
 
+      // Facture figée : les articles annulés APRÈS son émission y restent
+      // (ils font l'objet d'un avoir, 0232).
+      let orderItems = items;
+      if (orderInvoice) {
+        const { data: fresh } = await supabase
+          .from('orders')
+          .select('late_fee_amount, late_fee_days, order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost)')
+          .eq('id', order.id)
+          .maybeSingle();
+        if (fresh) {
+          const f = fresh as unknown as { late_fee_amount: number | null; late_fee_days: number | null; order_items: InvoiceSourceItem[] };
+          orderItems = buildInvoiceItems(f.order_items || [], { amount: f.late_fee_amount, days: f.late_fee_days }, orderInvoice.issued_at);
+        }
+      }
+
       for (const invoice of invoices) {
         // Une fois la facture officielle émise sur Qonto (voir
         // emit-qonto-invoice), son PDF certifié remplace le PDF jsPDF généré
@@ -212,7 +229,7 @@ export const useInvoices = () => {
           paymentMethod: order.paymentMethod,
           // Facture d'avance de sourcing rattachée à la commande (0196) : elle
           // ne facture que l'avance, jamais le détail des pièces.
-          items: invoice.kind === 'advance' ? advanceInvoiceItems(invoice) : items,
+          items: invoice.kind === 'advance' ? advanceInvoiceItems(invoice) : orderItems,
         });
       }
 
@@ -389,4 +406,60 @@ export const useAdvanceInvoices = (missionId: string | null) => {
   };
 
   return { invoices, emitting, emit, download, refresh };
+};
+
+// ---------------------------------------------------------------------------
+// Avoirs (0232) : un par article annulé et remboursé après l'émission de la
+// facture de sa commande. PDF régénéré à la demande, comme les factures.
+// ---------------------------------------------------------------------------
+
+export interface CreditNoteRow {
+  id: string;
+  credit_note_number: string;
+  issued_at: string;
+  amount: number;
+  refund_method: string | null;
+  reason: string | null;
+  legal_status: 'individual' | 'sole_proprietorship' | 'company';
+  billing_details: InvoiceBillingDetails;
+  lines: InvoiceLineItem[];
+  order_item_id: string;
+  invoice: { invoice_number: string } | null;
+  order: { order_number: string; created_at: string } | null;
+}
+
+export const CREDIT_NOTE_SELECT =
+  'id, credit_note_number, issued_at, amount, refund_method, reason, legal_status, billing_details, lines, order_item_id, ' +
+  'invoice:invoices(invoice_number), order:orders(order_number, created_at)';
+
+const refundMethodText = (m: string | null) =>
+  m === 'stripe' ? 'par carte bancaire (Stripe)' : m === 'wallet' ? 'en crédit sur le solde revendeur (wallet)' : 'selon le mode de paiement d\'origine';
+
+export const creditNotePdfData = (cn: CreditNoteRow): InvoiceData => ({
+  invoiceNumber: cn.credit_note_number,
+  issuedAt: cn.issued_at,
+  orderNumber: cn.order?.order_number || '',
+  orderDate: cn.order?.created_at || cn.issued_at,
+  totalAmount: Number(cn.amount),
+  legalStatus: cn.legal_status,
+  billingDetails: cn.billing_details || {},
+  paymentMethod: '',
+  items: cn.lines || [],
+  creditNote: { invoiceNumber: cn.invoice?.invoice_number || '', reason: cn.reason, refundMethod: refundMethodText(cn.refund_method) },
+});
+
+export const downloadCreditNote = async (cn: CreditNoteRow) => generateInvoicePdf(creditNotePdfData(cn));
+
+export const useOrderCreditNotes = (orderId: string | null | undefined) => {
+  const [creditNotes, setCreditNotes] = useState<CreditNoteRow[]>([]);
+  const refresh = useCallback(async () => {
+    if (!orderId) {
+      setCreditNotes([]);
+      return;
+    }
+    const { data, error } = await supabase.from('credit_notes').select(CREDIT_NOTE_SELECT).eq('order_id', orderId).order('issued_at');
+    setCreditNotes(error ? [] : ((data || []) as unknown as CreditNoteRow[]));
+  }, [orderId]);
+  useEffect(() => { refresh(); }, [refresh]);
+  return { creditNotes, refresh };
 };

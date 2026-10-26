@@ -8,6 +8,7 @@ import { supabase } from '../../../lib/supabase';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 import { AdminAuctionItem, AuctionRestockAction, CancelAuctionItemResult } from '../../../hooks/useAdminAuctionItems';
 import { CancelAuctionItemModal } from './auctions/CancelAuctionItemModal';
+import { useOrderCreditNotes, downloadCreditNote } from '../../../hooks/useInvoices';
 
 // `orders.shipping_address` est stocké dans la forme assemblée par
 // b2b-checkout (address/postcode/city/country/pickup_point_*/delivery_type/
@@ -424,6 +425,10 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const [cancellingEntrupyId, setCancellingEntrupyId] = useState<string | null>(null);
   // Article remboursé en crédit : remboursement par carte à la place (convert-item-refund-to-card).
   const [convertingItemId, setConvertingItemId] = useState<string | null>(null);
+  // Avoirs (0232) : rechargés quand un remboursement change.
+  const { creditNotes, refresh: refreshCreditNotes } = useOrderCreditNotes(order?.id);
+  const refundKey = (order?.order_items || []).map((i) => `${i.id}:${i.refund_status}`).join(',');
+  useEffect(() => { refreshCreditNotes(); }, [refundKey, refreshCreditNotes]);
   // Article prêt à expédier sans demande : remis en « livraison demandée » (0226).
   const [requestingDeliveryId, setRequestingDeliveryId] = useState<string | null>(null);
   // Facture commune avec d'autres commandes du même acheteur (0227).
@@ -975,6 +980,16 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                           {convertingItemId === item.id ? 'Remboursement…' : 'Rembourser par carte à la place'}
                                         </button>
                                       )}
+                                      {creditNotes.filter((cn) => cn.order_item_id === item.id).map((cn) => (
+                                        <button
+                                          key={cn.id}
+                                          type="button"
+                                          onClick={() => downloadCreditNote(cn)}
+                                          className="text-xs font-medium text-blue-600 underline hover:text-blue-800"
+                                        >
+                                          Avoir {cn.credit_note_number}
+                                        </button>
+                                      ))}
                                       {item.refund_status === 'succeeded' && item.refund_error && (
                                         <span className="text-xs text-gray-500">{item.refund_error}</span>
                                       )}
