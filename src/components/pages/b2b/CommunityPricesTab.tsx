@@ -12,6 +12,36 @@ import {
 import type { ResellerContact } from '../../../hooks/useResellers';
 import { CommunityOfferFeesCard } from './CommunityOfferFeesCard';
 
+interface MemberSub {
+  id: string;
+  community_sub_status: string | null;
+  community_sub_price: number | null;
+  community_sub_current_period_end: string | null;
+  community_sub_plan: string | null;
+  free_access_until: string | null;
+  total_paid: number;
+}
+
+const PAYING_STATUSES = ['active', 'trialing', 'past_due'];
+
+const memberSubStatus = (sub: MemberSub | undefined): { label: string; className: string } => {
+  const price = sub?.community_sub_price ? ` · ${formatMonthlyPrice(Number(sub.community_sub_price))}` : '';
+  const plan = sub?.community_sub_plan === 'drops' ? ' (Pass Drops)' : '';
+  switch (sub?.community_sub_status) {
+    case 'active':
+    case 'trialing':
+      return { label: `Abonné${plan}${price}`, className: 'bg-green-50 text-green-700' };
+    case 'past_due':
+      return { label: `Paiement en retard${price}`, className: 'bg-red-50 text-red-700' };
+    case 'canceled':
+      return { label: 'Résilié', className: 'bg-gray-100 text-gray-600' };
+  }
+  if (sub?.free_access_until && new Date(sub.free_access_until) > new Date()) {
+    return { label: `Accès offert jusqu'au ${new Date(sub.free_access_until).toLocaleDateString('fr-FR')}`, className: 'bg-teal-50 text-teal-700' };
+  }
+  return { label: 'Non abonné', className: 'bg-amber-50 text-amber-700' };
+};
+
 /** 1er du mois suivant (date par défaut d'un changement de prix). */
 const nextMonthStart = () => {
   const d = new Date();
@@ -41,20 +71,44 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
     for (const m of contacts) if (!m.is_primary && m.member_group) c[m.member_group] = (c[m.member_group] || 0) + 1;
     return c;
   }, [contacts]);
-  // Membres abonnés (paiement Stripe en cours, 0214) par groupe.
-  const [paying, setPaying] = useState<Record<number, number>>({});
+  // Abonnement de chaque membre (0214, 0222) et total payé (0217, hors 300 €
+  // de l'offre non encore reçus).
+  const [subs, setSubs] = useState<Record<string, MemberSub>>({});
   useEffect(() => {
-    supabase
-      .from('reseller_contacts')
-      .select('member_group, community_sub_status')
-      .eq('reseller_id', resellerId)
-      .in('community_sub_status', ['active', 'trialing', 'past_due'])
-      .then(({ data }) => {
-        const c: Record<number, number> = {};
-        for (const r of (data || []) as { member_group: number | null }[]) if (r.member_group) c[r.member_group] = (c[r.member_group] || 0) + 1;
-        setPaying(c);
-      });
+    Promise.all([
+      supabase
+        .from('reseller_contacts')
+        .select('id, community_sub_status, community_sub_price, community_sub_current_period_end, community_sub_plan, free_access_until')
+        .eq('reseller_id', resellerId),
+      supabase.from('community_subscription_payments').select('contact_id, amount').eq('reseller_id', resellerId).eq('awaiting_payment', false),
+    ]).then(([contactsRes, paymentsRes]) => {
+      const paid: Record<string, number> = {};
+      for (const p of (paymentsRes.data || []) as { contact_id: string | null; amount: number }[]) {
+        if (p.contact_id) paid[p.contact_id] = (paid[p.contact_id] || 0) + Number(p.amount || 0);
+      }
+      const next: Record<string, MemberSub> = {};
+      for (const r of (contactsRes.data || []) as Omit<MemberSub, 'total_paid'>[]) next[r.id] = { ...r, total_paid: paid[r.id] || 0 };
+      setSubs(next);
+    });
   }, [resellerId]);
+  const paying = useMemo(() => {
+    const c: Record<number, number> = {};
+    for (const m of contacts) {
+      if (!m.is_primary && m.member_group && PAYING_STATUSES.includes(subs[m.id]?.community_sub_status || '')) c[m.member_group] = (c[m.member_group] || 0) + 1;
+    }
+    return c;
+  }, [contacts, subs]);
+  // Groupe ouvert (détail des membres) ; 0 = membres non classés.
+  const [openGroup, setOpenGroup] = useState<number | null>(null);
+  const openMembers = useMemo(
+    () =>
+      openGroup === null
+        ? []
+        : contacts
+            .filter((m) => !m.is_primary && (openGroup === 0 ? !m.member_group : m.member_group === openGroup))
+            .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, 'fr')),
+    [contacts, openGroup]
+  );
   const unclassified = contacts.filter((m) => !m.is_primary && !m.member_group).length;
 
   const toggle = (g: number) =>
@@ -167,7 +221,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
         {MEMBER_GROUPS.map((g) => {
           const i = info[g.id];
           return (
-            <Card key={g.id}>
+            <Card key={g.id} onClick={() => setOpenGroup(openGroup === g.id ? null : g.id)} className={`cursor-pointer transition-shadow hover:shadow-md ${openGroup === g.id ? 'ring-2 ring-gray-900' : ''}`}>
               <CardContent className="p-4">
                 <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${g.className}`}>{g.label}</span>
                 <p className="mt-2 text-xs text-gray-500">
@@ -182,6 +236,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
                     {formatMonthlyPrice(i.upcoming.monthly_price)} à partir du {formatPriceDate(i.upcoming.effective_from)}
                   </p>
                 )}
+                <p className="mt-2 text-xs font-medium text-gray-500 underline">{openGroup === g.id ? 'Masquer les membres' : 'Voir les membres'}</p>
               </CardContent>
             </Card>
           );
@@ -191,8 +246,67 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
 
       {unclassified > 0 && (
         <p className="text-xs text-amber-700">
-          {unclassified} membre{unclassified > 1 ? 's ne sont' : " n'est"} pas encore classé{unclassified > 1 ? 's' : ''} dans un groupe : aucun prix ne {unclassified > 1 ? 'leur' : 'lui'} sera annoncé.
+          {unclassified} membre{unclassified > 1 ? 's ne sont' : " n'est"} pas encore classé{unclassified > 1 ? 's' : ''} dans un groupe : aucun prix ne {unclassified > 1 ? 'leur' : 'lui'} sera annoncé.{' '}
+          <button type="button" onClick={() => setOpenGroup(openGroup === 0 ? null : 0)} className="font-medium underline">
+            {openGroup === 0 ? 'Masquer' : 'Voir'}
+          </button>
         </p>
+      )}
+
+      {openGroup !== null && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-gray-900">
+                {openGroup === 0 ? 'Membres non classés' : MEMBER_GROUPS.find((g) => g.id === openGroup)?.label} · {openMembers.length} membre{openMembers.length > 1 ? 's' : ''}
+              </p>
+              <button type="button" onClick={() => setOpenGroup(null)} className="text-xs text-gray-500 hover:text-gray-800">Fermer</button>
+            </div>
+            {openMembers.length === 0 ? (
+              <p className="mt-3 text-sm text-gray-400">Aucun membre dans ce groupe.</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-left text-xs text-gray-500">
+                      <th className="py-2 pr-4 font-medium">Membre</th>
+                      <th className="py-2 pr-4 font-medium">Inscrit le</th>
+                      <th className="py-2 pr-4 font-medium">Abonnement</th>
+                      <th className="py-2 pr-4 font-medium">Prochaine échéance</th>
+                      <th className="py-2 text-right font-medium">Total payé</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {openMembers.map((m) => {
+                      const sub = subs[m.id];
+                      const status = memberSubStatus(sub);
+                      return (
+                        <tr key={m.id} className="border-b border-gray-50 last:border-b-0">
+                          <td className="py-2 pr-4">
+                            <p className="font-medium text-gray-900">{[m.first_name, m.last_name].filter(Boolean).join(' ') || '—'}</p>
+                            <p className="text-xs text-gray-500">{m.email}</p>
+                          </td>
+                          <td className="py-2 pr-4 text-gray-600">{new Date(m.created_at).toLocaleDateString('fr-FR')}</td>
+                          <td className="py-2 pr-4">
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>{status.label}</span>
+                          </td>
+                          <td className="py-2 pr-4 text-gray-600">
+                            {sub?.community_sub_current_period_end && PAYING_STATUSES.includes(sub.community_sub_status || '')
+                              ? new Date(sub.community_sub_current_period_end).toLocaleDateString('fr-FR')
+                              : '—'}
+                          </td>
+                          <td className="py-2 text-right font-medium text-gray-900">
+                            {sub?.total_paid ? sub.total_paid.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <Card>
