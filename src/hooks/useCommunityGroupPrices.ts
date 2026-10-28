@@ -28,7 +28,8 @@ const todayKey = () => new Date().toLocaleDateString('en-CA');
 export const groupPriceInfo = (rows: GroupPriceRow[]): Record<number, GroupPriceInfo> => {
   const today = todayKey();
   const out: Record<number, GroupPriceInfo> = {};
-  for (const g of [1, 2, 3, 4, 5]) {
+  // Groupes 1 à 5 et groupes personnalisés ayant un prix (0236).
+  for (const g of new Set([1, 2, 3, 4, 5, ...rows.map((r) => r.member_group)])) {
     const list = rows.filter((r) => r.member_group === g).sort((a, b) => a.effective_from.localeCompare(b.effective_from));
     const past = list.filter((r) => r.effective_from <= today);
     out[g] = { current: past[past.length - 1] || null, upcoming: list.find((r) => r.effective_from > today) || null };

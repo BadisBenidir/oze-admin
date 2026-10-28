@@ -61,7 +61,7 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
         .eq('member_group', me.member_group);
       if (cancelled || error) return true;
       const rows = ((data || []) as GroupPriceRow[]).map((r) => ({ ...r, monthly_price: Number(r.monthly_price) }));
-      const { current, upcoming } = groupPriceInfo(rows)[me.member_group];
+      const { current, upcoming } = groupPriceInfo(rows)[me.member_group] ?? { current: null, upcoming: null };
 
       // Coupure : prix en vigueur payant et aucun abonnement en cours.
       if (!subscriber && current && current.monthly_price > 0) {

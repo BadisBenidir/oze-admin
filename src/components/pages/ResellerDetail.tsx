@@ -24,7 +24,7 @@ import type { B2BOrder } from '../../hooks/useB2BOrders';
 import { fetchSourcingFulfillmentOrderIds } from '../../utils/sourcingFulfillment';
 import { openMemberSpace } from '../../utils/openMemberSpace';
 import { supabase } from '../../lib/supabase';
-import { MEMBER_GROUPS, memberGroupOf } from '../../config/memberGroups';
+import { useMemberGroups } from '../../hooks/useMemberGroups';
 
 interface ResellerDetailProps {
   reseller: Reseller;
@@ -138,6 +138,7 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   }, [orders, orderSearch]);
 
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
+  const { groups: memberGroups, groupOf, refresh: refreshMemberGroups } = useMemberGroups(currentReseller.id);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [contactsError, setContactsError] = useState<string | null>(null);
   const [contactSearch, setContactSearch] = useState('');
@@ -544,10 +545,10 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                                 value={c.member_group ?? ''}
                                 onChange={(e) => handleMemberGroup(c, e.target.value)}
                                 title="Groupe d'accès (défini par le contact principal, modifiable ici)"
-                                className={`rounded-full border px-2 py-0.5 text-xs font-medium ${memberGroupOf(c.member_group)?.className || 'border-dashed border-gray-300 bg-white text-gray-500'}`}
+                                className={`rounded-full border px-2 py-0.5 text-xs font-medium ${groupOf(c.member_group)?.className || 'border-dashed border-gray-300 bg-white text-gray-500'}`}
                               >
                                 <option value="">Non classé</option>
-                                {MEMBER_GROUPS.map((g) => (
+                                {memberGroups.map((g) => (
                                   <option key={g.id} value={g.id}>{g.label}</option>
                                 ))}
                               </select>
@@ -867,7 +868,12 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
       )}
 
       {activeTab === 'subscriptions' && !isSubscriber && (
-        <CommunityPricesTab resellerId={currentReseller.id} contacts={contacts} />
+        <CommunityPricesTab
+          resellerId={currentReseller.id}
+          contacts={contacts}
+          onMemberGroupChanged={(id, group) => setContacts((prev) => prev.map((x) => (x.id === id ? { ...x, member_group: group } : x)))}
+          onGroupsChanged={refreshMemberGroups}
+        />
       )}
 
       {/* Modal réinitialisation mot de passe */}

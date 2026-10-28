@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CalendarClock, Trash2 } from 'lucide-react';
+import { AlertCircle, CalendarClock, Plus, Search, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { supabase } from '../../../lib/supabase';
-import { MEMBER_GROUPS } from '../../../config/memberGroups';
+import { GROUP_COLORS } from '../../../config/memberGroups';
+import { useMemberGroups } from '../../../hooks/useMemberGroups';
 import {
   useCommunityGroupPrices,
   DEFAULT_GROUP_PRICES,
@@ -54,8 +55,15 @@ const nextMonthStart = () => {
  * programmation d'un changement de prix à une date — les membres du groupe
  * sont prévenus à leur connexion (CommunityPriceNotice, portail membre).
  */
-export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: ResellerContact[] }> = ({ resellerId, contacts }) => {
+export const CommunityPricesTab: React.FC<{
+  resellerId: string;
+  contacts: ResellerContact[];
+  onMemberGroupChanged?: (contactId: string, group: number | null) => void;
+  onGroupsChanged?: () => void;
+}> = ({ resellerId, contacts, onMemberGroupChanged, onGroupsChanged }) => {
   const { rows, info, refresh } = useCommunityGroupPrices(resellerId);
+  const { groups: MEMBER_GROUPS, custom: customGroups, refresh: refreshGroups } = useMemberGroups(resellerId);
+  const emptyInfo = { current: null, upcoming: null };
   const [prices, setPrices] = useState<Record<number, string>>(() =>
     Object.fromEntries(Object.entries(DEFAULT_GROUP_PRICES).map(([g, p]) => [g, String(p).replace('.', ',')]))
   );
@@ -110,6 +118,67 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
     [contacts, openGroup]
   );
   const unclassified = contacts.filter((m) => !m.is_primary && !m.member_group).length;
+
+  // Groupe personnalisé (0236) : création / modification (nom, description, couleur).
+  const [groupForm, setGroupForm] = useState<{ id: string | null; label: string; hint: string; color: string } | null>(null);
+  const [groupSaving, setGroupSaving] = useState(false);
+  const saveGroup = async () => {
+    if (!groupForm) return;
+    if (!groupForm.label.trim()) return alert('Donne un nom au groupe');
+    setGroupSaving(true);
+    const payload = { label: groupForm.label.trim(), hint: groupForm.hint.trim() || null, color: groupForm.color };
+    let id = groupForm.id;
+    let groupNumber: number | null = null;
+    if (id) {
+      const { error: e } = await supabase.from('community_custom_groups').update(payload).eq('id', id);
+      if (e) alert(e.message);
+    } else {
+      groupNumber = Math.max(5, ...customGroups.map((c) => c.member_group)) + 1;
+      const { data, error: e } = await supabase
+        .from('community_custom_groups')
+        .insert({ ...payload, reseller_id: resellerId, member_group: groupNumber })
+        .select('id')
+        .single();
+      if (e) alert(e.message);
+      id = data?.id ?? null;
+    }
+    setGroupSaving(false);
+    if (!id) return;
+    setGroupForm(null);
+    await refreshGroups();
+    onGroupsChanged?.();
+    if (groupNumber) setOpenGroup(groupNumber);
+  };
+  const deleteGroup = async (customId: string, label: string, count: number) => {
+    if (!confirm(`Supprimer le groupe « ${label} » ?${count ? ` Ses ${count} membre(s) deviendront non classés.` : ''} Ses prix programmés sont supprimés.`)) return;
+    const { error: e } = await supabase.rpc('admin_delete_custom_group', { p_group_id: customId });
+    if (e) return alert(e.message);
+    for (const m of contacts) if (m.member_group === openGroup) onMemberGroupChanged?.(m.id, null);
+    setOpenGroup(null);
+    await refreshGroups();
+    refresh();
+    onGroupsChanged?.();
+  };
+
+  // Ajout / retrait de membres dans le groupe ouvert.
+  const [memberSearch, setMemberSearch] = useState('');
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const setGroupOf = async (contactId: string, group: number | null) => {
+    setMovingId(contactId);
+    const { error: e } = await supabase.rpc('set_member_group', { p_contact_id: contactId, p_group: group });
+    setMovingId(null);
+    if (e) return alert(e.message);
+    onMemberGroupChanged?.(contactId, group);
+  };
+  const addCandidates = useMemo(() => {
+    if (!openGroup) return [];
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return [];
+    return contacts
+      .filter((m) => !m.is_primary && m.member_group !== openGroup)
+      .filter((m) => `${m.first_name} ${m.last_name} ${m.email}`.toLowerCase().includes(q))
+      .slice(0, 20);
+  }, [contacts, openGroup, memberSearch]);
 
   const toggle = (g: number) =>
     setSelected((prev) => {
@@ -219,7 +288,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {MEMBER_GROUPS.map((g) => {
-          const i = info[g.id];
+          const i = info[g.id] ?? emptyInfo;
           return (
             <Card key={g.id} onClick={() => setOpenGroup(openGroup === g.id ? null : g.id)} className={`cursor-pointer transition-shadow hover:shadow-md ${openGroup === g.id ? 'ring-2 ring-gray-900' : ''}`}>
               <CardContent className="p-4">
@@ -241,7 +310,69 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
             </Card>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setGroupForm({ id: null, label: '', hint: '', color: GROUP_COLORS[0].id })}
+          className="flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-gray-200 text-sm font-medium text-gray-500 hover:border-gray-400 hover:text-gray-800"
+        >
+          <Plus className="h-5 w-5" /> Nouveau groupe
+        </button>
       </div>
+
+      {groupForm && (
+        <Card>
+          <CardContent className="space-y-3 p-4">
+            <p className="text-sm font-semibold text-gray-900">{groupForm.id ? 'Modifier le groupe' : 'Nouveau groupe'}</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="text-xs text-gray-600">
+                Nom
+                <input
+                  value={groupForm.label}
+                  onChange={(e) => setGroupForm({ ...groupForm, label: e.target.value })}
+                  placeholder="ex. Offre VIP 1 000 €"
+                  className={`${input} mt-1 w-full`}
+                  autoFocus
+                />
+              </label>
+              <label className="text-xs text-gray-600">
+                Description (facultatif)
+                <input
+                  value={groupForm.hint}
+                  onChange={(e) => setGroupForm({ ...groupForm, hint: e.target.value })}
+                  placeholder="ex. A payé 1 000 € pour accéder"
+                  className={`${input} mt-1 w-full`}
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {GROUP_COLORS.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setGroupForm({ ...groupForm, color: c.id })}
+                  className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${c.className} ${groupForm.color === c.id ? 'ring-2 ring-gray-900' : ''}`}
+                >
+                  {groupForm.label.trim() || c.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500">Une fois créé, ouvre le groupe pour y ajouter les membres de ton choix, et programme son prix plus bas.</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={saveGroup}
+                disabled={groupSaving}
+                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {groupSaving ? 'Enregistrement…' : groupForm.id ? 'Enregistrer' : 'Créer le groupe'}
+              </button>
+              <button type="button" onClick={() => setGroupForm(null)} className="rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100">
+                Annuler
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <CommunityOfferFeesCard resellerId={resellerId} />
 
       {unclassified > 0 && (
@@ -260,8 +391,70 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
               <p className="text-sm font-semibold text-gray-900">
                 {openGroup === 0 ? 'Membres non classés' : MEMBER_GROUPS.find((g) => g.id === openGroup)?.label} · {openMembers.length} membre{openMembers.length > 1 ? 's' : ''}
               </p>
-              <button type="button" onClick={() => setOpenGroup(null)} className="text-xs text-gray-500 hover:text-gray-800">Fermer</button>
+              <span className="flex items-center gap-3">
+                {(() => {
+                  const g = MEMBER_GROUPS.find((x) => x.id === openGroup);
+                  const c = customGroups.find((x) => x.id === g?.customId);
+                  return c ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setGroupForm({ id: c.id, label: c.label, hint: c.hint || '', color: c.color })}
+                        className="text-xs font-medium text-gray-600 underline hover:text-gray-900"
+                      >
+                        Modifier le groupe
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteGroup(c.id, c.label, openMembers.length)}
+                        className="text-xs font-medium text-red-600 underline hover:text-red-800"
+                      >
+                        Supprimer le groupe
+                      </button>
+                    </>
+                  ) : null;
+                })()}
+                <button type="button" onClick={() => setOpenGroup(null)} className="text-xs text-gray-500 hover:text-gray-800">Fermer</button>
+              </span>
             </div>
+            {openGroup !== 0 && (
+              <div className="mt-3">
+                <div className="relative max-w-sm">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    placeholder="Ajouter un membre : nom ou email"
+                    className={`${input} w-full pl-9`}
+                  />
+                </div>
+                {memberSearch.trim() && (
+                  <ul className="mt-2 max-w-xl divide-y divide-gray-100 rounded-lg border border-gray-100">
+                    {addCandidates.length === 0 && <li className="px-3 py-2 text-xs text-gray-400">Aucun membre trouvé.</li>}
+                    {addCandidates.map((m) => {
+                      const current = MEMBER_GROUPS.find((x) => x.id === m.member_group);
+                      return (
+                        <li key={m.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                          <span className="min-w-0">
+                            <span className="font-medium text-gray-900">{[m.first_name, m.last_name].filter(Boolean).join(' ') || m.email}</span>
+                            <span className="ml-2 text-xs text-gray-500">{m.email}</span>
+                            <span className="ml-2 text-xs text-gray-400">{current ? `(actuellement ${current.short})` : '(non classé)'}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setGroupOf(m.id, openGroup)}
+                            disabled={movingId === m.id}
+                            className="flex-shrink-0 rounded-lg bg-gray-900 px-3 py-1 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                          >
+                            Ajouter
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
             {openMembers.length === 0 ? (
               <p className="mt-3 text-sm text-gray-400">Aucun membre dans ce groupe.</p>
             ) : (
@@ -274,6 +467,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
                       <th className="py-2 pr-4 font-medium">Abonnement</th>
                       <th className="py-2 pr-4 font-medium">Prochaine échéance</th>
                       <th className="py-2 text-right font-medium">Total payé</th>
+                      {openGroup !== 0 && <th className="py-2" />}
                     </tr>
                   </thead>
                   <tbody>
@@ -298,6 +492,19 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
                           <td className="py-2 text-right font-medium text-gray-900">
                             {sub?.total_paid ? sub.total_paid.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}
                           </td>
+                          {openGroup !== 0 && (
+                            <td className="py-2 pl-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setGroupOf(m.id, null)}
+                                disabled={movingId === m.id}
+                                title="Retirer du groupe (le membre devient non classé)"
+                                className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
+                              >
+                                Retirer
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -420,7 +627,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
                 editingId === r.id ? (
                   <li key={r.id} className="space-y-2 py-3 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-gray-800">Groupe {r.member_group}</span>
+                      <span className="font-medium text-gray-800">{MEMBER_GROUPS.find((g) => g.id === r.member_group)?.label || `Groupe ${r.member_group}`}</span>
                       <span className="relative">
                         <input
                           value={editPrice}
@@ -457,7 +664,7 @@ export const CommunityPricesTab: React.FC<{ resellerId: string; contacts: Resell
                 ) : (
                   <li key={r.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                     <span className="text-gray-800">
-                      Groupe {r.member_group} → <strong>{formatMonthlyPrice(r.monthly_price)}</strong> à partir du {formatPriceDate(r.effective_from)}
+                      {MEMBER_GROUPS.find((g) => g.id === r.member_group)?.label || `Groupe ${r.member_group}`} → <strong>{formatMonthlyPrice(r.monthly_price)}</strong> à partir du {formatPriceDate(r.effective_from)}
                       {r.message && <span className="mt-0.5 block whitespace-pre-line text-xs text-gray-500">« {r.message} »</span>}
                     </span>
                     <span className="flex flex-shrink-0 items-center gap-1">

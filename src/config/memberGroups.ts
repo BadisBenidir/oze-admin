@@ -21,3 +21,50 @@ export const OFFER_GROUP = 5;
 export const NEW_MEMBER_GROUP = 4;
 
 export const memberGroupOf = (id: number | null | undefined) => MEMBER_GROUPS.find((g) => g.id === id) || null;
+
+export interface MemberGroupDef {
+  id: number;
+  label: string;
+  short: string;
+  hint: string;
+  className: string;
+  /** Groupe personnalisé d'une communauté (0236) : id de sa définition. */
+  customId?: string;
+  color?: string;
+}
+
+/** Couleurs proposées pour un groupe personnalisé (0236). */
+export const GROUP_COLORS: { id: string; label: string; className: string }[] = [
+  { id: 'slate', label: 'Gris', className: 'bg-slate-50 text-slate-700 border-slate-200' },
+  { id: 'rose', label: 'Rose', className: 'bg-rose-50 text-rose-700 border-rose-200' },
+  { id: 'orange', label: 'Orange', className: 'bg-orange-50 text-orange-700 border-orange-200' },
+  { id: 'lime', label: 'Vert clair', className: 'bg-lime-50 text-lime-800 border-lime-200' },
+  { id: 'cyan', label: 'Cyan', className: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+  { id: 'indigo', label: 'Indigo', className: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  { id: 'fuchsia', label: 'Fuchsia', className: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200' },
+  { id: 'yellow', label: 'Jaune', className: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
+];
+
+export interface CustomGroupRow {
+  id: string;
+  member_group: number;
+  label: string;
+  hint: string | null;
+  color: string;
+}
+
+/** Groupes 1 à 5 suivis des groupes personnalisés de la communauté. */
+export const buildMemberGroups = (custom: CustomGroupRow[]): MemberGroupDef[] => [
+  ...MEMBER_GROUPS,
+  ...[...custom]
+    .sort((a, b) => a.member_group - b.member_group)
+    .map((c) => ({
+      id: c.member_group,
+      label: `Groupe ${c.member_group} — ${c.label}`,
+      short: `Groupe ${c.member_group}`,
+      hint: c.hint || c.label,
+      className: (GROUP_COLORS.find((k) => k.id === c.color) || GROUP_COLORS[0]).className,
+      customId: c.id,
+      color: c.color,
+    })),
+];

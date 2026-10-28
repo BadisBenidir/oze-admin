@@ -10,7 +10,8 @@ import { generateSecurePassword } from '../../../utils/generatePassword';
 import { TeamMemberDetail } from './TeamMemberDetail';
 import { InviteLinkPanel } from '../../reseller/InviteLinkPanel';
 import { MemberInviteLinks } from '../../reseller/MemberInviteLinks';
-import { MEMBER_GROUPS, memberGroupOf, OFFER_GROUP } from '../../../config/memberGroups';
+import { OFFER_GROUP } from '../../../config/memberGroups';
+import { useMemberGroups } from '../../../hooks/useMemberGroups';
 import { useCommunityGroupPrices, DEFAULT_GROUP_PRICES, formatMonthlyPrice, formatPriceDate } from '../../../hooks/useCommunityGroupPrices';
 import {
   Users, UserPlus, Trash2, AlertCircle, Mail, Phone, Crown, Eye, KeyRound, Copy, Check, Search, X, UserCheck,
@@ -47,6 +48,7 @@ export const Team: React.FC<TeamProps> = ({ onOpenProduct }) => {
   const { profile } = useResellerAuth();
   const { members, loading, error, inviteTeammate, removeTeammate, resetTeammatePassword, setMemberGroup } = useResellerTeam(profile?.reseller_id);
   const { info: groupPrices } = useCommunityGroupPrices(profile?.is_primary ? profile?.reseller_id : null);
+  const { groups: MEMBER_GROUPS, groupOf: memberGroupOf } = useMemberGroups(profile?.reseller_id);
   const [groupFilter, setGroupFilter] = useState<'all' | 'none' | number>('all');
   const [groupError, setGroupError] = useState<string | null>(null);
   const handleGroupChange = async (m: TeamMember, value: string) => {
