@@ -12,6 +12,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
+import { splitMetadata } from '../_shared/stripeMetadata.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -186,10 +187,11 @@ Deno.serve(async (req: Request) => {
         type: 'b2b_delivery_request',
         reseller_id: resellerId,
         placed_by_profile_id: user.id,
-        item_ids: JSON.stringify(item_ids),
+        // Valeurs longues découpées (limite Stripe de 500 caractères).
+        ...splitMetadata('item_ids', JSON.stringify(item_ids)),
         delivery_type,
-        parcel_point: parcel_point ? JSON.stringify(parcel_point) : '',
-        instructions: instructions || '',
+        ...splitMetadata('parcel_point', parcel_point ? JSON.stringify(parcel_point) : ''),
+        ...splitMetadata('instructions', instructions || ''),
         shipping_cost: String(cost),
       },
       success_url: `${origin}/?b2b_delivery=success&session_id={CHECKOUT_SESSION_ID}`,

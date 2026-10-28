@@ -30,6 +30,7 @@ import {
   handleSubscriptionPaymentFailed,
 } from './subscriptions.ts';
 import { recordSubscriptionInvoice } from '../_shared/subscriptionPayments.ts';
+import { joinMetadata } from '../_shared/stripeMetadata.ts';
 import { handleCommunityCheckout, handleCommunitySubscriptionChange, isCommunitySubscription, recordCommunityInvoice } from './community.ts';
 
 const LOG_PREFIX = '[b2b-stripe-webhook]';
@@ -231,8 +232,9 @@ Deno.serve(async (req: Request) => {
     console.log(`${LOG_PREFIX} Session ${session.id} — demande de livraison B2B, reseller_id: ${metadata.reseller_id}`);
     try {
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
-      const itemIds = JSON.parse(metadata.item_ids || '[]');
-      const parcelPoint = metadata.parcel_point ? JSON.parse(metadata.parcel_point) : null;
+      const itemIds = JSON.parse(joinMetadata(metadata, 'item_ids') || '[]');
+      const parcelPointRaw = joinMetadata(metadata, 'parcel_point');
+      const parcelPoint = parcelPointRaw ? JSON.parse(parcelPointRaw) : null;
 
       const { data, error } = await adminClient.rpc('finalize_b2b_delivery_request', {
         p_item_ids: itemIds,
@@ -240,7 +242,7 @@ Deno.serve(async (req: Request) => {
         p_profile_id: metadata.placed_by_profile_id,
         p_delivery_type: metadata.delivery_type,
         p_parcel_point: parcelPoint,
-        p_instructions: metadata.instructions || null,
+        p_instructions: joinMetadata(metadata, 'instructions') || null,
         p_shipping_cost: Number(metadata.shipping_cost || 0),
         p_stripe_session_id: session.id,
       });
@@ -265,7 +267,7 @@ Deno.serve(async (req: Request) => {
     console.log(`${LOG_PREFIX} Session ${session.id} — certificat Entrupy, reseller_id: ${metadata.reseller_id}`);
     try {
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
-      const itemIds = JSON.parse(metadata.item_ids || '[]');
+      const itemIds = JSON.parse(joinMetadata(metadata, 'item_ids') || '[]');
 
       const { data, error } = await adminClient.rpc('finalize_entrupy_certificate_request', {
         p_item_ids: itemIds,

@@ -13,6 +13,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
+import { splitMetadata } from '../_shared/stripeMetadata.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -123,7 +124,7 @@ Deno.serve(async (req: Request) => {
       metadata: {
         type: 'entrupy_certificate_request',
         reseller_id: resellerId,
-        item_ids: JSON.stringify(eligible.map((it: any) => it.id)),
+        ...splitMetadata('item_ids', JSON.stringify(eligible.map((it: any) => it.id))),
         cost: String(cost),
       },
       success_url: `${origin}/?b2b_entrupy=success&session_id={CHECKOUT_SESSION_ID}`,
