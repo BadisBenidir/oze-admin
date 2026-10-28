@@ -10,6 +10,8 @@ interface DraftProduct {
   id: string;
   name: string;
   product_code: string;
+  /** Numéro fournisseur (ex. 889-36841). */
+  source_reference: string | null;
   images: string[];
   main_image_index: number;
   condition: string | null;
@@ -79,7 +81,7 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
     Promise.all([
       supabase
         .from('products')
-        .select('id, name, product_code, images, main_image_index, condition, brand:brands(name)')
+        .select('id, name, product_code, source_reference, images, main_image_index, condition, brand:brands(name)')
         .in('status', ['draft', 'draft-b2b'])
         .order('created_at', { ascending: false }),
       supabase
@@ -96,7 +98,9 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
   const filteredProducts = useMemo(() => {
     const term = productSearch.trim().toLowerCase();
     if (!term) return draftProducts.slice(0, 20);
-    return draftProducts.filter((p) => p.name.toLowerCase().includes(term) || p.product_code.toLowerCase().includes(term)).slice(0, 20);
+    return draftProducts
+      .filter((p) => `${p.name} ${p.product_code} ${p.source_reference || ''}`.toLowerCase().includes(term))
+      .slice(0, 20);
   }, [draftProducts, productSearch]);
 
   if (!isOpen) return null;
@@ -219,7 +223,7 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
                         type="text"
                         value={productSearch}
                         onChange={(e) => setProductSearch(e.target.value)}
-                        placeholder="Rechercher par titre ou référence..."
+                        placeholder="Titre, référence ou numéro fournisseur…"
                         className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-gray-400"
                       />
                     </div>
@@ -246,6 +250,7 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
                                 {p.images?.[0] ? <img src={p.images[0]} alt="" className="h-full w-full object-cover" /> : <Package className="h-3.5 w-3.5 text-gray-400" />}
                               </div>
                               <span className="text-xs text-gray-800 truncate flex-1">{p.name}</span>
+                              {p.source_reference && <span className="font-mono text-[10px] text-gray-400 flex-shrink-0">{p.source_reference}</span>}
                               {alreadyAdded && <span className="text-[10px] text-gray-500 flex-shrink-0">Déjà ajouté</span>}
                             </button>
                           );
