@@ -151,7 +151,8 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   // l'entreprise : CHAQUE sous-compte a le sien, jamais partagé. L'admin
   // choisit ici quel membre de l'équipe consulter/ajuster (par défaut le
   // contact principal), au lieu d'être limité à ce dernier.
-  const primaryContact = contacts.find((c) => c.is_primary);
+  // Abonné Club (0167) : son unique contact n'est pas marqué principal.
+  const primaryContact = contacts.find((c) => c.is_primary) || (currentReseller.account_type === 'subscriber' ? contacts[0] : undefined);
   const filteredContacts = useMemo(() => {
     const query = normalizeSearch(contactSearch);
     if (!query) return contacts;
@@ -321,6 +322,16 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
         </div>
         <div className="flex items-center gap-3">
           {resellerStatusBadge(currentReseller.status)}
+          {isOwner && primaryContact && (
+            <button
+              onClick={() => handleOpenSpace(primaryContact.profile_id, `${primaryContact.first_name || ''} ${primaryContact.last_name || ''}`.trim() || primaryContact.email || 'ce membre')}
+              className="flex items-center space-x-2 px-3 py-1.5 border border-purple-200 bg-purple-50 text-purple-800 rounded-lg hover:bg-purple-100 transition-colors text-sm"
+              title="Ouvre le portail pro connecté en tant que ce client, dans un nouvel onglet"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              <span>Ouvrir son espace</span>
+            </button>
+          )}
           <button
             onClick={() => setShowEditModal(true)}
             className="flex items-center space-x-2 px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
