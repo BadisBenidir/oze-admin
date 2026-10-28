@@ -163,7 +163,8 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
       }
 
       const { data, count, error: fetchError } = await query
-        .order('created_at', { ascending: false })
+        // Ordre du drop à sa publication (0234), sinon date de création.
+        .order('sort_at', { ascending: false })
         .range(from, to);
 
       if (fetchError) {

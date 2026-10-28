@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Search, Package, AlertCircle } from 'lucide-react';
+import { X, Search, Package, AlertCircle, Shuffle } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Drop, DropInput } from '../../../hooks/useDrops';
 
@@ -39,6 +39,9 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
+  // Réordonne la liste seulement au chargement et au mélange (pas à chaque
+  // case cochée, pour que la ligne ne saute pas sous le curseur).
+  const [orderVersion, setOrderVersion] = useState(0);
 
   const [title, setTitle] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
@@ -100,6 +103,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
         const sourcedProductIds = new Set((sourcedItems || []).map((i) => i.product_id));
         for (const d of activeDrops || []) for (const id of d.product_ids || []) sourcedProductIds.add(id);
         setProducts(((data || []) as unknown as DraftProduct[]).filter((p) => !sourcedProductIds.has(p.id)));
+        setOrderVersion((v) => v + 1);
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Erreur de chargement des articles');
       } finally {
@@ -118,13 +122,19 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
     const parts = raw.split(/[\s,;]+/).filter(Boolean);
     return parts.length > 1 && parts.every((p) => /\d/.test(p)) ? parts : [raw];
   }, [search]);
+  // Articles cochés en tête, dans l'ordre du drop (ordre du catalogue
+  // revendeur à la publication, 0234), puis les autres.
   const filteredProducts = useMemo(() => {
-    if (searchTerms.length === 0) return products;
-    return products.filter((p) => {
-      const haystack = `${p.name} ${p.product_code} ${p.source_reference || ''}`.toLowerCase();
-      return searchTerms.some((t) => haystack.includes(t));
-    });
-  }, [products, searchTerms]);
+    const rank = new Map([...selectedIds].map((id, i) => [id, i]));
+    const list = searchTerms.length === 0
+      ? products
+      : products.filter((p) => {
+          const haystack = `${p.name} ${p.product_code} ${p.source_reference || ''}`.toLowerCase();
+          return searchTerms.some((t) => haystack.includes(t));
+        });
+    return [...list].sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, searchTerms, orderVersion]);
   const missingTerms = useMemo(
     () => (searchTerms.length > 1 ? searchTerms.filter((t) => !products.some((p) => (p.source_reference || '').toLowerCase().includes(t) || p.product_code.toLowerCase().includes(t))) : []),
     [products, searchTerms]
@@ -135,6 +145,17 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
       for (const p of filteredProducts) next.add(p.id);
       return next;
     });
+
+  // Mélange l'ordre des articles cochés (Fisher-Yates).
+  const shuffleSelected = () => {
+    const ids = [...selectedIds];
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+    setSelectedIds(new Set(ids));
+    setOrderVersion((v) => v + 1);
+  };
 
   const toggleProduct = (id: string) => {
     setSelectedIds((prev) => {
@@ -237,11 +258,23 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
                   <label className="block text-sm font-medium text-gray-700">
                     {addOnly ? 'Articles en brouillon ou en ligne' : 'Articles en brouillon'} ({selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''})
                   </label>
+                  <div className="flex items-center gap-3">
+                  {selectedIds.size > 1 && (
+                    <button
+                      type="button"
+                      onClick={shuffleSelected}
+                      title="Mélange l'ordre d'affichage des articles cochés dans le catalogue revendeur"
+                      className="flex items-center gap-1 text-xs font-medium text-gray-700 underline hover:text-gray-900"
+                    >
+                      <Shuffle className="h-3.5 w-3.5" /> Mélanger l'ordre
+                    </button>
+                  )}
                   {searchTerms.length > 0 && filteredProducts.length > 0 && (
                     <button type="button" onClick={selectAllFiltered} className="text-xs font-medium text-gray-700 underline hover:text-gray-900">
                       Tout sélectionner ({filteredProducts.length})
                     </button>
                   )}
+                  </div>
                 </div>
                 <div className="relative mb-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
