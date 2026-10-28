@@ -49,7 +49,7 @@ const itemStatusBadge = (status: SourcingItem['status']) => {
  * voir SourcingMissionsTab.tsx et 0091_b2b_sourcing_mission_budget_split.sql. */
 export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProps> = ({ mission, onClose, onStatusChange, onUpdateMission, onPublishChange, onShowUnitPricesChange, onCancelValidation, onDelete, onItemsChanged }) => {
   const { show: showFigure } = useHideFigures();
-  const { items, loading, error, addItem, addItems, setItemStatus, removeItem, linkProduct, setCustomPrice } = useSourcingItems(mission?.id || null);
+  const { items, loading, error, refresh: refreshItems, addItem, addItems, setItemStatus, removeItem, linkProduct, setCustomPrice } = useSourcingItems(mission?.id || null);
   // Lignes de la commande de la mission (validation du membre ou génération
   // à la clôture) : étape de réception / livraison et case « dans le
   // carton » (0202) de chaque pièce, demande de livraison (0205).
@@ -294,16 +294,49 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     onItemsChanged();
   };
 
+  // Mission clôturée (0235) : les pièces ajoutées entrent dans la commande de
+  // suivi et la demande de livraison, l'avance est répartie à nouveau.
+  const syncClosedAdditions = async (): Promise<{ success: boolean; error?: string }> => {
+    const { data, error: rpcError } = await supabase.rpc('admin_sourcing_closed_add_items', { p_mission_id: mission!.id });
+    await refreshItems();
+    if (rpcError) return { success: false, error: rpcError.message };
+    const r = data as { without_product: number; delivery_errors: string[] } | null;
+    const warnings = [
+      r?.without_product ? `${r.without_product} pièce(s) sans fiche produit : liez-les puis rouvrez la mission pour les ajouter à la commande.` : null,
+      r?.delivery_errors?.length ? `Demande de livraison non créée : ${r.delivery_errors.join(' ; ')}` : null,
+    ].filter(Boolean);
+    if (warnings.length) alert(warnings.join('\n'));
+    return { success: true };
+  };
+
   const handleAddItem = async (input: Parameters<typeof addItem>[0]) => {
-    const result = await addItem(input);
+    let result = await addItem(input);
+    if (result.success && isCompleted) result = await syncClosedAdditions();
     if (result.success) onItemsChanged();
     return result;
   };
 
   const handleAddItems = async (inputs: Parameters<typeof addItems>[0]) => {
-    const result = await addItems(inputs);
+    let result = await addItems(inputs);
+    if (result.success && isCompleted) result = await syncClosedAdditions();
     if (result.success) onItemsChanged();
     return result;
+  };
+
+  const handleRemoveItem = async (item: { id: string; title: string }) => {
+    if (!isCompleted) {
+      await removeItem(item.id);
+      onItemsChanged();
+      return;
+    }
+    if (!window.confirm(`Retirer « ${item.title} » de la mission clôturée ? La pièce sort de la commande et de la demande de livraison, sa fiche repasse en brouillon B2B et l'avance est répartie sur les autres pièces.`)) return;
+    const { error: rpcError } = await supabase.rpc('admin_sourcing_closed_remove_item', { p_item_id: item.id });
+    if (rpcError) {
+      alert(rpcError.message);
+      return;
+    }
+    await refreshItems();
+    onItemsChanged();
   };
 
   const handleTogglePublish = async () => {
@@ -669,9 +702,8 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 )}
               </div>
               <button
-                onClick={() => !isCompleted && setShowAddModal(true)}
-                disabled={isCompleted}
-                title={isCompleted ? 'Mission clôturée — annulez la validation pour ajouter des pièces' : undefined}
+                onClick={() => setShowAddModal(true)}
+                title={isCompleted ? 'Mission clôturée : la pièce est ajoutée à la commande et à la demande de livraison' : undefined}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-900"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -825,9 +857,8 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                             <td className="py-2.5 px-3 text-right">
                               <button
                                 type="button"
-                                onClick={() => !isCompleted && removeItem(item.id).then(onItemsChanged)}
-                                disabled={isCompleted}
-                                title={isCompleted ? 'Mission clôturée — annulez la validation pour retirer une pièce' : 'Retirer cette pièce de la mission'}
+                                onClick={() => handleRemoveItem(item)}
+                                title={isCompleted ? 'Retirer cette pièce (absente du carton) : sortie de la commande et de la livraison' : 'Retirer cette pièce de la mission'}
                                 className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
