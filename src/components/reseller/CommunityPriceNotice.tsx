@@ -44,10 +44,12 @@ export const CommunityPriceNotice: React.FC<{ profileId: string | undefined; fir
     const load = async (): Promise<boolean> => {
       const { data: me } = await supabase
         .from('reseller_contacts')
-        .select('reseller_id, member_group, is_primary, community_sub_status, community_sub_stripe_subscription_id, community_sub_price, community_sub_plan, free_access_until, created_at')
+        .select('reseller_id, member_group, is_primary, community_sub_status, community_sub_stripe_subscription_id, community_sub_price, community_sub_plan, free_access_until, created_at, access_revoked_at')
         .eq('profile_id', profileId)
         .maybeSingle();
       if (!me || me.is_primary || !me.member_group) return true;
+      // Abonnement résilié par OZË (0237) : ni annonce ni paiement.
+      if (me.access_revoked_at) return true;
       // Accès offert en cours (groupe 5, offre 2 000 €) : ni annonce ni coupure.
       if (me.free_access_until && new Date(me.free_access_until).getTime() > Date.now()) return true;
       const subscriber = Boolean(me.community_sub_status && PAYING_STATUSES.has(me.community_sub_status));

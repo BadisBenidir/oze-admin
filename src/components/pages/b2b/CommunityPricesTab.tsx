@@ -473,7 +473,9 @@ export const CommunityPricesTab: React.FC<{
                   <tbody>
                     {openMembers.map((m) => {
                       const sub = subs[m.id];
-                      const status = memberSubStatus(sub);
+                      const status = m.access_revoked_at
+                        ? { label: `Accès retiré le ${new Date(m.access_revoked_at).toLocaleDateString('fr-FR')}`, className: 'bg-red-50 text-red-700' }
+                        : memberSubStatus(sub);
                       return (
                         <tr key={m.id} className="border-b border-gray-50 last:border-b-0">
                           <td className="py-2 pr-4">

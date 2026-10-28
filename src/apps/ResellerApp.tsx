@@ -21,7 +21,7 @@ import { WalletPage } from '../components/pages/reseller/WalletPage';
 import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
 import { CartBlockingModal } from '../components/pages/reseller/CartBlockingModal';
 import { Auctions } from '../components/pages/reseller/Auctions';
-import { PlanLockedScreen } from '../components/pages/reseller/Subscription';
+import { AccessRevokedScreen, PlanLockedScreen } from '../components/pages/reseller/Subscription';
 import { useResellerPresenceTracking } from '../hooks/useResellerPresenceTracking';
 import { Terms } from '../components/pages/reseller/Terms';
 import { PrivacyPolicy } from '../components/pages/reseller/PrivacyPolicy';
@@ -222,7 +222,7 @@ function ResellerApp() {
       return <ProductPage productId={productId} cart={cart} onBack={closeToRoot} />;
     }
 
-    if (isCartRoute) {
+    if (isCartRoute && !profile?.access_revoked) {
       return <CartPage cart={cart} onBack={closeToRoot} wallet={wallet} onWalletPaymentSuccess={handleWalletCheckoutSuccess} onOpenTerms={openTerms} />;
     }
 
@@ -232,6 +232,11 @@ function ResellerApp() {
 
     if (isPrivacyRoute) {
       return <PrivacyPolicy />;
+    }
+
+    // Abonnement résilié par OZË (0237) : espace en consultation seule.
+    if (profile?.access_revoked && (isCartRoute || !['my-orders', 'shipments', 'profile', 'team', 'wallet'].includes(currentTab))) {
+      return <AccessRevokedScreen onGoToOrders={() => navigateTo('my-orders')} />;
     }
 
     switch (currentTab) {

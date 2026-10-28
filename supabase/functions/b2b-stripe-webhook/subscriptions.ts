@@ -199,7 +199,17 @@ export async function handleSubscriptionChange(
 
   const update: Record<string, unknown> = subscriptionColumns(subscription, reseller.subscription_plan as Plan | null);
 
-  if (deleted || !grantsAccess(subscription.status)) {
+  // Résilié immédiatement par l'admin (0237, admin-cancel-subscription) : le
+  // compte reste ouvert en consultation (commandes, factures), sans achat.
+  const { count: revoked } = await admin
+    .from('reseller_contacts')
+    .select('id', { count: 'exact', head: true })
+    .eq('reseller_id', reseller.id)
+    .not('access_revoked_at', 'is', null);
+
+  if ((deleted || !grantsAccess(subscription.status)) && revoked) {
+    // Statut inchangé.
+  } else if (deleted || !grantsAccess(subscription.status)) {
     // Fin de l'abonnement (résiliation arrivée à échéance, impayé définitif) : accès coupé.
     update.status = 'suspended';
   } else if (reseller.status === 'suspended' && reseller.subscription_status && !grantsAccess(reseller.subscription_status)) {

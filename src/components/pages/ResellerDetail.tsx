@@ -25,6 +25,7 @@ import { fetchSourcingFulfillmentOrderIds } from '../../utils/sourcingFulfillmen
 import { openMemberSpace } from '../../utils/openMemberSpace';
 import { supabase } from '../../lib/supabase';
 import { useMemberGroups } from '../../hooks/useMemberGroups';
+import { RevokeSubscriptionControl } from './b2b/RevokeSubscriptionControl';
 
 interface ResellerDetailProps {
   reseller: Reseller;
@@ -243,6 +244,12 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
   // Abonné Club B2B (0167) : un seul compte, jamais de sous-comptes — fiche dédiée.
   const isSubscriber = currentReseller.account_type === 'subscriber';
   const subscriberContact = contacts[0] || null;
+  // Après une résiliation immédiate / un accès rendu (0237) : membres et abonnement relus.
+  const refreshAfterRevoke = async () => {
+    setContacts(await fetchContacts(currentReseller.id));
+    const { data } = await supabase.from('resellers').select('*').eq('id', currentReseller.id).maybeSingle();
+    if (data) setCurrentReseller((prev) => ({ ...prev, ...(data as Partial<Reseller>) }));
+  };
 
   const openResetModal = (contact: ResellerContact) => {
     setResettingContact(contact);
@@ -452,6 +459,14 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
           onToggleHideIdentity={() => subscriberContact && toggleHideIdentity(subscriberContact)}
           onResetPassword={() => subscriberContact && openResetModal(subscriberContact)}
           onOpenSpace={isOwner && subscriberContact ? () => handleOpenSpace(subscriberContact.profile_id, `${subscriberContact.first_name || ''} ${subscriberContact.last_name || ''}`.trim() || subscriberContact.email || 'ce membre') : undefined}
+          revokeControl={subscriberContact && (subscriberContact.access_revoked_at || ['active', 'trialing', 'past_due'].includes(currentReseller.subscription_status || '')) ? (
+            <RevokeSubscriptionControl
+              contactId={subscriberContact.id}
+              name={`${subscriberContact.first_name || ''} ${subscriberContact.last_name || ''}`.trim() || subscriberContact.email}
+              revokedAt={subscriberContact.access_revoked_at}
+              onChanged={refreshAfterRevoke}
+            />
+          ) : null}
         />
       )}
 
@@ -554,6 +569,14 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                               </select>
                             )}
                             {legalStatusBadge(c.legal_status)}
+                            {c.access_revoked_at && (
+                              <RevokeSubscriptionControl
+                                contactId={c.id}
+                                name={`${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email}
+                                revokedAt={c.access_revoked_at}
+                                onChanged={refreshAfterRevoke}
+                              />
+                            )}
                             {c.hide_identity && <Badge variant="default">Identité masquée</Badge>}
                           </div>
                         </td>
@@ -593,6 +616,15 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                             >
                               <EyeOff className="h-4 w-4" />
                             </button>
+                            {!c.is_primary && !c.access_revoked_at && (
+                              <RevokeSubscriptionControl
+                                compact
+                                contactId={c.id}
+                                name={`${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email}
+                                revokedAt={null}
+                                onChanged={refreshAfterRevoke}
+                              />
+                            )}
                             <button
                               onClick={() => openResetModal(c)}
                               className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

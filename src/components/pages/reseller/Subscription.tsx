@@ -444,3 +444,28 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
     </Card>
   );
 };
+
+/** Abonnement résilié par OZË Paris (0237) : catalogue, drops, enchères et
+ * sourcing fermés, l'espace reste ouvert en consultation. */
+export const AccessRevokedScreen: React.FC<{ onGoToOrders: () => void }> = ({ onGoToOrders }) => (
+  <div className="mx-auto w-full max-w-xl px-4 py-12">
+    <Card>
+      <CardContent className="p-8 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-900 text-white">
+          <Lock className="h-7 w-7" />
+        </div>
+        <h3 className="mt-5 text-lg font-semibold text-gray-900">Votre abonnement a été résilié</h3>
+        <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
+          Le catalogue, les drops, les enchères et le sourcing ne sont plus accessibles. Vous gardez l'accès à vos commandes, vos factures et votre portefeuille.
+        </p>
+        <button
+          type="button"
+          onClick={onGoToOrders}
+          className="mt-6 rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800"
+        >
+          Voir mes commandes
+        </button>
+      </CardContent>
+    </Card>
+  </div>
+);

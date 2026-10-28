@@ -76,6 +76,9 @@ export interface ResellerProfile {
   subscription_amount: number | null
   /** Membre de communauté abonné passé au Pass Drops (0216) : ni enchères ni sourcing. */
   community_drops: boolean
+  /** Abonnement résilié par OZË (0237) : commandes, factures, portefeuille
+   * en consultation ; ni catalogue, ni drops, ni enchères, ni sourcing. */
+  access_revoked: boolean
 }
 
 export interface LegalInfoInput {
@@ -177,7 +180,7 @@ export const useResellerAuth = () => {
       // Offre de l'abonnement membre de communauté (0216), lue à part comme ci-dessus.
       const { data: community } = await supabase
         .from('reseller_contacts')
-        .select('community_sub_plan, community_sub_status')
+        .select('community_sub_plan, community_sub_status, access_revoked_at')
         .eq('profile_id', data.id)
         .maybeSingle()
       const communityDrops =
@@ -222,6 +225,7 @@ export const useResellerAuth = () => {
           subscription_cancel_at_period_end: Boolean(sub.subscription_cancel_at_period_end),
           subscription_amount: sub.subscription_amount != null ? Number(sub.subscription_amount) : null,
           community_drops: communityDrops,
+          access_revoked: Boolean(community?.access_revoked_at),
         },
         pendingReason: null,
       }

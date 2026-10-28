@@ -53,10 +53,12 @@ interface SubscriberOverviewProps {
   onResetPassword: () => void;
   /** « Voir son espace » (propriétaire uniquement). */
   onOpenSpace?: () => void;
+  /** Résiliation immédiate / accès rendu (0237). */
+  revokeControl?: React.ReactNode;
 }
 
 export const SubscriberOverview: React.FC<SubscriberOverviewProps> = ({
-  reseller, contact, onEdit, onViewOrders, onViewWallet, onToggleHideIdentity, onResetPassword, onOpenSpace,
+  reseller, contact, onEdit, onViewOrders, onViewWallet, onToggleHideIdentity, onResetPassword, onOpenSpace, revokeControl,
 }) => {
   const email = contact?.email || reseller.contact_email;
   const phone = contact?.phone || reseller.contact_phone;
@@ -122,6 +124,7 @@ export const SubscriberOverview: React.FC<SubscriberOverviewProps> = ({
               )}
               <Row icon={CreditCard} label="Statut Stripe">{reseller.subscription_status || '—'}</Row>
             </div>
+            {revokeControl && <div className="mt-3">{revokeControl}</div>}
 
             {(reseller.stripe_customer_id || reseller.stripe_subscription_id) && (
               <div className="mt-3 flex flex-wrap gap-2">
