@@ -7,6 +7,8 @@ interface DraftProduct {
   id: string;
   name: string;
   product_code: string;
+  /** Numéro fournisseur (ex. 891-40490). */
+  source_reference: string | null;
   sale_price: number;
   images: string[];
   main_image_index: number;
@@ -73,7 +75,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
         const [{ data, error }, { data: sourcedItems, error: sourcedError }, { data: activeDrops }] = await Promise.all([
           supabase
             .from('products')
-            .select('id, name, product_code, sale_price, images, main_image_index, status, brand:brands(name)')
+            .select('id, name, product_code, source_reference, sale_price, images, main_image_index, status, brand:brands(name)')
             .or(
               preselected.length > 0
                 ? `status.in.(${statuses}),id.in.(${preselected.join(',')})`
@@ -108,13 +110,31 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
     loadDraftProducts();
   }, [isOpen, editingDrop, addOnly]);
 
+  // Plusieurs numéros fournisseur collés d'un coup (espaces, virgules,
+  // retours à la ligne) : chaque numéro est cherché séparément.
+  const searchTerms = useMemo(() => {
+    const raw = search.trim().toLowerCase();
+    if (!raw) return [];
+    const parts = raw.split(/[\s,;]+/).filter(Boolean);
+    return parts.length > 1 && parts.every((p) => /\d/.test(p)) ? parts : [raw];
+  }, [search]);
   const filteredProducts = useMemo(() => {
-    if (!search.trim()) return products;
-    const term = search.toLowerCase();
-    return products.filter(
-      (p) => p.name.toLowerCase().includes(term) || p.product_code.toLowerCase().includes(term)
-    );
-  }, [products, search]);
+    if (searchTerms.length === 0) return products;
+    return products.filter((p) => {
+      const haystack = `${p.name} ${p.product_code} ${p.source_reference || ''}`.toLowerCase();
+      return searchTerms.some((t) => haystack.includes(t));
+    });
+  }, [products, searchTerms]);
+  const missingTerms = useMemo(
+    () => (searchTerms.length > 1 ? searchTerms.filter((t) => !products.some((p) => (p.source_reference || '').toLowerCase().includes(t) || p.product_code.toLowerCase().includes(t))) : []),
+    [products, searchTerms]
+  );
+  const selectAllFiltered = () =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const p of filteredProducts) next.add(p.id);
+      return next;
+    });
 
   const toggleProduct = (id: string) => {
     setSelectedIds((prev) => {
@@ -217,17 +237,27 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
                   <label className="block text-sm font-medium text-gray-700">
                     {addOnly ? 'Articles en brouillon ou en ligne' : 'Articles en brouillon'} ({selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''})
                   </label>
+                  {searchTerms.length > 0 && filteredProducts.length > 0 && (
+                    <button type="button" onClick={selectAllFiltered} className="text-xs font-medium text-gray-700 underline hover:text-gray-900">
+                      Tout sélectionner ({filteredProducts.length})
+                    </button>
+                  )}
                 </div>
                 <div className="relative mb-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Rechercher par nom ou code..."
+                    placeholder="Nom, code ou numéro fournisseur (plusieurs numéros possibles)…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm"
                   />
                 </div>
+                {missingTerms.length > 0 && (
+                  <p className="mb-2 text-xs text-amber-700">
+                    Introuvable{missingTerms.length > 1 ? 's' : ''} parmi les articles disponibles : {missingTerms.join(', ')}
+                  </p>
+                )}
 
                 {loadError && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2 mb-2">
@@ -276,6 +306,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
                             <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
                             <p className="text-xs text-gray-500">
                               {product.brand?.name || 'Sans marque'} · {product.sale_price.toFixed(0)} €
+                              {product.source_reference && <span className="ml-1.5 font-mono text-gray-400">{product.source_reference}</span>}
                               {product.status === 'for-sale-b2b' && <span className="ml-1.5 rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700">Déjà en ligne</span>}
                             </p>
                           </div>
