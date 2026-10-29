@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CalendarClock, Package, Search, Trash2 } from 'lucide-react';
+import { AlertCircle, CalendarClock, Clock, Package, Search, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { Toast } from '../../ui/Toast';
@@ -186,6 +186,8 @@ export const B2BPriceChanges: React.FC = () => {
   // Reprogrammer tout un groupe (erreur d'heure) sans ressaisir les prix.
   const [reschedulingAt, setReschedulingAt] = useState<string | null>(null);
   const [rescheduleWhen, setRescheduleWhen] = useState('');
+  // Reprogrammer un seul article du groupe.
+  const [reschedulingItemId, setReschedulingItemId] = useState<string | null>(null);
   const rescheduleChanges = async (ids: string[]) => {
     const at = new Date(rescheduleWhen);
     if (Number.isNaN(at.getTime())) {
@@ -206,6 +208,7 @@ export const B2BPriceChanges: React.FC = () => {
       return;
     }
     setReschedulingAt(null);
+    setReschedulingItemId(null);
     setToast(`${ids.length} changement(s) reprogrammé(s) pour le ${dateTime(at.toISOString())}.`);
     load();
   };
@@ -275,6 +278,7 @@ export const B2BPriceChanges: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
+                          setReschedulingItemId(null);
                           setReschedulingAt(at);
                           setRescheduleWhen(toLocalInput(at));
                         }}
@@ -297,8 +301,40 @@ export const B2BPriceChanges: React.FC = () => {
                     <li key={c.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                       <span className="min-w-0 truncate text-gray-900">{c.product?.name || 'Article'}</span>
                       <span className="flex items-center gap-3 flex-shrink-0">
+                        {reschedulingItemId === c.id && (
+                          <>
+                            <input
+                              type="datetime-local"
+                              value={rescheduleWhen}
+                              onChange={(e) => setRescheduleWhen(e.target.value)}
+                              className="px-2 py-1 border border-gray-200 rounded-lg text-xs bg-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => rescheduleChanges([c.id])}
+                              className="text-xs font-medium text-gray-900 hover:underline"
+                            >
+                              Valider
+                            </button>
+                            <button type="button" onClick={() => setReschedulingItemId(null)} className="text-xs text-gray-500 hover:text-gray-800">
+                              Annuler
+                            </button>
+                          </>
+                        )}
                         <span className="tabular-nums text-gray-400 line-through">{EUR(c.product?.sale_price)}</span>
                         <span className="tabular-nums font-semibold text-gray-900">{EUR(c.new_price)}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReschedulingAt(null);
+                            setReschedulingItemId(c.id);
+                            setRescheduleWhen(toLocalInput(c.scheduled_at));
+                          }}
+                          title="Changer l'heure de cet article seulement"
+                          className="p-1 text-gray-400 hover:text-gray-900"
+                        >
+                          <Clock className="h-3.5 w-3.5" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => cancelChanges([c.id])}
