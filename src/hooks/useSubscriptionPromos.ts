@@ -21,8 +21,9 @@ export interface SubscriptionPaymentRow {
 
 export interface ClubPromoTerms {
   code: string;
-  discount_type: 'percentage' | 'fixed_amount';
+  discount_type: 'percentage' | 'fixed_amount' | 'fixed_price';
   discount_value: number;
+  next_price?: number | null;
   duration: 'once' | 'repeating' | 'forever';
   duration_months: number | null;
 }
@@ -60,6 +61,8 @@ export const expectedMonthlyAmount = (r: Reseller, { payments, promos }: Subscri
 
   const promo = promos.get(latest.promo_code.toUpperCase());
   if (!promo) return Number(latest.discount_amount) > 0 ? Number(latest.amount) || 0 : catalogue;
+  // Prix fixe (0238) : prix des mois suivants (vide : prix normal).
+  if (promo.discount_type === 'fixed_price') return promo.next_price == null ? catalogue : Math.min(catalogue, Number(promo.next_price));
   if (promo.duration === 'once') return catalogue;
   if (promo.duration === 'repeating') {
     const used = own.filter((p) => p.promo_code?.toUpperCase() === promo.code.toUpperCase()).length;
@@ -89,7 +92,7 @@ export const useSubscriptionPromos = (enabled = true): SubscriptionPromoData | n
       supabase
         .from('b2b_subscription_payments')
         .select('reseller_id, stripe_subscription_id, amount, discount_amount, promo_code, paid_at'),
-      supabase.from('club_promo_codes').select('code, discount_type, discount_value, duration, duration_months'),
+      supabase.from('club_promo_codes').select('code, discount_type, discount_value, next_price, duration, duration_months'),
     ]).then(([paymentsRes, promosRes]) => {
       if (paymentsRes.error) return;
       setData({

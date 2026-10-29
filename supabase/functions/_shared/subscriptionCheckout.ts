@@ -37,6 +37,8 @@ export async function createSubscriptionCheckout(
     cancelUrl: string;
     /** Coupon Stripe d'un code promo Club saisi sur la page d'inscription et déjà validé (subscriptionPromo.ts). */
     couponId?: string;
+    /** Coupon des mois suivants (code « prix fixe », 0238) : posé par le webhook après le 1er paiement. */
+    nextCouponId?: string;
   },
 ): Promise<{ url: string; sessionId: string }> {
   if (!params.resellerId && !params.signupId) throw new Error('resellerId ou signupId requis');
@@ -48,6 +50,7 @@ export async function createSubscriptionCheckout(
     plan: params.plan,
     ...(params.resellerId ? { reseller_id: params.resellerId } : {}),
     ...(params.signupId ? { signup_id: params.signupId } : {}),
+    ...(params.nextCouponId ? { club_next_coupon: params.nextCouponId } : {}),
   };
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',

@@ -18,8 +18,10 @@ type Plan = 'drops' | 'revendeur';
 interface ClubPromoCode {
   id: string;
   code: string;
-  discount_type: 'percentage' | 'fixed_amount';
+  /** 'fixed_price' (0238) : discount_value = prix du 1er mois, next_price = prix des mois suivants. */
+  discount_type: 'percentage' | 'fixed_amount' | 'fixed_price';
   discount_value: number;
+  next_price?: number | null;
   duration: 'once' | 'repeating' | 'forever';
   duration_months: number | null;
   plans: Plan[];
@@ -64,7 +66,11 @@ const shortDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 const PLAN_LABELS: Record<Plan, string> = { drops: 'Pass Drops', revendeur: 'Pass Revendeur' };
 
-const discountLabel = (c: Pick<ClubPromoCode, 'discount_type' | 'discount_value' | 'duration' | 'duration_months'>): string => {
+const discountLabel = (c: Pick<ClubPromoCode, 'discount_type' | 'discount_value' | 'duration' | 'duration_months' | 'next_price'>): string => {
+  if (c.discount_type === 'fixed_price') {
+    const first = EUR(Number(c.discount_value));
+    return c.next_price == null ? `${first} 1er mois · puis prix normal` : `${first} 1er mois · puis ${EUR(Number(c.next_price))}/mois`;
+  }
   const amount = c.discount_type === 'percentage' ? `-${Number(c.discount_value)} %` : `-${EUR(Number(c.discount_value))}`;
   const duration = c.duration === 'forever' ? 'à vie' : c.duration === 'once' ? '1er mois' : `${c.duration_months || 1} mois`;
   return `${amount} · ${duration}`;
@@ -74,6 +80,7 @@ const EMPTY_FORM = {
   code: '',
   discount_type: 'percentage' as ClubPromoCode['discount_type'],
   discount_value: '',
+  next_price: '',
   duration: 'once' as ClubPromoCode['duration'],
   duration_months: '3',
   plans: ['drops', 'revendeur'] as Plan[],
@@ -94,6 +101,7 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
           code: editing.code,
           discount_type: editing.discount_type,
           discount_value: String(Number(editing.discount_value)),
+          next_price: editing.next_price != null ? String(Number(editing.next_price)) : '',
           duration: editing.duration,
           duration_months: String(editing.duration_months || 3),
           plans: editing.plans,
@@ -112,7 +120,12 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
     const code = form.code.trim().toUpperCase();
     const value = Number(form.discount_value.replace(',', '.'));
     if (!editing && !/^[A-Z0-9_-]{3,30}$/.test(code)) return setError('Code : 3 à 30 caractères, lettres, chiffres, - ou _');
-    if (!value || value <= 0) return setError('Indique le montant de la remise');
+    const fixedPrice = form.discount_type === 'fixed_price';
+    const nextPrice = form.next_price.trim() ? Number(form.next_price.replace(',', '.')) : null;
+    if (fixedPrice) {
+      if (!form.discount_value.trim() || !Number.isFinite(value) || value < 0) return setError('Indique le prix du premier mois');
+      if (nextPrice !== null && (!Number.isFinite(nextPrice) || nextPrice < 0)) return setError('Prix des mois suivants invalide');
+    } else if (!value || value <= 0) return setError('Indique le montant de la remise');
     if (form.discount_type === 'percentage' && value > 100) return setError('Un pourcentage ne peut pas dépasser 100 %');
     if (form.plans.length === 0) return setError('Choisis au moins un pass');
     const months = Number(form.duration_months);
@@ -125,8 +138,9 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
         .update({
           discount_type: form.discount_type,
           discount_value: value,
-          duration: form.duration,
-          duration_months: form.duration === 'repeating' ? months : null,
+          next_price: fixedPrice ? nextPrice : null,
+          duration: fixedPrice ? 'forever' : form.duration,
+          duration_months: !fixedPrice && form.duration === 'repeating' ? months : null,
           plans: form.plans,
           max_uses: form.max_uses ? Number(form.max_uses) : null,
           valid_until: form.valid_until ? new Date(`${form.valid_until}T23:59:59`).toISOString() : null,
@@ -147,8 +161,9 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
       code,
       discount_type: form.discount_type,
       discount_value: value,
-      duration: form.duration,
-      duration_months: form.duration === 'repeating' ? months : null,
+      next_price: fixedPrice ? nextPrice : null,
+      duration: fixedPrice ? 'forever' : form.duration,
+      duration_months: !fixedPrice && form.duration === 'repeating' ? months : null,
       plans: form.plans,
       max_uses: form.max_uses ? Number(form.max_uses) : null,
       valid_until: form.valid_until ? new Date(`${form.valid_until}T23:59:59`).toISOString() : null,
@@ -215,8 +230,21 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
                 >
                   <option value="percentage">Pourcentage (%)</option>
                   <option value="fixed_amount">Montant fixe (€)</option>
+                  <option value="fixed_price">Prix fixe : 1er mois puis mois suivants</option>
                 </select>
               </div>
+              {form.discount_type === 'fixed_price' ? (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Prix du 1er mois (€)</label>
+                  <input
+                    value={form.discount_value}
+                    onChange={(e) => setForm({ ...form, discount_value: e.target.value })}
+                    inputMode="decimal"
+                    placeholder="9,90 (0 = offert)"
+                    className={input}
+                  />
+                </div>
+              ) : (
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">
                   Remise {form.discount_type === 'percentage' ? '(%)' : '(€)'}
@@ -229,7 +257,23 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
                   className={input}
                 />
               </div>
+              )}
             </div>
+            {form.discount_type === 'fixed_price' ? (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Prix des mois suivants (€)</label>
+              <input
+                value={form.next_price}
+                onChange={(e) => setForm({ ...form, next_price: e.target.value })}
+                inputMode="decimal"
+                placeholder="Vide = prix normal du pass"
+                className={`${input} max-w-[calc(50%-0.375rem)]`}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Prix payé chaque mois à partir du 2e mois, tant que l'abonnement continue. Les mêmes prix s'appliquent à chaque pass coché (jamais au-dessus de son prix normal).
+              </p>
+            </div>
+            ) : (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Durée de la remise</label>
@@ -255,6 +299,7 @@ const CreateCodeModal: React.FC<{ onClose: () => void; onCreated: () => void; ed
                 </div>
               )}
             </div>
+            )}
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600">Valable pour</label>
               <div className="flex gap-4">

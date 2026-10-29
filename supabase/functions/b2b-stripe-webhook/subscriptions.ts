@@ -78,6 +78,16 @@ export async function handleSubscriptionCheckout(
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
+  // Code promo « prix fixe » (0238) : prix des mois suivants, posé maintenant
+  // que le 1er mois (coupon du checkout) est payé.
+  if (metadata.club_next_coupon) {
+    try {
+      await stripe.subscriptions.update(subscriptionId, { discounts: [{ coupon: metadata.club_next_coupon }] });
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Coupon des mois suivants ${metadata.club_next_coupon} (abonnement ${subscriptionId}) :`, err instanceof Error ? err.message : err);
+    }
+  }
+
   // Nouvelle inscription (0175) : le compte n'existe pas encore, il est créé
   // maintenant que le paiement est confirmé (ou l'a déjà été par la page de
   // remerciement). Création en cours ailleurs → 500 : Stripe renverra l'événement.

@@ -23,7 +23,7 @@ import Stripe from 'https://esm.sh/stripe@17.7.0?target=deno';
 import bcrypt from 'npm:bcryptjs@2.4.3';
 import { createSubscriptionCheckout, isSubscriptionPlan, siteOrigin, type SubscriptionPlan } from '../_shared/subscriptionCheckout.ts';
 import { countryCode } from '../_shared/stripeBilling.ts';
-import { ensureStripeCoupon, resolveClubPromo } from '../_shared/subscriptionPromo.ts';
+import { stripeCouponsForPromo, resolveClubPromo } from '../_shared/subscriptionPromo.ts';
 import { finalizePendingSignup } from '../_shared/pendingSignup.ts';
 import { handleSubscriptionCheckout } from '../b2b-stripe-webhook/subscriptions.ts';
 
@@ -214,11 +214,12 @@ Deno.serve(async (req: Request) => {
 
   // Code promo facultatif : revalidé ici (jamais d'id accepté tel quel du client).
   let couponId: string | undefined;
+  let nextCouponId: string | undefined;
   const promoCode = text(body.promo_code, 60);
   if (promoCode) {
     try {
-      const { promo } = await resolveClubPromo(admin, stripe, promoCode, plan);
-      couponId = await ensureStripeCoupon(stripe, promo);
+      const { promo, preview } = await resolveClubPromo(admin, stripe, promoCode, plan);
+      ({ couponId, nextCouponId } = await stripeCouponsForPromo(stripe, promo, preview.regularAmount));
     } catch (err) {
       return reply({ code: 'invalid_promo', error: err instanceof Error ? err.message : 'Code promo invalide' }, 400);
     }
@@ -275,6 +276,7 @@ Deno.serve(async (req: Request) => {
       email: input.email,
       customerId: customer.id,
       couponId,
+      nextCouponId,
       ...checkoutUrls(req, input.email, plan),
     });
     await admin
