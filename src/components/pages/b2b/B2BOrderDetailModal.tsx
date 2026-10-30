@@ -67,6 +67,51 @@ const CANCEL_REASONS = [
   'Défaut majeur découvert avant envoi',
   'Demande du client',
 ] as const;
+const OTHER_REASON = '__other__';
+
+/** Raison d'annulation : liste, ou « Autre raison » saisie, plus une explication facultative. */
+const useCancelReason = () => {
+  const [choice, setChoice] = useState<string>(CANCEL_REASONS[0]);
+  const [other, setOther] = useState('');
+  const [details, setDetails] = useState('');
+  const base = choice === OTHER_REASON ? other.trim() : choice;
+  const reason = [base, details.trim()].filter(Boolean).join(' — ');
+  const field = (id: string) => (
+    <div className="space-y-2">
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700">
+        Raison de l'annulation
+      </label>
+      <select
+        id={id}
+        value={choice}
+        onChange={(e) => setChoice(e.target.value)}
+        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm bg-white"
+      >
+        {CANCEL_REASONS.map((r) => (
+          <option key={r} value={r}>{r}</option>
+        ))}
+        <option value={OTHER_REASON}>Autre raison…</option>
+      </select>
+      {choice === OTHER_REASON && (
+        <input
+          value={other}
+          onChange={(e) => setOther(e.target.value)}
+          placeholder="Raison de l'annulation"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm"
+          autoFocus
+        />
+      )}
+      <textarea
+        value={details}
+        onChange={(e) => setDetails(e.target.value)}
+        rows={3}
+        placeholder="Explication (facultatif)"
+        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm resize-y"
+      />
+    </div>
+  );
+  return { reason, valid: base.length > 0, field };
+};
 
 const RESTOCK_OPTIONS: { value: 'draft' | 'for-sale-b2b' | 'archived'; label: string }[] = [
   { value: 'draft', label: 'Remettre en brouillon' },
@@ -164,13 +209,14 @@ interface CancelItemPanelProps {
 
 const CancelItemPanel: React.FC<CancelItemPanelProps> = ({ item, isPaid, hasStripePayment, onCancel, onConfirmed }) => {
   const refundAmount = item.line_total + (item.insured ? item.insurance_cost : 0);
-  const [reason, setReason] = useState<string>(CANCEL_REASONS[0]);
+  const { reason, valid: reasonValid, field: reasonField } = useCancelReason();
   const [restockAction, setRestockAction] = useState<'draft' | 'for-sale-b2b' | 'archived'>('draft');
   const [refundMethod, setRefundMethod] = useState<'wallet' | 'stripe'>('wallet');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const handleConfirm = async () => {
+    if (!reasonValid) return setError("Indique la raison de l'annulation");
     setSubmitting(true);
     setError('');
     const result = await cancelOrderItem(item.id, reason, restockAction, isPaid ? refundMethod : undefined);
@@ -215,21 +261,7 @@ const CancelItemPanel: React.FC<CancelItemPanelProps> = ({ item, isPaid, hasStri
               </div>
             </div>
 
-            <div>
-              <label htmlFor="cancel-reason" className="block text-sm font-medium text-gray-700 mb-2">
-                Raison de l'annulation
-              </label>
-              <select
-                id="cancel-reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm bg-white"
-              >
-                {CANCEL_REASONS.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
+            {reasonField('cancel-reason')}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Que faire de l'article ?</label>
@@ -296,13 +328,14 @@ const CancelOrderPanel: React.FC<CancelOrderPanelProps> = ({ order, isPaid, hasS
   const activeItems = order.order_items.filter((i) => i.status === 'active');
   const totalToRefund = activeItems.reduce((sum, i) => sum + i.line_total + (i.insured ? i.insurance_cost : 0), 0);
 
-  const [reason, setReason] = useState<string>(CANCEL_REASONS[0]);
+  const { reason, valid: reasonValid, field: reasonField } = useCancelReason();
   const [restockAction, setRestockAction] = useState<'draft' | 'for-sale-b2b' | 'archived'>('draft');
   const [refundMethod, setRefundMethod] = useState<'wallet' | 'stripe'>('wallet');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const handleConfirm = async () => {
+    if (!reasonValid) return setError("Indique la raison de l'annulation");
     setSubmitting(true);
     setError('');
     const result = await cancelOrder(order.id, reason, restockAction, isPaid ? refundMethod : undefined);
@@ -335,21 +368,7 @@ const CancelOrderPanel: React.FC<CancelOrderPanelProps> = ({ order, isPaid, hasS
               <p className="text-sm font-semibold text-gray-900 mt-1">Total à rembourser : {totalToRefund.toFixed(0)} €</p>
             </div>
 
-            <div>
-              <label htmlFor="cancel-order-reason" className="block text-sm font-medium text-gray-700 mb-2">
-                Raison de l'annulation
-              </label>
-              <select
-                id="cancel-order-reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 text-sm bg-white"
-              >
-                {CANCEL_REASONS.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
+            {reasonField('cancel-order-reason')}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Que faire des articles ?</label>
