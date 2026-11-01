@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
 import { AccountingRawData } from '../../../hooks/useAccountingRawData';
 import { AccountingPeriod, isWithinRange, monthKeyLabel } from '../../../utils/accountingPeriods';
-import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries } from '../../../utils/accountingCalc';
+import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries, computeShippingCharges, withShipping } from '../../../utils/accountingCalc';
 import { SUBSCRIPTION_SOURCE_CLIENTS } from '../../../hooks/useAccountingRawData';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -16,12 +16,13 @@ const pct = (current: number, previous: number): number | null => (previous ? ((
 
 // Infobulle du graphique mensuel : CA total du mois en tête, puis le
 // détail par canal et les courbes, toujours dans le même ordre.
-const MONTHLY_TOOLTIP_ROWS: { key: 'web' | 'b2b' | 'live' | 'subscriptions' | 'cogs' | 'margin'; label: string; color: string }[] = [
+const MONTHLY_TOOLTIP_ROWS: { key: 'web' | 'b2b' | 'live' | 'subscriptions' | 'cogs' | 'shipping' | 'margin'; label: string; color: string }[] = [
   { key: 'web', label: 'CA B2C', color: '#2563eb' },
   { key: 'b2b', label: 'CA B2B', color: '#7c3aed' },
   { key: 'live', label: 'CA Lives', color: '#d97706' },
   { key: 'subscriptions', label: 'CA Abonnements', color: '#059669' },
   { key: 'cogs', label: "Coût d'achat", color: '#dc2626' },
+  { key: 'shipping', label: "Frais d'expédition (HT)", color: '#ea580c' },
   { key: 'margin', label: 'Marge brute', color: '#16a34a' },
 ];
 
@@ -74,7 +75,8 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     const b2b = computeChannelTotals(data.orders, 'b2b', period.range);
     const live = computeLiveTotals(data.liveSales, period.range);
     const subscriptions = computeSubscriptionTotals(data.subscriptionPayments, period.range);
-    return { web, b2b, live, subscriptions, global: combineTotals(web, b2b, live, subscriptions) };
+    const shipping = computeShippingCharges(data.shippingCharges, period.range);
+    return { web, b2b, live, subscriptions, shipping, global: withShipping(combineTotals(web, b2b, live, subscriptions), shipping) };
   }, [data, period.range]);
 
   const mom = useMemo(() => {
@@ -82,7 +84,10 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     const web = computeChannelTotals(data.orders, 'web', period.momRange);
     const b2b = computeChannelTotals(data.orders, 'b2b', period.momRange);
     const live = computeLiveTotals(data.liveSales, period.momRange);
-    return combineTotals(web, b2b, live, computeSubscriptionTotals(data.subscriptionPayments, period.momRange));
+    return withShipping(
+      combineTotals(web, b2b, live, computeSubscriptionTotals(data.subscriptionPayments, period.momRange)),
+      computeShippingCharges(data.shippingCharges, period.momRange)
+    );
   }, [data, period.momRange]);
 
   const yoy = useMemo(() => {
@@ -90,7 +95,10 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     const web = computeChannelTotals(data.orders, 'web', period.yoyRange);
     const b2b = computeChannelTotals(data.orders, 'b2b', period.yoyRange);
     const live = computeLiveTotals(data.liveSales, period.yoyRange);
-    return combineTotals(web, b2b, live, computeSubscriptionTotals(data.subscriptionPayments, period.yoyRange));
+    return withShipping(
+      combineTotals(web, b2b, live, computeSubscriptionTotals(data.subscriptionPayments, period.yoyRange)),
+      computeShippingCharges(data.shippingCharges, period.yoyRange)
+    );
   }, [data, period.yoyRange]);
 
   const monthly = useMemo(() => computeMonthlySeries(data, 12), [data]);
@@ -152,7 +160,10 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
           value={EUR(current.global.margin)}
           icon={PiggyBank}
           tone={current.global.margin >= 0 ? 'green' : 'red'}
-          hint={current.global.marginRate !== null ? `Taux de marge : ${current.global.marginRate.toFixed(1)}%` : undefined}
+          hint={[
+            current.global.marginRate !== null ? `Taux de marge : ${current.global.marginRate.toFixed(1)}%` : null,
+            current.shipping ? `Expédition Sendcloud déduite : ${EUR(current.shipping)} HT` : null,
+          ].filter(Boolean).join(' · ') || undefined}
           deltaMoM={mom ? pct(current.global.margin, mom.margin) : undefined}
           deltaYoY={yoy ? pct(current.global.margin, yoy.margin) : undefined}
         />
@@ -236,6 +247,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                   ))}
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA Total</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Coût d'achat</th>
+                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">Expédition Sendcloud (HT)</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Marge brute</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Marge %</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Croissance MoM</th>
@@ -257,6 +269,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                       ))}
                       <td className="py-2.5 px-4 text-right text-sm font-medium text-gray-900 tabular-nums">{EUR(m.total)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.cogs)}</td>
+                      <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.shipping)}</td>
                       <td className={`py-2.5 px-4 text-right text-sm font-medium tabular-nums ${m.margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>{EUR(m.margin)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{marginRate !== null ? `${marginRate.toFixed(1)}%` : '—'}</td>
                       <td className={`py-2.5 px-4 text-right text-sm font-medium tabular-nums ${growth === null ? 'text-gray-400' : growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>

@@ -76,6 +76,16 @@ export const computeSubscriptionBySource = (payments: AccountingSubscriptionPaym
   return [...totals.entries()].map(([source, revenue]) => ({ source, revenue }));
 };
 
+/** Frais d'expédition Sendcloud HT de la période (0239). */
+export const computeShippingCharges = (charges: { date: string; amount: number }[], range: DateRange): number =>
+  (charges || []).filter((c) => isWithinRange(c.date, range)).reduce((s, c) => s + c.amount, 0);
+
+/** Totaux après déduction des frais d'expédition (marge nette des envois). */
+export const withShipping = (t: ChannelTotals, shipping: number): ChannelTotals => {
+  const margin = t.margin - shipping;
+  return { ...t, margin, marginRate: t.revenue > 0 ? (margin / t.revenue) * 100 : null };
+};
+
 export const combineTotals = (...parts: ChannelTotals[]): ChannelTotals => {
   const revenue = parts.reduce((s, p) => s + p.revenue, 0);
   const cogs = parts.reduce((s, p) => s + p.cogs, 0);
@@ -101,6 +111,8 @@ export interface MonthlyChannelRow {
   subsBySource: Record<string, number>;
   total: number;
   cogs: number;
+  /** Frais d'expédition Sendcloud HT du mois (0239), déduits de la marge. */
+  shipping: number;
   margin: number;
 }
 
@@ -122,7 +134,7 @@ export const computeMonthlySeries = (data: AccountingRawData, months: number): M
     if (key >= COMPANY_ACTIVITY_START_MONTH) keys.push(key);
   }
 
-  const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, subscriptions: 0, subsBySource: {}, total: 0, cogs: 0, margin: 0 }]));
+  const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, subscriptions: 0, subsBySource: {}, total: 0, cogs: 0, shipping: 0, margin: 0 }]));
 
   data.orders.filter(isOrderPaid).forEach((o) => {
     const key = monthKey(o.created_at);
@@ -154,6 +166,13 @@ export const computeMonthlySeries = (data: AccountingRawData, months: number): M
     row.subsBySource[p.source] = (row.subsBySource[p.source] || 0) + p.amount;
     row.total += p.amount;
     row.margin += p.amount;
+  });
+
+  (data.shippingCharges || []).forEach((c) => {
+    const row = rows.get(monthKey(c.date));
+    if (!row) return;
+    row.shipping += c.amount;
+    row.margin -= c.amount;
   });
 
   return keys.map((k) => rows.get(k)!);

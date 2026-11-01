@@ -77,6 +77,8 @@ export interface AccountingRawData {
   subscriptionPayments: AccountingSubscriptionPayment[];
   /** Sources de CA d'abonnement à afficher, même à 0 (clients, communautés, partenaires). */
   subscriptionSources: string[];
+  /** Factures Sendcloud (0239) : frais d'expédition HT, déduits de la marge au mois de la facture. */
+  shippingCharges: { date: string; amount: number }[];
 }
 
 /** Prédicat "encaissé" partagé avec useSalesJournalExport.ts / Accounting.tsx
@@ -98,7 +100,7 @@ export const isOrderPaid = (o: Pick<AccountingOrder, 'payment_status' | 'status'
  * en mémoire plutôt que de refaire une requête par sélection de période ou
  * de comparaison, ce qui rend le changement de période instantané. */
 export const useAccountingRawData = (isAdmin: boolean = false) => {
-  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [], subscriptionPayments: [], subscriptionSources: [SUBSCRIPTION_SOURCE_CLIENTS] });
+  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [], subscriptionPayments: [], subscriptionSources: [SUBSCRIPTION_SOURCE_CLIENTS], shippingCharges: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -279,7 +281,14 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         ...[...partners].filter((p) => !communities.has(p)).sort((a, b) => a.localeCompare(b, 'fr')),
       ];
 
-      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments, subscriptionSources });
+      // Frais d'expédition Sendcloud (0239) : lecture tolérante.
+      const sendcloudRes = await supabase.from('sendcloud_invoices').select('invoice_date, price_excl');
+      const shippingCharges = ((sendcloudRes.error ? [] : sendcloudRes.data || []) as { invoice_date: string; price_excl: number }[]).map((r) => ({
+        date: `${r.invoice_date}T12:00:00`,
+        amount: Number(r.price_excl) || 0,
+      }));
+
+      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments, subscriptionSources, shippingCharges });
     } catch (err) {
       console.error('Erreur lors du chargement des données comptables:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');
