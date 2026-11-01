@@ -79,6 +79,8 @@ export interface AccountingRawData {
   subscriptionSources: string[];
   /** Factures Sendcloud (0239) : frais d'expédition HT, déduits de la marge au mois de la facture. */
   shippingCharges: { date: string; amount: number }[];
+  /** Frais de livraison payés par les clients B2B (demandes de livraison payées par carte, non remboursées). */
+  deliveryPayments: { date: string; amount: number }[];
 }
 
 /** Prédicat "encaissé" partagé avec useSalesJournalExport.ts / Accounting.tsx
@@ -100,7 +102,7 @@ export const isOrderPaid = (o: Pick<AccountingOrder, 'payment_status' | 'status'
  * en mémoire plutôt que de refaire une requête par sélection de période ou
  * de comparaison, ce qui rend le changement de période instantané. */
 export const useAccountingRawData = (isAdmin: boolean = false) => {
-  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [], subscriptionPayments: [], subscriptionSources: [SUBSCRIPTION_SOURCE_CLIENTS], shippingCharges: [] });
+  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [], subscriptionPayments: [], subscriptionSources: [SUBSCRIPTION_SOURCE_CLIENTS], shippingCharges: [], deliveryPayments: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -288,7 +290,17 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         amount: Number(r.price_excl) || 0,
       }));
 
-      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments, subscriptionSources, shippingCharges });
+      // Demandes de livraison payées (frais de port encaissés par carte), hors remboursées.
+      const deliveriesRes = await supabase
+        .from('shipments')
+        .select('created_at, shipping_cost, shipping_refund_status')
+        .not('stripe_session_id', 'is', null)
+        .gt('shipping_cost', 0);
+      const deliveryPayments = ((deliveriesRes.error ? [] : deliveriesRes.data || []) as { created_at: string; shipping_cost: number; shipping_refund_status: string | null }[])
+        .filter((s) => s.shipping_refund_status !== 'succeeded')
+        .map((s) => ({ date: s.created_at, amount: Number(s.shipping_cost) || 0 }));
+
+      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments, subscriptionSources, shippingCharges, deliveryPayments });
     } catch (err) {
       console.error('Erreur lors du chargement des données comptables:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');

@@ -80,6 +80,13 @@ export const computeSubscriptionBySource = (payments: AccountingSubscriptionPaym
 export const computeShippingCharges = (charges: { date: string; amount: number }[], range: DateRange): number =>
   (charges || []).filter((c) => isWithinRange(c.date, range)).reduce((s, c) => s + c.amount, 0);
 
+/** CA des frais de livraison payés par les clients sur une plage (sans coût
+ * propre : le coût est la facture Sendcloud ; non compté dans les ventes). */
+export const computeDeliveryTotals = (payments: { date: string; amount: number }[], range: DateRange): ChannelTotals => {
+  const revenue = (payments || []).filter((p) => isWithinRange(p.date, range)).reduce((s, p) => s + p.amount, 0);
+  return { revenue, cogs: 0, margin: revenue, marginRate: revenue > 0 ? 100 : null, count: 0, averageBasket: 0 };
+};
+
 /** Totaux après déduction des frais d'expédition (marge nette des envois). */
 export const withShipping = (t: ChannelTotals, shipping: number): ChannelTotals => {
   const margin = t.margin - shipping;
@@ -113,6 +120,8 @@ export interface MonthlyChannelRow {
   cogs: number;
   /** Frais d'expédition Sendcloud HT du mois (0239), déduits de la marge. */
   shipping: number;
+  /** Frais de livraison payés par les clients (demandes de livraison B2B). */
+  deliveries: number;
   margin: number;
 }
 
@@ -134,7 +143,7 @@ export const computeMonthlySeries = (data: AccountingRawData, months: number): M
     if (key >= COMPANY_ACTIVITY_START_MONTH) keys.push(key);
   }
 
-  const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, subscriptions: 0, subsBySource: {}, total: 0, cogs: 0, shipping: 0, margin: 0 }]));
+  const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, subscriptions: 0, subsBySource: {}, total: 0, cogs: 0, shipping: 0, deliveries: 0, margin: 0 }]));
 
   data.orders.filter(isOrderPaid).forEach((o) => {
     const key = monthKey(o.created_at);
@@ -166,6 +175,14 @@ export const computeMonthlySeries = (data: AccountingRawData, months: number): M
     row.subsBySource[p.source] = (row.subsBySource[p.source] || 0) + p.amount;
     row.total += p.amount;
     row.margin += p.amount;
+  });
+
+  (data.deliveryPayments || []).forEach((d) => {
+    const row = rows.get(monthKey(d.date));
+    if (!row) return;
+    row.deliveries += d.amount;
+    row.total += d.amount;
+    row.margin += d.amount;
   });
 
   (data.shippingCharges || []).forEach((c) => {
