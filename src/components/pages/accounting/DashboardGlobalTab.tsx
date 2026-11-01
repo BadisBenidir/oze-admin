@@ -175,7 +175,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} width={70} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k€`} />
-                <Tooltip content={<MonthlyTooltip sources={sources} />} />
+                <Tooltip content={<MonthlyTooltip sources={sources} />} wrapperStyle={{ zIndex: 20 }} />
                 <Legend />
                 <Bar dataKey="web" stackId="ca" name="CA B2C" fill={CHANNEL_COLORS.web} radius={[0, 0, 0, 0]} />
                 <Bar dataKey="b2b" stackId="ca" name="CA B2B" fill={CHANNEL_COLORS.b2b} />
