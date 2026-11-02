@@ -32,6 +32,59 @@ const json = (body: unknown, status = 200) =>
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+const CARD_NOTE_PREFIX = 'Remboursement par carte (au lieu du crédit)';
+
+// Rembourse `target` € par Stripe : paiement carte de la commande, puis
+// recharges de portefeuille payées par carte (plus récente d'abord).
+async function refundByCard(
+  stripe: Stripe,
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  order: { id: string; placed_by_profile_id: string; stripe_payment_intent_id: string | null },
+  target: number,
+  metadata: Record<string, string>
+) {
+  let remainingCents = Math.round(target * 100);
+  const refundIds: string[] = [];
+  let stripeError: string | null = null;
+  const paymentIntents: string[] = [];
+  if (order.stripe_payment_intent_id) paymentIntents.push(order.stripe_payment_intent_id);
+  const { data: topups } = await admin
+    .from('wallet_transactions')
+    .select('stripe_session_id')
+    .eq('profile_id', order.placed_by_profile_id)
+    .eq('type', 'rechargement')
+    .eq('status', 'success')
+    .not('stripe_session_id', 'is', null)
+    .order('created_at', { ascending: false });
+  for (const t of (topups || []) as { stripe_session_id: string }[]) {
+    try {
+      const session = await stripe.checkout.sessions.retrieve(t.stripe_session_id);
+      const pi = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+      if (pi && !paymentIntents.includes(pi)) paymentIntents.push(pi);
+    } catch {
+      /* session illisible : ignorée */
+    }
+  }
+  for (const pi of paymentIntents) {
+    if (remainingCents <= 0) break;
+    try {
+      const intent = await stripe.paymentIntents.retrieve(pi, { expand: ['latest_charge'] });
+      const charge = intent.latest_charge && typeof intent.latest_charge === 'object' ? intent.latest_charge : null;
+      if (!charge || intent.status !== 'succeeded') continue;
+      const refundable = (charge.amount_captured ?? charge.amount) - (charge.amount_refunded ?? 0);
+      if (refundable <= 0) continue;
+      const part = Math.min(refundable, remainingCents);
+      const refund = await stripe.refunds.create({ payment_intent: pi, amount: part, metadata });
+      refundIds.push(refund.id);
+      remainingCents -= part;
+    } catch (err) {
+      stripeError = err instanceof Error ? err.message : 'Erreur Stripe inconnue';
+    }
+  }
+  return { refundIds, remainingCents, stripeError };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -48,10 +101,71 @@ Deno.serve(async (req: Request) => {
     if (!user) return json({ error: 'Non authentifié' }, 401);
     if (!(await hasAdminAccess(callerClient, user.id, 'refunds'))) return json({ error: 'Action réservée aux administrateurs' }, 403);
 
-    const { action, order_item_id, amount } = await req.json();
-    if (!order_item_id || !['preview', 'convert', 'retry'].includes(action)) return json({ error: 'Requête invalide' }, 400);
-
+    const { action, order_item_id, order_id, amount } = await req.json();
     const admin = createClient(supabaseUrl, serviceRoleKey);
+
+    // ---- Certificat Entrupy annulé (article gardé), recrédité : remboursement par carte ----
+    if (action === 'entrupy_preview' || action === 'entrupy_convert') {
+      if (!order_id) return json({ error: 'Requête invalide' }, 400);
+      const { data: o } = await admin
+        .from('orders')
+        .select('id, order_number, placed_by_profile_id, reseller_id, stripe_payment_intent_id')
+        .eq('id', order_id)
+        .maybeSingle();
+      if (!o?.placed_by_profile_id) return json({ error: 'Commande ou membre introuvable' }, 404);
+      const { data: txs } = await admin
+        .from('wallet_transactions')
+        .select('amount, type, note')
+        .eq('order_id', o.id)
+        .eq('status', 'success');
+      const rows = (txs || []) as { amount: number; type: string; note: string | null }[];
+      const entrupyCredit = rows
+        .filter((r) => r.type === 'remboursement' && /entrupy/i.test(r.note || ''))
+        .reduce((s, r) => s + Number(r.amount || 0), 0);
+      const totalCredit = rows.filter((r) => r.type === 'remboursement').reduce((s, r) => s + Number(r.amount || 0), 0);
+      const converted = rows
+        .filter((r) => r.type === 'ajustement_admin' && (r.note || '').startsWith(CARD_NOTE_PREFIX))
+        .reduce((s, r) => s - Number(r.amount || 0), 0);
+      // Crédit Entrupy pas encore converti (une conversion d'article a pu l'inclure).
+      const available = round2(Math.max(0, Math.min(entrupyCredit, totalCredit - converted)));
+      const { data: profile } = await admin.from('profiles').select('wallet_balance').eq('id', o.placed_by_profile_id).maybeSingle();
+      const balance = round2(Number(profile?.wallet_balance || 0));
+      if (action === 'entrupy_preview') return json({ available_amount: available, wallet_balance: balance });
+
+      if (!stripeSecretKey) return json({ error: 'STRIPE_SECRET_KEY manquant côté serveur' }, 500);
+      const target = round2(Number(amount) || available);
+      if (!target || target <= 0) return json({ error: 'Aucun crédit Entrupy à rembourser par carte sur cette commande' }, 400);
+      if (target > available) return json({ error: `Au plus ${available.toFixed(2)} € de crédit Entrupy à rembourser sur cette commande` }, 400);
+      if (target > balance) return json({ error: `Solde insuffisant : le membre n'a plus que ${balance.toFixed(2)} € sur son portefeuille` }, 400);
+
+      const { error: debitError } = await admin.rpc('debit_wallet_for_card_refund', {
+        p_profile_id: o.placed_by_profile_id,
+        p_reseller_id: o.reseller_id,
+        p_amount: target,
+        p_order_id: o.id,
+        p_note: `${CARD_NOTE_PREFIX} — certificat Entrupy annulé, commande ${o.order_number}`,
+      });
+      if (debitError) return json({ error: debitError.message }, 400);
+
+      const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
+      const r = await refundByCard(stripe, admin, o, target, { type: 'b2b_entrupy_refund_to_card', order_id: o.id });
+      const refunded = round2(target - r.remainingCents / 100);
+      if (r.remainingCents > 0) {
+        await admin.rpc('credit_order_item_refund_to_wallet', {
+          p_profile_id: o.placed_by_profile_id,
+          p_reseller_id: o.reseller_id,
+          p_amount: r.remainingCents / 100,
+          p_order_id: o.id,
+          p_note: `Remboursement par carte impossible pour ${(r.remainingCents / 100).toFixed(2)} € — recrédité (certificat Entrupy), commande ${o.order_number}`,
+        });
+      }
+      if (refunded <= 0) {
+        return json({ error: `Aucun paiement carte remboursable trouvé${r.stripeError ? ` (${r.stripeError})` : ''} : le crédit a été remis sur le portefeuille.` }, 400);
+      }
+      return json({ success: true, refunded_amount: refunded, wallet_recredited: round2(r.remainingCents / 100), refund_ids: r.refundIds });
+    }
+
+    if (!order_item_id || !['preview', 'convert', 'retry'].includes(action)) return json({ error: 'Requête invalide' }, 400);
     const { data: item } = await admin
       .from('order_items')
       .select('id, order_id, line_total, insured, insurance_cost, cancelled_at, refund_status, refund_method')
@@ -132,7 +246,7 @@ Deno.serve(async (req: Request) => {
     if (!target || target <= 0) return json({ error: 'Montant invalide' }, 400);
     if (target > balance) return json({ error: `Solde insuffisant : le membre n'a plus que ${balance.toFixed(2)} € sur son portefeuille` }, 400);
 
-    const note = `Remboursement par carte (au lieu du crédit) — article annulé, commande ${order.order_number}`;
+    const note = `${CARD_NOTE_PREFIX} — article annulé, commande ${order.order_number}`;
     const { error: debitError } = await admin.rpc('debit_wallet_for_card_refund', {
       p_profile_id: order.placed_by_profile_id,
       p_reseller_id: order.reseller_id,
@@ -143,51 +257,11 @@ Deno.serve(async (req: Request) => {
     if (debitError) return json({ error: debitError.message }, 400);
 
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
-    let remainingCents = Math.round(target * 100);
-    const refundIds: string[] = [];
-    let stripeError: string | null = null;
-
-    // Paiements carte à rembourser : la commande elle-même, sinon les recharges.
-    const paymentIntents: string[] = [];
-    if (order.stripe_payment_intent_id) paymentIntents.push(order.stripe_payment_intent_id);
-    const { data: topups } = await admin
-      .from('wallet_transactions')
-      .select('stripe_session_id')
-      .eq('profile_id', order.placed_by_profile_id)
-      .eq('type', 'rechargement')
-      .eq('status', 'success')
-      .not('stripe_session_id', 'is', null)
-      .order('created_at', { ascending: false });
-    for (const t of topups || []) {
-      try {
-        const session = await stripe.checkout.sessions.retrieve(t.stripe_session_id as string);
-        const pi = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
-        if (pi && !paymentIntents.includes(pi)) paymentIntents.push(pi);
-      } catch {
-        /* session illisible : ignorée */
-      }
-    }
-
-    for (const pi of paymentIntents) {
-      if (remainingCents <= 0) break;
-      try {
-        const intent = await stripe.paymentIntents.retrieve(pi, { expand: ['latest_charge'] });
-        const charge = intent.latest_charge && typeof intent.latest_charge === 'object' ? intent.latest_charge : null;
-        if (!charge || intent.status !== 'succeeded') continue;
-        const refundable = (charge.amount_captured ?? charge.amount) - (charge.amount_refunded ?? 0);
-        if (refundable <= 0) continue;
-        const part = Math.min(refundable, remainingCents);
-        const refund = await stripe.refunds.create({
-          payment_intent: pi,
-          amount: part,
-          metadata: { type: 'b2b_item_refund_to_card', order_item_id: item.id, order_id: order.id },
-        });
-        refundIds.push(refund.id);
-        remainingCents -= part;
-      } catch (err) {
-        stripeError = err instanceof Error ? err.message : 'Erreur Stripe inconnue';
-      }
-    }
+    const { refundIds, remainingCents, stripeError } = await refundByCard(stripe, admin, order, target, {
+      type: 'b2b_item_refund_to_card',
+      order_item_id: item.id,
+      order_id: order.id,
+    });
 
     // Ce que Stripe n'a pas pu rembourser revient sur le portefeuille.
     const refundedAmount = round2(target - remainingCents / 100);

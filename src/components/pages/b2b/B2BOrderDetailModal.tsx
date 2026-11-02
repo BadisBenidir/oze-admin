@@ -448,6 +448,45 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const { creditNotes, refresh: refreshCreditNotes } = useOrderCreditNotes(order?.id);
   const refundKey = (order?.order_items || []).map((i) => `${i.id}:${i.refund_status}`).join(',');
   useEffect(() => { refreshCreditNotes(); }, [refundKey, refreshCreditNotes]);
+  // Certificat Entrupy annulé et recrédité, pas encore remboursé par carte
+  // (même calcul que convert-item-refund-to-card, action entrupy_convert).
+  const [entrupyCredit, setEntrupyCredit] = useState(0);
+  const [convertingEntrupy, setConvertingEntrupy] = useState(false);
+  const entrupyKey = (order?.order_items || []).map((i) => `${i.id}:${i.entrupy_requested ? 1 : 0}`).join(',');
+  const loadEntrupyCredit = useCallback(async () => {
+    if (!order) return setEntrupyCredit(0);
+    const { data } = await supabase.from('wallet_transactions').select('amount, type, note').eq('order_id', order.id).eq('status', 'success');
+    const rows = (data || []) as { amount: number; type: string; note: string | null }[];
+    const sum = (list: typeof rows) => list.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const credits = rows.filter((r) => r.type === 'remboursement');
+    const entrupy = sum(credits.filter((r) => /entrupy/i.test(r.note || '')));
+    const converted = -sum(rows.filter((r) => r.type === 'ajustement_admin' && (r.note || '').startsWith('Remboursement par carte (au lieu du crédit)')));
+    setEntrupyCredit(Math.round(Math.max(0, Math.min(entrupy, sum(credits) - converted)) * 100) / 100);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.id]);
+  useEffect(() => { loadEntrupyCredit(); }, [loadEntrupyCredit, entrupyKey, refundKey]);
+  const handleEntrupyToCard = async () => {
+    if (!order) return;
+    if (!window.confirm(`Rembourser ${entrupyCredit.toFixed(2)} € par carte (Stripe) pour le certificat Entrupy annulé, et retirer ${entrupyCredit.toFixed(2)} € de son portefeuille ?`)) return;
+    setConvertingEntrupy(true);
+    const { data, error } = await invokeEdgeFunction<{ refunded_amount: number; wallet_recredited: number }>('convert-item-refund-to-card', {
+      action: 'entrupy_convert',
+      order_id: order.id,
+      amount: entrupyCredit,
+    });
+    setConvertingEntrupy(false);
+    if (error || !data) {
+      alert(error || 'Remboursement impossible');
+      return;
+    }
+    setRefundNotice(
+      data.wallet_recredited > 0
+        ? `${data.refunded_amount.toFixed(2)} € remboursés par carte ; ${data.wallet_recredited.toFixed(2)} € n'ont pas pu l'être et restent en crédit portefeuille.`
+        : `Certificat Entrupy : ${data.refunded_amount.toFixed(2)} € remboursés par carte et retirés du portefeuille du membre.`
+    );
+    await loadEntrupyCredit();
+    onOrderUpdated();
+  };
   // Article prêt à expédier sans demande : remis en « livraison demandée » (0226).
   const [requestingDeliveryId, setRequestingDeliveryId] = useState<string | null>(null);
   // Facture commune avec d'autres commandes du même acheteur (0227).
@@ -815,6 +854,21 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-blue-800">{refundNotice}</p>
+                </div>
+              )}
+              {entrupyCredit > 0 && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm text-purple-900 flex items-center gap-1.5">
+                    <BadgeCheck className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                    Certificat Entrupy annulé : {entrupyCredit.toFixed(2)} € remboursés en crédit portefeuille.
+                  </p>
+                  <button
+                    onClick={handleEntrupyToCard}
+                    disabled={convertingEntrupy}
+                    className="px-3 py-1.5 text-xs font-medium text-purple-800 bg-white border border-purple-300 rounded-lg hover:bg-purple-100 disabled:opacity-50"
+                  >
+                    {convertingEntrupy ? 'Remboursement…' : 'Rembourser par carte à la place'}
+                  </button>
                 </div>
               )}
 
