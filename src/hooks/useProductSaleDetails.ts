@@ -5,6 +5,8 @@ export interface ProductSaleDetails {
   orderItemId: string;
   orderItemStatus: 'active' | 'cancelled';
   fulfillmentStatus: 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'label_created' | 'shipped' | 'delivered';
+  /** Réception physique à l'atelier (order_items.received_at) — null : pas encore reçu. */
+  receivedAt: string | null;
   order: {
     id: string;
     orderNumber: string;
@@ -61,7 +63,7 @@ export const useProductSaleDetails = (productId: string | undefined, reservedByO
       const { data, error: fetchError } = await supabase
         .from('order_items')
         .select(
-          'id, status, fulfillment_status, shipment_id, ' +
+          'id, status, fulfillment_status, received_at, shipment_id, ' +
           'shipment_parcel:shipment_parcels(parcel_index, tracking_number, tracking_url, label_url), ' +
           'order:orders(id, order_number, created_at, placed_by_profile_id, reseller_id, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email))'
         )
@@ -79,6 +81,7 @@ export const useProductSaleDetails = (productId: string | undefined, reservedByO
         id: string;
         status: 'active' | 'cancelled';
         fulfillment_status: ProductSaleDetails['fulfillmentStatus'];
+        received_at: string | null;
         shipment_id: string | null;
         shipment_parcel: { parcel_index: number; tracking_number: string | null; tracking_url: string | null; label_url: string | null } | null;
         order: {
@@ -110,6 +113,7 @@ export const useProductSaleDetails = (productId: string | undefined, reservedByO
         orderItemId: row.id,
         orderItemStatus: row.status,
         fulfillmentStatus: row.fulfillment_status,
+        receivedAt: row.received_at,
         order: {
           id: row.order.id,
           orderNumber: row.order.order_number,

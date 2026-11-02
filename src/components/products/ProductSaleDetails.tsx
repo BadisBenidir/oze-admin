@@ -9,6 +9,8 @@ import { supabase } from '../../lib/supabase';
 interface ProductSaleDetailsProps {
   productId: string;
   reservedByOrderId: string | null;
+  /** products.received_at (0240) : reçu avant la vente. */
+  productReceivedAt?: string | null;
 }
 
 const fulfillmentBadge = (details: SaleDetails) => {
@@ -39,7 +41,7 @@ const fulfillmentBadge = (details: SaleDetails) => {
  * useProductSaleDetails.ts pour la requête (order_items -> orders ->
  * profiles/resellers/shipment_parcels).
  */
-export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productId, reservedByOrderId }) => {
+export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productId, reservedByOrderId, productReceivedAt }) => {
   const { details, loading, error, refresh } = useProductSaleDetails(productId, reservedByOrderId);
   const { sync: syncSendcloud } = useSendcloudSync();
   const [copied, setCopied] = useState(false);
@@ -229,6 +231,27 @@ export const ProductSaleDetails: React.FC<ProductSaleDetailsProps> = ({ productI
             <p className="text-sm text-red-700">{syncError}</p>
           </div>
         )}
+
+        {isActiveItem && (() => {
+          const receivedAt = details.receivedAt || productReceivedAt || null;
+          return (
+            <div>
+              <label className="text-sm font-medium text-gray-500">Réception à l'atelier</label>
+              <div className="mt-1.5">
+                {receivedAt ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+                    <PackageCheck className="h-3.5 w-3.5" />
+                    Reçu le {new Date(receivedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                    Pas encore reçu
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         <div>
           <div className="flex items-center justify-between">

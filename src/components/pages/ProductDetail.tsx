@@ -27,7 +27,8 @@ import {
   ZoomIn,
   Handshake,
   Image as ImageIcon,
-  Download
+  Download,
+  PackageCheck
 } from 'lucide-react';
 import { ProductPosterModal } from '../products/ProductPosterModal';
 import { downloadProductPhotos } from '../../utils/downloadProductPhotos';
@@ -156,6 +157,24 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
       setCurrentImageIndex((prev) => 
         prev === 0 ? product.images.length - 1 : prev - 1
       );
+    }
+  };
+
+  // Reçu à l'atelier avant la vente (0240) : à la vente B2B, l'article est directement prêt à être livré.
+  const [receivedBusy, setReceivedBusy] = useState(false);
+  const handleToggleReceived = async (received: boolean) => {
+    if (!product || receivedBusy) return;
+    setReceivedBusy(true);
+    try {
+      const { supabase } = await import('../../lib/supabase');
+      const { error: rpcError } = await supabase.rpc('admin_set_product_received', { p_product_id: product.id, p_received: received });
+      if (rpcError) throw new Error(rpcError.message);
+      await fetchProduct();
+      onProductUpdate?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erreur inconnue');
+    } finally {
+      setReceivedBusy(false);
     }
   };
 
@@ -493,7 +512,11 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
             </CardContent>
           </Card>
 
-          <ProductSaleDetails productId={productId} reservedByOrderId={product.reserved_by_order_id} />
+          <ProductSaleDetails
+            productId={productId}
+            reservedByOrderId={product.reserved_by_order_id}
+            productReceivedAt={(product as Product & { received_at?: string | null }).received_at}
+          />
 
           {/* État et statut */}
           <Card>
@@ -553,6 +576,34 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                     {statusUpdateSuccess && (
                       <p className="text-xs text-green-600 mt-1">✓ Statut mis à jour avec succès</p>
                     )}
+                    {(product.status.endsWith('-b2b') || !!product.b2b_reference) && (() => {
+                      const receivedAt = (product as Product & { received_at?: string | null }).received_at;
+                      return receivedAt ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                          <span className="inline-flex items-center gap-1 font-medium text-green-700">
+                            <PackageCheck className="h-3.5 w-3.5" />
+                            Reçu le {new Date(receivedAt).toLocaleDateString('fr-FR')} · prêt à être livré
+                          </span>
+                          <button
+                            onClick={() => handleToggleReceived(false)}
+                            disabled={receivedBusy}
+                            className="text-gray-500 underline hover:text-gray-700 disabled:opacity-50"
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleToggleReceived(true)}
+                          disabled={receivedBusy}
+                          title="L'article est physiquement à l'atelier : dès qu'il sera vendu, il sera directement prêt à être livré"
+                          className="mt-2 flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-gray-900 disabled:opacity-50"
+                        >
+                          <PackageCheck className="h-3.5 w-3.5" />
+                          {receivedBusy ? 'Enregistrement…' : 'Marquer comme reçu (prêt à être livré)'}
+                        </button>
+                      );
+                    })()}
                     {(product.status === 'draft' || product.status === 'draft-b2b') && (
                       <button
                         onClick={() => setShowDirectSaleModal(true)}
