@@ -32,6 +32,7 @@ import {
 import { ProductPosterModal } from '../products/ProductPosterModal';
 import { downloadProductPhotos } from '../../utils/downloadProductPhotos';
 import { useHideFigures } from '../../hooks/useHideFigures';
+import { CreateProduct } from './CreateProduct';
 
 interface ProductDetailProps {
   productId: string;
@@ -53,6 +54,8 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
   const [showDirectSaleModal, setShowDirectSaleModal] = useState(false);
   const [statusUpdateSuccess, setStatusUpdateSuccess] = useState(false);
   const [showPoster, setShowPoster] = useState(false);
+  // Modification sur place quand la fiche est ouverte depuis une enchère, un drop… (pas de onEdit fourni).
+  const [editingInline, setEditingInline] = useState(false);
   // Téléchargement de toutes les photos en ZIP : progression « 3/16 » pendant la préparation.
   const [photosProgress, setPhotosProgress] = useState<string | null>(null);
   const handleDownloadPhotos = async () => {
@@ -239,6 +242,19 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
     }
   };
 
+  if (editingInline) {
+    return (
+      <CreateProduct
+        productId={productId}
+        onBack={() => {
+          setEditingInline(false);
+          fetchProduct();
+          onProductUpdate?.();
+        }}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="p-6 max-w-6xl mx-auto">
@@ -290,8 +306,9 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
         
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between space-y-4 lg:space-y-0">
           <div className="flex-1">
-            <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 mb-2">
-              <h1 className="text-xl md:text-2xl font-bold text-gray-900">{product.name}</h1>
+            <div className="flex flex-wrap items-start gap-x-3 gap-y-2 mb-2">
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900 min-w-0">{product.name}</h1>
+              <span className="shrink-0 mt-1 md:mt-1.5">
               <Badge variant={
                 product.status === 'for-sale-online' || product.status === 'for-sale-b2b' || product.status === 'cadeau-livre' ? 'success' :
                 product.status === 'sold-online' || product.status === 'sold-other-platform' || product.status === 'sold-b2b' ? 'warning' :
@@ -301,6 +318,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
               }>
                 {formatStatus(product.status)}
               </Badge>
+              </span>
             </div>
             <p className="text-gray-600">{product.brand?.name || 'Sans marque'} • {product.product_code}</p>
             {product.b2b_reference && (
@@ -336,9 +354,9 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                 {photosProgress ? `Préparation ${photosProgress}…` : 'Télécharger les photos'}
               </button>
             )}
-            {onEdit && (
+            {(
               <button
-                onClick={() => onEdit(productId)}
+                onClick={() => (onEdit ? onEdit(productId) : setEditingInline(true))}
                 className="flex items-center justify-center px-4 py-3 md:py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors touch-manipulation text-sm"
               >
                 <Edit className="h-4 w-4 mr-2" />
@@ -506,6 +524,10 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                         updatingStatus ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
+                      {!['draft', 'draft-b2b', 'for-sale-online', 'for-sale-other-platform', 'for-sale-b2b', 'cadeau', 'sold-online', 'sold-b2b', 'sold-other-platform', 'sold-display'].includes(product.status) && (
+                        // Statut géré ailleurs (enchère, drop, réservé…) : affiché tel quel au lieu de « Brouillon ».
+                        <option value={product.status} disabled>{formatStatus(product.status)}</option>
+                      )}
                       <optgroup label="📝 En préparation">
                         <option value="draft">Brouillon</option>
                         <option value="draft-b2b">Brouillon (B2B)</option>
