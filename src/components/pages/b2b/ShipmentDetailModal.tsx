@@ -157,8 +157,8 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     setMergeNotice(null);
   }, [shipment?.id]);
   const [cancelLabelsError, setCancelLabelsError] = useState<string | null>(null);
-  // Articles retirés de cette demande car pas encore reçus (0186/0187),
-  // tant qu'ils ne sont rattachés à aucune autre demande.
+  // Articles retirés de cette demande car pas encore reçus (0186/0187), et
+  // reçus depuis : seuls ceux-là peuvent être remis dans la demande.
   const [removedItems, setRemovedItems] = useState<RemovedItem[]>([]);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const loadRemovedItems = useCallback(async (shipmentId: string) => {
@@ -166,6 +166,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
       .from('order_items')
       .select('id, fulfillment_status, product:products(name, images, main_image_index, product_code, reference, b2b_reference, brand:brands(name))')
       .eq('removed_from_shipment_id', shipmentId)
+      .in('fulfillment_status', ['received', 'ready_to_ship'])
       .is('shipment_id', null)
       .eq('status', 'active');
     setRemovedItems(error ? [] : ((data || []) as unknown as RemovedItem[]));
@@ -179,20 +180,21 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   // demandés : l'admin peut les ajouter lui-même à cette demande (0199).
   const [readyItems, setReadyItems] = useState<RemovedItem[]>([]);
   const [addingId, setAddingId] = useState<string | null>(null);
-  const loadReadyItems = useCallback(async (profileId: string) => {
+  const loadReadyItems = useCallback(async (profileId: string, own: string) => {
     const { data, error } = await supabase
       .from('order_items')
-      .select('id, fulfillment_status, product:products(name, images, main_image_index, product_code, reference, b2b_reference, brand:brands(name)), order:orders!inner(placed_by_profile_id, order_channel)')
+      .select('id, fulfillment_status, removed_from_shipment_id, product:products(name, images, main_image_index, product_code, reference, b2b_reference, brand:brands(name)), order:orders!inner(placed_by_profile_id, order_channel)')
       .eq('order.placed_by_profile_id', profileId)
       .eq('order.order_channel', 'b2b')
       .eq('fulfillment_status', 'ready_to_ship')
       .is('shipment_id', null)
       .eq('status', 'active')
       .order('created_at', { ascending: true });
-    setReadyItems(error ? [] : ((data || []) as unknown as RemovedItem[]));
+    // Les articles retirés de CETTE demande ont déjà leur encadré « Remettre dans la demande ».
+    setReadyItems(error ? [] : ((data || []) as unknown as (RemovedItem & { removed_from_shipment_id?: string | null })[]).filter((i) => i.removed_from_shipment_id !== own));
   }, []);
   useEffect(() => {
-    if (shipment?.requested_by_profile_id && shipment.status === 'requested') loadReadyItems(shipment.requested_by_profile_id);
+    if (shipment?.requested_by_profile_id && shipment.status === 'requested') loadReadyItems(shipment.requested_by_profile_id, shipment.id);
     else setReadyItems([]);
   }, [shipment, loadReadyItems]);
 
@@ -227,7 +229,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
       setRevertError(error.message);
       return;
     }
-    if (shipment.requested_by_profile_id) await loadReadyItems(shipment.requested_by_profile_id);
+    if (shipment.requested_by_profile_id) await loadReadyItems(shipment.requested_by_profile_id, shipment.id);
     onGenerated();
   };
 
@@ -565,7 +567,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-800">
                   <Undo2 className="h-3.5 w-3.5" />
-                  {removedItems.length} article{removedItems.length > 1 ? 's' : ''} retiré{removedItems.length > 1 ? 's' : ''} (pas encore reçu{removedItems.length > 1 ? 's' : ''})
+                  {removedItems.length} article{removedItems.length > 1 ? 's' : ''} retiré{removedItems.length > 1 ? 's' : ''} de la demande, reçu{removedItems.length > 1 ? 's' : ''} depuis
                 </p>
                 <ul className="divide-y divide-amber-100">
                   {removedItems.map((item) => {
