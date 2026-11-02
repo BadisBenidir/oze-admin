@@ -222,7 +222,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                       · Dans le carton : {packedCount}/{items.length}
                     </span>
                   </th>
-                  <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Colis</th>
+                  {parcels.length > 1 && <th className="text-right py-2 px-3 font-medium text-gray-500 text-xs">Colis</th>}
                 </tr>
               </thead>
               <tbody>
@@ -232,7 +232,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                   const image = product?.images?.[product.main_image_index] || product?.images?.[0];
                   return (
                     <tr key={item.id} className={`border-b border-gray-50 last:border-b-0 ${packed[item.id] ? 'bg-green-50/60' : ''}`}>
-                      <td className="py-2 px-3">
+                      <td className="py-2 px-3 w-full max-w-0">
                         <div className="flex items-start gap-3">
                           <label className="flex flex-col items-center gap-0.5 pt-1 cursor-pointer flex-shrink-0" title="Coche quand l'article est dans le carton">
                             <input
@@ -248,7 +248,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                           ) : (
                             <div className="h-12 w-12 rounded-lg bg-gray-100 flex-shrink-0" />
                           )}
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="text-sm text-gray-900 font-medium truncate">{product?.name || 'Article'}</p>
                             <p className="text-xs text-gray-500">
                               {product?.brand?.name && <span>{product.brand.name} · </span>}
@@ -279,7 +279,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                                 </button>
                               </div>
                             )}
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
                               <span className="text-xs font-medium text-gray-700">{item.line_total.toFixed(2)} €</span>
                               {item.product_id && (
                                 <button
@@ -315,7 +315,8 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                           </div>
                         </div>
                       </td>
-                      <td className="py-2 px-3 text-right align-top">
+                      {parcels.length > 1 && (
+                      <td className="py-2 px-3 text-right align-top w-px whitespace-nowrap">
                         <div className="inline-flex gap-1">
                           {parcels.map((_, idx) => (
                             <button
@@ -331,6 +332,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                           ))}
                         </div>
                       </td>
+                      )}
                     </tr>
                   );
                 })}
