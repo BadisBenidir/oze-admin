@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban, PackageX, Combine, RotateCcw } from 'lucide-react';
+import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban, PackageX, Combine, RotateCcw, PackagePlus } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipment, AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { ParcelSplitEditor } from './ParcelSplitEditor';
@@ -175,6 +175,27 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     else setRemovedItems([]);
   }, [shipment, loadRemovedItems]);
 
+  // Autres articles du même acheteur prêts à être livrés mais pas encore
+  // demandés : l'admin peut les ajouter lui-même à cette demande (0199).
+  const [readyItems, setReadyItems] = useState<RemovedItem[]>([]);
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const loadReadyItems = useCallback(async (profileId: string) => {
+    const { data, error } = await supabase
+      .from('order_items')
+      .select('id, fulfillment_status, product:products(name, images, main_image_index, product_code, reference, b2b_reference, brand:brands(name)), order:orders!inner(placed_by_profile_id, order_channel)')
+      .eq('order.placed_by_profile_id', profileId)
+      .eq('order.order_channel', 'b2b')
+      .eq('fulfillment_status', 'ready_to_ship')
+      .is('shipment_id', null)
+      .eq('status', 'active')
+      .order('created_at', { ascending: true });
+    setReadyItems(error ? [] : ((data || []) as unknown as RemovedItem[]));
+  }, []);
+  useEffect(() => {
+    if (shipment?.requested_by_profile_id && shipment.status === 'requested') loadReadyItems(shipment.requested_by_profile_id);
+    else setReadyItems([]);
+  }, [shipment, loadReadyItems]);
+
   if (!shipment) return null;
 
   const handleRestoreItem = async (itemId: string) => {
@@ -194,6 +215,19 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
       return;
     }
     await loadRemovedItems(shipment.id);
+    onGenerated();
+  };
+
+  const handleAddReadyItem = async (itemId: string) => {
+    setRevertError(null);
+    setAddingId(itemId);
+    const { error } = await supabase.rpc('admin_add_item_to_shipment', { p_item_id: itemId, p_shipment_id: shipment.id });
+    setAddingId(null);
+    if (error) {
+      setRevertError(error.message);
+      return;
+    }
+    if (shipment.requested_by_profile_id) await loadReadyItems(shipment.requested_by_profile_id);
     onGenerated();
   };
 
@@ -485,6 +519,45 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
             {revertError && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                 <p className="text-sm text-red-700">{revertError}</p>
+              </div>
+            )}
+
+            {readyItems.length > 0 && realParcels.length === 0 && (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-green-800">
+                  <PackagePlus className="h-3.5 w-3.5" />
+                  {readyItems.length} autre{readyItems.length > 1 ? 's' : ''} article{readyItems.length > 1 ? 's' : ''} prêt{readyItems.length > 1 ? 's' : ''} à livrer, non demandé{readyItems.length > 1 ? 's' : ''}
+                </p>
+                <ul className="divide-y divide-green-100">
+                  {readyItems.map((item) => {
+                    const image = item.product?.images?.[item.product?.main_image_index ?? 0] || item.product?.images?.[0];
+                    return (
+                      <li key={item.id} className="flex items-center gap-3 py-2">
+                        {image ? (
+                          <img src={image} alt={item.product?.name || 'Article'} className="h-9 w-9 flex-shrink-0 rounded-lg border border-green-100 object-cover" />
+                        ) : (
+                          <div className="h-9 w-9 flex-shrink-0 rounded-lg bg-green-100" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-900">{item.product?.name || 'Article'}</p>
+                          <p className="text-xs text-gray-600">
+                            {item.product?.brand?.name && <span>{item.product.brand.name} · </span>}
+                            Réf. {itemRef(item)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddReadyItem(item.id)}
+                          disabled={addingId !== null}
+                          title="Ajouter cet article à cette demande de livraison (même carton, sans nouveaux frais)"
+                          className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-green-300 bg-white px-2.5 py-1.5 text-xs font-medium text-green-800 hover:bg-green-100 disabled:opacity-50"
+                        >
+                          <PackagePlus className="h-3.5 w-3.5" /> {addingId === item.id ? 'Ajout…' : 'Ajouter à la demande'}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
 
