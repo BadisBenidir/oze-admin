@@ -206,7 +206,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
       <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
 
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[94vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
             <h3 className="text-lg font-semibold text-gray-900">
               {addOnly ? `Ajouter des pièces à « ${editingDrop?.title || 'Drop sans nom'} »` : editingDrop ? 'Modifier le drop' : 'Créer un Drop'}
@@ -264,13 +264,13 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
                       type="button"
                       onClick={shuffleSelected}
                       title="Mélange l'ordre d'affichage des articles cochés dans le catalogue revendeur"
-                      className="flex items-center gap-1 text-xs font-medium text-gray-700 underline hover:text-gray-900"
+                      className="flex items-center gap-1 text-sm font-medium text-gray-700 underline hover:text-gray-900"
                     >
                       <Shuffle className="h-3.5 w-3.5" /> Mélanger l'ordre
                     </button>
                   )}
                   {searchTerms.length > 0 && filteredProducts.length > 0 && (
-                    <button type="button" onClick={selectAllFiltered} className="text-xs font-medium text-gray-700 underline hover:text-gray-900">
+                    <button type="button" onClick={selectAllFiltered} className="text-sm font-medium text-gray-700 underline hover:text-gray-900">
                       Tout sélectionner ({filteredProducts.length})
                     </button>
                   )}
@@ -299,7 +299,7 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
                   </div>
                 )}
 
-                <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto divide-y divide-gray-100">
+                <div className="border border-gray-200 rounded-lg max-h-[52vh] overflow-y-auto divide-y divide-gray-100">
                   {loadingProducts ? (
                     [...Array(3)].map((_, i) => (
                       <div key={i} className="p-3">
@@ -324,22 +324,23 @@ export const CreateDropModal: React.FC<CreateDropModalProps> = ({ isOpen, onClos
                             onChange={() => toggleProduct(product.id)}
                             className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
                           />
-                          <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          <div className="h-14 w-14 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden border border-gray-100">
                             {product.images?.length > 0 ? (
                               <img
                                 src={product.images[product.main_image_index] || product.images[0]}
                                 alt={product.name}
                                 className="h-full w-full object-cover"
+                                loading="lazy"
                               />
                             ) : (
                               <Package className="h-4 w-4 text-gray-400" />
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-[15px] font-medium text-gray-900 truncate">{product.name}</p>
+                            <p className="text-sm text-gray-500">
                               {product.brand?.name || 'Sans marque'} · {product.sale_price.toFixed(0)} €
-                              {product.source_reference && <span className="ml-1.5 font-mono text-gray-400">{product.source_reference}</span>}
+                              {product.source_reference && <span className="ml-1.5 font-mono text-xs text-gray-400">{product.source_reference}</span>}
                               {product.status === 'for-sale-b2b' && <span className="ml-1.5 rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700">Déjà en ligne</span>}
                             </p>
                           </div>
