@@ -9,6 +9,7 @@ export interface CommunityPayer {
   community_sub_price: number | null;
   community_sub_plan: string | null;
   community_sub_current_period_end: string | null;
+  community_sub_started_at: string | null;
   profile: { first_name: string | null; last_name: string | null; email: string | null; phone: string | null } | null;
   reseller: { company_name: string } | null;
 }
@@ -24,13 +25,14 @@ export const useCommunityPayers = (enabled = true) => {
     supabase
       .from('reseller_contacts')
       .select(
-        'id, reseller_id, community_sub_status, community_sub_price, community_sub_plan, community_sub_current_period_end, profile:profiles(first_name, last_name, email, phone), reseller:resellers(company_name)'
+        'id, reseller_id, community_sub_status, community_sub_price, community_sub_plan, community_sub_current_period_end, community_sub_started_at, profile:profiles(first_name, last_name, email, phone), reseller:resellers(company_name)'
       )
       .in('community_sub_status', ['active', 'trialing', 'past_due'])
       .then(({ data, error }) => {
         if (error) return;
         const rows = (data || []) as unknown as CommunityPayer[];
-        rows.sort((a, b) => communityPayerName(a).localeCompare(communityPayerName(b)));
+        // Plus récent abonné en premier.
+        rows.sort((a, b) => (b.community_sub_started_at || '').localeCompare(a.community_sub_started_at || ''));
         setPayers(rows);
       });
   }, [enabled]);
