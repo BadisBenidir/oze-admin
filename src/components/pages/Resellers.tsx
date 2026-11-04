@@ -10,7 +10,7 @@ import { ResellerDetail } from './ResellerDetail';
 import { ResellerFormModal } from './ResellerFormModal';
 import { InviteLinkPanel } from '../reseller/InviteLinkPanel';
 import { SubscriptionStats } from './b2b/SubscriptionStats';
-import { useSubscriptionPromos, lifetimeFreeCode, expectedMonthlyAmount } from '../../hooks/useSubscriptionPromos';
+import { useSubscriptionPromos, lifetimeFreeCode, expectedMonthlyAmount, signupPromoCode } from '../../hooks/useSubscriptionPromos';
 import { PendingWalletDebitsButton } from './b2b/PendingWalletDebitsButton';
 import { useCommunityPayers, communityPayerName } from '../../hooks/useCommunityPayers';
 import { generateSecurePassword } from '../../utils/generatePassword';
@@ -388,7 +388,21 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-4 md:px-6 hidden sm:table-cell">{statusBadge(reseller.status)}</td>
+                        <td className="py-4 px-4 md:px-6 hidden sm:table-cell">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {statusBadge(reseller.status)}
+                            {isSubscribers && promoData && (() => {
+                              const code = signupPromoCode(reseller, promoData);
+                              if (!code) return null;
+                              const stripeCoupon = code.startsWith('COUPON:');
+                              return (
+                                <span title={stripeCoupon ? 'Remise posée depuis Stripe' : "Code promo utilisé à l'inscription"}>
+                                  <Badge variant="purple">{stripeCoupon ? 'Remise Stripe' : `Code ${code}`}</Badge>
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </td>
                         <td className="py-4 px-4 md:px-6 hidden lg:table-cell">
                           {isSubscribers ? (
                             <div className="text-sm">

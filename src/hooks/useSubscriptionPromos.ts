@@ -83,6 +83,14 @@ export const lifetimeFreeCode = (r: Reseller, data: SubscriptionPromoData): stri
   return expectedMonthlyAmount(r, data) === 0 ? promo.code.toUpperCase() : null;
 };
 
+/** Code promo saisi à l'inscription : celui de la toute première échéance
+ * payée (« coupon:… » = remise posée depuis le Dashboard Stripe). */
+export const signupPromoCode = (r: Reseller, data: SubscriptionPromoData): string | null => {
+  const own = paymentsOf(r, data.payments);
+  const first = own[own.length - 1];
+  return first?.promo_code ? first.promo_code.toUpperCase() : null;
+};
+
 /** null tant que le chargement n'a pas abouti (ou en cas d'erreur). */
 export const useSubscriptionPromos = (enabled = true): SubscriptionPromoData | null => {
   const [data, setData] = useState<SubscriptionPromoData | null>(null);
