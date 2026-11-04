@@ -13,6 +13,7 @@ interface Preview {
   days_used: number | null;
   days_total: number | null;
   refund: number;
+  refund_full: number;
   success?: boolean;
   refund_error?: string | null;
 }
@@ -36,11 +37,17 @@ export const RevokeSubscriptionControl: React.FC<{
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'prorata' | 'full' | 'custom' | 'none'>('prorata');
+  const [customAmount, setCustomAmount] = useState('');
+  const chosenRefund = (p: Preview) =>
+    mode === 'full' ? p.refund_full : mode === 'none' ? 0 : mode === 'custom' ? Number(customAmount.replace(',', '.')) || 0 : p.refund;
 
   const start = async () => {
     setOpen(true);
     setPreview(null);
     setError(null);
+    setMode('prorata');
+    setCustomAmount('');
     setLoading(true);
     const { data, error: e } = await invokeEdgeFunction<Preview>('admin-cancel-subscription', { contactId, action: 'preview' });
     setLoading(false);
@@ -51,7 +58,12 @@ export const RevokeSubscriptionControl: React.FC<{
   const confirm = async () => {
     setLoading(true);
     setError(null);
-    const { data, error: e } = await invokeEdgeFunction<Preview>('admin-cancel-subscription', { contactId, action: 'confirm' });
+    const { data, error: e } = await invokeEdgeFunction<Preview>('admin-cancel-subscription', {
+      contactId,
+      action: 'confirm',
+      refundMode: mode,
+      refundAmount: mode === 'custom' ? Number(customAmount.replace(',', '.')) : undefined,
+    });
     setLoading(false);
     if (e || !data?.success) return setError(e || 'Résiliation impossible');
     setOpen(false);
@@ -110,8 +122,33 @@ export const RevokeSubscriptionControl: React.FC<{
               <div className="rounded-lg bg-gray-50 p-3 space-y-1">
                 <p>Dernier paiement : <strong>{eur(preview.amount_paid)}</strong> pour la période du {day(preview.period_start)} au {day(preview.period_end)}</p>
                 {preview.days_total ? <p>Utilisé : {preview.days_used} jour{(preview.days_used || 0) > 1 ? 's' : ''} sur {preview.days_total}</p> : null}
-                <p className="text-base">Remboursement : <strong>{eur(preview.refund)}</strong> sur sa carte</p>
               </div>
+              {preview.refund_full > 0 && (
+                <div className="space-y-1.5">
+                  <p className="font-medium text-gray-900">Remboursement sur sa carte</p>
+                  {([
+                    ['prorata', `Au prorata du temps restant : ${eur(preview.refund)}`],
+                    ['full', `Tout rembourser : ${eur(preview.refund_full)}`],
+                    ['custom', 'Autre montant'],
+                    ['none', 'Ne rien rembourser'],
+                  ] as const).map(([value, label]) => (
+                    <label key={value} className="flex cursor-pointer items-center gap-2">
+                      <input type="radio" name="refund-mode" checked={mode === value} onChange={() => setMode(value)} className="text-red-600 focus:ring-red-500" />
+                      <span>{label}</span>
+                      {value === 'custom' && mode === 'custom' && (
+                        <input
+                          value={customAmount}
+                          onChange={(e) => setCustomAmount(e.target.value)}
+                          inputMode="decimal"
+                          placeholder={`max ${preview.refund_full.toFixed(2).replace('.', ',')}`}
+                          className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-gray-500 focus:outline-none"
+                          autoFocus
+                        />
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )}
               <ul className="list-disc space-y-1 pl-5 text-gray-600">
                 <li>L'abonnement Stripe est arrêté tout de suite, plus aucun prélèvement.</li>
                 <li>Il n'a plus accès au catalogue, aux drops, aux enchères ni au sourcing.</li>
@@ -128,10 +165,10 @@ export const RevokeSubscriptionControl: React.FC<{
             <button
               type="button"
               onClick={confirm}
-              disabled={loading || !preview}
+              disabled={loading || !preview || (mode === 'custom' && !(Number(customAmount.replace(',', '.')) >= 0 && Number(customAmount.replace(',', '.')) <= (preview?.refund_full || 0)))}
               className="rounded-lg bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-700 disabled:opacity-50"
             >
-              {loading && preview ? 'Résiliation…' : `Résilier${preview?.refund ? ` et rembourser ${eur(preview.refund)}` : ''}`}
+              {loading && preview ? 'Résiliation…' : `Résilier${preview && chosenRefund(preview) > 0 ? ` et rembourser ${eur(chosenRefund(preview))}` : ''}`}
             </button>
           </div>
         </div>

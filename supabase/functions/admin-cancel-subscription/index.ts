@@ -5,7 +5,10 @@
 //   - body { contactId, action: 'preview' | 'confirm' } :
 //       abonné Club (compte 'subscriber') : resellers.stripe_subscription_id ;
 //       membre de communauté : reseller_contacts.community_sub_stripe_subscription_id ;
-//   - preview : montant remboursé, période, jours utilisés ;
+//   - preview : montant remboursé au prorata, montant total remboursable,
+//     période, jours utilisés ;
+//   - refundMode (confirm) : 'prorata' (défaut), 'full' (tout le dernier
+//     paiement), 'none', ou 'custom' + refundAmount (≤ total remboursable) ;
 //   - confirm : accès retiré (access_revoked_at, posé AVANT la résiliation
 //     Stripe pour que le webhook ne suspende pas le compte Club), abonnement
 //     Stripe résilié sans prorata Stripe, remboursement sur la carte du
@@ -46,7 +49,7 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     if (!(await hasAdminAccess(admin, user.id, 'refunds'))) return reply({ error: 'Accès refusé' }, 403);
 
-    const { contactId, action } = await req.json();
+    const { contactId, action, refundMode, refundAmount } = await req.json();
     if (!contactId || !['preview', 'confirm'].includes(action)) return reply({ error: 'Requête invalide' }, 400);
 
     const { data: contact } = await admin
@@ -81,6 +84,7 @@ Deno.serve(async (req: Request) => {
       const unused = Math.min(1, (periodEnd - Math.max(now, periodStart)) / (periodEnd - periodStart));
       refundCents = Math.max(0, Math.min(Math.floor(invoice.amount_paid * unused), invoice.amount_paid - alreadyRefunded));
     }
+    const fullCents = invoice && chargeId ? Math.max(0, invoice.amount_paid - alreadyRefunded) : 0;
     const summary = {
       club,
       subscription_status: subscription.status,
@@ -90,9 +94,22 @@ Deno.serve(async (req: Request) => {
       days_used: periodStart ? Math.max(0, Math.ceil((Math.min(now, periodEnd ?? now) - periodStart) / DAY)) : null,
       days_total: periodStart && periodEnd ? Math.round((periodEnd - periodStart) / DAY) : null,
       refund: refundCents / 100,
+      refund_full: fullCents / 100,
       already_revoked: Boolean(contact.access_revoked_at),
     };
     if (action === 'preview') return reply(summary);
+
+    // Montant choisi par l'admin (prorata par défaut).
+    if (refundMode === 'full') refundCents = fullCents;
+    else if (refundMode === 'none') refundCents = 0;
+    else if (refundMode === 'custom') {
+      const cents = Math.round(Number(refundAmount) * 100);
+      if (!Number.isFinite(cents) || cents < 0 || cents > fullCents) {
+        return reply({ error: `Montant invalide : entre 0 et ${(fullCents / 100).toFixed(2)} €` }, 400);
+      }
+      refundCents = cents;
+    }
+    summary.refund = refundCents / 100;
 
     // 1. Accès retiré (avant Stripe : le webhook de fin d'abonnement le voit).
     const revokedAt = new Date().toISOString();
