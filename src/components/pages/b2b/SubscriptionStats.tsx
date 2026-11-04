@@ -4,6 +4,7 @@ import { Card, CardContent } from '../../ui/Card';
 import type { Reseller } from '../../../hooks/useResellers';
 import { supabase } from '../../../lib/supabase';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
+import { useCommunityPayers } from '../../../hooks/useCommunityPayers';
 import { expectedMonthlyAmount, planPriceValue, type SubscriptionPromoData } from '../../../hooks/useSubscriptionPromos';
 
 /**
@@ -18,16 +19,6 @@ import { expectedMonthlyAmount, planPriceValue, type SubscriptionPromoData } fro
  * de groupe (reseller_contacts.community_sub_*, 0214).
  */
 
-type CommunityPayer = {
-  id: string;
-  community_sub_status: string;
-  community_sub_price: number | null;
-  community_sub_plan: string | null;
-  community_sub_current_period_end: string | null;
-  profile: { first_name: string | null; last_name: string | null; email: string | null } | null;
-  reseller: { company_name: string } | null;
-};
-
 type PendingSignup = {
   id: string;
   email: string;
@@ -39,7 +30,6 @@ type PendingSignup = {
   reminder_count: number | null;
 };
 
-const PREVIEW = 5;
 /** Lien de reprise du paiement valable 30 jours après l'inscription (b2b-signup). */
 const RESUME_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -85,22 +75,8 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[]; promoData: S
   const revendeur = clubPaying.filter((r) => r.subscription_plan === 'revendeur');
 
   // Membres des communautés partenaires abonnés (accompagnement d'Aurel…).
-  const [communityPayers, setCommunityPayers] = useState<CommunityPayer[]>([]);
-  const [showAllCommunity, setShowAllCommunity] = useState(false);
-  useEffect(() => {
-    supabase
-      .from('reseller_contacts')
-      .select('id, community_sub_status, community_sub_price, community_sub_plan, community_sub_current_period_end, profile:profiles(first_name, last_name, email), reseller:resellers(company_name)')
-      .in('community_sub_status', [...ONGOING])
-      .then(({ data, error }) => {
-        if (error) return;
-        const rows = (data || []) as unknown as CommunityPayer[];
-        rows.sort((a, b) => (a.community_sub_current_period_end || '').localeCompare(b.community_sub_current_period_end || ''));
-        setCommunityPayers(rows);
-      });
-  }, []);
+  const communityPayers = useCommunityPayers();
   const communityMrr = communityPayers.reduce((sum, c) => sum + (Number(c.community_sub_price) || 0), 0);
-  const communityCompanies = [...new Set(communityPayers.map((c) => c.reseller?.company_name).filter(Boolean))];
 
   const mrr = clubMrr + communityMrr;
   const mrrHint = [
@@ -200,49 +176,6 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[]; promoData: S
         />
       </div>
 
-      {communityPayers.length > 0 && (
-        <Card>
-          <CardContent className="p-4">
-            <p className="mb-3 flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-900">
-              <Users className="h-4 w-4 text-gray-400" />
-              Membres payants des communautés ({communityPayers.length})
-              <span className="text-xs font-normal text-gray-500">
-                {communityCompanies.join(', ')} · {EUR(communityMrr)} / mois
-              </span>
-            </p>
-            <ul className="divide-y divide-gray-100">
-              {(showAllCommunity ? communityPayers : communityPayers.slice(0, PREVIEW)).map((c) => (
-                <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                  <span className="min-w-0 truncate text-gray-900">
-                    {[c.profile?.first_name, c.profile?.last_name].filter(Boolean).join(' ') || c.profile?.email || 'Membre'}
-                    <span className="ml-2 text-xs text-gray-500">{c.profile?.email}</span>
-                    {c.reseller?.company_name && <span className="ml-2 text-xs text-gray-400">· {c.reseller.company_name}</span>}
-                  </span>
-                  <span className="text-xs text-gray-600">
-                    <span className="font-medium text-gray-900">{EUR(Number(c.community_sub_price) || 0)}</span>
-                    {c.community_sub_plan === 'drops' ? ' · Drops' : ''}
-                    {c.community_sub_status === 'past_due' ? (
-                      <span className="ml-2 font-medium text-red-700">Paiement en échec</span>
-                    ) : c.community_sub_current_period_end ? (
-                      <span className="ml-2 text-gray-500">renouvellement le {shortDate(c.community_sub_current_period_end)}</span>
-                    ) : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {communityPayers.length > PREVIEW && (
-              <button
-                type="button"
-                onClick={() => setShowAllCommunity((v) => !v)}
-                className="mt-2 text-sm font-medium text-gray-600 hover:text-gray-900"
-              >
-                {showAllCommunity ? 'Afficher moins' : `Afficher plus (${communityPayers.length - PREVIEW})`}
-              </button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardContent className="p-4">
@@ -282,12 +215,12 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[]; promoData: S
               <span className="font-semibold tabular-nums text-gray-900">{neverPaid}</span>
             </div>
             {pendingSignups.length > 0 && (
-              <ul className="space-y-1.5">
+              <ul className="-mx-1 divide-y divide-gray-100 border-y border-gray-100">
                 {pendingSignups.map((p) => {
                   const expired = Date.now() - new Date(p.created_at).getTime() > RESUME_MAX_AGE_MS;
                   return (
-                    <li key={p.id} className="rounded-lg bg-gray-50 px-2.5 py-2">
-                      <div className="flex items-start justify-between gap-2">
+                    <li key={p.id} className="px-1 py-2">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-xs font-medium text-gray-900">
                             {p.first_name} {p.last_name}
@@ -305,7 +238,7 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[]; promoData: S
                             onClick={() => signupAction('remind', [p.id], p.id)}
                             disabled={signupBusy !== null || expired}
                             title={expired ? 'Lien de paiement expiré (plus de 30 jours) : la personne doit recommencer son inscription' : "Renvoyer l'email avec le lien pour finaliser le paiement"}
-                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-40"
+                            className="inline-flex items-center gap-1 rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white hover:bg-gray-700 disabled:opacity-30"
                           >
                             <Send className="h-3 w-3" /> {signupBusy === p.id ? '…' : 'Relancer'}
                           </button>

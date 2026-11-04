@@ -12,6 +12,7 @@ import { InviteLinkPanel } from '../reseller/InviteLinkPanel';
 import { SubscriptionStats } from './b2b/SubscriptionStats';
 import { useSubscriptionPromos, lifetimeFreeCode, expectedMonthlyAmount } from '../../hooks/useSubscriptionPromos';
 import { PendingWalletDebitsButton } from './b2b/PendingWalletDebitsButton';
+import { useCommunityPayers, communityPayerName } from '../../hooks/useCommunityPayers';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import { whatsappUrl } from '../../utils/whatsapp';
 
@@ -75,6 +76,8 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
     updateContactCanPreviewDrops,
   } = useResellers(isAdmin);
   const promoData = useSubscriptionPromos(isSubscribers);
+  const communityPayers = useCommunityPayers(isSubscribers);
+  const [subscriberTab, setSubscriberTab] = useState<'paying' | 'community' | 'free' | 'other'>('paying');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Reseller['status']>('all');
@@ -265,22 +268,86 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
     );
   }
 
-  // Section Abonnés : payants / accès gratuit (code 100 %) / autres, 5 par
-  // section puis « Afficher plus ». Partenaires : une seule liste complète.
+  // Section Abonnés : onglets Payants / Communauté / Accès gratuit / Autres,
+  // 5 lignes puis « Afficher plus ». Partenaires : une seule liste complète.
   const ongoingSub = (r: Reseller) => ['active', 'trialing', 'past_due'].includes(r.subscription_status || '');
   const isFreeSub = (r: Reseller) => Boolean(promoData) && ongoingSub(r) && expectedMonthlyAmount(r, promoData!) === 0;
-  const subscriberSections: { key: string; title: string | null; hint?: string; items: Reseller[]; limited: boolean }[] = isSubscribers
-    ? [
-        { key: 'paying', title: 'Payants', items: filteredResellers.filter((r) => r.status === 'active' && ongoingSub(r) && !isFreeSub(r)), limited: true },
-        { key: 'free', title: 'Accès gratuit', hint: 'code promo 100 %, aucun prélèvement', items: filteredResellers.filter((r) => isFreeSub(r)), limited: true },
-        {
-          key: 'other',
-          title: 'En attente, suspendus ou terminés',
-          items: filteredResellers.filter((r) => !isFreeSub(r) && !(r.status === 'active' && ongoingSub(r))),
-          limited: true,
-        },
-      ]
-    : [{ key: 'all', title: null, items: filteredResellers, limited: false }];
+  const search = searchTerm.trim().toLowerCase();
+  const filteredCommunity = communityPayers.filter(
+    (c) =>
+      !search ||
+      communityPayerName(c).toLowerCase().includes(search) ||
+      (c.profile?.email || '').toLowerCase().includes(search) ||
+      (c.reseller?.company_name || '').toLowerCase().includes(search)
+  );
+  const subscriberTabs: { key: typeof subscriberTab; label: string; items: Reseller[] }[] = [
+    { key: 'paying', label: 'Payants', items: filteredResellers.filter((r) => r.status === 'active' && ongoingSub(r) && !isFreeSub(r)) },
+    { key: 'community', label: 'Communauté', items: [] },
+    { key: 'free', label: 'Accès gratuit', items: filteredResellers.filter((r) => isFreeSub(r)) },
+    { key: 'other', label: 'En attente / terminés', items: filteredResellers.filter((r) => !isFreeSub(r) && !(r.status === 'active' && ongoingSub(r))) },
+  ];
+  const tabCount = (key: typeof subscriberTab) => (key === 'community' ? filteredCommunity.length : subscriberTabs.find((t) => t.key === key)!.items.length);
+  const tabRows = isSubscribers ? (subscriberTab === 'community' ? filteredCommunity.length : subscriberTabs.find((t) => t.key === subscriberTab)!.items.length) : filteredResellers.length;
+  const showAllRows = !isSubscribers || Boolean(expandedSections[subscriberTab]) || Boolean(search);
+  const rowLimit = showAllRows ? Infinity : SECTION_PREVIEW;
+
+  const renderCommunityRow = (c: (typeof communityPayers)[number]) => {
+    const name = communityPayerName(c);
+    const initials = name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+    return (
+      <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+        <td className="py-4 px-4 md:px-6">
+          <div className="flex items-center space-x-3">
+            <div className="h-9 w-9 rounded-full bg-cyan-700 flex items-center justify-center flex-shrink-0 text-xs font-semibold text-white">{initials}</div>
+            <div>
+              <p className="font-medium text-gray-900 text-sm md:text-base">{name}</p>
+              {c.profile?.email && (
+                <p className="text-xs md:text-sm text-gray-500 flex items-center gap-1">
+                  <Mail className="h-3 w-3" /> {c.profile.email}
+                </p>
+              )}
+              {c.profile?.phone && (
+                <a
+                  href={whatsappUrl(c.profile.phone) || `tel:${c.profile.phone}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs md:text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1"
+                  title="Ouvrir la discussion WhatsApp"
+                >
+                  <Phone className="h-3 w-3" /> {c.profile.phone}
+                </a>
+              )}
+            </div>
+          </div>
+        </td>
+        <td className="py-4 px-4 md:px-6 hidden sm:table-cell">
+          {c.community_sub_status === 'past_due' ? <Badge variant="danger">Paiement en échec</Badge> : <Badge variant="success">Actif</Badge>}
+        </td>
+        <td className="py-4 px-4 md:px-6 hidden lg:table-cell">
+          <div className="text-sm">
+            <p className="font-medium text-gray-900">
+              {c.reseller?.company_name || 'Communauté'} · {(Number(c.community_sub_price) || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}/mois
+            </p>
+            {c.community_sub_current_period_end && (
+              <p className="text-xs text-gray-500">Renouvellement le {formatShortDate(c.community_sub_current_period_end)}</p>
+            )}
+          </div>
+        </td>
+        <td className="py-4 px-4 md:px-6">
+          <button
+            onClick={() => {
+              const company = resellers.find((r) => r.id === c.reseller_id);
+              if (company) setViewingReseller(company);
+            }}
+            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Ouvrir la fiche de la communauté"
+          >
+            <Eye className="h-4 w-4" />
+          </button>
+        </td>
+      </tr>
+    );
+  };
 
   const renderResellerRow = (reseller: Reseller) => (
                       <tr key={reseller.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
@@ -484,6 +551,28 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
       {(filteredResellers.length > 0 || loading) && (
         <Card>
           <CardContent className="p-0">
+            {isSubscribers && (
+              <div className="flex gap-1 overflow-x-auto border-b border-gray-100 px-2 md:px-4">
+                {subscriberTabs.map((t) => {
+                  const active = subscriberTab === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setSubscriberTab(t.key)}
+                      className={`-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
+                        active ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      {t.label}
+                      <span className={`rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${active ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                        {tabCount(t.key)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -513,40 +602,39 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
                       </tr>
                     ))
                   ) : (
-                    subscriberSections.map((section) => {
-                      const expanded = Boolean(expandedSections[section.key]) || Boolean(searchTerm.trim());
-                      const visible = section.limited && !expanded ? section.items.slice(0, SECTION_PREVIEW) : section.items;
-                      return (
-                        <React.Fragment key={section.key}>
-                          {section.title && section.items.length > 0 && (
-                            <tr className="bg-gray-50 border-b border-gray-100">
-                              <td colSpan={4} className="py-2 px-4 md:px-6 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                {section.title} ({section.items.length})
-                                {section.hint && <span className="ml-2 normal-case font-normal tracking-normal text-gray-400">{section.hint}</span>}
-                              </td>
-                            </tr>
-                          )}
-                          {visible.map((reseller) => renderResellerRow(reseller))}
-                          {section.limited && section.items.length > SECTION_PREVIEW && !searchTerm.trim() && (
-                            <tr className="border-b border-gray-50">
-                              <td colSpan={4} className="py-2 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedSections((prev) => ({ ...prev, [section.key]: !prev[section.key] }))}
-                                  className="text-sm font-medium text-gray-600 hover:text-gray-900"
-                                >
-                                  {expanded ? 'Afficher moins' : `Afficher plus (${section.items.length - SECTION_PREVIEW})`}
-                                </button>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })
+                    <>
+                      {(isSubscribers && subscriberTab === 'community'
+                        ? filteredCommunity.slice(0, rowLimit).map((c) => renderCommunityRow(c))
+                        : (isSubscribers ? subscriberTabs.find((t) => t.key === subscriberTab)!.items : filteredResellers)
+                            .slice(0, rowLimit)
+                            .map((reseller) => renderResellerRow(reseller)))}
+                      {tabRows === 0 && (
+                        <tr>
+                          <td colSpan={4} className="py-10 text-center text-sm text-gray-500">
+                            {subscriberTab === 'free'
+                              ? 'Aucun accès gratuit.'
+                              : subscriberTab === 'community'
+                                ? 'Aucun membre de communauté abonné.'
+                                : 'Personne dans cette catégorie.'}
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   )}
                 </tbody>
               </table>
             </div>
+            {isSubscribers && !search && tabRows > SECTION_PREVIEW && (
+              <div className="border-t border-gray-100 py-2.5 text-center">
+                <button
+                  type="button"
+                  onClick={() => setExpandedSections((prev) => ({ ...prev, [subscriberTab]: !prev[subscriberTab] }))}
+                  className="text-sm font-medium text-gray-600 hover:text-gray-900"
+                >
+                  {expandedSections[subscriberTab] ? 'Afficher moins' : `Afficher plus (${tabRows - SECTION_PREVIEW})`}
+                </button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
