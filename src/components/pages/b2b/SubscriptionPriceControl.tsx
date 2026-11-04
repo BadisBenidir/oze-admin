@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Tag } from 'lucide-react';
 import { Modal } from '../../ui/Modal';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
+import { supabase } from '../../../lib/supabase';
 
 interface Preview {
   plan_price: number;
@@ -24,18 +25,30 @@ export const SubscriptionPriceControl: React.FC<{ resellerId: string; name: stri
   const [price, setPrice] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Dernière échéance payée (b2b_subscription_payments, hors remboursements).
+  const [lastPayment, setLastPayment] = useState<{ amount: number; paid_at: string; promo_code: string | null } | null>(null);
 
   const start = async () => {
     setOpen(true);
     setPreview(null);
     setError(null);
     setPrice('');
+    setLastPayment(null);
     setLoading(true);
+    supabase
+      .from('b2b_subscription_payments')
+      .select('amount, paid_at, promo_code')
+      .eq('reseller_id', resellerId)
+      .gt('amount', 0)
+      .order('paid_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setLastPayment(data ? { ...data, amount: Number(data.amount) } : null));
     const { data, error: e } = await invokeEdgeFunction<Preview>('admin-subscription-price', { action: 'preview', resellerId });
     setLoading(false);
     if (e || !data) return setError(e || "Lecture de l'abonnement impossible");
     setPreview(data);
-    setPrice(String(data.next_amount ?? data.plan_price).replace('.', ','));
+    setPrice((data.next_amount ?? data.plan_price).toFixed(2).replace('.', ','));
   };
 
   const parsed = Number(price.replace(',', '.'));
@@ -74,6 +87,26 @@ export const SubscriptionPriceControl: React.FC<{ resellerId: string; name: stri
             <>
               <div className="space-y-1 rounded-lg bg-gray-50 p-3">
                 <p>Prix du pass : <strong>{eur(preview.plan_price)}</strong> / mois</p>
+                <p>
+                  Dernier mois payé :{' '}
+                  {lastPayment ? (
+                    <>
+                      <strong>{eur(lastPayment.amount)}</strong> le {day(lastPayment.paid_at)}
+                      {lastPayment.promo_code ? ` (code ${lastPayment.promo_code.replace(/^coupon:/, '')})` : ''}
+                      {lastPayment.amount < preview.plan_price && (
+                        <button
+                          type="button"
+                          onClick={() => setPrice(lastPayment.amount.toFixed(2).replace('.', ','))}
+                          className="ml-2 text-xs font-medium text-gray-700 underline hover:text-gray-900"
+                        >
+                          Garder ce prix
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </p>
                 <p>Remise en cours : {preview.discounts.length ? preview.discounts.join(', ') : 'aucune'}</p>
                 <p>
                   Prochain prélèvement : <strong>{preview.next_amount !== null ? eur(preview.next_amount) : '—'}</strong>
