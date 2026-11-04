@@ -10,10 +10,13 @@ import { ResellerDetail } from './ResellerDetail';
 import { ResellerFormModal } from './ResellerFormModal';
 import { InviteLinkPanel } from '../reseller/InviteLinkPanel';
 import { SubscriptionStats } from './b2b/SubscriptionStats';
-import { useSubscriptionPromos, lifetimeFreeCode } from '../../hooks/useSubscriptionPromos';
+import { useSubscriptionPromos, lifetimeFreeCode, expectedMonthlyAmount } from '../../hooks/useSubscriptionPromos';
 import { PendingWalletDebitsButton } from './b2b/PendingWalletDebitsButton';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import { whatsappUrl } from '../../utils/whatsapp';
+
+/** Section Abonnés : lignes affichées par groupe avant « Afficher plus ». */
+const SECTION_PREVIEW = 5;
 import {
   Building2,
   Plus,
@@ -57,6 +60,7 @@ interface ResellersProps {
 
 export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' }) => {
   const isSubscribers = accountType === 'subscriber';
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const { isAdmin } = useAdminAuth();
   const {
     resellers,
@@ -261,6 +265,129 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
     );
   }
 
+  // Section Abonnés : payants / accès gratuit (code 100 %) / autres, 5 par
+  // section puis « Afficher plus ». Partenaires : une seule liste complète.
+  const ongoingSub = (r: Reseller) => ['active', 'trialing', 'past_due'].includes(r.subscription_status || '');
+  const isFreeSub = (r: Reseller) => Boolean(promoData) && ongoingSub(r) && expectedMonthlyAmount(r, promoData!) === 0;
+  const subscriberSections: { key: string; title: string | null; hint?: string; items: Reseller[]; limited: boolean }[] = isSubscribers
+    ? [
+        { key: 'paying', title: 'Payants', items: filteredResellers.filter((r) => r.status === 'active' && ongoingSub(r) && !isFreeSub(r)), limited: true },
+        { key: 'free', title: 'Accès gratuit', hint: 'code promo 100 %, aucun prélèvement', items: filteredResellers.filter((r) => isFreeSub(r)), limited: true },
+        {
+          key: 'other',
+          title: 'En attente, suspendus ou terminés',
+          items: filteredResellers.filter((r) => !isFreeSub(r) && !(r.status === 'active' && ongoingSub(r))),
+          limited: true,
+        },
+      ]
+    : [{ key: 'all', title: null, items: filteredResellers, limited: false }];
+
+  const renderResellerRow = (reseller: Reseller) => (
+                      <tr key={reseller.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                        <td className="py-4 px-4 md:px-6">
+                          <div className="flex items-center space-x-3">
+                            <div className="h-9 w-9 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0">
+                              <Building2 className="h-4 w-4 text-white" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900 text-sm md:text-base flex flex-wrap items-center gap-2">
+                                {reseller.company_name}
+                                {isSubscribers && promoData && (() => {
+                                  const freeCode = lifetimeFreeCode(reseller, promoData);
+                                  return freeCode ? (
+                                    <span title="Code promo 100 % à vie : aucun prélèvement">
+                                      <Badge variant="purple">Gratuit à vie · {freeCode}</Badge>
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </p>
+                              {reseller.contact_email && (
+                                <p className="text-xs md:text-sm text-gray-500 flex items-center gap-1">
+                                  <Mail className="h-3 w-3" /> {reseller.contact_email}
+                                </p>
+                              )}
+                              {reseller.contact_phone && (
+                                <a
+                                  href={whatsappUrl(reseller.contact_phone) || `tel:${reseller.contact_phone}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-xs md:text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1"
+                                  title="Ouvrir la discussion WhatsApp"
+                                >
+                                  <Phone className="h-3 w-3" /> {reseller.contact_phone}
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 md:px-6 hidden sm:table-cell">{statusBadge(reseller.status)}</td>
+                        <td className="py-4 px-4 md:px-6 hidden lg:table-cell">
+                          {isSubscribers ? (
+                            <div className="text-sm">
+                              <p className="font-medium text-gray-900">{PLAN_LABEL[reseller.subscription_plan || ''] || '—'}</p>
+                              {reseller.subscription_current_period_end && (
+                                <p className={`text-xs ${reseller.subscription_cancel_at_period_end ? 'text-amber-700' : 'text-gray-500'}`}>
+                                  {reseller.subscription_cancel_at_period_end ? 'Résilié, fin le ' : 'Renouvellement le '}
+                                  {formatShortDate(reseller.subscription_current_period_end)}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <Users className="h-4 w-4 text-gray-400" />
+                              {reseller.contacts_count}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-4 px-4 md:px-6">
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={() => setViewingReseller(reseller)}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Détails"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            {!isSubscribers && <button
+                              onClick={() => openContactsModal(reseller)}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Gérer les contacts"
+                            >
+                              <UserPlus className="h-4 w-4" />
+                            </button>}
+                            <button
+                              onClick={() => handleToggleStatus(reseller)}
+                              className={`p-2 rounded-lg transition-colors ${
+                                reseller.status === 'active'
+                                  ? 'text-orange-600 hover:bg-orange-50'
+                                  : 'text-green-600 hover:bg-green-50'
+                              }`}
+                              title={reseller.status === 'active' ? 'Suspendre' : 'Activer'}
+                            >
+                              {reseller.status === 'active' ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                            </button>
+                            {!isSubscribers && reseller.status !== 'discovery' && (
+                              <button
+                                onClick={() => handleSetDiscovery(reseller)}
+                                className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                title="Passer en accès découverte (lecture seule, aucun achat possible)"
+                              >
+                                <Glasses className="h-4 w-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDelete(reseller)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+  );
+
   return (
     <div className="p-4 md:p-6">
       {/* Header */}
@@ -386,111 +513,36 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
                       </tr>
                     ))
                   ) : (
-                    filteredResellers.map((reseller) => (
-                      <tr key={reseller.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                        <td className="py-4 px-4 md:px-6">
-                          <div className="flex items-center space-x-3">
-                            <div className="h-9 w-9 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0">
-                              <Building2 className="h-4 w-4 text-white" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900 text-sm md:text-base flex flex-wrap items-center gap-2">
-                                {reseller.company_name}
-                                {isSubscribers && promoData && (() => {
-                                  const freeCode = lifetimeFreeCode(reseller, promoData);
-                                  return freeCode ? (
-                                    <span title="Code promo 100 % à vie : aucun prélèvement">
-                                      <Badge variant="purple">Gratuit à vie · {freeCode}</Badge>
-                                    </span>
-                                  ) : null;
-                                })()}
-                              </p>
-                              {reseller.contact_email && (
-                                <p className="text-xs md:text-sm text-gray-500 flex items-center gap-1">
-                                  <Mail className="h-3 w-3" /> {reseller.contact_email}
-                                </p>
-                              )}
-                              {reseller.contact_phone && (
-                                <a
-                                  href={whatsappUrl(reseller.contact_phone) || `tel:${reseller.contact_phone}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="text-xs md:text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1"
-                                  title="Ouvrir la discussion WhatsApp"
-                                >
-                                  <Phone className="h-3 w-3" /> {reseller.contact_phone}
-                                </a>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4 px-4 md:px-6 hidden sm:table-cell">{statusBadge(reseller.status)}</td>
-                        <td className="py-4 px-4 md:px-6 hidden lg:table-cell">
-                          {isSubscribers ? (
-                            <div className="text-sm">
-                              <p className="font-medium text-gray-900">{PLAN_LABEL[reseller.subscription_plan || ''] || '—'}</p>
-                              {reseller.subscription_current_period_end && (
-                                <p className={`text-xs ${reseller.subscription_cancel_at_period_end ? 'text-amber-700' : 'text-gray-500'}`}>
-                                  {reseller.subscription_cancel_at_period_end ? 'Résilié, fin le ' : 'Renouvellement le '}
-                                  {formatShortDate(reseller.subscription_current_period_end)}
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1 text-sm text-gray-600">
-                              <Users className="h-4 w-4 text-gray-400" />
-                              {reseller.contacts_count}
-                            </div>
+                    subscriberSections.map((section) => {
+                      const expanded = Boolean(expandedSections[section.key]) || Boolean(searchTerm.trim());
+                      const visible = section.limited && !expanded ? section.items.slice(0, SECTION_PREVIEW) : section.items;
+                      return (
+                        <React.Fragment key={section.key}>
+                          {section.title && section.items.length > 0 && (
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                              <td colSpan={4} className="py-2 px-4 md:px-6 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                {section.title} ({section.items.length})
+                                {section.hint && <span className="ml-2 normal-case font-normal tracking-normal text-gray-400">{section.hint}</span>}
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="py-4 px-4 md:px-6">
-                          <div className="flex items-center space-x-1">
-                            <button
-                              onClick={() => setViewingReseller(reseller)}
-                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Détails"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                            {!isSubscribers && <button
-                              onClick={() => openContactsModal(reseller)}
-                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Gérer les contacts"
-                            >
-                              <UserPlus className="h-4 w-4" />
-                            </button>}
-                            <button
-                              onClick={() => handleToggleStatus(reseller)}
-                              className={`p-2 rounded-lg transition-colors ${
-                                reseller.status === 'active'
-                                  ? 'text-orange-600 hover:bg-orange-50'
-                                  : 'text-green-600 hover:bg-green-50'
-                              }`}
-                              title={reseller.status === 'active' ? 'Suspendre' : 'Activer'}
-                            >
-                              {reseller.status === 'active' ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                            </button>
-                            {!isSubscribers && reseller.status !== 'discovery' && (
-                              <button
-                                onClick={() => handleSetDiscovery(reseller)}
-                                className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                                title="Passer en accès découverte (lecture seule, aucun achat possible)"
-                              >
-                                <Glasses className="h-4 w-4" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleDelete(reseller)}
-                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Supprimer"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                          {visible.map((reseller) => renderResellerRow(reseller))}
+                          {section.limited && section.items.length > SECTION_PREVIEW && !searchTerm.trim() && (
+                            <tr className="border-b border-gray-50">
+                              <td colSpan={4} className="py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedSections((prev) => ({ ...prev, [section.key]: !prev[section.key] }))}
+                                  className="text-sm font-medium text-gray-600 hover:text-gray-900"
+                                >
+                                  {expanded ? 'Afficher moins' : `Afficher plus (${section.items.length - SECTION_PREVIEW})`}
+                                </button>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
