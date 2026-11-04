@@ -26,6 +26,7 @@ import { openMemberSpace } from '../../utils/openMemberSpace';
 import { supabase } from '../../lib/supabase';
 import { useMemberGroups } from '../../hooks/useMemberGroups';
 import { RevokeSubscriptionControl } from './b2b/RevokeSubscriptionControl';
+import { SubscriptionPriceControl } from './b2b/SubscriptionPriceControl';
 
 interface ResellerDetailProps {
   reseller: Reseller;
@@ -471,12 +472,20 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
           onResetPassword={() => subscriberContact && openResetModal(subscriberContact)}
           onOpenSpace={isOwner && subscriberContact ? () => handleOpenSpace(subscriberContact.profile_id, `${subscriberContact.first_name || ''} ${subscriberContact.last_name || ''}`.trim() || subscriberContact.email || 'ce membre') : undefined}
           revokeControl={subscriberContact && (subscriberContact.access_revoked_at || ['active', 'trialing', 'past_due'].includes(currentReseller.subscription_status || '')) ? (
-            <RevokeSubscriptionControl
-              contactId={subscriberContact.id}
-              name={`${subscriberContact.first_name || ''} ${subscriberContact.last_name || ''}`.trim() || subscriberContact.email}
-              revokedAt={subscriberContact.access_revoked_at}
-              onChanged={refreshAfterRevoke}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              {!subscriberContact.access_revoked_at && currentReseller.stripe_subscription_id && (
+                <SubscriptionPriceControl
+                  resellerId={currentReseller.id}
+                  name={`${subscriberContact.first_name || ''} ${subscriberContact.last_name || ''}`.trim() || subscriberContact.email}
+                />
+              )}
+              <RevokeSubscriptionControl
+                contactId={subscriberContact.id}
+                name={`${subscriberContact.first_name || ''} ${subscriberContact.last_name || ''}`.trim() || subscriberContact.email}
+                revokedAt={subscriberContact.access_revoked_at}
+                onChanged={refreshAfterRevoke}
+              />
+            </div>
           ) : null}
         />
       )}
