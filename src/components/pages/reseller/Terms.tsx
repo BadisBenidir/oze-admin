@@ -181,6 +181,15 @@ export const Terms: React.FC = () => {
                   sommes dues. Les commandes, le solde du portefeuille et les informations du client sont conservés.
                 </p>
                 <p>
+                  <strong>Pénalités de retard.</strong> Toute échéance impayée à sa date de prélèvement porte de plein
+                  droit intérêt de retard : pour le client professionnel (EI, société), au taux de trois fois le taux
+                  d'intérêt légal à compter du lendemain de l'échéance, sans qu'un rappel soit nécessaire, auquel s'ajoute
+                  l'indemnité forfaitaire pour frais de recouvrement de 40 € (articles L441-10 et D441-5 du Code de
+                  commerce) ; pour le client particulier, au taux d'intérêt légal à compter de la mise en demeure (article
+                  1231-6 du Code civil). Les frais de rejet de prélèvement facturés par l'établissement bancaire peuvent
+                  être refacturés au client.
+                </p>
+                <p>
                   <strong>6.6 Droit de rétractation.</strong> Le client professionnel (EI, société) ne dispose d'aucun
                   droit de rétractation sur l'abonnement. Le client particulier dispose d'un délai de 14 jours à compter
                   de la souscription ; en acceptant les présentes CGV, il demande l'accès immédiat au Club et, s'il se
