@@ -268,6 +268,19 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmDowngrade, setConfirmDowngrade] = useState(false);
   const pendingPlan = usePendingPlan(profile.account_type === 'subscriber' ? profile.reseller_id : null);
+  // Prochain prélèvement réel (remise comprise), chargé chez Stripe.
+  const [nextAmount, setNextAmount] = useState<number | null>(null);
+  const isSubscriber = profile.account_type === 'subscriber' && Boolean(profile.subscription_plan);
+  useEffect(() => {
+    if (!isSubscriber) return;
+    let cancelled = false;
+    invokeEdgeFunction<{ next_amount: number | null }>('b2b-subscription', { action: 'upcoming' }).then(({ data }) => {
+      if (!cancelled) setNextAmount(data?.next_amount ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSubscriber, profile.subscription_plan]);
   const plan = profile.subscription_plan;
   if (profile.account_type !== 'subscriber' || !plan) return null;
 
@@ -276,6 +289,8 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
   const pastDue = profile.subscription_status === 'past_due';
   const downgradeScheduled = pendingPlan === 'drops' && plan === 'revendeur';
   const currentSub: CurrentSub = { plan, amount: profile.subscription_amount };
+  const listPrice = profile.subscription_amount ? formatPassPrice(profile.subscription_amount) : planPrice(plan);
+  const discounted = nextAmount !== null && profile.subscription_amount != null && nextAmount < Number(profile.subscription_amount);
 
   return (
     <Card className="mb-6">
@@ -287,7 +302,16 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
             </h4>
             <p className="mt-2 text-base font-semibold text-gray-900">{PLAN_NAME[plan]}</p>
             <p className="text-sm text-gray-500">
-              {profile.subscription_amount ? formatPassPrice(profile.subscription_amount) : planPrice(plan)} {PERIOD} · sans engagement
+              {discounted ? (
+                <>
+                  <span className="font-medium text-gray-900">{formatPassPrice(nextAmount!)}</span> {PERIOD}{' '}
+                  <span className="line-through">{listPrice}</span> · sans engagement
+                </>
+              ) : (
+                <>
+                  {listPrice} {PERIOD} · sans engagement
+                </>
+              )}
             </p>
           </div>
           {pastDue ? (

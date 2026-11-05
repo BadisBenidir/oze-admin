@@ -70,7 +70,7 @@ Deno.serve(async (req: Request) => {
     if (!user) return reply({ error: 'Non authentifié' }, 401);
 
     const { action, plan } = await req.json();
-    if (!['upgrade', 'downgrade', 'cancel_downgrade', 'cancel', 'resume', 'checkout', 'invoices', 'portal', 'sync_billing'].includes(action)) {
+    if (!['upgrade', 'downgrade', 'cancel_downgrade', 'cancel', 'resume', 'checkout', 'invoices', 'upcoming', 'portal', 'sync_billing'].includes(action)) {
       return reply({ error: 'Action inconnue' }, 400);
     }
 
@@ -111,6 +111,18 @@ Deno.serve(async (req: Request) => {
         if (invoices.length >= 120) break;
       }
       return reply({ invoices });
+    }
+
+    // Montant réellement prélevé à la prochaine échéance (remise / prix fixé
+    // par l'admin compris) : affiché à la place du prix catalogue du pass.
+    if (action === 'upcoming') {
+      if (!reseller.stripe_subscription_id) return reply({ next_amount: null });
+      try {
+        const upcoming = await stripe.invoices.retrieveUpcoming({ subscription: reseller.stripe_subscription_id });
+        return reply({ next_amount: upcoming.amount_due / 100 });
+      } catch {
+        return reply({ next_amount: null });
+      }
     }
 
     // Portail Stripe : changer de carte, régler une échéance en échec. Ouvert
