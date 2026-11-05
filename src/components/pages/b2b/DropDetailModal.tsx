@@ -96,7 +96,7 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="fixed inset-0 bg-black bg-opacity-25" onClick={onClose} />
 
-        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-start justify-between p-6 border-b border-gray-100">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">{drop.title || 'Drop sans nom'}</h3>
@@ -172,9 +172,9 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="text-left py-2.5 px-4 font-medium text-gray-500 text-xs">Produit</th>
-                    <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Prix d'achat</th>
-                    <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Prix de vente / Statut</th>
-                    {otherDrops.length > 0 && <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Déplacer</th>}
+                    <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">Prix d'achat</th>
+                    <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">Prix de vente / Statut</th>
+                    {otherDrops.length > 0 && <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">Déplacer</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -198,7 +198,7 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
                       const image = p.images?.[p.main_image_index] || p.images?.[0];
                       return (
                         <tr key={p.id} className="border-b border-gray-50 last:border-b-0">
-                          <td className="py-3 px-4">
+                          <td className="py-3 px-4 w-full max-w-0">
                             <div className="flex items-center gap-3">
                               {canFeature && (
                                 <button
@@ -215,7 +215,7 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
                                 type="button"
                                 onClick={() => setViewingProductId(p.id)}
                                 title="Ouvrir la fiche de l'article"
-                                className="flex min-w-0 items-center gap-3 text-left group"
+                                className="flex min-w-0 flex-1 items-center gap-3 text-left group"
                               >
                                 <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
                                   {image ? (
@@ -225,24 +225,27 @@ export const DropDetailModal: React.FC<DropDetailModalProps> = ({ drop, onClose,
                                   )}
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 truncate group-hover:underline">{p.name}</p>
-                                  <p className="text-xs text-gray-400 font-mono">{p.product_code}</p>
+                                  <p className="text-sm font-medium text-gray-900 truncate group-hover:underline" title={p.name}>{p.name}</p>
+                                  <p className="text-xs text-gray-400 font-mono truncate">{p.product_code}</p>
                                 </div>
                               </button>
                             </div>
                           </td>
-                          <td className="py-3 px-4 text-right text-sm text-gray-700">
+                          <td className="py-3 px-4 text-right text-sm text-gray-700 whitespace-nowrap tabular-nums">
                             {p.purchase_price != null ? `${showFigure(p.purchase_price.toFixed(2))} €` : '—'}
                           </td>
-                          <td className="py-3 px-4 text-right">
+                          <td className="py-3 px-4 text-right whitespace-nowrap tabular-nums">
                             {sold ? (
-                              <span className="text-sm font-semibold text-green-600">Vendu — {p.sale_price.toFixed(2)} €</span>
+                              <span className="inline-flex items-center gap-2 text-sm font-semibold text-green-600">
+                                <span className="rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium ring-1 ring-green-200">Vendu</span>
+                                {p.sale_price.toFixed(2)} €
+                              </span>
                             ) : (
                               <span className="text-sm font-semibold text-gray-900">{p.sale_price.toFixed(2)} €</span>
                             )}
                           </td>
                           {otherDrops.length > 0 && (
-                            <td className="py-3 px-4 text-right">
+                            <td className="py-3 px-4 text-right whitespace-nowrap">
                               <select
                                 value=""
                                 disabled={movingProductId === p.id}
