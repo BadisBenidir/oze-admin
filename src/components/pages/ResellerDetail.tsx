@@ -9,6 +9,7 @@ import { useAdminWallet } from '../../hooks/useAdminWallet';
 import { ResellerFormModal } from './ResellerFormModal';
 import { B2BOrderDetailModal } from './b2b/B2BOrderDetailModal';
 import { WalletAdjustModal } from './b2b/WalletAdjustModal';
+import { WalletPayoutControl } from './b2b/WalletPayoutControl';
 import { ResellerContactEditModal } from './b2b/ResellerContactEditModal';
 import { SourcingMissionsTab } from './b2b/SourcingMissionsTab';
 import { SubscriberOverview } from './b2b/SubscriberOverview';
@@ -825,13 +826,23 @@ export const ResellerDetail: React.FC<ResellerDetailProps> = ({ reseller, onBack
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setShowAdjustModal(true)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
-                  >
-                    <Settings2 className="h-4 w-4" />
-                    <span>Ajuster le solde</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedContact?.profile_id && (
+                      <WalletPayoutControl
+                        profileId={selectedContact.profile_id}
+                        resellerId={currentReseller.id}
+                        name={`${selectedContact.first_name || ''} ${selectedContact.last_name || ''}`.trim() || 'ce membre'}
+                        onDone={wallet.refresh}
+                      />
+                    )}
+                    <button
+                      onClick={() => setShowAdjustModal(true)}
+                      className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+                    >
+                      <Settings2 className="h-4 w-4" />
+                      <span>Ajuster le solde</span>
+                    </button>
+                  </div>
                 </CardContent>
               </Card>
 

@@ -33,6 +33,7 @@ const json = (body: unknown, status = 200) =>
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const CARD_NOTE_PREFIX = 'Remboursement par carte (au lieu du crédit)';
+const WALLET_PAYOUT_NOTE = 'Solde remboursé par carte';
 
 // Rembourse `target` € par Stripe : paiement carte de la commande, puis
 // recharges de portefeuille payées par carte (plus récente d'abord).
@@ -101,7 +102,8 @@ Deno.serve(async (req: Request) => {
     if (!user) return json({ error: 'Non authentifié' }, 401);
     if (!(await hasAdminAccess(callerClient, user.id, 'refunds'))) return json({ error: 'Action réservée aux administrateurs' }, 403);
 
-    const { action, order_item_id, order_id, amount } = await req.json();
+    const body = await req.json();
+    const { action, order_item_id, order_id, amount } = body;
     const admin = createClient(supabaseUrl, serviceRoleKey);
 
     // ---- Certificat Entrupy annulé (article gardé), recrédité : remboursement par carte ----
@@ -161,6 +163,85 @@ Deno.serve(async (req: Request) => {
       }
       if (refunded <= 0) {
         return json({ error: `Aucun paiement carte remboursable trouvé${r.stripeError ? ` (${r.stripeError})` : ''} : le crédit a été remis sur le portefeuille.` }, 400);
+      }
+      return json({ success: true, refunded_amount: refunded, wallet_recredited: round2(r.remainingCents / 100), refund_ids: r.refundIds });
+    }
+
+    // ---- Solde du portefeuille (tout ou partie) remboursé sur la carte du membre ----
+    // Remboursé sur les paiements carte de ses recharges, du plus récent au
+    // plus ancien : on ne rembourse jamais plus que ce qui a été payé par carte.
+    if (action === 'wallet_preview' || action === 'wallet_payout') {
+      const { profile_id, reseller_id } = body;
+      if (!profile_id || !reseller_id) return json({ error: 'Requête invalide' }, 400);
+      const { data: link } = await admin
+        .from('reseller_contacts')
+        .select('profile_id')
+        .eq('profile_id', profile_id)
+        .eq('reseller_id', reseller_id)
+        .maybeSingle();
+      if (!link) return json({ error: 'Membre introuvable pour ce compte' }, 404);
+      const { data: profile } = await admin.from('profiles').select('wallet_balance').eq('id', profile_id).maybeSingle();
+      const balance = round2(Number(profile?.wallet_balance || 0));
+      if (!stripeSecretKey) return json({ error: 'STRIPE_SECRET_KEY manquant côté serveur' }, 500);
+      const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
+
+      if (action === 'wallet_preview') {
+        // Total encore remboursable sur les recharges payées par carte.
+        const { data: topups } = await admin
+          .from('wallet_transactions')
+          .select('stripe_session_id')
+          .eq('profile_id', profile_id)
+          .eq('type', 'rechargement')
+          .eq('status', 'success')
+          .not('stripe_session_id', 'is', null);
+        let refundableCents = 0;
+        for (const t of (topups || []) as { stripe_session_id: string }[]) {
+          try {
+            const session = await stripe.checkout.sessions.retrieve(t.stripe_session_id, { expand: ['payment_intent.latest_charge'] });
+            const intent = session.payment_intent && typeof session.payment_intent === 'object' ? session.payment_intent : null;
+            const charge = intent?.latest_charge && typeof intent.latest_charge === 'object' ? intent.latest_charge : null;
+            if (!charge || intent?.status !== 'succeeded') continue;
+            refundableCents += Math.max(0, (charge.amount_captured ?? charge.amount) - (charge.amount_refunded ?? 0));
+          } catch {
+            /* session illisible : ignorée */
+          }
+        }
+        const cardRefundable = round2(refundableCents / 100);
+        return json({ wallet_balance: balance, card_refundable: cardRefundable, max_amount: round2(Math.min(balance, cardRefundable)) });
+      }
+
+      const target = round2(Number(amount));
+      if (!target || target <= 0) return json({ error: 'Montant invalide' }, 400);
+      if (target > balance) return json({ error: `Solde insuffisant : le membre n'a que ${balance.toFixed(2)} € sur son portefeuille` }, 400);
+
+      const { error: debitError } = await admin.rpc('debit_wallet_for_card_refund', {
+        p_profile_id: profile_id,
+        p_reseller_id: reseller_id,
+        p_amount: target,
+        p_order_id: null,
+        p_note: `${WALLET_PAYOUT_NOTE} (${target.toFixed(2)} €)`,
+      });
+      if (debitError) return json({ error: debitError.message }, 400);
+
+      const r = await refundByCard(
+        stripe,
+        admin,
+        { id: '', placed_by_profile_id: profile_id, stripe_payment_intent_id: null },
+        target,
+        { type: 'b2b_wallet_payout', profile_id }
+      );
+      const refunded = round2(target - r.remainingCents / 100);
+      if (r.remainingCents > 0) {
+        await admin.rpc('credit_order_item_refund_to_wallet', {
+          p_profile_id: profile_id,
+          p_reseller_id: reseller_id,
+          p_amount: r.remainingCents / 100,
+          p_order_id: null,
+          p_note: `Remboursement du solde par carte impossible pour ${(r.remainingCents / 100).toFixed(2)} € — recrédité`,
+        });
+      }
+      if (refunded <= 0) {
+        return json({ error: `Aucun paiement carte remboursable trouvé${r.stripeError ? ` (${r.stripeError})` : ''} : le solde a été remis sur le portefeuille.` }, 400);
       }
       return json({ success: true, refunded_amount: refunded, wallet_recredited: round2(r.remainingCents / 100), refund_ids: r.refundIds });
     }
