@@ -299,6 +299,22 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     onGenerated();
   };
 
+  // Sendcloud tarde parfois à remonter le premier scan (dépôt en Point Relais) :
+  // confirmation manuelle de la remise au transporteur (0243).
+  const [handingOver, setHandingOver] = useState(false);
+  const handleHandedOver = async () => {
+    if (!window.confirm('Confirmer que le(s) colis ont été remis au transporteur ? La demande passera « Expédiée ».')) return;
+    setCancelLabelsError(null);
+    setHandingOver(true);
+    const { error } = await supabase.rpc('admin_mark_shipment_handed_over', { p_shipment_id: shipment.id });
+    setHandingOver(false);
+    if (error) {
+      setCancelLabelsError(error.message);
+      return;
+    }
+    onGenerated();
+  };
+
   const handleSyncSendcloud = async () => {
     setSyncError(null);
     setSyncing(true);
@@ -412,6 +428,15 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                 <p className="text-sm text-amber-800">
                   Bordereau généré, colis pas encore remis au transporteur.
                 </p>
+                <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  onClick={handleHandedOver}
+                  disabled={handingOver}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-900 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  <Truck className="h-4 w-4" />
+                  {handingOver ? 'Enregistrement...' : 'Déjà remis au transporteur'}
+                </button>
                 <button
                   onClick={handleCancelLabels}
                   disabled={cancellingLabels}
@@ -420,6 +445,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                   <Ban className="h-4 w-4" />
                   {cancellingLabels ? 'Annulation...' : "Annuler l'envoi"}
                 </button>
+                </div>
               </div>
             )}
             {cancelLabelsError && (
