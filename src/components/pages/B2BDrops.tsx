@@ -92,7 +92,7 @@ const MergeDropModal: React.FC<MergeDropModalProps> = ({ source, otherDrops, onC
 
 export const B2BDrops: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { drops, loading, error, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, reassignDropProduct, deleteDrop, setFeaturedProducts, setLockCancellation, addProductsToPublishedDrop } = useDrops(isAdmin);
+  const { drops, loading, error, createDrop, updateDrop, cancelDrop, renameDrop, mergeDrops, deleteDrop, setFeaturedProducts, setLockCancellation, addProductsToPublishedDrop } = useDrops(isAdmin);
   // Drop publié auquel on ajoute des pièces après coup (0189).
   const [addingToDrop, setAddingToDrop] = useState<Drop | null>(null);
 
@@ -406,8 +406,6 @@ export const B2BDrops: React.FC = () => {
       <DropDetailModal
         drop={viewingDrop}
         onClose={() => setViewingDropId(null)}
-        otherDrops={drops.filter((d) => d.id !== viewingDropId)}
-        onReassignProduct={reassignDropProduct}
         onDelete={deleteDrop}
         onSetFeatured={setFeaturedProducts}
         onSetLockCancellation={setLockCancellation}
