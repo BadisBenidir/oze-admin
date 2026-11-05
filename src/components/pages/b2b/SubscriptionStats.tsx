@@ -56,6 +56,37 @@ const Stat: React.FC<{ icon: React.ElementType; label: string; value: string; hi
   </Card>
 );
 
+/** Retente tout de suite le prélèvement impayé (admin-subscription-price, retry_payment). */
+const RetryPaymentButton: React.FC<{ resellerId: string; name: string }> = ({ resellerId, name }) => {
+  const [state, setState] = useState<'idle' | 'loading' | 'paid'>('idle');
+  const retry = async () => {
+    if (!window.confirm(`Retenter maintenant le prélèvement de ${name} ?`)) return;
+    setState('loading');
+    const { data, error } = await invokeEdgeFunction<{ success: boolean; amount: number }>('admin-subscription-price', {
+      action: 'retry_payment',
+      resellerId,
+    });
+    if (error || !data?.success) {
+      setState('idle');
+      alert(error || 'Le paiement a échoué');
+      return;
+    }
+    setState('paid');
+  };
+  if (state === 'paid') return <span className="text-green-700">Payé ✓ (actualiser)</span>;
+  return (
+    <button
+      type="button"
+      onClick={retry}
+      disabled={state === 'loading'}
+      className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+    >
+      <RefreshCw className={`h-3 w-3 ${state === 'loading' ? 'animate-spin' : ''}`} />
+      {state === 'loading' ? 'Prélèvement…' : 'Retenter le paiement'}
+    </button>
+  );
+};
+
 export const SubscriptionStats: React.FC<{ subscribers: Reseller[]; promoData: SubscriptionPromoData | null }> = ({
   subscribers,
   promoData,
@@ -192,7 +223,8 @@ export const SubscriptionStats: React.FC<{ subscribers: Reseller[]; promoData: S
                       {r.company_name}
                       <span className="ml-2 text-xs text-gray-500">{r.contact_email}</span>
                     </span>
-                    <span className={`text-xs font-medium ${r.subscription_status === 'past_due' ? 'text-red-700' : 'text-amber-700'}`}>
+                    <span className={`flex items-center gap-2 text-xs font-medium ${r.subscription_status === 'past_due' ? 'text-red-700' : 'text-amber-700'}`}>
+                      {r.subscription_status === 'past_due' && <RetryPaymentButton resellerId={r.id} name={r.company_name} />}
                       {r.subscription_status === 'past_due'
                         ? 'Paiement en échec'
                         : r.subscription_cancel_at_period_end

@@ -8,6 +8,9 @@
 //     l'abonnement par un coupon Stripe « à vie » (prix du pass − prix voulu) ;
 //     un prix ≥ prix du pass retire toute remise. Effet dès le prochain
 //     prélèvement, aucune facturation immédiate.
+//   - action "retry_payment" (+ resellerId) : retente tout de suite le
+//     prélèvement de la facture impayée (abonnement en échec de paiement),
+//     sur le moyen de paiement enregistré.
 // Réservé à l'équipe avec le droit « accounts ».
 //
 // Secrets : STRIPE_SECRET_KEY
@@ -44,7 +47,7 @@ Deno.serve(async (req: Request) => {
     if (!(await hasAdminAccess(callerClient, user.id, 'accounts'))) return json({ error: 'Action réservée aux administrateurs' }, 403);
 
     const { action, resellerId, price } = await req.json();
-    if (!resellerId || !['preview', 'set'].includes(action)) return json({ error: 'Requête invalide' }, 400);
+    if (!resellerId || !['preview', 'set', 'retry_payment'].includes(action)) return json({ error: 'Requête invalide' }, 400);
 
     const admin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const { data: reseller } = await admin.from('resellers').select('id, stripe_subscription_id').eq('id', resellerId).maybeSingle();
@@ -54,6 +57,23 @@ Deno.serve(async (req: Request) => {
     const sub = await stripe.subscriptions.retrieve(reseller.stripe_subscription_id, { expand: ['discounts'] });
     if (!['active', 'trialing', 'past_due'].includes(sub.status)) return json({ error: "L'abonnement n'est plus en cours" }, 400);
     const unit = sub.items.data[0]?.price?.unit_amount ?? 0;
+
+    if (action === 'retry_payment') {
+      const invoiceId = typeof sub.latest_invoice === 'string' ? sub.latest_invoice : sub.latest_invoice?.id;
+      if (!invoiceId) return json({ error: 'Aucune facture à régler' }, 400);
+      const invoice = await stripe.invoices.retrieve(invoiceId);
+      if (invoice.status === 'paid') return json({ success: true, already_paid: true, amount: invoice.amount_paid / 100 });
+      if (invoice.status !== 'open') return json({ error: 'La dernière facture ne peut plus être réglée' }, 400);
+      try {
+        const paid = await stripe.invoices.pay(invoiceId);
+        return json({ success: paid.status === 'paid', amount: paid.amount_paid / 100 });
+      } catch (err) {
+        // deno-lint-ignore no-explicit-any
+        const e = err as any;
+        const reason = e?.decline_code || e?.code || '';
+        return json({ error: `Paiement refusé par la banque${reason ? ` (${reason})` : ''} : ${e?.message || 'erreur Stripe'}` }, 400);
+      }
+    }
 
     if (action === 'preview') {
       let nextAmount: number | null = null;
