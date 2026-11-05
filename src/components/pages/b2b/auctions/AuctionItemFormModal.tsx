@@ -15,8 +15,12 @@ interface DraftProduct {
   images: string[];
   main_image_index: number;
   condition: string | null;
+  /** Prix d'achat fournisseur (affiché pour caler le prix de départ). */
+  purchase_price: number | null;
   brand: { name: string } | null;
 }
+
+const eur = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 
 /** Grade d'un lot recopié tel quel depuis products.condition (grades lettrés
  * S/A/AB/B/BC/C/D, voir productGrade.ts) — plus d'arrondi à 3 paliers, qui
@@ -85,7 +89,7 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
     Promise.all([
       supabase
         .from('products')
-        .select('id, name, product_code, source_reference, images, main_image_index, condition, brand:brands(name)')
+        .select('id, name, product_code, source_reference, images, main_image_index, condition, purchase_price, brand:brands(name)')
         .in('status', ['draft', 'draft-b2b'])
         .order('created_at', { ascending: false }),
       supabase
@@ -298,6 +302,12 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
                               {p.source_reference && <span className="font-mono"> · {p.source_reference}</span>}
                             </p>
                           </div>
+                          <div className="flex-shrink-0 text-right">
+                            <p className="text-sm font-semibold tabular-nums text-gray-900">
+                              {p.purchase_price != null ? eur(Number(p.purchase_price)) : '—'}
+                            </p>
+                            <p className="text-[11px] text-gray-400">prix d'achat</p>
+                          </div>
                           {alreadyAdded && <span className="text-xs text-gray-500 flex-shrink-0">Déjà ajouté</span>}
                         </label>
                       );
@@ -308,6 +318,7 @@ export const AuctionItemFormModal: React.FC<AuctionItemFormModalProps> = ({ isOp
                   <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm text-white">
                     <span>
                       {selected.length} pièce{selected.length > 1 ? 's' : ''} sélectionnée{selected.length > 1 ? 's' : ''}
+                      <span className="text-gray-300"> · {eur(selected.reduce((t, p) => t + (Number(p.purchase_price) || 0), 0))} d'achat au total</span>
                     </span>
                     <button type="button" onClick={() => setSelected([])} className="text-xs text-gray-300 underline hover:text-white">
                       Vider la sélection
