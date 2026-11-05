@@ -151,6 +151,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   // Article présélectionné quand l'annulation part du bouton d'une ligne.
   const [cancelItemIds, setCancelItemIds] = useState<string[]>([]);
   const [cancellingLabels, setCancellingLabels] = useState(false);
+  const [handingOver, setHandingOver] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
   const [mergeNotice, setMergeNotice] = useState<string | null>(null);
   useEffect(() => {
@@ -301,7 +302,6 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
 
   // Sendcloud tarde parfois à remonter le premier scan (dépôt en Point Relais) :
   // confirmation manuelle de la remise au transporteur (0243).
-  const [handingOver, setHandingOver] = useState(false);
   const handleHandedOver = async () => {
     if (!window.confirm('Confirmer que le(s) colis ont été remis au transporteur ? La demande passera « Expédiée ».')) return;
     setCancelLabelsError(null);
