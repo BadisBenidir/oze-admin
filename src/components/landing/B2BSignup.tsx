@@ -816,7 +816,9 @@ const SignupForm: React.FC = () => {
                         <a href="/cgv" target="_blank" rel="noopener noreferrer" className="font-medium underline hover:text-black">
                           conditions générales de vente B2B
                         </a>{' '}
-                        et l'abonnement mensuel sans engagement, résiliable à tout moment depuis mon profil.
+                        et l'abonnement mensuel sans engagement, résiliable à tout moment depuis mon profil. Je demande à
+                        accéder immédiatement au Club, avant la fin de mon délai de rétractation de 14 jours, et reconnais
+                        que si je me rétracte, je devrai payer la part du pass correspondant à la période déjà écoulée.
                       </span>
                     </label>
                     <p className="mt-2 pl-7 text-xs text-gray-500">

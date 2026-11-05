@@ -179,7 +179,8 @@ export const Terms: React.FC = () => {
                 <p>
                   <strong>6.6 Droit de rétractation.</strong> Le client professionnel (EI, société) ne dispose d'aucun
                   droit de rétractation sur l'abonnement. Le client particulier dispose d'un délai de 14 jours à compter
-                  de la souscription (voir l'onglet « Particuliers »).
+                  de la souscription ; en acceptant les présentes CGV, il demande l'accès immédiat au Club et, s'il se
+                  rétracte, règle la part du pass correspondant à la période écoulée (voir l'onglet « Particuliers »).
                 </p>
                 <p>
                   <strong>6.7 Déclarations infondées.</strong> Lorsqu'un client retourne un article en invoquant un défaut
@@ -280,8 +281,17 @@ export const Terms: React.FC = () => {
                 <p>
                   Le client particulier dispose de <strong>14 jours calendaires</strong> à compter de la souscription d'un
                   pass pour se rétracter, sans avoir à justifier de motif, par email à l'adresse contact@ozeparis.com.
-                  L'accès à l'espace est alors fermé et le montant payé pour le pass lui est remboursé dans un délai de
-                  14 jours à compter de la réception de sa décision.
+                </p>
+                <p>
+                  <strong>Accès immédiat.</strong> En acceptant les présentes CGV lors de la souscription, le client
+                  déclare : « Je demande à accéder immédiatement au Club, avant la fin de mon délai de rétractation de 14
+                  jours. Je reconnais que si je me rétracte, je devrai payer la part du pass correspondant à la période
+                  déjà écoulée. » (article L221-25 du Code de la consommation).
+                </p>
+                <p>
+                  En cas de rétractation, l'accès à l'espace est fermé et le client est remboursé du montant payé pour le
+                  pass, déduction faite de la part correspondant à la période écoulée jusqu'à la réception de sa
+                  décision (calculée au prorata des jours), dans un délai de 14 jours à compter de cette réception.
                 </p>
                 <p>
                   Un retour motivé par une déclaration qui se révèle inexacte (authenticité, défaut non décrit) peut
