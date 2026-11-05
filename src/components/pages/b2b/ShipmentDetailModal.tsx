@@ -152,6 +152,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   const [cancelItemIds, setCancelItemIds] = useState<string[]>([]);
   const [cancellingLabels, setCancellingLabels] = useState(false);
   const [handingOver, setHandingOver] = useState(false);
+  const [markingDelivered, setMarkingDelivered] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
   const [mergeNotice, setMergeNotice] = useState<string | null>(null);
   useEffect(() => {
@@ -315,6 +316,20 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     onGenerated();
   };
 
+  // Livraison confirmée à la main, quel que soit le statut (0244).
+  const handleMarkDelivered = async () => {
+    if (!window.confirm('Marquer cette demande comme livrée ? Tous ses articles passeront « Livré ».')) return;
+    setCancelLabelsError(null);
+    setMarkingDelivered(true);
+    const { error } = await supabase.rpc('admin_mark_shipment_delivered', { p_shipment_id: shipment.id });
+    setMarkingDelivered(false);
+    if (error) {
+      setCancelLabelsError(error.message);
+      return;
+    }
+    onGenerated();
+  };
+
   const handleSyncSendcloud = async () => {
     setSyncError(null);
     setSyncing(true);
@@ -409,6 +424,17 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
                   {syncing ? 'Actualisation...' : 'Actualiser les statuts Sendcloud'}
+                </button>
+              )}
+              {shipment.status !== 'delivered' && shipment.status !== 'cancelled' && (
+                <button
+                  onClick={handleMarkDelivered}
+                  disabled={markingDelivered}
+                  title="Colis remis autrement (autre colis, main propre…) : passe la demande et ses articles en livrés"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 border border-green-200 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
+                >
+                  <BadgeCheck className="h-3.5 w-3.5" />
+                  {markingDelivered ? 'Enregistrement...' : 'Marquer comme livrée'}
                 </button>
               )}
               <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
