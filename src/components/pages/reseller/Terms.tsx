@@ -171,10 +171,14 @@ export const Terms: React.FC = () => {
                   Pass Revendeur au Pass Drops prend effet à la prochaine échéance.
                 </p>
                 <p>
-                  <strong>6.5 Défaut de paiement.</strong> En cas d'échec d'un prélèvement, de nouvelles tentatives sont
-                  effectuées automatiquement et le client en est informé par email. À défaut de régularisation, l'accès
-                  est suspendu. Les commandes, le solde du portefeuille et les informations du client sont conservés ;
-                  l'accès est rétabli dès la souscription d'un nouveau pass.
+                  <strong>6.5 Défaut de paiement.</strong> L'abonnement étant reconduit automatiquement sauf résiliation
+                  effectuée depuis « Mon profil » (article 6.3), l'échec ou le rejet d'un prélèvement ne vaut pas
+                  résiliation : l'échéance de la période mensuelle commencée reste due en totalité. De nouvelles tentatives
+                  de prélèvement sont effectuées et le client en est informé par email. À défaut de régularisation, l'accès
+                  est suspendu jusqu'au complet paiement. Si l'échéance reste impayée 15 jours après son terme, OZË Paris
+                  peut résilier l'abonnement de plein droit, l'échéance impayée restant exigible. Le rétablissement de
+                  l'accès, y compris par la souscription d'un nouveau pass, est subordonné au règlement préalable des
+                  sommes dues. Les commandes, le solde du portefeuille et les informations du client sont conservés.
                 </p>
                 <p>
                   <strong>6.6 Droit de rétractation.</strong> Le client professionnel (EI, société) ne dispose d'aucun
