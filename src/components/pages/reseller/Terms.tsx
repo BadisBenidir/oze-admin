@@ -186,8 +186,10 @@ export const Terms: React.FC = () => {
                   nécessaire, de <strong>10 % de son montant par semaine de retard entamée</strong>, à compter du
                   lendemain de l'échéance et jusqu'à complet paiement, auxquels s'ajoute l'indemnité forfaitaire pour frais
                   de recouvrement de 40 € (articles L441-10 et D441-5 du Code de commerce). Pour le client particulier,
-                  l'échéance impayée porte intérêt au taux légal à compter de la mise en demeure (article 1231-6 du Code
-                  civil). Les frais de rejet de prélèvement facturés par l'établissement bancaire peuvent
+                  toute échéance d'abonnement impayée à sa date de prélèvement donne lieu à des frais de retard
+                  forfaitaires de <strong>10 € par semaine de retard entamée, dans la limite de 30 € par échéance
+                  impayée</strong>, ainsi qu'aux intérêts au taux légal à compter de la mise en demeure (article 1231-6 du
+                  Code civil). Les frais de rejet de prélèvement facturés par l'établissement bancaire peuvent
                   être refacturés au client.
                 </p>
                 <p>
