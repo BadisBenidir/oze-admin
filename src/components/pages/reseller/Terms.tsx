@@ -181,12 +181,13 @@ export const Terms: React.FC = () => {
                   sommes dues. Les commandes, le solde du portefeuille et les informations du client sont conservés.
                 </p>
                 <p>
-                  <strong>Pénalités de retard.</strong> Toute échéance impayée à sa date de prélèvement porte de plein
-                  droit intérêt de retard : pour le client professionnel (EI, société), au taux de trois fois le taux
-                  d'intérêt légal à compter du lendemain de l'échéance, sans qu'un rappel soit nécessaire, auquel s'ajoute
-                  l'indemnité forfaitaire pour frais de recouvrement de 40 € (articles L441-10 et D441-5 du Code de
-                  commerce) ; pour le client particulier, au taux d'intérêt légal à compter de la mise en demeure (article
-                  1231-6 du Code civil). Les frais de rejet de prélèvement facturés par l'établissement bancaire peuvent
+                  <strong>Pénalités de retard.</strong> Pour le client professionnel (EI, société), toute échéance
+                  d'abonnement impayée à sa date de prélèvement est majorée de plein droit, sans qu'un rappel soit
+                  nécessaire, de <strong>10 % de son montant par semaine de retard entamée</strong>, à compter du
+                  lendemain de l'échéance et jusqu'à complet paiement, auxquels s'ajoute l'indemnité forfaitaire pour frais
+                  de recouvrement de 40 € (articles L441-10 et D441-5 du Code de commerce). Pour le client particulier,
+                  l'échéance impayée porte intérêt au taux légal à compter de la mise en demeure (article 1231-6 du Code
+                  civil). Les frais de rejet de prélèvement facturés par l'établissement bancaire peuvent
                   être refacturés au client.
                 </p>
                 <p>
