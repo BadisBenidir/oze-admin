@@ -8,6 +8,7 @@ import { supabase } from '../../../lib/supabase';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 import { AdminAuctionItem, AuctionRestockAction, CancelAuctionItemResult } from '../../../hooks/useAdminAuctionItems';
 import { CancelAuctionItemModal } from './auctions/CancelAuctionItemModal';
+import { ProductDetail } from '../ProductDetail';
 import { useOrderCreditNotes, downloadCreditNote } from '../../../hooks/useInvoices';
 
 // `orders.shipping_address` est stocké dans la forme assemblée par
@@ -494,6 +495,8 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
   const [linkCandidates, setLinkCandidates] = useState<{ id: string; order_number: string; created_at: string; total_amount: number }[] | null>(null);
   const [linkTarget, setLinkTarget] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
+  // Fiche article ouverte par-dessus la commande (clic sur la photo ou le nom).
+  const [viewingProductId, setViewingProductId] = useState<string | null>(null);
   const loadSharedInvoiceInfo = useCallback(async () => {
     setSharedInvoice(null);
     if (!order) return;
@@ -956,7 +959,11 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                           <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-3">
-                                <div className={`h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 ${isCancelled ? 'opacity-40' : ''}`}>
+                                <div
+                                  onClick={item.product_id ? () => setViewingProductId(item.product_id) : undefined}
+                                  title={item.product_id ? "Ouvrir la fiche de l'article" : undefined}
+                                  className={`h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 ${isCancelled ? 'opacity-40' : ''} ${item.product_id ? 'cursor-pointer hover:ring-2 hover:ring-gray-300' : ''}`}
+                                >
                                   {image ? (
                                     <img src={image} alt={item.product_snapshot?.name} className="h-full w-full object-cover" />
                                   ) : (
@@ -964,9 +971,20 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                   )}
                                 </div>
                                 <div>
-                                  <span className={`text-sm font-medium ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                                    {item.product_snapshot?.name || 'Produit'}
-                                  </span>
+                                  {item.product_id ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingProductId(item.product_id)}
+                                      title="Ouvrir la fiche de l'article"
+                                      className={`text-left text-sm font-medium hover:underline ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}
+                                    >
+                                      {item.product_snapshot?.name || 'Produit'}
+                                    </button>
+                                  ) : (
+                                    <span className={`text-sm font-medium ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                                      {item.product_snapshot?.name || 'Produit'}
+                                    </span>
+                                  )}
                                   {item.is_loyalty_gift && (
                                     <div className="mt-1">
                                       <Badge variant="warning">🎁 Cadeau Fidélité — 0 €</Badge>
@@ -1269,6 +1287,12 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
           onCancel={() => setCancellingOrder(false)}
           onConfirmed={handleOrderConfirmed}
         />
+      )}
+
+      {viewingProductId && (
+        <div className="fixed inset-0 z-[80] bg-white overflow-y-auto">
+          <ProductDetail productId={viewingProductId} onBack={() => setViewingProductId(null)} />
+        </div>
       )}
     </>
   );
