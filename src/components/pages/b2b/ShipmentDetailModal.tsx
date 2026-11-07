@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban, PackageX, Combine, RotateCcw, PackagePlus } from 'lucide-react';
+import { X, MapPin, Package, User, Phone, Truck, FileDown, ExternalLink, Undo2, BadgeCheck, Split, ArrowRight, RefreshCw, Ban, PackageX, Combine, RotateCcw, PackagePlus, PackageMinus } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { AdminShipment, AdminShipmentItem } from '../../../hooks/useAdminShipments';
 import { ParcelSplitEditor } from './ParcelSplitEditor';
@@ -61,6 +61,8 @@ const itemFulfillmentBadge = (status: AdminShipmentItem['fulfillment_status']) =
 interface ShippedItemRowProps {
   item: AdminShipmentItem;
   onRevert: (itemId: string) => void;
+  /** Article pas mis dans le carton : le sortir de la demande, « prêt à la livraison » (0246). */
+  onBackToReady: (itemId: string) => void;
   reverting: boolean;
   /** Mode scission actif : remplace le bouton "Annuler" par une case à
    * cocher pour choisir les articles à déplacer vers un nouveau colis. */
@@ -69,7 +71,7 @@ interface ShippedItemRowProps {
   onToggleSelect: (itemId: string) => void;
 }
 
-const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, reverting, splitMode, selected, onToggleSelect }) => {
+const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, onBackToReady, reverting, splitMode, selected, onToggleSelect }) => {
   const product = item.product;
   const image = product?.images?.[product.main_image_index] || product?.images?.[0];
   return (
@@ -123,6 +125,17 @@ const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, reverti
           className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
         >
           <Undo2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {!splitMode && (item.fulfillment_status === 'label_created' || item.fulfillment_status === 'shipped') && (
+        <button
+          type="button"
+          onClick={() => onBackToReady(item.id)}
+          disabled={reverting}
+          title="Pas mis dans le carton : remettre « prêt à la livraison »"
+          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+        >
+          <PackageMinus className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
@@ -249,6 +262,28 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     }
     if ((data?.updated_count || 0) === 0) {
       setRevertError("Cet article n'a pas pu être annulé.");
+      return;
+    }
+    onGenerated();
+  };
+
+  // Article oublié hors du carton : sorti de la demande et remis « prêt à la
+  // livraison » (0246), même si le colis est déjà parti. Le colis et les
+  // autres articles ne bougent pas ; « Remettre dans la demande » annule.
+  const handleBackToReady = async (itemId: string) => {
+    if (!window.confirm("Cet article n'est pas dans le colis ? Il sera retiré de cette demande et repassera « prêt à la livraison » (le revendeur pourra le redemander). Le colis et les autres articles ne changent pas.")) {
+      return;
+    }
+    setRevertError(null);
+    setRevertingId(itemId);
+    const { data, error } = await supabase.rpc('admin_item_back_to_ready', { p_item_ids: [itemId] });
+    setRevertingId(null);
+    if (error) {
+      setRevertError(error.message);
+      return;
+    }
+    if ((data?.updated_count || 0) === 0) {
+      setRevertError("Cet article n'a pas pu être remis prêt à la livraison.");
       return;
     }
     onGenerated();
@@ -689,6 +724,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                       key={item.id}
                       item={item}
                       onRevert={handleRevertShippedItem}
+                      onBackToReady={handleBackToReady}
                       reverting={revertingId === item.id}
                       splitMode={splitMode}
                       selected={selectedForSplit.has(item.id)}
