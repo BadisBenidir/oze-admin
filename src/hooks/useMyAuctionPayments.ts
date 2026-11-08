@@ -18,6 +18,8 @@ export interface PendingAuctionPayment {
   late_days?: number;
   /** Pénalité en cours : 5 % du prix du lot par jour de retard. */
   late_fee?: number;
+  /** Assurance déjà posée sur la commande (0247), incluse dans amount/base_amount. */
+  insurance_cost?: number;
 }
 
 export interface PayAuctionResult {
@@ -76,10 +78,11 @@ export const useMyAuctionPayments = (enabled: boolean) => {
     };
   }, [enabled, fetchPayments]);
 
-  const pay = async (orderId: string, paymentMethod: 'wallet' | 'card' | 'mixed'): Promise<PayAuctionResult> => {
+  const pay = async (orderId: string, paymentMethod: 'wallet' | 'card' | 'mixed', insured = false): Promise<PayAuctionResult> => {
     const { data, error } = await invokeEdgeFunction<{ url?: string; success?: boolean }>('auction-order-payment', {
       order_id: orderId,
       payment_method: paymentMethod,
+      insured,
     });
     if (error) return { success: false, error };
     if (data?.url) return { success: true, redirectUrl: data.url };

@@ -38,7 +38,7 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: userError } = await callerClient.auth.getUser();
     if (userError || !user) return json({ error: 'Non authentifié' }, 401);
 
-    const { order_id, payment_method } = await req.json();
+    const { order_id, payment_method, insured } = await req.json();
     if (!order_id || !['wallet', 'card', 'mixed'].includes(payment_method)) {
       return json({ error: 'Paramètres invalides' }, 400);
     }
@@ -72,6 +72,14 @@ Deno.serve(async (req: Request) => {
     if (itemError) return json({ error: itemError.message }, 400);
     if (!item || item.status !== 'sold') {
       return json({ error: "Ce lot n'a pas encore été adjugé — paiement impossible pour le moment" }, 409);
+    }
+
+    // Assurance du lot (0247) cochée ou non au paiement : posée sur la
+    // commande AVANT tout débit / session Stripe (total_amount inclus).
+    // Absente de la requête (ancien front) : la commande reste telle quelle.
+    if (typeof insured === 'boolean') {
+      const { error: insuranceError } = await callerClient.rpc('set_my_auction_order_insurance', { p_order_id: order_id, p_insured: insured });
+      if (insuranceError) return json({ error: insuranceError.message }, 400);
     }
 
     if (payment_method === 'wallet') {
@@ -128,8 +136,15 @@ Deno.serve(async (req: Request) => {
           currency: 'eur',
           product_data: {
             name: `Lot d'enchère — commande ${order.order_number}`,
-            ...(fee && Number(fee.late_fee) > 0
-              ? { description: `Dont pénalité de retard de paiement : ${Number(fee.late_fee).toFixed(2)} € (${fee.late_days} jour${fee.late_days > 1 ? 's' : ''} × 5 %)` }
+            ...((fee && Number(fee.late_fee) > 0) || insured === true
+              ? {
+                  description: [
+                    insured === true ? 'Assurance colis incluse (0,6 %)' : null,
+                    fee && Number(fee.late_fee) > 0
+                      ? `Dont pénalité de retard de paiement : ${Number(fee.late_fee).toFixed(2)} € (${fee.late_days} jour${fee.late_days > 1 ? 's' : ''} × 5 %)`
+                      : null,
+                  ].filter(Boolean).join(' · '),
+                }
               : {}),
           },
           unit_amount: Math.round(chargeAmount * 100),

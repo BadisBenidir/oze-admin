@@ -288,8 +288,8 @@ export const Auctions: React.FC = () => {
   const { balance: walletBalance, refresh: refreshWallet } = useWallet(profile?.id);
   // Après un paiement par solde, relit le solde : sinon les lots suivants
   // sont proposés « Payer (solde) » avec l'ancien montant.
-  const handlePayAuction = async (orderId: string, method: 'wallet' | 'card' | 'mixed') => {
-    const result = await payAuctionOrder(orderId, method);
+  const handlePayAuction = async (orderId: string, method: 'wallet' | 'card' | 'mixed', insured: boolean) => {
+    const result = await payAuctionOrder(orderId, method, insured);
     if (result.success && !result.redirectUrl) refreshWallet();
     return result;
   };

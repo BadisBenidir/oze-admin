@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, CreditCard, Wallet, Coins, Gavel } from 'lucide-react';
+import { AlertCircle, CreditCard, Wallet, Coins, Gavel, ShieldCheck } from 'lucide-react';
 import { PendingAuctionPayment, PayAuctionResult } from '../../../hooks/useMyAuctionPayments';
+
+/** Même taux que le panier (INSURANCE_RATE, useB2BCart) et que set_my_auction_order_insurance (0247). */
+const INSURANCE_RATE = 0.006;
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
@@ -26,7 +29,7 @@ const formatCountdown = (ms: number): string => {
 interface PaymentRowProps {
   payment: PendingAuctionPayment;
   walletBalance: number;
-  onPay: (orderId: string, method: 'wallet' | 'card' | 'mixed') => Promise<PayAuctionResult>;
+  onPay: (orderId: string, method: 'wallet' | 'card' | 'mixed', insured: boolean) => Promise<PayAuctionResult>;
 }
 
 /** Une ligne = un lot gagné à payer. Compte à rebours vers payment_deadline
@@ -50,21 +53,28 @@ const PaymentRow: React.FC<PaymentRowProps> = ({ payment, walletBalance, onPay }
   const image = payment.images?.[0];
   const lateFee = Number(payment.late_fee) || 0;
   const lateDays = Number(payment.late_days) || 0;
-  const canCoverFully = walletBalance >= payment.amount;
+  // Assurance (0247) : déjà posée si une session carte a été abandonnée —
+  // les montants serveur l'incluent, on la retire pour repartir du prix du lot.
+  const currentInsurance = Number(payment.insurance_cost) || 0;
+  const [insured, setInsured] = useState(currentInsurance > 0);
+  const lotPrice = Number(payment.base_amount ?? payment.amount - lateFee) - currentInsurance;
+  const insuranceCost = Math.round(lotPrice * INSURANCE_RATE * 100) / 100;
+  const amount = Math.round((payment.amount - currentInsurance + (insured ? insuranceCost : 0)) * 100) / 100;
+  const canCoverFully = walletBalance >= amount;
   const canCoverPartially = walletBalance > 0 && !canCoverFully;
 
   const handlePay = async (method: 'wallet' | 'card' | 'mixed') => {
     if (
       lateFee > 0 &&
       !window.confirm(
-        `Paiement en retard de ${lateDays} jour${lateDays > 1 ? 's' : ''} : une pénalité de ${EUR(lateFee)} (5 % du prix du lot par jour, CGV art. 2 bis) s'ajoute au prix du lot.\n\nTotal à régler : ${EUR(payment.amount)}. Continuer ?`
+        `Paiement en retard de ${lateDays} jour${lateDays > 1 ? 's' : ''} : une pénalité de ${EUR(lateFee)} (5 % du prix du lot par jour, CGV art. 2 bis) s'ajoute au prix du lot.\n\nTotal à régler : ${EUR(amount)}. Continuer ?`
       )
     ) {
       return;
     }
     setSubmitting(method);
     setError('');
-    const result = await onPay(payment.order_id, method);
+    const result = await onPay(payment.order_id, method, insured);
     if (!result.success) {
       setError(result.error || 'Erreur lors du paiement');
       setSubmitting(null);
@@ -90,15 +100,26 @@ const PaymentRow: React.FC<PaymentRowProps> = ({ payment, walletBalance, onPay }
         <div className="min-w-0">
           <p className="text-sm font-medium text-gray-900 truncate">{payment.title}</p>
           <p className="text-xs text-gray-500">
-            {payment.brand} · {EUR(lateFee > 0 ? Number(payment.base_amount) : payment.amount)}
+            {payment.brand} · {EUR(lotPrice)}
           </p>
+          <label className="mt-1 inline-flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={insured}
+              onChange={() => setInsured((v) => !v)}
+              disabled={submitting !== null}
+              className="h-3.5 w-3.5 rounded border-gray-300 text-gray-900 focus:ring-gray-400"
+            />
+            <ShieldCheck className="h-3.5 w-3.5 text-gray-500" />
+            Assurer ce lot (+0.6%) <span className="font-medium">+{EUR(insuranceCost)}</span>
+          </label>
           {lateFee > 0 ? (
             <div className="mt-1 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
               <p className="font-semibold">
                 Retard de paiement : {lateDays} jour{lateDays > 1 ? 's' : ''} — pénalité +{EUR(lateFee)}
               </p>
               <p>
-                5 % du prix du lot par jour de retard (CGV, art. 2 bis). Total à régler aujourd'hui : <strong>{EUR(payment.amount)}</strong>.
+                5 % du prix du lot par jour de retard (CGV, art. 2 bis). Total à régler aujourd'hui : <strong>{EUR(amount)}</strong>.
                 La pénalité augmente chaque jour et figure sur votre facture.
               </p>
             </div>
@@ -128,11 +149,11 @@ const PaymentRow: React.FC<PaymentRowProps> = ({ payment, walletBalance, onPay }
           <button
             onClick={() => handlePay('mixed')}
             disabled={submitting !== null}
-            title={`Utilise votre solde (${EUR(walletBalance)}) et complète par carte (${EUR(payment.amount - walletBalance)})`}
+            title={`Utilise votre solde (${EUR(walletBalance)}) et complète par carte (${EUR(amount - walletBalance)})`}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-xs font-medium whitespace-nowrap"
           >
             <Coins className="h-3.5 w-3.5" />
-            {submitting === 'mixed' ? '...' : `Solde + carte (reste ${EUR(payment.amount - walletBalance)})`}
+            {submitting === 'mixed' ? '...' : `Solde + carte (reste ${EUR(amount - walletBalance)})`}
           </button>
         )}
         <button
@@ -151,7 +172,7 @@ const PaymentRow: React.FC<PaymentRowProps> = ({ payment, walletBalance, onPay }
 interface AuctionPaymentsDueProps {
   payments: PendingAuctionPayment[];
   walletBalance: number;
-  onPay: (orderId: string, method: 'wallet' | 'card' | 'mixed') => Promise<PayAuctionResult>;
+  onPay: (orderId: string, method: 'wallet' | 'card' | 'mixed', insured: boolean) => Promise<PayAuctionResult>;
 }
 
 /** Espace dédié en haut de la page Enchères : les lots que ce revendeur a

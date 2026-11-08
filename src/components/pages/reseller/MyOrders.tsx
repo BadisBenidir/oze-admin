@@ -29,8 +29,8 @@ export const MyOrders: React.FC<MyOrdersProps> = ({ onOpenProduct, onWalletChang
   const { payments: auctionPayments, pay: payAuctionOrder } = useMyAuctionPayments(Boolean(profile?.id));
   const wallet = useWallet(profile?.id);
 
-  const handlePayAuction = async (orderId: string, method: 'wallet' | 'card' | 'mixed') => {
-    const result = await payAuctionOrder(orderId, method);
+  const handlePayAuction = async (orderId: string, method: 'wallet' | 'card' | 'mixed', insured: boolean) => {
+    const result = await payAuctionOrder(orderId, method, insured);
     if (result.success && !result.redirectUrl) {
       refresh();
       wallet.refresh();
