@@ -8,6 +8,7 @@ import AdminApp from './apps/AdminApp';
 import ResellerApp from './apps/ResellerApp';
 import { B2BLanding } from './components/landing/B2BLanding';
 import { B2BSignup } from './components/landing/B2BSignup';
+import { PublicMarketResults } from './components/landing/PublicMarketResults';
 import { PreviewLinkPage, getPreviewToken } from './components/landing/PreviewLinkPage';
 import { isLandingHost } from './components/landing/plans';
 import { Terms } from './components/pages/reseller/Terms';
@@ -89,6 +90,10 @@ function App() {
     }
     if (/^\/inscription\/?$/.test(window.location.pathname) && landingEnabled) {
       return <B2BSignup />;
+    }
+    // Toutes les ventes (lien « Dernières ventes » de la landing) : publique.
+    if (/^\/resultats-de-ventes\/?$/.test(window.location.pathname) && landingEnabled) {
+      return <PublicMarketResults />;
     }
     // Retour de Stripe après paiement : page de remerciement neutre, affichée
     // sur n'importe quel domaine revendeur (Stripe peut y renvoyer depuis pro.*).

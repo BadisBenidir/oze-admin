@@ -373,6 +373,9 @@ export const B2BLanding: React.FC = () => {
   // Titre d'onglet : sinon celui d'index.html ("Gestion", pensé pour l'admin).
   useEffect(() => {
     document.title = 'Club B2B';
+    // Arrivée depuis une autre page (ex. /#tarifs depuis les résultats de ventes).
+    const hash = window.location.hash.slice(1);
+    if (hash) setTimeout(() => scrollTo(hash), 300);
   }, []);
 
   // Comme sur le site principal : header transparent sur la photo, blanc une fois le hero (plein écran) dépassé.

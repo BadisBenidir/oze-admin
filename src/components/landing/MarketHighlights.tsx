@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, Gavel, Rocket } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { LOGIN_URL } from './plans';
 
 interface Sale {
   id: string;
@@ -17,8 +16,8 @@ interface Sale {
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €';
 const DAY = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-// Même domaine que la connexion (pro.ozeparis.com depuis la landing).
-const RESULTS_URL = LOGIN_URL.replace(/\/connexion$/, '/resultats-de-ventes');
+// Page publique de toutes les ventes, sur le domaine de la landing (voir App.tsx).
+const RESULTS_URL = '/resultats-de-ventes';
 
 /**
  * Landing : « Ventes récentes » — les dernières pièces vendues en drop et aux
@@ -43,13 +42,13 @@ export const MarketHighlights: React.FC<{ onJoin: () => void }> = ({ onJoin }) =
     <section id="ventes" className="scroll-mt-20 bg-neutral-50 py-12 sm:py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="text-center">
-          <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-gray-500 sm:text-xs">Résultats de ventes</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-gray-500 sm:text-xs">Dernières ventes</p>
           <h2 className="mt-2 text-xl font-light tracking-tight sm:mt-3 sm:text-4xl">
-            Ce qui s'est vendu <span className="font-semibold">sur la plateforme</span>
+            Les dernières pièces vendues <span className="font-semibold">sur la plateforme</span>
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-gray-600 sm:text-base">
-            {total ? `${total} pièces déjà vendues` : 'Des centaines de pièces vendues'} en drop et aux enchères. Les membres consultent
-            l'historique complet : prix de départ, prix final, état et photos de chaque vente.
+            Les {sales.length} ventes les plus récentes, mises à jour en continu. {total ? `${total} pièces déjà vendues` : 'Des centaines de pièces vendues'} en
+            drop et aux enchères : retrouvez-les toutes avec prix de départ, prix final, état et photos.
           </p>
         </div>
 
@@ -90,15 +89,15 @@ export const MarketHighlights: React.FC<{ onJoin: () => void }> = ({ onJoin }) =
         </div>
 
         <div className="mt-8 flex flex-col items-center gap-3 sm:mt-10">
-          <button
-            onClick={onJoin}
+          <a
+            href={RESULTS_URL}
             className="inline-flex items-center gap-2 rounded-xl bg-black px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
           >
-            Rejoindre le Club pour voir toutes les ventes <ArrowRight className="h-4 w-4" />
-          </button>
-          <a href={RESULTS_URL} className="text-sm text-gray-600 underline underline-offset-4 hover:text-gray-900">
-            Déjà membre ? Voir tous les résultats
+            Voir toutes les ventes <ArrowRight className="h-4 w-4" />
           </a>
+          <button onClick={onJoin} className="text-sm text-gray-600 underline underline-offset-4 hover:text-gray-900">
+            Rejoindre le Club
+          </button>
         </div>
       </div>
     </section>
