@@ -68,11 +68,14 @@ export const ReadyToShipManager: React.FC = () => {
     load();
   }, [load]);
 
-  const visible = useMemo(() => {
-    const q = norm(query.trim());
-    return rows.filter((r) => {
-      if (filter === 'todo' ? r.fulfillment_status === 'ready_to_ship' : r.fulfillment_status !== 'ready_to_ship') return false;
-      if (!q) return true;
+  // Une recherche par ligne : une liste de références collée affiche tous
+  // les articles correspondant à au moins une ligne.
+  const terms = useMemo(
+    () => Array.from(new Set(query.split(/[\n\r\t;]+/).map((t) => norm(t.trim())).filter(Boolean))),
+    [query]
+  );
+
+  const haystackOf = (r: Row) => {
       const buyer = r.order?.placed_by ? `${r.order.placed_by.first_name || ''} ${r.order.placed_by.last_name || ''}` : '';
       const haystack = [
         r.product?.name || r.product_snapshot?.name,
@@ -88,9 +91,18 @@ export const ReadyToShipManager: React.FC = () => {
       ]
         .filter(Boolean)
         .join(' ');
-      return norm(haystack).includes(q);
-    });
-  }, [rows, query, filter]);
+      return norm(haystack);
+  };
+
+  const { visible, notFound } = useMemo(() => {
+    const inTab = rows.filter((r) => (filter === 'todo' ? r.fulfillment_status !== 'ready_to_ship' : r.fulfillment_status === 'ready_to_ship'));
+    if (terms.length === 0) return { visible: inTab, notFound: [] as string[] };
+    const hay = new Map(inTab.map((r) => [r.id, haystackOf(r)]));
+    const matched = inTab.filter((r) => terms.some((t) => hay.get(r.id)!.includes(t)));
+    const missing = terms.length > 1 ? terms.filter((t) => !inTab.some((r) => hay.get(r.id)!.includes(t))) : [];
+    return { visible: matched, notFound: missing };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, terms, filter]);
 
   const todoCount = rows.filter((r) => r.fulfillment_status !== 'ready_to_ship').length;
   const readyCount = rows.length - todoCount;
@@ -158,13 +170,19 @@ export const ReadyToShipManager: React.FC = () => {
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[240px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
+          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <textarea
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Article, référence, réf. fournisseur, acheteur, commande…"
-            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none"
+            rows={Math.min(Math.max(query.split('\n').length, 1), 8)}
+            placeholder="Article, référence, réf. fournisseur, acheteur, commande… — une par ligne pour coller une liste"
+            className="w-full resize-y rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none"
           />
+          {terms.length > 1 && (
+            <p className="mt-1 text-xs text-gray-500">
+              {terms.length} recherches · {visible.length} article{visible.length > 1 ? 's' : ''} trouvé{visible.length > 1 ? 's' : ''}
+            </p>
+          )}
         </div>
         <div className="flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
           <button
@@ -183,6 +201,24 @@ export const ReadyToShipManager: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {notFound.length > 0 && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Introuvable{notFound.length > 1 ? 's' : ''} dans cet onglet ({notFound.length}) : <span className="font-mono">{notFound.join(' · ')}</span>
+        </p>
+      )}
+
+      {selectable && visible.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            {allVisibleSelected ? 'Tout désélectionner' : `Sélectionner tout (${visible.length})`}
+          </button>
+        </div>
+      )}
 
       {selectable && selected.size > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm">
