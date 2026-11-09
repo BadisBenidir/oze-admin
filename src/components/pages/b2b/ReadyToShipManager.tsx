@@ -9,7 +9,7 @@ interface Row {
   id: string;
   fulfillment_status: Stage;
   product_snapshot: { name?: string; images?: string[]; main_image_index?: number } | null;
-  product: { name: string | null; images: string[] | null; main_image_index: number | null; reference: string | null; b2b_reference: string | null; product_code: string | null; brand: { name: string } | null } | null;
+  product: { name: string | null; images: string[] | null; main_image_index: number | null; reference: string | null; b2b_reference: string | null; product_code: string | null; supplier_reference: string | null; brand: { name: string } | null } | null;
   order: {
     order_number: string;
     email: string | null;
@@ -51,7 +51,7 @@ export const ReadyToShipManager: React.FC = () => {
       .from('order_items')
       .select(
         'id, fulfillment_status, product_snapshot, ' +
-          'product:products(name, images, main_image_index, reference, b2b_reference, product_code, brand:brands(name)), ' +
+          'product:products(name, images, main_image_index, reference, b2b_reference, product_code, supplier_reference, brand:brands(name)), ' +
           'order:orders!inner(order_number, email, order_channel, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name))'
       )
       .eq('status', 'active')
@@ -80,6 +80,7 @@ export const ReadyToShipManager: React.FC = () => {
         r.product?.b2b_reference,
         r.product?.reference,
         r.product?.product_code,
+        r.product?.supplier_reference,
         r.order?.order_number,
         r.order?.email,
         r.order?.reseller?.company_name,
@@ -161,7 +162,7 @@ export const ReadyToShipManager: React.FC = () => {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Article, référence, acheteur, commande…"
+            placeholder="Article, référence, réf. fournisseur, acheteur, commande…"
             className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none"
           />
         </div>
@@ -255,6 +256,7 @@ export const ReadyToShipManager: React.FC = () => {
                           <p className="text-xs text-gray-500">
                             {r.product?.brand?.name && <span>{r.product.brand.name} · </span>}
                             {ref ? `Réf. ${ref}` : ''}
+                            {r.product?.supplier_reference ? ` · Fournisseur ${r.product.supplier_reference}` : ''}
                           </p>
                         </div>
                       </div>
