@@ -5,7 +5,7 @@ import { LOGIN_URL } from './plans';
 import logo from './assets/logo_oze_paris_b2b.png';
 
 /**
- * b2b.ozeparis.com/resultats-de-ventes : page « Résultats de ventes » ouverte
+ * b2b.ozeparis.com/ventes : page « Résultats de ventes » ouverte
  * aux visiteurs (get_market_results / get_market_result_detail publics, 0252),
  * avec un en-tête minimal vers la landing, la connexion et l'inscription.
  */

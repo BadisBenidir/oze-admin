@@ -17,7 +17,7 @@ interface Sale {
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €';
 const DAY = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 // Page publique de toutes les ventes, sur le domaine de la landing (voir App.tsx).
-const RESULTS_URL = '/resultats-de-ventes';
+const RESULTS_URL = '/ventes';
 
 /**
  * Landing : « Ventes récentes » — les dernières pièces vendues en drop et aux

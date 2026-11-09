@@ -44,6 +44,11 @@ const isLandingEnabled = (): boolean => {
 function App() {
   const { status, role } = useSessionRole();
 
+  // Ancienne adresse des résultats de ventes (liens déjà partagés) : /ventes.
+  if (/^\/resultats-de-ventes\/?$/.test(window.location.pathname)) {
+    window.history.replaceState(null, '', '/ventes' + window.location.search + window.location.hash);
+  }
+
   // Priorité absolue, indépendante de l'état de session : c'est la page de
   // destination du lien d'invitation par email (voir `redirectTo` dans
   // invite-reseller-contact). Elle gère elle-même son propre chargement de
@@ -92,7 +97,7 @@ function App() {
       return <B2BSignup />;
     }
     // Toutes les ventes (lien « Dernières ventes » de la landing) : publique.
-    if (/^\/resultats-de-ventes\/?$/.test(window.location.pathname) && landingEnabled) {
+    if (/^\/ventes\/?$/.test(window.location.pathname) && landingEnabled) {
       return <PublicMarketResults />;
     }
     // Retour de Stripe après paiement : page de remerciement neutre, affichée

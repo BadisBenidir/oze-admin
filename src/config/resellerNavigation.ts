@@ -11,7 +11,7 @@ export const resellerNavigationItems: MenuItem[] = [
   { id: 'my-orders', label: 'Mes commandes', icon: ShoppingBag, path: '/mes-commandes' },
   { id: 'sourcing', label: 'Sourcing sur mesure', icon: PackageSearch, path: '/sourcing-sur-mesure' },
   { id: 'auctions', label: 'Enchères', icon: Gavel, path: '/encheres' },
-  { id: 'market-results', label: 'Résultats de ventes', icon: TrendingUp, path: '/resultats-de-ventes' },
+  { id: 'market-results', label: 'Résultats de ventes', icon: TrendingUp, path: '/ventes' },
   { id: 'wallet', label: 'Mon Portefeuille', icon: Wallet, path: '/portefeuille' },
   { id: 'profile', label: 'Mon profil', icon: User, path: '/mon-profil' },
 ];
