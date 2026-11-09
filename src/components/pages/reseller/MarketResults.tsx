@@ -71,7 +71,7 @@ export const MarketResults: React.FC = () => {
   const selectClass = 'rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-gray-400 focus:outline-none';
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-7xl space-y-5 p-4 md:p-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900">Résultats de ventes</h2>
         <p className="text-sm text-gray-500">Tous les articles vendus sur la plateforme, en drop ou aux enchères, avec leur prix final.</p>
@@ -124,7 +124,7 @@ export const MarketResults: React.FC = () => {
           {filtered.length === 0 ? (
             <p className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">Aucune vente ne correspond à votre recherche.</p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {filtered.slice(0, shown).map((r) => (
                 <div key={r.id} className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
                   <div className="relative aspect-square bg-gray-50">
@@ -147,7 +147,7 @@ export const MarketResults: React.FC = () => {
                   <div className="flex flex-1 flex-col gap-1 p-3 text-xs">
                     <div className="flex justify-between text-gray-500">
                       <span>Vendu le {DAY(r.sold_at)}</span>
-                      {r.condition && <span>État {r.condition}</span>}
+                      {r.condition && <span>État {r.condition.replace(/^grade\s*/i, '')}</span>}
                     </div>
                     <p className="mt-1 text-center text-sm font-semibold uppercase tracking-[0.2em] text-gray-900">{r.brand || '—'}</p>
                     <p className="line-clamp-2 min-h-[2rem] text-center text-gray-600">{r.title}</p>
