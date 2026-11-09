@@ -113,6 +113,7 @@ export const navigationItems: MenuItem[] = [
       { id: 'price-changes', label: 'Baisses de prix', path: '/espace-b2b/baisses-de-prix', icon: TrendingDown },
       { id: 'sourcing', label: 'Sourcing sur mesure', path: '/espace-b2b/sourcing', icon: PackageSearch },
       { id: 'auctions', label: 'Enchères B2B', path: '/espace-b2b/encheres', icon: Gavel },
+      { id: 'ready-to-ship', label: 'Prêt à la livraison', path: '/espace-b2b/pret-a-la-livraison', icon: PackageCheck },
       { id: 'promo-codes', label: 'Codes Promos', path: '/espace-b2b/codes-promo', icon: Ticket },
       { id: 'club-promo-codes', label: 'Codes promo Club', path: '/espace-b2b/codes-promo-club', icon: Ticket },
       { id: 'commissions', label: 'Chiffre d\'affaires B2B', path: '/espace-b2b/chiffre-affaires', icon: Banknote },
