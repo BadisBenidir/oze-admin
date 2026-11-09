@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Search, Gavel, Rocket, Package, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { MarketResultDetail } from './MarketResultDetail';
+import { parseQuery, prepareText, smartMatch, PreparedText } from '../../../utils/smartSearch';
 
 interface MarketResult {
   id: string;
@@ -21,7 +22,6 @@ type SortKey = 'recent' | 'oldest' | 'price_desc' | 'price_asc';
 const PER_PAGE_OPTIONS = [20, 50, 100];
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' €';
 const DAY = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /**
  * Résultats de ventes : tous les articles vendus sur la plateforme (drops et
@@ -54,21 +54,27 @@ export const MarketResults: React.FC = () => {
   const categories = useMemo(() => Array.from(new Set(rows.map((r) => r.category).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)), [rows]);
   const brands = useMemo(() => Array.from(new Set(rows.map((r) => r.brand?.trim()).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)), [rows]);
 
+  // Texte de recherche préparé une fois par vente (recherche intelligente, smartSearch).
+  const searchIndex = useMemo(
+    () => new Map(rows.map((r) => [r.id, prepareText(`${r.title || ''} ${r.brand || ''} ${r.category || ''} ${r.condition || ''}`)])),
+    [rows]
+  );
+
   const filtered = useMemo(() => {
-    const q = norm(query.trim());
+    const units = parseQuery(query);
     const list = rows.filter(
       (r) =>
         (!category || r.category === category) &&
         (!brand || r.brand?.trim() === brand) &&
         (!source || r.source === source) &&
-        (!q || norm(`${r.title || ''} ${r.brand || ''} ${r.category || ''}`).includes(q))
+        (units.length === 0 || smartMatch(units, searchIndex.get(r.id) as PreparedText))
     );
     const byDate = (a: MarketResult, b: MarketResult) => new Date(b.sold_at).getTime() - new Date(a.sold_at).getTime();
     list.sort((a, b) =>
       sort === 'recent' ? byDate(a, b) : sort === 'oldest' ? -byDate(a, b) : sort === 'price_desc' ? b.final_price - a.final_price : a.final_price - b.final_price
     );
     return list;
-  }, [rows, query, category, brand, source, sort]);
+  }, [rows, searchIndex, query, category, brand, source, sort]);
 
   useEffect(() => setPage(1), [query, category, brand, source, sort, perPage]);
 

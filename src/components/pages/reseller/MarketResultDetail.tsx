@@ -172,21 +172,29 @@ export const MarketResultDetail: React.FC<Props> = ({ rows, index, onIndexChange
           </div>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-3 overflow-hidden rounded-lg text-white">
-              <div className={`px-3 py-2 text-sm font-medium ${isAuction ? 'bg-indigo-600' : 'bg-gray-900'}`}>{isAuction ? 'Enchère' : 'Drop'}</div>
-              <div className="bg-orange-400 px-3 py-2 text-sm font-medium">{row.category || '—'}</div>
-              <div className="bg-red-600 px-3 py-2 text-sm font-semibold">VENDU</div>
-              <div className="border border-gray-200 bg-white px-3 py-2 text-gray-900">
-                <p className="text-xs text-gray-500">État</p>
-                <p className="text-2xl font-bold">{condition}</p>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-white ${isAuction ? 'bg-indigo-600' : 'bg-gray-900'}`}
+                >
+                  {isAuction ? 'Enchère' : 'Drop'}
+                </span>
+                {row.category && <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">{row.category}</span>}
+                <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">Vendu le {DAY(row.sold_at)}</span>
               </div>
-              <div className="bg-slate-500 px-3 py-2">
-                <p className="text-xs opacity-80">Prix de départ</p>
-                <p className="text-xl font-semibold">{isAuction && row.start_price != null ? EUR(row.start_price) : '—'}</p>
-              </div>
-              <div className="bg-blue-800 px-3 py-2">
-                <p className="text-xs opacity-80">Prix final</p>
-                <p className="text-xl font-bold">{EUR(row.final_price)}</p>
+              <div className="grid grid-cols-3 divide-x divide-gray-200 rounded-xl border border-gray-200">
+                <div className="px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">État</p>
+                  <p className="mt-1 text-2xl font-semibold text-gray-900">{condition}</p>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Prix de départ</p>
+                  <p className="mt-1 text-2xl font-semibold text-gray-500">{isAuction && row.start_price != null ? EUR(row.start_price) : '—'}</p>
+                </div>
+                <div className="rounded-r-xl bg-gray-900 px-4 py-3 text-white">
+                  <p className="text-xs uppercase tracking-wide text-gray-300">Prix final</p>
+                  <p className="mt-1 text-2xl font-bold">{EUR(row.final_price)}</p>
+                </div>
               </div>
             </div>
 
