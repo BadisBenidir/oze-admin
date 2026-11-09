@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, Gavel, Rocket, Package, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
+import { MarketResultDetail } from './MarketResultDetail';
 
 interface MarketResult {
   id: string;
@@ -39,6 +40,8 @@ export const MarketResults: React.FC = () => {
   const [sort, setSort] = useState<SortKey>('recent');
   const [perPage, setPerPage] = useState(20);
   const [page, setPage] = useState(1);
+  // Vente ouverte en fiche détaillée : index dans la liste filtrée.
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   useEffect(() => {
     supabase.rpc('get_market_results').then(({ data, error: rpcError }) => {
@@ -168,8 +171,12 @@ export const MarketResults: React.FC = () => {
             <p className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">Aucune vente ne correspond à votre recherche.</p>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {pageRows.map((r) => (
-                <div key={r.id} className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
+              {pageRows.map((r, i) => (
+                <div
+                  key={r.id}
+                  onClick={() => setOpenIndex((current - 1) * perPage + i)}
+                  className="flex cursor-pointer flex-col overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-md"
+                >
                   <div className="relative aspect-square bg-gray-50">
                     {r.image ? (
                       <img src={r.image} alt={r.title || ''} loading="lazy" className="h-full w-full object-cover" />
@@ -210,6 +217,9 @@ export const MarketResults: React.FC = () => {
             </div>
           )}
           {filtered.length > 0 && pager}
+          {openIndex !== null && (
+            <MarketResultDetail rows={filtered} index={openIndex} onIndexChange={setOpenIndex} onClose={() => setOpenIndex(null)} />
+          )}
         </>
       )}
     </div>
