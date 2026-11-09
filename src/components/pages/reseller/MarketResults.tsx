@@ -17,7 +17,15 @@ interface MarketResult {
   sold_at: string;
 }
 
-type SortKey = 'recent' | 'oldest' | 'price_desc' | 'price_asc';
+type SortKey = 'recent' | 'oldest' | 'price_desc' | 'price_asc' | 'condition_best' | 'condition_worst';
+
+// État affiché (« Grade AB » → « AB ») et rang du meilleur au moins bon :
+// grades des enchères (S > SA > A > AB > B > BC > C > D) et états du catalogue.
+const conditionLabel = (c: string | null) => (c ? c.replace(/^grade\s*/i, '').trim() : '');
+const CONDITION_RANK: Record<string, number> = {
+  n: 0, neuf: 0, new: 0, s: 1, sa: 2, a: 3, excellent: 3, ab: 4, 'very-good': 4, b: 5, good: 5, bc: 6, c: 7, cd: 8, d: 9,
+};
+const conditionRank = (c: string | null) => CONDITION_RANK[conditionLabel(c).toLowerCase()] ?? 50;
 
 const PER_PAGE_OPTIONS = [20, 50, 100];
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' €';
@@ -37,6 +45,7 @@ export const MarketResults: React.FC = () => {
   const [category, setCategory] = useState('');
   const [brand, setBrand] = useState('');
   const [source, setSource] = useState<'' | 'auction' | 'drop'>('');
+  const [condition, setCondition] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
   const [perPage, setPerPage] = useState(20);
   const [page, setPage] = useState(1);
@@ -55,6 +64,10 @@ export const MarketResults: React.FC = () => {
 
   const categories = useMemo(() => Array.from(new Set(rows.map((r) => r.category).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)), [rows]);
   const brands = useMemo(() => Array.from(new Set(rows.map((r) => r.brand?.trim()).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)), [rows]);
+  const conditions = useMemo(
+    () => Array.from(new Set(rows.map((r) => conditionLabel(r.condition)).filter(Boolean))).sort((a, b) => conditionRank(a) - conditionRank(b) || a.localeCompare(b)),
+    [rows]
+  );
 
   // Texte de recherche préparé une fois par vente (recherche intelligente, smartSearch).
   const searchIndex = useMemo(
@@ -69,16 +82,30 @@ export const MarketResults: React.FC = () => {
         (!category || r.category === category) &&
         (!brand || r.brand?.trim() === brand) &&
         (!source || r.source === source) &&
+        (!condition || conditionLabel(r.condition) === condition) &&
         (units.length === 0 || smartMatch(units, searchIndex.get(r.id) as PreparedText))
     );
     const byDate = (a: MarketResult, b: MarketResult) => new Date(b.sold_at).getTime() - new Date(a.sold_at).getTime();
-    list.sort((a, b) =>
-      sort === 'recent' ? byDate(a, b) : sort === 'oldest' ? -byDate(a, b) : sort === 'price_desc' ? b.final_price - a.final_price : a.final_price - b.final_price
-    );
+    list.sort((a, b) => {
+      switch (sort) {
+        case 'oldest':
+          return -byDate(a, b);
+        case 'price_desc':
+          return b.final_price - a.final_price;
+        case 'price_asc':
+          return a.final_price - b.final_price;
+        case 'condition_best':
+          return conditionRank(a.condition) - conditionRank(b.condition) || byDate(a, b);
+        case 'condition_worst':
+          return conditionRank(b.condition) - conditionRank(a.condition) || byDate(a, b);
+        default:
+          return byDate(a, b);
+      }
+    });
     return list;
-  }, [rows, searchIndex, query, category, brand, source, sort]);
+  }, [rows, searchIndex, query, category, brand, source, condition, sort]);
 
-  useEffect(() => setPage(1), [query, category, brand, source, sort, perPage]);
+  useEffect(() => setPage(1), [query, category, brand, source, condition, sort, perPage]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / perPage));
   const current = Math.min(page, pageCount);
@@ -161,11 +188,19 @@ export const MarketResults: React.FC = () => {
           <option value="drop">Drops</option>
           <option value="auction">Enchères</option>
         </select>
+        <select value={condition} onChange={(e) => setCondition(e.target.value)} className={selectClass}>
+          <option value="">Tous les états</option>
+          {conditions.map((c) => (
+            <option key={c} value={c}>État {c}</option>
+          ))}
+        </select>
         <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className={selectClass}>
           <option value="recent">Plus récentes</option>
           <option value="oldest">Plus anciennes</option>
           <option value="price_desc">Prix décroissant</option>
           <option value="price_asc">Prix croissant</option>
+          <option value="condition_best">Meilleur état d'abord</option>
+          <option value="condition_worst">Moins bon état d'abord</option>
         </select>
       </div>
 
