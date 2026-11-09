@@ -224,6 +224,7 @@ export const ReadyToShipManager: React.FC = () => {
                   </th>
                 )}
                 <th className="px-4 py-2.5 font-medium">Article</th>
+                <th className="px-4 py-2.5 font-medium">Réf. fournisseur</th>
                 <th className="px-4 py-2.5 font-medium">Acheteur</th>
                 <th className="px-4 py-2.5 font-medium">Commande</th>
                 <th className="px-4 py-2.5 font-medium">Statut</th>
@@ -256,10 +257,18 @@ export const ReadyToShipManager: React.FC = () => {
                           <p className="text-xs text-gray-500">
                             {r.product?.brand?.name && <span>{r.product.brand.name} · </span>}
                             {ref ? `Réf. ${ref}` : ''}
-                            {r.product?.source_reference ? ` · Fournisseur ${r.product.source_reference}` : ''}
                           </p>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.product?.source_reference ? (
+                        <span className="rounded-md bg-gray-100 px-2 py-1 font-mono text-sm font-semibold text-gray-900 whitespace-nowrap">
+                          {r.product.source_reference}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-gray-900">{buyer || '—'}</p>
