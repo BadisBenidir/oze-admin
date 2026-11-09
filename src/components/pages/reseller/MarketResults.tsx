@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Gavel, Rocket, Package } from 'lucide-react';
+import { Search, Gavel, Rocket, Package, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 
 interface MarketResult {
@@ -17,7 +17,7 @@ interface MarketResult {
 
 type SortKey = 'recent' | 'oldest' | 'price_desc' | 'price_asc';
 
-const PAGE = 60;
+const PER_PAGE_OPTIONS = [20, 50, 100];
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' €';
 const DAY = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -37,7 +37,8 @@ export const MarketResults: React.FC = () => {
   const [brand, setBrand] = useState('');
   const [source, setSource] = useState<'' | 'auction' | 'drop'>('');
   const [sort, setSort] = useState<SortKey>('recent');
-  const [shown, setShown] = useState(PAGE);
+  const [perPage, setPerPage] = useState(20);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     supabase.rpc('get_market_results').then(({ data, error: rpcError }) => {
@@ -66,7 +67,51 @@ export const MarketResults: React.FC = () => {
     return list;
   }, [rows, query, category, brand, source, sort]);
 
-  useEffect(() => setShown(PAGE), [query, category, brand, source, sort]);
+  useEffect(() => setPage(1), [query, category, brand, source, sort, perPage]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / perPage));
+  const current = Math.min(page, pageCount);
+  const pageRows = filtered.slice((current - 1) * perPage, current * perPage);
+  const goTo = (n: number) => {
+    setPage(Math.min(Math.max(n, 1), pageCount));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navButton = 'flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40';
+  const pager = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm text-gray-500">
+        {filtered.length} vente{filtered.length > 1 ? 's' : ''}
+        {filtered.length > 0 && ` · ${(current - 1) * perPage + 1}–${Math.min(current * perPage, filtered.length)}`}
+      </p>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => goTo(1)} disabled={current === 1} title="Première page" className={navButton}>
+          <ChevronsLeft className="h-4 w-4" />
+        </button>
+        <button type="button" onClick={() => goTo(current - 1)} disabled={current === 1} title="Page précédente" className={navButton}>
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <span className="px-3 text-sm text-gray-700">
+          Page <strong>{current}</strong> / {pageCount}
+        </span>
+        <button type="button" onClick={() => goTo(current + 1)} disabled={current === pageCount} title="Page suivante" className={navButton}>
+          <ChevronRight className="h-4 w-4" />
+        </button>
+        <button type="button" onClick={() => goTo(pageCount)} disabled={current === pageCount} title="Dernière page" className={navButton}>
+          <ChevronsRight className="h-4 w-4" />
+        </button>
+      </div>
+      <label className="flex items-center gap-2 text-sm text-gray-600">
+        Afficher
+        <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm focus:border-gray-400 focus:outline-none">
+          {PER_PAGE_OPTIONS.map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+        par page
+      </label>
+    </div>
+  );
 
   const selectClass = 'rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-gray-400 focus:outline-none';
 
@@ -118,14 +163,12 @@ export const MarketResults: React.FC = () => {
         <p className="text-sm text-gray-500">Chargement…</p>
       ) : (
         <>
-          <p className="text-xs text-gray-500">
-            {filtered.length} vente{filtered.length > 1 ? 's' : ''}
-          </p>
+          {pager}
           {filtered.length === 0 ? (
             <p className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">Aucune vente ne correspond à votre recherche.</p>
           ) : (
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filtered.slice(0, shown).map((r) => (
+              {pageRows.map((r) => (
                 <div key={r.id} className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                   <div className="relative aspect-square bg-gray-50">
                     {r.image ? (
@@ -166,17 +209,7 @@ export const MarketResults: React.FC = () => {
               ))}
             </div>
           )}
-          {shown < filtered.length && (
-            <div className="flex justify-center">
-              <button
-                type="button"
-                onClick={() => setShown((n) => n + PAGE)}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Voir plus ({filtered.length - shown} restantes)
-              </button>
-            </div>
-          )}
+          {filtered.length > 0 && pager}
         </>
       )}
     </div>
