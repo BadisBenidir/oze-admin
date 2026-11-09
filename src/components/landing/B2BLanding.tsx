@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { MarketHighlights } from './MarketHighlights';
 import { Analytics } from '@vercel/analytics/react';
 import {
   ArrowRight, ChevronDown, Gavel, LayoutGrid, Menu, PackageSearch, X, Check, ShieldCheck, Users, Euro, UserRound, Mail,
@@ -32,6 +33,7 @@ const NAV = [
   { id: 'drops', label: 'Drops' },
   { id: 'encheres', label: 'Enchères' },
   { id: 'sourcing', label: 'Sourcing' },
+  { id: 'ventes', label: 'Ventes' },
   { id: 'faq', label: 'FAQ' },
 ];
 
@@ -600,6 +602,9 @@ export const B2BLanding: React.FC = () => {
           Exemples de pièces déjà proposées aux membres. Catalogue complet et prix réservés aux abonnés.
         </p>
       </section>
+
+      {/* VENTES RÉCENTES — dernières pièces vendues, invitation à voir tous les résultats */}
+      <MarketHighlights onJoin={() => scrollTo('tarifs')} />
 
       {/* DÉTAIL DES 3 SOLUTIONS (cibles des liens Drops / Enchères / Sourcing du header) */}
       {FEATURES.map((f, i) => {
