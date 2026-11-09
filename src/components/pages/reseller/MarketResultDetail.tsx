@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 
@@ -34,6 +34,52 @@ const colorsText = (colors: unknown): string | null => {
   return colors.map((c) => (typeof c === 'string' ? c : (c as { name?: string })?.name)).filter(Boolean).join(', ') || null;
 };
 
+/**
+ * Photo principale : au survol, loupe centrée sur la souris ; la molette
+ * augmente / diminue le grossissement. Un clic ouvre la photo en plein écran.
+ */
+const ZoomableImage: React.FC<{ src: string; alt: string; onOpen: () => void }> = ({ src, alt, onOpen }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState(false);
+  const [origin, setOrigin] = useState({ x: 50, y: 50 });
+  const [scale, setScale] = useState(2.5);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setScale((s) => Math.min(6, Math.max(1.5, s - e.deltaY * 0.003)));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setOrigin({ x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 });
+  };
+
+  return (
+    <div
+      ref={ref}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onMouseMove={onMove}
+      onClick={onOpen}
+      className="h-full w-full cursor-zoom-in overflow-hidden"
+    >
+      <img
+        src={src}
+        alt={alt}
+        draggable={false}
+        className="h-full w-full select-none object-contain transition-transform duration-75"
+        style={{ transform: hover ? `scale(${scale})` : 'none', transformOrigin: `${origin.x}% ${origin.y}%` }}
+      />
+    </div>
+  );
+};
+
 interface Props {
   rows: MarketResultRow[];
   index: number;
@@ -52,6 +98,9 @@ export const MarketResultDetail: React.FC<Props> = ({ rows, index, onIndexChange
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [photo, setPhoto] = useState(0);
+  // Photo affichée en plein écran (clic sur la photo principale).
+  const [lightbox, setLightbox] = useState(false);
+  const imageCount = useRef(0);
 
   useEffect(() => {
     if (!row) return;
@@ -59,6 +108,7 @@ export const MarketResultDetail: React.FC<Props> = ({ rows, index, onIndexChange
     setLoading(true);
     setDetail(null);
     setPhoto(0);
+    setLightbox(false);
     supabase.rpc('get_market_result_detail', { p_source: row.source, p_id: row.id }).then(({ data }) => {
       if (cancelled) return;
       setDetail((data as Detail) || null);
@@ -71,18 +121,26 @@ export const MarketResultDetail: React.FC<Props> = ({ rows, index, onIndexChange
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (lightbox) {
+        const n = imageCount.current || 1;
+        if (e.key === 'Escape') setLightbox(false);
+        if (e.key === 'ArrowRight') setPhoto((p) => (p + 1) % n);
+        if (e.key === 'ArrowLeft') setPhoto((p) => (p - 1 + n) % n);
+        return;
+      }
       if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowRight' && index < rows.length - 1) onIndexChange(index + 1);
       if (e.key === 'ArrowLeft' && index > 0) onIndexChange(index - 1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [index, rows.length, onClose, onIndexChange]);
+  }, [index, rows.length, onClose, onIndexChange, lightbox]);
 
   if (!row) return null;
 
   const images = (detail?.images?.length ? detail.images : row.image ? [row.image] : []).filter(Boolean);
   const current = images[Math.min(photo, Math.max(images.length - 1, 0))];
+  imageCount.current = images.length;
   const isAuction = row.source === 'auction';
   const condition = row.condition?.replace(/^grade\s*/i, '') || '—';
   const remarks = [detail?.description, detail?.defects].filter((t) => t && t.trim()).join('\n');
@@ -130,7 +188,7 @@ export const MarketResultDetail: React.FC<Props> = ({ rows, index, onIndexChange
           <div>
             <div className="relative aspect-square overflow-hidden rounded-lg bg-gray-50">
               {current ? (
-                <img src={current} alt={row.title || ''} className="h-full w-full object-contain" />
+                <ZoomableImage src={current} alt={row.title || ''} onOpen={() => setLightbox(true)} />
               ) : (
                 <div className="flex h-full items-center justify-center">
                   <Package className="h-10 w-10 text-gray-300" />
@@ -141,14 +199,14 @@ export const MarketResultDetail: React.FC<Props> = ({ rows, index, onIndexChange
                   <button
                     type="button"
                     onClick={() => setPhoto((p) => (p - 1 + images.length) % images.length)}
-                    className="absolute left-0 top-1/2 flex h-14 w-11 -translate-y-1/2 items-center justify-center bg-gray-800/60 text-white hover:bg-gray-800/80"
+                    className="absolute left-0 top-1/2 z-10 flex h-14 w-11 -translate-y-1/2 items-center justify-center bg-gray-800/60 text-white hover:bg-gray-800/80"
                   >
                     <ChevronLeft className="h-6 w-6" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setPhoto((p) => (p + 1) % images.length)}
-                    className="absolute right-0 top-1/2 flex h-14 w-11 -translate-y-1/2 items-center justify-center bg-gray-800/60 text-white hover:bg-gray-800/80"
+                    className="absolute right-0 top-1/2 z-10 flex h-14 w-11 -translate-y-1/2 items-center justify-center bg-gray-800/60 text-white hover:bg-gray-800/80"
                   >
                     <ChevronRight className="h-6 w-6" />
                   </button>
@@ -173,18 +231,18 @@ export const MarketResultDetail: React.FC<Props> = ({ rows, index, onIndexChange
 
           <div className="space-y-4">
             <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-gray-200">
-              <div className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] ${isAuction ? 'bg-violet-100 text-violet-800' : 'bg-gray-200 text-gray-800'}`}>{isAuction ? 'Enchère' : 'Drop'}</div>
-              <div className="bg-amber-100 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-amber-800">{row.category || '—'}</div>
-              <div className="bg-rose-100 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-rose-700">Vendu</div>
+              <div className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] ${isAuction ? 'bg-violet-200 text-violet-900' : 'bg-gray-300 text-gray-900'}`}>{isAuction ? 'Enchère' : 'Drop'}</div>
+              <div className="bg-amber-200 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-amber-900">{row.category || '—'}</div>
+              <div className="bg-rose-200 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-rose-800">Vendu</div>
               <div className="bg-white px-4 py-3">
                 <p className="text-[11px] font-medium uppercase tracking-[0.15em] text-gray-500">État</p>
                 <p className="mt-1 text-2xl font-semibold tracking-tight text-gray-900">{condition}</p>
               </div>
-              <div className="border-l border-gray-200 bg-sky-50 px-4 py-3 text-sky-900">
+              <div className="border-l border-gray-200 bg-sky-100 px-4 py-3 text-sky-900">
                 <p className="text-[11px] font-medium uppercase tracking-[0.15em] opacity-70">Prix de départ</p>
                 <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">{isAuction && row.start_price != null ? EUR(row.start_price) : '—'}</p>
               </div>
-              <div className="border-l border-gray-200 bg-indigo-50 px-4 py-3 text-indigo-900">
+              <div className="border-l border-gray-200 bg-indigo-100 px-4 py-3 text-indigo-900">
                 <p className="text-[11px] font-medium uppercase tracking-[0.15em] opacity-70">Prix final</p>
                 <p className="mt-1 text-2xl font-bold tracking-tight tabular-nums">{EUR(row.final_price)}</p>
               </div>
@@ -207,6 +265,56 @@ export const MarketResultDetail: React.FC<Props> = ({ rows, index, onIndexChange
           </div>
         </div>
       </div>
+
+      {lightbox && current && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90"
+          onClick={(e) => {
+            e.stopPropagation();
+            setLightbox(false);
+          }}
+        >
+          <img src={current} alt={row.title || ''} className="max-h-[92vh] max-w-[92vw] select-none object-contain" onClick={(e) => e.stopPropagation()} />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightbox(false);
+            }}
+            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+            title="Fermer"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          {images.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPhoto((p) => (p - 1 + images.length) % images.length);
+                }}
+                className="absolute left-4 top-1/2 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              >
+                <ChevronLeft className="h-8 w-8" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPhoto((p) => (p + 1) % images.length);
+                }}
+                className="absolute right-4 top-1/2 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              >
+                <ChevronRight className="h-8 w-8" />
+              </button>
+              <span className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-sm text-white">
+                {Math.min(photo, images.length - 1) + 1} / {images.length}
+              </span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };

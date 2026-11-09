@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Gavel, Rocket, Package, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { MarketResultDetail } from './MarketResultDetail';
@@ -42,6 +42,8 @@ export const MarketResults: React.FC = () => {
   const [page, setPage] = useState(1);
   // Vente ouverte en fiche détaillée : index dans la liste filtrée.
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  // Haut de la page : la zone qui défile est le conteneur de l'app, pas la fenêtre.
+  const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     supabase.rpc('get_market_results').then(({ data, error: rpcError }) => {
@@ -83,6 +85,7 @@ export const MarketResults: React.FC = () => {
   const pageRows = filtered.slice((current - 1) * perPage, current * perPage);
   const goTo = (n: number) => {
     setPage(Math.min(Math.max(n, 1), pageCount));
+    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -125,7 +128,7 @@ export const MarketResults: React.FC = () => {
   const selectClass = 'rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-gray-400 focus:outline-none';
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
+    <div ref={topRef} className="mx-auto max-w-[1600px] scroll-mt-24 space-y-5 p-4 md:p-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900">Résultats de ventes</h2>
         <p className="text-sm text-gray-500">Tous les articles vendus sur la plateforme, en drop ou aux enchères, avec leur prix final.</p>
