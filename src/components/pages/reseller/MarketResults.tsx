@@ -71,7 +71,7 @@ export const MarketResults: React.FC = () => {
   const selectClass = 'rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-gray-400 focus:outline-none';
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
+    <div className="mx-auto max-w-[1800px] space-y-5 p-4 md:p-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900">Résultats de ventes</h2>
         <p className="text-sm text-gray-500">Tous les articles vendus sur la plateforme, en drop ou aux enchères, avec leur prix final.</p>
@@ -124,9 +124,9 @@ export const MarketResults: React.FC = () => {
           {filtered.length === 0 ? (
             <p className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">Aucune vente ne correspond à votre recherche.</p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filtered.slice(0, shown).map((r) => (
-                <div key={r.id} className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
+                <div key={r.id} className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                   <div className="relative aspect-square bg-gray-50">
                     {r.image ? (
                       <img src={r.image} alt={r.title || ''} loading="lazy" className="h-full w-full object-cover" />
@@ -136,7 +136,7 @@ export const MarketResults: React.FC = () => {
                       </div>
                     )}
                     <span
-                      className={`absolute left-2 top-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-white ${
+                      className={`absolute left-2 top-2 inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium text-white ${
                         r.source === 'auction' ? 'bg-indigo-600' : 'bg-gray-900'
                       }`}
                     >
@@ -144,21 +144,21 @@ export const MarketResults: React.FC = () => {
                       {r.source === 'auction' ? 'Enchère' : 'Drop'}
                     </span>
                   </div>
-                  <div className="flex flex-1 flex-col gap-1.5 p-4 text-sm">
+                  <div className="flex flex-1 flex-col gap-2 p-5 text-base">
                     <div className="flex justify-between text-gray-500">
                       <span>Vendu le {DAY(r.sold_at)}</span>
                       {r.condition && <span>État {r.condition.replace(/^grade\s*/i, '')}</span>}
                     </div>
-                    <p className="mt-1 text-center text-base font-semibold uppercase tracking-[0.2em] text-gray-900">{r.brand || '—'}</p>
-                    <p className="line-clamp-2 min-h-[2.5rem] text-center text-gray-600">{r.title}</p>
+                    <p className="mt-1 text-center text-xl font-semibold uppercase tracking-[0.2em] text-gray-900">{r.brand || '—'}</p>
+                    <p className="line-clamp-2 min-h-[3rem] text-center text-base text-gray-600">{r.title}</p>
                     <div className="mt-auto grid grid-cols-2 border-t border-gray-100 pt-2">
                       <div>
-                        <p className="text-xs uppercase text-gray-400">Prix de départ</p>
-                        <p className="text-base font-medium text-gray-700">{r.source === 'auction' && r.start_price != null ? EUR(r.start_price) : '—'}</p>
+                        <p className="text-sm uppercase text-gray-400">Prix de départ</p>
+                        <p className="text-xl font-medium text-gray-700">{r.source === 'auction' && r.start_price != null ? EUR(r.start_price) : '—'}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs uppercase text-gray-400">Prix final</p>
-                        <p className="text-lg font-semibold text-gray-900">{EUR(r.final_price)}</p>
+                        <p className="text-sm uppercase text-gray-400">Prix final</p>
+                        <p className="text-2xl font-bold text-gray-900">{EUR(r.final_price)}</p>
                       </div>
                     </div>
                   </div>
