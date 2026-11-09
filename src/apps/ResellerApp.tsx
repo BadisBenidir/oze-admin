@@ -21,6 +21,7 @@ import { WalletPage } from '../components/pages/reseller/WalletPage';
 import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
 import { CartBlockingModal } from '../components/pages/reseller/CartBlockingModal';
 import { Auctions } from '../components/pages/reseller/Auctions';
+import { MarketResults } from '../components/pages/reseller/MarketResults';
 import { AccessRevokedScreen, PlanLockedScreen } from '../components/pages/reseller/Subscription';
 import { useResellerPresenceTracking } from '../hooks/useResellerPresenceTracking';
 import { Terms } from '../components/pages/reseller/Terms';
@@ -48,6 +49,7 @@ const TAB_TITLES: Record<string, string> = {
   'my-orders': 'Mes Commandes | OZË Paris',
   sourcing: 'Sourcing sur mesure | OZË Paris',
   auctions: 'Enchères B2B | OZË Paris',
+  'market-results': 'Résultats de ventes | OZË Paris',
   wallet: 'Mon Portefeuille | OZË Paris',
   profile: 'Mon Profil | OZË Paris',
 };
@@ -253,6 +255,8 @@ function ResellerApp() {
         return isDropsPlan ? <PlanLockedScreen feature="sourcing" community={profile?.community_drops} currentAmount={profile?.subscription_amount} /> : <SourcingSurMesure />;
       case 'auctions':
         return isDropsPlan && !auctionsUnlocked ? <PlanLockedScreen feature="auctions" community={profile?.community_drops} currentAmount={profile?.subscription_amount} /> : <Auctions />;
+      case 'market-results':
+        return <MarketResults />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':
