@@ -19,4 +19,4 @@ export const resellerNavigationItems: MenuItem[] = [
 ];
 
 /** Visible uniquement pour le contact principal de l'entreprise (voir ResellerApp). */
-export const resellerTeamNavItem: MenuItem = { id: 'team', label: 'Mon équipe', icon: Users, path: '/mon-equipe' };
+export const resellerTeamNavItem: MenuItem = { id: 'team', label: 'Mon équipe', icon: Users, path: '/mon-equipe', hidden: true };

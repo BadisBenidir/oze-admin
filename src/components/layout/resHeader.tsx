@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, User, LogOut, ChevronDown, Building2, ShoppingBag, Wallet } from 'lucide-react';
+import { Menu, User, LogOut, ChevronDown, Building2, ShoppingBag, Wallet, Users } from 'lucide-react';
 import { useResellerAuth } from '../../hooks/useResellerAuth';
 
 interface ResellerHeaderProps {
@@ -12,6 +12,7 @@ const TITLES: Record<string, string> = {
   catalog: 'Catalogue',
   'my-orders': 'Mes commandes',
   wallet: 'Mon Portefeuille',
+  team: 'Mon équipe',
   auctions: 'Enchères',
   profile: 'Mon profil',
 };
@@ -22,6 +23,9 @@ const ACCOUNT_LINKS = [
   { id: 'my-orders', label: 'Mes commandes', icon: ShoppingBag },
   { id: 'wallet', label: 'Mon Portefeuille', icon: Wallet },
 ];
+
+// Contact principal de l'entreprise uniquement (voir ResellerApp).
+const TEAM_LINK = { id: 'team', label: 'Mon équipe', icon: Users };
 
 export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMenuToggle, onTabChange }) => {
   const { profile, signOut } = useResellerAuth();
@@ -77,7 +81,7 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
                     <p className="text-xs text-gray-500">{displayEmail}</p>
                   </div>
                   {onTabChange &&
-                    ACCOUNT_LINKS.map(({ id, label, icon: Icon }) => (
+                    (profile?.is_primary ? [...ACCOUNT_LINKS, TEAM_LINK] : ACCOUNT_LINKS).map(({ id, label, icon: Icon }) => (
                       <button
                         key={id}
                         onClick={() => {
