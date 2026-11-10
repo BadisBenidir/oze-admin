@@ -490,6 +490,10 @@ function ResellerApp() {
       {profile && (currentTab !== 'assistance' || productId || ticketNumber || isCartRoute) && (
         <SavChatWidget
           onOpenTicket={openTicket}
+          onOpenRequests={() => {
+            if (productId || ticketNumber || isCartRoute || isTermsRoute || isPrivacyRoute) closeToRoot();
+            navigateTo('my-requests', '');
+          }}
           onExpand={() => {
             if (productId || ticketNumber || isCartRoute || isTermsRoute || isPrivacyRoute) closeToRoot();
             navigateTo('assistance', '');

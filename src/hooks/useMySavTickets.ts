@@ -50,7 +50,10 @@ export const useMySavTickets = (enabled: boolean) => {
   return { tickets, loading, error, refresh };
 };
 
-/** Nombre de demandes avec une réponse non lue (badge du menu « Mon compte »). */
+/** Émis après lecture d'une demande : les badges se mettent à jour tout de suite. */
+export const SAV_READ_EVENT = 'oze-sav-read';
+
+/** Nombre de demandes avec une réponse non lue (badges « Mon compte » et bulle de chat). */
 export const useMySavUnreadCount = (enabled: boolean) => {
   const [count, setCount] = useState(0);
   useEffect(() => {
@@ -63,7 +66,13 @@ export const useMySavUnreadCount = (enabled: boolean) => {
         .then(({ count: c }) => setCount(c ?? 0));
     load();
     const t = window.setInterval(load, 120000);
-    return () => window.clearInterval(t);
+    window.addEventListener(SAV_READ_EVENT, load);
+    window.addEventListener('focus', load);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener(SAV_READ_EVENT, load);
+      window.removeEventListener('focus', load);
+    };
   }, [enabled]);
   return count;
 };
@@ -94,7 +103,9 @@ export const useMySavTicket = (number: string | null) => {
     setMessages((m.data || []) as MySavMessage[]);
     setChat((c.data || []) as typeof chat);
     setLoading(false);
-    if (tk.has_new_reply) supabase.rpc('sav_mark_ticket_read', { p_ticket_id: tk.id }).then(() => {});
+    if (tk.has_new_reply) {
+      supabase.rpc('sav_mark_ticket_read', { p_ticket_id: tk.id }).then(() => window.dispatchEvent(new Event(SAV_READ_EVENT)));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [number]);
 

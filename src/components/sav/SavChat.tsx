@@ -3,6 +3,7 @@ import { Bot, ImagePlus, Loader2, MessageCircle, Maximize2, RotateCcw, Send, Tic
 import { supabase } from '../../lib/supabase';
 import { useResellerAuth } from '../../hooks/useResellerAuth';
 import { SavAttachment, uploadSavAttachments } from '../../lib/sav';
+import { useMySavUnreadCount } from '../../hooks/useMySavTickets';
 
 /**
  * Assistant SAV de l'espace pro (Edge Function sav-chat, 0263) : réponses en
@@ -150,7 +151,10 @@ export const SavChatPanel: React.FC<{
   onClose?: () => void;
   onExpand?: () => void;
   fullPage?: boolean;
-}> = ({ onOpenTicket, onClose, onExpand, fullPage }) => {
+  /** Réponses de l'équipe non lues : bandeau vers « Mes demandes ». */
+  unreadCount?: number;
+  onOpenRequests?: () => void;
+}> = ({ onOpenTicket, onClose, onExpand, fullPage, unreadCount = 0, onOpenRequests }) => {
   const { lines, send, reset, streaming, loadingHistory, firstName } = useSavChat();
   const [text, setText] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -181,6 +185,17 @@ export const SavChatPanel: React.FC<{
         {onExpand && <button onClick={onExpand} title="Plein écran" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-700"><Maximize2 className="h-4 w-4" /></button>}
         {onClose && <button onClick={onClose} title="Fermer" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-700"><X className="h-4 w-4" /></button>}
       </div>
+
+      {unreadCount > 0 && onOpenRequests && (
+        <button
+          onClick={onOpenRequests}
+          className="flex items-center gap-2 border-b border-red-100 bg-red-50 px-4 py-2.5 text-left text-sm text-red-800 hover:bg-red-100"
+        >
+          <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-semibold text-white">{unreadCount}</span>
+          <span className="flex-1">{unreadCount > 1 ? 'Nouvelles réponses' : 'Nouvelle réponse'} de l'équipe OZË</span>
+          <span className="text-xs font-medium underline">Voir mes demandes</span>
+        </button>
+      )}
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-gray-100 px-3.5 py-2.5 text-sm text-gray-900">
@@ -301,8 +316,13 @@ export const SavChatPanel: React.FC<{
 };
 
 /** Bulle flottante en bas à droite, sur toutes les pages de l'espace pro. */
-export const SavChatWidget: React.FC<{ onOpenTicket: (number: string) => void; onExpand: () => void }> = ({ onOpenTicket, onExpand }) => {
+export const SavChatWidget: React.FC<{ onOpenTicket: (number: string) => void; onExpand: () => void; onOpenRequests: () => void }> = ({
+  onOpenTicket,
+  onExpand,
+  onOpenRequests,
+}) => {
   const [open, setOpen] = useState(false);
+  const unread = useMySavUnreadCount(true);
   return (
     <>
       {open && (
@@ -317,15 +337,25 @@ export const SavChatWidget: React.FC<{ onOpenTicket: (number: string) => void; o
               setOpen(false);
               onOpenTicket(n);
             }}
+            unreadCount={unread}
+            onOpenRequests={() => {
+              setOpen(false);
+              onOpenRequests();
+            }}
           />
         </div>
       )}
       <button
         onClick={() => setOpen((v) => !v)}
         className={`fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gray-900 text-white shadow-lg transition-transform hover:scale-105 sm:bottom-6 sm:right-6 ${open ? 'hidden sm:flex' : ''}`}
-        aria-label="Assistance"
+        aria-label={unread > 0 ? `Assistance — ${unread} nouvelle(s) réponse(s)` : 'Assistance'}
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+        {!open && unread > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-6 min-w-[24px] items-center justify-center rounded-full border-2 border-white bg-red-600 px-1 text-xs font-bold text-white">
+            {unread}
+          </span>
+        )}
       </button>
     </>
   );
