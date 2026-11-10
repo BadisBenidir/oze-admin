@@ -239,6 +239,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
       case 'for-sale-online': return 'À vendre en ligne';
       case 'for-sale-other-platform': return 'À vendre sur autre plateforme';
       case 'for-sale-b2b': return 'Revendeurs B2B uniquement';
+      case 'instant-b2b': return 'Achat immédiat B2B';
       case 'reserved-b2b': return 'Réservé (B2B)';
       case 'sold-b2b': return 'Vendu (B2B)';
       case 'sold-online': return 'Vendu en ligne';
@@ -329,7 +330,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
               <h1 className="text-xl md:text-2xl font-bold text-gray-900 min-w-0">{product.name}</h1>
               <span className="shrink-0 mt-1 md:mt-1.5">
               <Badge variant={
-                product.status === 'for-sale-online' || product.status === 'for-sale-b2b' || product.status === 'cadeau-livre' ? 'success' :
+                product.status === 'for-sale-online' || product.status === 'for-sale-b2b' || product.status === 'instant-b2b' || product.status === 'cadeau-livre' ? 'success' :
                 product.status === 'sold-online' || product.status === 'sold-other-platform' || product.status === 'sold-b2b' ? 'warning' :
                 product.status === 'sold-display' || product.status === 'reserved-b2b' || product.status === 'cadeau-attribue' ? 'info' :
                 product.status === 'sourced-b2b' || product.status === 'drop-b2b' || product.status === 'auction-b2b' ? 'purple' :
@@ -547,7 +548,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                         updatingStatus ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
-                      {!['draft', 'draft-b2b', 'for-sale-online', 'for-sale-other-platform', 'for-sale-b2b', 'cadeau', 'sold-online', 'sold-b2b', 'sold-other-platform', 'sold-display'].includes(product.status) && (
+                      {!['draft', 'draft-b2b', 'for-sale-online', 'for-sale-other-platform', 'for-sale-b2b', 'instant-b2b', 'cadeau', 'sold-online', 'sold-b2b', 'sold-other-platform', 'sold-display'].includes(product.status) && (
                         // Statut géré ailleurs (enchère, drop, réservé…) : affiché tel quel au lieu de « Brouillon ».
                         <option value={product.status} disabled>{formatStatus(product.status)}</option>
                       )}
@@ -559,6 +560,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                         <option value="for-sale-online">À vendre en ligne</option>
                         <option value="for-sale-other-platform">À vendre sur autre plateforme</option>
                         <option value="for-sale-b2b">Revendeurs B2B uniquement</option>
+                        <option value="instant-b2b">Achat immédiat B2B</option>
                       </optgroup>
                       <optgroup label="🎁 Programme fidélité B2B">
                         <option value="cadeau">Cadeau fidélité (en attente d'attribution)</option>

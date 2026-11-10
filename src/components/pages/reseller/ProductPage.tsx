@@ -136,7 +136,7 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
   // du catalogue : plus achetable, on n'affiche que la consultation (photos,
   // grade, défauts, description, référence) — jamais le bouton d'achat ni le
   // statut de réservation, qui n'ont plus de sens ici.
-  const isReadOnly = !isDropPreview && product.status !== 'for-sale-b2b';
+  const isReadOnly = !isDropPreview && product.status !== 'for-sale-b2b' && product.status !== 'instant-b2b';
   const canBuy = !isReadOnly && !isDropPreview;
 
   const inCart = cart.isInCart(product.id);

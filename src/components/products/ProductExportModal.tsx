@@ -22,6 +22,7 @@ const STATUS_LABELS: Record<string, string> = {
   'for-sale-online': 'En vente en ligne',
   'for-sale-other-platform': 'Autre plateforme',
   'for-sale-b2b': 'Revendeurs B2B',
+  'instant-b2b': 'Achat immédiat B2B',
   'for-auction-live': 'Live enchères',
   'reserved-b2b': 'Réservé (B2B)',
   'sold-online': 'Vendu en ligne',
@@ -36,7 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_GROUPS: { label: string; statuses: string[] }[] = [
-  { label: 'En stock', statuses: ['draft', 'draft-b2b', 'sourced-b2b', 'drop-b2b', 'auction-b2b', 'for-sale-online', 'for-sale-other-platform', 'for-sale-b2b', 'for-auction-live', 'reserved-b2b'] },
+  { label: 'En stock', statuses: ['draft', 'draft-b2b', 'sourced-b2b', 'drop-b2b', 'auction-b2b', 'for-sale-online', 'for-sale-other-platform', 'for-sale-b2b', 'instant-b2b', 'for-auction-live', 'reserved-b2b'] },
   { label: 'Vendus', statuses: ['sold-online', 'sold-other-platform', 'sold-display', 'sold-auction', 'sold-b2b'] },
   { label: 'Cadeaux & archivés', statuses: ['cadeau', 'cadeau-attribue', 'cadeau-livre', 'archived'] },
 ];

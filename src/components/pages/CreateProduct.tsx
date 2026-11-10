@@ -226,6 +226,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
     'drop-b2b': 'Drop B2B',
     'auction-b2b': 'Enchère',
     'for-sale-b2b': 'Revendeurs B2B uniquement',
+    'instant-b2b': 'Achat immédiat B2B',
     'reserved-b2b': 'Réservé (B2B)',
     'sold-b2b': 'Vendu (B2B)',
   };
@@ -1464,7 +1465,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Statut *
           </label>
-          {isB2B && productData.status === 'for-sale-b2b' ? (
+          {isB2B && (productData.status === 'for-sale-b2b' || productData.status === 'instant-b2b') ? (
             // 'for-sale-b2b' reste modifiable : c'est depuis là qu'on bascule
             // un article vers la file d'attente du programme fidélité.
             <select
@@ -1473,6 +1474,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="for-sale-b2b">Revendeurs B2B uniquement</option>
+              <option value="instant-b2b">Achat immédiat B2B</option>
               <option value="cadeau">🎁 Cadeau fidélité (en attente d'attribution)</option>
             </select>
           ) : isB2B ? (
@@ -1502,6 +1504,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
               <optgroup label="🏪 Disponible à la vente">
                 <option value="for-sale-other-platform">À vendre sur une autre plateforme</option>
                 <option value="for-sale-b2b">Revendeurs B2B uniquement</option>
+                <option value="instant-b2b">Achat immédiat B2B</option>
               </optgroup>
               <optgroup label="🔨 Live enchères">
                 <option value="for-auction-live">À vendre en live enchères</option>

@@ -81,7 +81,7 @@ export const B2BPriceChanges: React.FC = () => {
       supabase
         .from('products')
         .select('id, name, sale_price, purchase_price, images, main_image_index, created_at, brand:brands(name), category:categories(name)')
-        .eq('status', 'for-sale-b2b')
+        .in('status', ['for-sale-b2b', 'instant-b2b'])
         .order('created_at', { ascending: true })
         .limit(2000),
       supabase

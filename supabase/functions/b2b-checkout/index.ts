@@ -151,7 +151,7 @@ Deno.serve(async (req: Request) => {
       .from('products')
       .select('id, name, sale_price, images, main_image_index')
       .in('id', product_ids)
-      .eq('status', 'for-sale-b2b');
+      .in('status', ['for-sale-b2b', 'instant-b2b']);
 
     if (productsError) {
       return new Response(JSON.stringify({ error: productsError.message }), {

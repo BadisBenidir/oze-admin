@@ -101,7 +101,7 @@ interface UseB2BCatalogResult {
 const ITEMS_PER_PAGE = 24;
 
 /** `instantBuy` : onglet « Achat immédiat » (products.instant_buy, 0253) au
- * lieu du Catalogue — mêmes articles for-sale-b2b, même panier. */
+ * lieu du Catalogue — statut 'instant-b2b' (0257), même panier. */
 export const useB2BCatalog = (isAuthenticated: boolean = false, instantBuy: boolean = false): UseB2BCatalogResult => {
   const [items, setItems] = useState<B2BCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,7 +149,7 @@ export const useB2BCatalog = (isAuthenticated: boolean = false, instantBuy: bool
       let query = supabase
         .from('b2b_catalog')
         .select('*, brand:brands(id, name), category:categories(id, name)', { count: 'exact' })
-        .in('status', ['for-sale-b2b', 'draft'])
+        .in('status', ['for-sale-b2b', 'instant-b2b', 'draft'])
         .eq('instant_buy', instantBuy);
 
       if (currentFilters.search) {
@@ -230,7 +230,7 @@ export const useB2BCatalog = (isAuthenticated: boolean = false, instantBuy: bool
       const { data, error: fetchError } = await supabase
         .from('b2b_catalog')
         .select('brand:brands(id, name), category:categories(id, name), condition')
-        .in('status', ['for-sale-b2b', 'draft'])
+        .in('status', ['for-sale-b2b', 'instant-b2b', 'draft'])
         .eq('instant_buy', instantBuy);
 
       if (fetchError) throw new Error(fetchError.message);

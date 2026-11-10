@@ -31,7 +31,7 @@ const EUR = (n: number | null) => (n == null ? '—' : `${Number(n).toLocaleStri
 
 /**
  * Onglet « Achat immédiat » : articles proposés dans l'onglet du même nom de
- * l'espace pro (products.instant_buy, 0253). Ajout depuis le stock
+ * l'espace pro (statut 'instant-b2b', 0257). Ajout depuis le stock
  * (brouillons, B2B ou non, et articles déjà au Catalogue) un par un ou en
  * sélection — recherche multi-lignes pour coller une liste de références —,
  * retrait vers le Catalogue ou hors vente (admin_set_instant_buy).
@@ -80,7 +80,7 @@ export const InstantBuyManager: React.FC = () => {
       supabase
         .from('products')
         .select('id, name, images, main_image_index, reference, b2b_reference, product_code, source_reference, status, sale_price, instant_buy, brand:brands(name)')
-        .in('status', ['draft', 'draft-b2b', 'for-sale-b2b'])
+        .in('status', ['draft', 'draft-b2b', 'for-sale-b2b', 'instant-b2b'])
         .order('created_at', { ascending: false })
         .limit(5000),
       supabase.from('drops').select('product_ids').eq('status', 'planifie'),
