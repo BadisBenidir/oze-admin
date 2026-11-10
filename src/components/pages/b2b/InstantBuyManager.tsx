@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Search, Zap, RefreshCw, Package, Undo2, Archive, Lock, Unlock } from 'lucide-react';
+import { Search, Zap, RefreshCw, Package, Archive, Lock, Unlock } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 
@@ -14,6 +14,7 @@ interface Row {
   source_reference: string | null;
   status: string;
   sale_price: number | null;
+  purchase_price: number | null;
   instant_buy: boolean;
   brand: { name: string } | null;
 }
@@ -24,6 +25,16 @@ const STATUS_LABEL: Record<string, { label: string; variant: 'default' | 'info' 
   draft: { label: 'Brouillon', variant: 'default' },
   'draft-b2b': { label: 'Brouillon B2B', variant: 'default' },
   'for-sale-b2b': { label: 'Catalogue', variant: 'info' },
+  'archived-instant-b2b': { label: 'Archivé achat immédiat', variant: 'default' },
+};
+
+/** Prix en achat immédiat (même règle que instant_buy_price, 0258) : prix
+ * d'achat TTC × 1,40 s'il dépasse 100 €, sinon × 1,35, au multiple de 5
+ * inférieur. */
+const instantPrice = (purchase: number | null): number | null => {
+  if (!purchase || purchase <= 0) return null;
+  const at40 = Math.floor((purchase * 1.4) / 5) * 5;
+  return at40 > 100 ? at40 : Math.floor((purchase * 1.35) / 5) * 5;
 };
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -34,7 +45,7 @@ const EUR = (n: number | null) => (n == null ? '—' : `${Number(n).toLocaleStri
  * l'espace pro (statut 'instant-b2b', 0257). Ajout depuis le stock
  * (brouillons, B2B ou non, et articles déjà au Catalogue) un par un ou en
  * sélection — recherche multi-lignes pour coller une liste de références —,
- * retrait vers le Catalogue ou hors vente (admin_set_instant_buy).
+ * archivage ('archived-instant-b2b', 0258) via admin_set_instant_buy.
  */
 export const InstantBuyManager: React.FC = () => {
   const [rows, setRows] = useState<Row[]>([]);
@@ -79,8 +90,8 @@ export const InstantBuyManager: React.FC = () => {
     const [productsRes, dropsRes] = await Promise.all([
       supabase
         .from('products')
-        .select('id, name, images, main_image_index, reference, b2b_reference, product_code, source_reference, status, sale_price, instant_buy, brand:brands(name)')
-        .in('status', ['draft', 'draft-b2b', 'for-sale-b2b', 'instant-b2b'])
+        .select('id, name, images, main_image_index, reference, b2b_reference, product_code, source_reference, status, sale_price, purchase_price, instant_buy, brand:brands(name)')
+        .in('status', ['draft', 'draft-b2b', 'for-sale-b2b', 'instant-b2b', 'archived-instant-b2b'])
         .order('created_at', { ascending: false })
         .limit(5000),
       supabase.from('drops').select('product_ids').eq('status', 'planifie'),
@@ -141,7 +152,7 @@ export const InstantBuyManager: React.FC = () => {
     setNotice(null);
   };
 
-  const apply = async (ids: string[], enabled: boolean, target: 'for-sale-b2b' | 'draft-b2b' = 'draft-b2b') => {
+  const apply = async (ids: string[], enabled: boolean) => {
     if (ids.length === 0) return;
     setBusy(true);
     setError(null);
@@ -149,7 +160,7 @@ export const InstantBuyManager: React.FC = () => {
     const { data, error: rpcError } = await supabase.rpc('admin_set_instant_buy', {
       p_product_ids: ids,
       p_enabled: enabled,
-      p_target: target,
+      p_target: 'archived-instant-b2b',
     });
     setBusy(false);
     if (rpcError) {
@@ -158,13 +169,7 @@ export const InstantBuyManager: React.FC = () => {
     }
     const count = Number(data?.updated_count || 0);
     const s = count > 1 ? 's' : '';
-    setNotice(
-      enabled
-        ? `${count} article${s} mis en achat immédiat.`
-        : target === 'for-sale-b2b'
-          ? `${count} article${s} remis au Catalogue.`
-          : `${count} article${s} retiré${s} de la vente.`
-    );
+    setNotice(enabled ? `${count} article${s} mis en achat immédiat.` : `${count} article${s} archivé${s}.`);
     setSelected(new Set());
     await load();
   };
@@ -175,7 +180,7 @@ export const InstantBuyManager: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Achat immédiat</h2>
           <p className="text-sm text-gray-500">
-            Articles proposés dans l'onglet « Achat Immédiat » de l'espace pro, achetables tout de suite comme au Catalogue.
+            Articles proposés dans l'onglet « Achat Immédiat » de l'espace pro. Prix appliqué automatiquement : prix d'achat TTC × 1,40 au-dessus de 100 €, × 1,35 en dessous.
           </p>
         </div>
         <button
@@ -305,24 +310,14 @@ export const InstantBuyManager: React.FC = () => {
                 {busy ? 'En cours…' : `Mettre en achat immédiat (${selected.size})`}
               </button>
             ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => apply([...selected], false, 'for-sale-b2b')}
-                  disabled={busy}
-                  className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  <Undo2 className="h-4 w-4" /> Remettre au Catalogue
-                </button>
-                <button
-                  type="button"
-                  onClick={() => apply([...selected], false, 'draft-b2b')}
-                  disabled={busy}
-                  className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-                >
-                  <Archive className="h-4 w-4" /> Retirer de la vente
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => apply([...selected], false)}
+                disabled={busy}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <Archive className="h-4 w-4" /> {busy ? 'En cours…' : `Archiver (${selected.size})`}
+              </button>
             )}
           </div>
         </div>
@@ -388,7 +383,16 @@ export const InstantBuyManager: React.FC = () => {
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-900">{EUR(r.sale_price)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-900">
+                      {view === 'stock' && instantPrice(r.purchase_price) != null && instantPrice(r.purchase_price) !== Number(r.sale_price) ? (
+                        <span title="Prix appliqué en achat immédiat (marge 40 % au-dessus de 100 €, 35 % en dessous)">
+                          <span className="text-gray-400 line-through">{EUR(r.sale_price)}</span>{' '}
+                          <span className="font-medium">→ {EUR(instantPrice(r.purchase_price))}</span>
+                        </span>
+                      ) : (
+                        EUR(r.sale_price)
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <Badge variant={status.variant}>{status.label}</Badge>
                     </td>
@@ -397,8 +401,8 @@ export const InstantBuyManager: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => apply([r.id], true)}
-                          disabled={busy || !r.sale_price}
-                          title={!r.sale_price ? 'Renseignez d’abord un prix de vente' : undefined}
+                          disabled={busy || (!r.sale_price && !r.purchase_price)}
+                          title={!r.sale_price && !r.purchase_price ? 'Renseignez d’abord un prix' : undefined}
                           className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
                         >
                           <Zap className="h-3.5 w-3.5" /> Achat immédiat
@@ -406,11 +410,11 @@ export const InstantBuyManager: React.FC = () => {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => apply([r.id], false, 'for-sale-b2b')}
+                          onClick={() => apply([r.id], false)}
                           disabled={busy}
                           className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                         >
-                          <Undo2 className="h-3.5 w-3.5" /> Remettre au Catalogue
+                          <Archive className="h-3.5 w-3.5" /> Archiver
                         </button>
                       )}
                     </td>

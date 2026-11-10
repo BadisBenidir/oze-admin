@@ -227,6 +227,7 @@ export const CreateProduct: React.FC<CreateProductProps> = ({ onBack, productId,
     'auction-b2b': 'Enchère',
     'for-sale-b2b': 'Revendeurs B2B uniquement',
     'instant-b2b': 'Achat immédiat B2B',
+    'archived-instant-b2b': 'Archivé achat immédiat',
     'reserved-b2b': 'Réservé (B2B)',
     'sold-b2b': 'Vendu (B2B)',
   };

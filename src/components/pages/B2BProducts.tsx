@@ -14,6 +14,7 @@ const statusOptions = [
   { value: 'auction-b2b', label: 'Enchère' },
   { value: 'for-sale-b2b', label: 'En vente (B2B)' },
   { value: 'instant-b2b', label: 'Achat immédiat (B2B)' },
+  { value: 'archived-instant-b2b', label: 'Archivé achat immédiat' },
   { value: 'reserved-b2b', label: 'Réservé' },
   { value: 'sold-b2b', label: 'Vendu' },
   { value: 'cadeau', label: '🎁 Cadeau (en attente)' },
@@ -49,6 +50,8 @@ const statusBadge = (status: string) => {
       return <Badge variant="success">En vente</Badge>;
     case 'instant-b2b':
       return <Badge variant="warning">⚡ Achat immédiat</Badge>;
+    case 'archived-instant-b2b':
+      return <Badge variant="default">Archivé achat immédiat</Badge>;
     default:
       return <Badge variant="success">En vente</Badge>;
   }

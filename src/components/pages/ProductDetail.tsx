@@ -240,6 +240,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
       case 'for-sale-other-platform': return 'À vendre sur autre plateforme';
       case 'for-sale-b2b': return 'Revendeurs B2B uniquement';
       case 'instant-b2b': return 'Achat immédiat B2B';
+      case 'archived-instant-b2b': return 'Archivé achat immédiat';
       case 'reserved-b2b': return 'Réservé (B2B)';
       case 'sold-b2b': return 'Vendu (B2B)';
       case 'sold-online': return 'Vendu en ligne';
@@ -548,7 +549,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                         updatingStatus ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
-                      {!['draft', 'draft-b2b', 'for-sale-online', 'for-sale-other-platform', 'for-sale-b2b', 'instant-b2b', 'cadeau', 'sold-online', 'sold-b2b', 'sold-other-platform', 'sold-display'].includes(product.status) && (
+                      {!['draft', 'draft-b2b', 'for-sale-online', 'for-sale-other-platform', 'for-sale-b2b', 'instant-b2b', 'archived-instant-b2b', 'cadeau', 'sold-online', 'sold-b2b', 'sold-other-platform', 'sold-display'].includes(product.status) && (
                         // Statut géré ailleurs (enchère, drop, réservé…) : affiché tel quel au lieu de « Brouillon ».
                         <option value={product.status} disabled>{formatStatus(product.status)}</option>
                       )}
@@ -561,6 +562,9 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                         <option value="for-sale-other-platform">À vendre sur autre plateforme</option>
                         <option value="for-sale-b2b">Revendeurs B2B uniquement</option>
                         <option value="instant-b2b">Achat immédiat B2B</option>
+                      </optgroup>
+                      <optgroup label="🗄️ Archives">
+                        <option value="archived-instant-b2b">Archivé achat immédiat</option>
                       </optgroup>
                       <optgroup label="🎁 Programme fidélité B2B">
                         <option value="cadeau">Cadeau fidélité (en attente d'attribution)</option>

@@ -125,6 +125,49 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
     });
   }, [instantBuy]);
 
+  // Achat immédiat : les pièces vendues restent affichées, grisées « Vendu »
+  // (vue b2b_instant_sold, 0258), après les pièces disponibles.
+  const [soldItems, setSoldItems] = useState<B2BCatalogItem[]>([]);
+  useEffect(() => {
+    if (!instantBuy) return;
+    supabase
+      .from('b2b_instant_sold')
+      .select('*, brand:brands(id, name), category:categories(id, name)')
+      .order('sold_at', { ascending: false })
+      .limit(500)
+      .then(({ data, error: soldError }) => {
+        if (soldError) return;
+        setSoldItems(
+          (data || []).map((r: Record<string, any>) => ({
+            ...r,
+            images: r.images || [],
+            main_image_index: r.main_image_index ?? 0,
+            held_by_other: false,
+            drop_preview_scheduled_at: null,
+            status: 'sold-b2b',
+            sold_at: new Date(r.sold_at).getTime(),
+          })) as B2BCatalogItem[]
+        );
+      });
+  }, [instantBuy, totalCount]);
+
+  // Mêmes filtres que la grille, appliqués aux vendus côté navigateur.
+  const visibleSold = useMemo(() => {
+    const q = filters.search.trim().toLowerCase();
+    return soldItems.filter(
+      (p) =>
+        !items.some((i) => i.id === p.id) &&
+        (!q || p.name?.toLowerCase().includes(q) || p.product_code?.toLowerCase().includes(q)) &&
+        (filters.brandIds.length === 0 || (p.brand_id && filters.brandIds.includes(p.brand_id))) &&
+        (filters.categoryIds.length === 0 || (p.category_id && filters.categoryIds.includes(p.category_id))) &&
+        (filters.conditions.length === 0 || filters.conditions.includes(p.condition)) &&
+        (filters.priceMin === null || p.price >= filters.priceMin) &&
+        (filters.priceMax === null || p.price <= filters.priceMax)
+    );
+  }, [soldItems, items, filters]);
+  // Sur la dernière page de la grille (ou s'il n'y a plus rien en vente).
+  const showSold = instantBuy && !loading && (totalPages <= 1 || currentPage === totalPages);
+
   // Annonce du prochain drop programmé (0168) — silencieuse en cas d'erreur
   // (fonction absente avant migration) : pas de bandeau, rien d'autre.
   const [nextDrop, setNextDrop] = useState<NextDropAnnouncement | null>(null);
@@ -305,7 +348,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
 
       {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Erreur : {error}</p>}
 
-      {!loading && !error && items.length === 0 && (
+      {!loading && !error && items.length === 0 && !(showSold && visibleSold.length > 0) && (
         <div className="rounded-xl border border-gray-200 bg-white py-12 text-center">
           <Package className="mx-auto mb-4 h-12 w-12 text-gray-300" />
           <h3 className="mb-2 text-lg font-medium text-gray-900">Aucun article disponible</h3>
@@ -347,6 +390,10 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
                 onView={() => onOpenProduct(product.id)}
               />
             ))}
+        {showSold &&
+          visibleSold.map((product) => (
+            <ProductCard key={`sold-${product.id}`} product={product} inCart={false} onAdd={async () => ({ success: false })} onView={() => {}} />
+          ))}
       </div>
 
       {pager}

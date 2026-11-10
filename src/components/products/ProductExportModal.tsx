@@ -23,6 +23,7 @@ const STATUS_LABELS: Record<string, string> = {
   'for-sale-other-platform': 'Autre plateforme',
   'for-sale-b2b': 'Revendeurs B2B',
   'instant-b2b': 'Achat immédiat B2B',
+  'archived-instant-b2b': 'Archivé achat immédiat',
   'for-auction-live': 'Live enchères',
   'reserved-b2b': 'Réservé (B2B)',
   'sold-online': 'Vendu en ligne',
