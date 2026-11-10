@@ -1,4 +1,4 @@
-import { Gavel, LayoutGrid, LifeBuoy, Zap, PackageSearch, ShoppingBag, TrendingUp, User, Users, Wallet } from 'lucide-react';
+import { Bot, Gavel, LayoutGrid, LifeBuoy, Zap, PackageSearch, ShoppingBag, TrendingUp, User, Users, Wallet } from 'lucide-react';
 import { MenuItem } from '../types';
 
 export const resellerNavigationItems: MenuItem[] = [
@@ -21,6 +21,8 @@ export const resellerNavigationItems: MenuItem[] = [
   // SAV (0263) : demandes d'assistance — détail sur /mes-demandes/SAV-AAAA-NNNN
   // (route lue dans ResellerApp.tsx).
   { id: 'my-requests', label: 'Mes demandes', icon: LifeBuoy, path: '/mes-demandes', hidden: true },
+  // Assistant (chatbot) en plein écran — aussi en bulle flottante sur toutes les pages.
+  { id: 'assistance', label: 'Assistance', icon: Bot, path: '/assistance', hidden: true },
 ];
 
 /** Visible uniquement pour le contact principal de l'entreprise (voir ResellerApp). */

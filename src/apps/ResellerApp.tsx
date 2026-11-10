@@ -29,6 +29,7 @@ import { Terms } from '../components/pages/reseller/Terms';
 import { PrivacyPolicy } from '../components/pages/reseller/PrivacyPolicy';
 import { MyRequests } from '../components/pages/reseller/MyRequests';
 import { MyRequestDetail } from '../components/pages/reseller/MyRequestDetail';
+import { AssistancePage, SavChatWidget } from '../components/sav/SavChat';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 import { ShoppingCart, Wallet, X } from 'lucide-react';
 import { WalletCreditNotice } from '../components/reseller/WalletCreditNotice';
@@ -292,6 +293,8 @@ function ResellerApp() {
         return <WalletPage />;
       case 'my-requests':
         return <MyRequests onOpen={openTicket} onOpenAssistant={() => navigateTo('assistance', '')} />;
+      case 'assistance':
+        return <AssistancePage onOpenTicket={openTicket} onOpenRequests={() => navigateTo('my-requests', '')} />;
       case 'catalog':
       default:
         return <Catalog key="catalog" cart={cart} onOpenProduct={openProduct} />;
@@ -483,6 +486,16 @@ function ResellerApp() {
         </footer>
       </MainLayout>
       <CartBlockingModal blockingError={cart.blockingError} onClose={cart.dismissBlockingError} />
+      {/* Assistant SAV (0263) : bulle sur toutes les pages, sauf la page /assistance. */}
+      {profile && (currentTab !== 'assistance' || productId || ticketNumber || isCartRoute) && (
+        <SavChatWidget
+          onOpenTicket={openTicket}
+          onExpand={() => {
+            if (productId || ticketNumber || isCartRoute || isTermsRoute || isPrivacyRoute) closeToRoot();
+            navigateTo('assistance', '');
+          }}
+        />
+      )}
     </ResellerProtectedRoute>
   );
 }
