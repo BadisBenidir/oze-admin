@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Search, Zap, RefreshCw, Package, Archive, Lock, Unlock } from 'lucide-react';
+import { Search, Zap, RefreshCw, Package, Archive, Lock, Unlock, Clock } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 
@@ -61,13 +61,42 @@ export const InstantBuyManager: React.FC = () => {
   const [locked, setLocked] = useState(false);
   const [lockMessage, setLockMessage] = useState('');
   const [lockBusy, setLockBusy] = useState(false);
+  // Date limite d'achat (0259) : invendus archivés automatiquement ensuite.
+  const [endsAt, setEndsAt] = useState<string | null>(null);
+  const [deadlineInput, setDeadlineInput] = useState('');
+  const [deadlineBusy, setDeadlineBusy] = useState(false);
+  const toLocalInput = (iso: string) => {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
   useEffect(() => {
     supabase.rpc('get_instant_buy_lock').then(({ data }) => {
-      const row = data as { locked?: boolean; message?: string | null } | null;
+      const row = data as { locked?: boolean; message?: string | null; ends_at?: string | null } | null;
       setLocked(Boolean(row?.locked));
       setLockMessage(row?.message || '');
+      setEndsAt(row?.ends_at ?? null);
+      setDeadlineInput(row?.ends_at ? toLocalInput(row.ends_at) : '');
     });
   }, []);
+
+  const saveDeadline = async (value: string | null) => {
+    setDeadlineBusy(true);
+    setError(null);
+    setNotice(null);
+    const iso = value ? new Date(value).toISOString() : null;
+    const { data, error: rpcError } = await supabase.rpc('admin_set_instant_buy_deadline', { p_ends_at: iso });
+    setDeadlineBusy(false);
+    if (rpcError) {
+      setError(rpcError.message);
+      return;
+    }
+    const row = data as { ends_at?: string | null } | null;
+    setEndsAt(row?.ends_at ?? null);
+    setDeadlineInput(row?.ends_at ? toLocalInput(row.ends_at) : '');
+    setNotice(row?.ends_at ? `Date limite enregistrée : ${new Date(row.ends_at).toLocaleString('fr-FR')}.` : 'Date limite retirée : vente sans limite de temps.');
+  };
+  const deadlinePassed = endsAt ? new Date(endsAt).getTime() <= Date.now() : false;
 
   const saveLock = async (nextLocked: boolean) => {
     setLockBusy(true);
@@ -235,6 +264,50 @@ export const InstantBuyManager: React.FC = () => {
               Enregistrer le message
             </button>
           )}
+        </div>
+      </div>
+
+      <div className={`rounded-xl border p-4 ${deadlinePassed ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Clock className="h-5 w-5 text-gray-500" />
+            <div>
+              <p className="font-medium text-gray-900">Date limite d'achat</p>
+              <p className="text-sm text-gray-500">
+                {!endsAt
+                  ? 'Aucune : la vente reste ouverte sans limite de temps.'
+                  : deadlinePassed
+                    ? `Vente terminée le ${new Date(endsAt).toLocaleString('fr-FR')} : les invendus sont archivés (« Archivé achat immédiat »). Fixez une nouvelle date pour rouvrir.`
+                    : `Fin le ${new Date(endsAt).toLocaleString('fr-FR')} : compte à rebours affiché aux revendeurs, puis invendus archivés automatiquement.`}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="datetime-local"
+              value={deadlineInput}
+              onChange={(e) => setDeadlineInput(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-gray-400 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => saveDeadline(deadlineInput)}
+              disabled={deadlineBusy || !deadlineInput}
+              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {deadlineBusy ? 'En cours…' : 'Enregistrer'}
+            </button>
+            {endsAt && (
+              <button
+                type="button"
+                onClick={() => saveDeadline(null)}
+                disabled={deadlineBusy}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Retirer
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

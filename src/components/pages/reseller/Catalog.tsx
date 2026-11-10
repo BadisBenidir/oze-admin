@@ -115,15 +115,31 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Achat immédiat bloqué par l'admin (0254) : cadenas + message, aucun article.
-  const [lock, setLock] = useState<{ locked: boolean; message: string | null } | null>(null);
+  // Achat immédiat bloqué par l'admin (0254) : cadenas + message, aucun
+  // article. Date limite (0259) : compte à rebours, puis « Vente terminée ».
+  const [lock, setLock] = useState<{ locked: boolean; message: string | null; endsAt: number | null } | null>(null);
+  // Décalage horloge serveur / navigateur, pour un compte à rebours juste.
+  const [clockOffset, setClockOffset] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!instantBuy) return;
     supabase.rpc('get_instant_buy_lock').then(({ data, error: lockError }) => {
-      const row = data as { locked?: boolean; message?: string | null } | null;
-      setLock(lockError ? { locked: false, message: null } : { locked: Boolean(row?.locked), message: row?.message ?? null });
+      const row = data as { locked?: boolean; message?: string | null; ends_at?: string | null; server_now?: string } | null;
+      if (row?.server_now) setClockOffset(new Date(row.server_now).getTime() - Date.now());
+      setLock(
+        lockError
+          ? { locked: false, message: null, endsAt: null }
+          : { locked: Boolean(row?.locked), message: row?.message ?? null, endsAt: row?.ends_at ? new Date(row.ends_at).getTime() : null }
+      );
     });
   }, [instantBuy]);
+  useEffect(() => {
+    if (!instantBuy || !lock?.endsAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [instantBuy, lock?.endsAt]);
+  const remainingMs = lock?.endsAt ? lock.endsAt - (now + clockOffset) : null;
+  const saleEnded = remainingMs !== null && remainingMs <= 0;
 
   // Achat immédiat : les pièces vendues restent affichées, grisées « Vendu »
   // (vue b2b_instant_sold, 0258), après les pièces disponibles.
@@ -227,6 +243,21 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
       </div>
     ) : null;
 
+  if (instantBuy && saleEnded && !lock?.locked) {
+    return (
+      <div className="mx-auto flex max-w-[1600px] flex-col items-center justify-center p-4 py-24 text-center md:p-6 md:py-32">
+        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gray-900">
+          <Clock className="h-9 w-9 text-white" />
+        </div>
+        <h2 className="text-2xl font-semibold text-gray-900">Vente terminée</h2>
+        <p className="mt-3 max-w-md text-gray-600">
+          La vente en achat immédiat s'est terminée le {formatDeadline(lock!.endsAt!)}.
+        </p>
+        <p className="mt-2 text-sm text-gray-400">Revenez bientôt, de nouvelles pièces arrivent régulièrement.</p>
+      </div>
+    );
+  }
+
   if (instantBuy && lock?.locked) {
     return (
       <div className="mx-auto flex max-w-[1600px] flex-col items-center justify-center p-4 py-24 text-center md:p-6 md:py-32">
@@ -259,6 +290,19 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
             }, 5000);
           }}
         />
+      )}
+
+      {instantBuy && remainingMs !== null && remainingMs > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gray-900 px-5 py-4 text-white">
+          <div className="flex items-center gap-3">
+            <Clock className="h-5 w-5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Vente limitée dans le temps</p>
+              <p className="text-sm text-gray-300">Fin le {formatDeadline(lock!.endsAt!)}</p>
+            </div>
+          </div>
+          <Countdown ms={remainingMs} />
+        </div>
       )}
 
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gray-200 pb-5">
@@ -404,6 +448,30 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
 // ---------------------------------------------------------------------------
 // Sous-composants
 // ---------------------------------------------------------------------------
+
+const formatDeadline = (ms: number) =>
+  new Date(ms).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+
+/** Compte à rebours jours / heures / minutes / secondes. */
+const Countdown: React.FC<{ ms: number }> = ({ ms }) => {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const parts = [
+    { value: Math.floor(total / 86400), label: 'j' },
+    { value: Math.floor((total % 86400) / 3600), label: 'h' },
+    { value: Math.floor((total % 3600) / 60), label: 'min' },
+    { value: total % 60, label: 's' },
+  ].filter((p, i) => i > 0 || p.value > 0);
+  return (
+    <div className="flex items-baseline gap-3 tabular-nums">
+      {parts.map((p) => (
+        <span key={p.label} className="flex items-baseline gap-0.5">
+          <span className="text-2xl font-semibold">{String(p.value).padStart(2, '0')}</span>
+          <span className="text-xs text-gray-400">{p.label}</span>
+        </span>
+      ))}
+    </div>
+  );
+};
 
 interface ProductCardProps {
   product: B2BCatalogItem;
