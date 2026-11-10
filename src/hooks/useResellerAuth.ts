@@ -79,6 +79,10 @@ export interface ResellerProfile {
   /** Abonnement résilié par OZË (0237) : commandes, factures, portefeuille
    * en consultation ; ni catalogue, ni drops, ni enchères, ni sourcing. */
   access_revoked: boolean
+  /** Abonné dont l'abonnement est terminé (0255) : commandes, livraisons,
+   * factures, portefeuille et profil en consultation ; le reste fermé, avec
+   * un accès au réabonnement. */
+  subscription_ended: boolean
 }
 
 export interface LegalInfoInput {
@@ -153,7 +157,19 @@ export const useResellerAuth = () => {
       // 'discovery' (0147) passe comme 'active' ici : accès complet en
       // lecture, jamais redirigé vers l'écran "compte en attente" — seul
       // reseller_status distingue ensuite les deux pour désactiver l'achat.
-      if (reseller.status !== 'active' && reseller.status !== 'discovery') {
+      // Abonné dont l'abonnement est terminé (suspendu, abonnement Stripe plus
+      // en cours) : il garde l'accès à ses commandes (0255). Toute autre
+      // suspension (entreprise, décision de l'admin) reste bloquée.
+      let endedState: Record<string, any> | null = null
+      if (reseller.status === 'suspended') {
+        const { data: stateRows } = await supabase.rpc('get_my_subscription_state')
+        const state = (Array.isArray(stateRows) ? stateRows[0] : stateRows) as Record<string, any> | null
+        if (state?.account_type === 'subscriber' && !['active', 'trialing', 'past_due'].includes(state.subscription_status || '')) {
+          endedState = state
+        }
+      }
+
+      if (reseller.status !== 'active' && reseller.status !== 'discovery' && !endedState) {
         return {
           profile: null,
           pendingReason: reseller.status === 'suspended' ? 'suspended' : reseller.status === 'deleted' ? 'deleted' : 'pending',
@@ -168,7 +184,7 @@ export const useResellerAuth = () => {
         .select('account_type, subscription_plan, subscription_status, subscription_current_period_end, subscription_cancel_at_period_end, subscription_amount')
         .eq('id', contact.reseller_id)
         .maybeSingle()
-      const sub = (subscription || {}) as Partial<{
+      const sub = (subscription || endedState || {}) as Partial<{
         account_type: string
         subscription_plan: 'drops' | 'revendeur' | null
         subscription_status: string | null
@@ -226,6 +242,7 @@ export const useResellerAuth = () => {
           subscription_amount: sub.subscription_amount != null ? Number(sub.subscription_amount) : null,
           community_drops: communityDrops,
           access_revoked: Boolean(community?.access_revoked_at),
+          subscription_ended: Boolean(endedState),
         },
         pendingReason: null,
       }

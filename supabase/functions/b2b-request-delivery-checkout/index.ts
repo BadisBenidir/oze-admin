@@ -95,7 +95,9 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: userError } = await callerClient.auth.getUser();
     if (userError || !user) return json({ error: 'Non authentifié' }, 401);
 
-    const { data: resellerId } = await callerClient.rpc('current_reseller_id');
+    // Abonné dont l'abonnement est terminé compris (0255) : ses pièces déjà
+    // payées restent livrables.
+    const { data: resellerId } = await callerClient.rpc('current_reseller_id_incl_ended');
     if (!resellerId) return json({ error: 'Aucun compte revendeur actif associé à cet utilisateur' }, 403);
 
     const { item_ids, delivery_type, parcel_point, instructions } = await req.json();

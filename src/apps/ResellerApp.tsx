@@ -22,7 +22,8 @@ import { CheckoutSuccess } from '../components/pages/reseller/CheckoutSuccess';
 import { CartBlockingModal } from '../components/pages/reseller/CartBlockingModal';
 import { Auctions } from '../components/pages/reseller/Auctions';
 import { MarketResults } from '../components/pages/reseller/MarketResults';
-import { AccessRevokedScreen, PlanLockedScreen } from '../components/pages/reseller/Subscription';
+import { AccessRevokedScreen, PlanLockedScreen, SubscriptionEndedScreen } from '../components/pages/reseller/Subscription';
+import { SubscriptionGate } from '../components/auth/SubscriptionGate';
 import { useResellerPresenceTracking } from '../hooks/useResellerPresenceTracking';
 import { Terms } from '../components/pages/reseller/Terms';
 import { PrivacyPolicy } from '../components/pages/reseller/PrivacyPolicy';
@@ -58,7 +59,9 @@ const DEFAULT_TITLE = 'Portail B2B | OZË Paris';
 const DEFAULT_DESCRIPTION = 'Espace professionnel exclusif OZË Paris - Maroquinerie de luxe de seconde main.';
 
 function ResellerApp() {
-  const { profile } = useResellerAuth();
+  const { profile, signOut } = useResellerAuth();
+  // Consultation seule : résilié par OZË (0237) ou abonnement terminé (0255).
+  const readOnly = Boolean(profile?.access_revoked || profile?.subscription_ended);
   const navItems = profile?.is_primary ? [...resellerNavigationItems, resellerTeamNavItem] : resellerNavigationItems;
   const { activeTab, activeSubTab, navigateTo } = useNavigation(navItems, 'catalog');
   const cart = useB2BCart(profile?.id, Boolean(profile?.legal_status));
@@ -225,7 +228,7 @@ function ResellerApp() {
       return <ProductPage productId={productId} cart={cart} onBack={closeToRoot} />;
     }
 
-    if (isCartRoute && !profile?.access_revoked) {
+    if (isCartRoute && !readOnly) {
       return <CartPage cart={cart} onBack={closeToRoot} wallet={wallet} onWalletPaymentSuccess={handleWalletCheckoutSuccess} onOpenTerms={openTerms} />;
     }
 
@@ -238,8 +241,12 @@ function ResellerApp() {
     }
 
     // Abonnement résilié par OZË (0237) : espace en consultation seule.
-    if (profile?.access_revoked && (isCartRoute || !['my-orders', 'shipments', 'profile', 'team', 'wallet'].includes(currentTab))) {
-      return <AccessRevokedScreen onGoToOrders={() => navigateTo('my-orders')} />;
+    if (readOnly && (isCartRoute || !['my-orders', 'shipments', 'profile', 'team', 'wallet'].includes(currentTab))) {
+      return profile?.subscription_ended ? (
+        <SubscriptionEndedScreen onGoToOrders={() => navigateTo('my-orders')} />
+      ) : (
+        <AccessRevokedScreen onGoToOrders={() => navigateTo('my-orders')} />
+      );
     }
 
     switch (currentTab) {
@@ -336,6 +343,15 @@ function ResellerApp() {
     </div>
   );
 
+  // Abonnement terminé : page de réabonnement (et attente du webhook au
+  // retour de Stripe, ?abonnement=ok), en plein écran hors de l'espace.
+  if (
+    profile?.subscription_ended &&
+    (/^\/reabonnement\/?$/.test(pathname) || new URLSearchParams(window.location.search).get('abonnement') === 'ok')
+  ) {
+    return <SubscriptionGate onSignOut={signOut} fallback={<SubscriptionEndedScreen onGoToOrders={() => navigatePath('/mes-commandes')} />} />;
+  }
+
   return (
     <ResellerProtectedRoute>
       <MainLayout
@@ -352,6 +368,16 @@ function ResellerApp() {
         navRightContent={desktopCartButton}
         mobileExtra={mobileCartButton}
       >
+        {profile?.subscription_ended && (
+          <div className="m-4 md:m-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3">
+            <p className="text-sm text-gray-700">
+              Votre abonnement est terminé : vous pouvez toujours suivre vos commandes et demander la livraison de vos pièces.
+            </p>
+            <a href="/reabonnement" className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800">
+              Me réabonner
+            </a>
+          </div>
+        )}
         <ResellerNotificationsBanner notifications={notifications} onDismiss={markNotificationRead} />
         <WalletCreditNotice profileId={profile?.id} onAcknowledged={wallet.refresh} />
         <CommunityPriceNotice profileId={profile?.id} firstName={profile?.first_name} />

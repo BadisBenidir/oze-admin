@@ -284,6 +284,32 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
   const plan = profile.subscription_plan;
   if (profile.account_type !== 'subscriber' || !plan) return null;
 
+  if (profile.subscription_ended) {
+    const endedOn = formatDate(profile.subscription_current_period_end);
+    return (
+      <Card className="mb-6">
+        <CardContent className="space-y-4 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                <CreditCard className="h-4 w-4 text-gray-400" /> Mon abonnement
+              </h4>
+              <p className="mt-2 text-base font-semibold text-gray-900">{PLAN_NAME[plan]}</p>
+              <p className="text-sm text-gray-500">{endedOn ? `Terminé le ${endedOn}` : 'Terminé'}</p>
+            </div>
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 ring-1 ring-gray-200">Terminé</span>
+          </div>
+          <div className="border-t border-gray-100 pt-4">
+            <a href="/reabonnement" className="inline-flex rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800">
+              Me réabonner
+            </a>
+          </div>
+          <InvoicesList />
+        </CardContent>
+      </Card>
+    );
+  }
+
   const endDate = formatDate(profile.subscription_current_period_end);
   const cancelling = profile.subscription_cancel_at_period_end;
   const pastDue = profile.subscription_status === 'past_due';
@@ -468,6 +494,37 @@ export const SubscriptionSection: React.FC<{ profile: ResellerProfile }> = ({ pr
     </Card>
   );
 };
+
+/** Abonnement terminé (0255) : mêmes accès qu'une résiliation par OZË, plus
+ * le réabonnement (/reabonnement, voir ResellerApp). */
+export const SubscriptionEndedScreen: React.FC<{ onGoToOrders: () => void }> = ({ onGoToOrders }) => (
+  <div className="mx-auto w-full max-w-xl px-4 py-12">
+    <Card>
+      <CardContent className="p-8 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-900 text-white">
+          <Lock className="h-7 w-7" />
+        </div>
+        <h3 className="mt-5 text-lg font-semibold text-gray-900">Votre abonnement est terminé</h3>
+        <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
+          Le catalogue, les drops, les enchères et le sourcing sont réservés aux membres du Club. Vous gardez l'accès à vos
+          commandes, vous pouvez toujours demander la livraison de vos pièces, et consulter vos factures et votre portefeuille.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <a href="/reabonnement" className="rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800">
+            Me réabonner
+          </a>
+          <button
+            type="button"
+            onClick={onGoToOrders}
+            className="rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-gray-800 ring-1 ring-gray-200 hover:bg-gray-50"
+          >
+            Voir mes commandes
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+);
 
 /** Abonnement résilié par OZË Paris (0237) : catalogue, drops, enchères et
  * sourcing fermés, l'espace reste ouvert en consultation. */
