@@ -39,7 +39,13 @@ begin
   if tg_op = 'INSERT' then
     insert into public.sav_email_outbox (ticket_id, kind) values (new.id, 'ticket_created'), (new.id, 'team_new_ticket');
     perform public.sav_ping_notify();
-  elsif new.status = 'resolved' and old.status is distinct from 'resolved' then
+  elsif new.status = 'resolved' and old.status is distinct from 'resolved'
+    -- Réponse + « Résolu » d'un même geste (sav_admin_reply) : un seul email,
+    -- la réponse, qui mentionne alors la résolution (sav-notify).
+    and not exists (
+      select 1 from public.sav_email_outbox
+      where ticket_id = new.id and kind = 'team_reply' and created_at = now()
+    ) then
     insert into public.sav_email_outbox (ticket_id, kind) values (new.id, 'resolved');
     perform public.sav_ping_notify();
   end if;

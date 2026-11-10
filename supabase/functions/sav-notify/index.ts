@@ -116,7 +116,11 @@ Deno.serve(async () => {
           paragraphs: [hello, `Nous avons répondu à votre demande <strong>${esc(t.number)}</strong> « ${esc(t.subject)} » :`],
           quote: excerpt(m.content || '') + photos,
           cta: { label: 'Voir et répondre', url: ticketUrl },
-          note: NO_REPLY_NOTE,
+          // Réponse + « Résolu » d'un même geste : un seul email (0265).
+          note:
+            t.status === 'resolved'
+              ? `Votre demande est désormais marquée comme résolue. Si quelque chose ne vous convient pas, répondez sur la demande : elle sera rouverte. ${NO_REPLY_NOTE}`
+              : NO_REPLY_NOTE,
         });
       } else if (job.kind === 'resolved') {
         to = clientEmail;
