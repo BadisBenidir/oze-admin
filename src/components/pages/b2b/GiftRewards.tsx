@@ -2,31 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { Gift, AlertCircle, PackageCheck, PackageX, Send, X } from 'lucide-react';
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
-import { supabase } from '../../../lib/supabase';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { useGiftRewards, GiftReward } from '../../../hooks/useGiftRewards';
-import { B2BOrder, computeB2BOrderStatus } from '../../../hooks/useB2BOrders';
+import { B2BOrder, fetchB2BOrderById } from '../../../hooks/useB2BOrders';
 import { AssignGiftToOrderModal } from './AssignGiftToOrderModal';
 import { B2BOrderDetailModal } from './B2BOrderDetailModal';
-
-// Même select que useB2BOrders.ts — ici pour UNE commande précise (ouverte
-// depuis son numéro dans le tableau des portefeuilles offerts), pas la
-// liste complète : évite de charger tout useB2BOrders juste pour afficher
-// une seule fiche depuis un lien.
-const fetchOrderById = async (orderId: string): Promise<B2BOrder | null> => {
-  const { data, error } = await supabase
-    .from('orders')
-    .select(
-      'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), ' +
-      'placed_by:profiles!placed_by_profile_id(first_name, last_name, email), ' +
-      'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg), shipment:shipments!order_items_shipment_id_fkey(delivery_type, parcel_point))'
-    )
-    .eq('id', orderId)
-    .single();
-  if (error || !data) return null;
-  const order = data as unknown as B2BOrder;
-  return { ...order, placed_by_is_primary: true, computedStatus: computeB2BOrderStatus(order) };
-};
 
 type StatusFilter = 'all' | 'due' | 'shipped';
 
@@ -142,7 +122,7 @@ export const GiftRewards: React.FC = () => {
 
   const handleViewOrder = async (orderId: string) => {
     setLoadingOrderId(orderId);
-    const order = await fetchOrderById(orderId);
+    const order = await fetchB2BOrderById(orderId);
     setLoadingOrderId(null);
     if (order) setViewingOrder(order);
   };

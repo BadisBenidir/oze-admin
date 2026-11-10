@@ -150,6 +150,25 @@ export const computeB2BOrderStatus = (order: Pick<B2BOrder, 'status' | 'order_it
   return 'confirmed';
 };
 
+// Même select que useB2BOrders — ici pour UNE commande précise (ouverte
+// depuis un lien : portefeuilles offerts, ticket SAV…), pas la liste
+// complète : évite de charger tout useB2BOrders juste pour afficher
+// une seule fiche depuis un lien.
+export const fetchB2BOrderById = async (orderId: string): Promise<B2BOrder | null> => {
+  const { data, error } = await supabase
+    .from('orders')
+    .select(
+      'id, order_number, status, email, payment_status, stripe_payment_intent_id, placed_by_profile_id, subtotal, shipping_cost, total_amount, shipping_address, created_at, reseller_id, reseller:resellers(company_name), ' +
+      'placed_by:profiles!placed_by_profile_id(first_name, last_name, email), ' +
+      'order_items(*, shipment_parcel:shipment_parcels(tracking_number,tracking_url,label_url,sendcloud_parcel_id,weight_kg), shipment:shipments!order_items_shipment_id_fkey(delivery_type, parcel_point))'
+    )
+    .eq('id', orderId)
+    .single();
+  if (error || !data) return null;
+  const order = data as unknown as B2BOrder;
+  return { ...order, placed_by_is_primary: true, computedStatus: computeB2BOrderStatus(order) };
+};
+
 export const useB2BOrders = (isAuthenticated: boolean = false, resellerId?: string, placedByProfileId?: string) => {
   const [orders, setOrders] = useState<B2BOrder[]>([]);
   const [loading, setLoading] = useState(true);

@@ -1,4 +1,7 @@
 import {
+  LifeBuoy,
+  Scale,
+  BookOpen,
   LayoutDashboard,
   Package,
   ShoppingCart,
@@ -134,6 +137,19 @@ export const navigationItems: MenuItem[] = [
     // attend toujours au moins un subItems[0]), même pattern que 'accounting'.
     subItems: [
       { id: 'overview', label: 'Statistiques B2B', path: '/statistiques-b2b/vue-ensemble', icon: Radio },
+    ]
+  },
+  {
+    // SAV (0263) : tickets des revendeurs (chatbot + « Mes demandes »),
+    // litiges, base de connaissances du chatbot.
+    id: 'sav',
+    label: 'SAV',
+    icon: LifeBuoy,
+    path: '/sav',
+    subItems: [
+      { id: 'tickets', label: 'Tickets', path: '/sav/tickets', icon: LifeBuoy },
+      { id: 'disputes', label: 'Litiges', path: '/sav/litiges', icon: Scale },
+      { id: 'knowledge-base', label: 'Base de connaissances', path: '/sav/base-de-connaissances', icon: BookOpen },
     ]
   },
   {

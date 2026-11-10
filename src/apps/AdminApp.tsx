@@ -15,11 +15,15 @@ import { usePendingGiftRewardsCount } from '../hooks/useGiftRewards';
 import { usePendingEntrupyCount } from '../hooks/useEntrupyCertificates';
 import { setForcedHideFigures } from '../hooks/useHideFigures';
 import { StaffManagement } from '../components/pages/team/StaffManagement';
+import { SavAdmin } from '../components/pages/sav/SavAdmin';
+import { useSavCounters } from '../hooks/useSavAdmin';
 
 function AdminApp() {
   const { isAdmin, isOwner, profile } = useAdminAuth();
   const pendingGiftRewardsCount = usePendingGiftRewardsCount(isAdmin);
   const pendingEntrupyCount = usePendingEntrupyCount(isAdmin);
+  const { counters: savCounters } = useSavCounters(isAdmin);
+  const newSavCount = savCounters?.new_count ?? 0;
 
   // Compte employé (0208) : seulement les pages cochées par le propriétaire ;
   // « Équipe » réservée au propriétaire ; chiffres masqués d'office sans le
@@ -47,11 +51,14 @@ function AdminApp() {
   // Injecte dynamiquement le nombre de portefeuilles offerts en attente
   // d'expédition et de certificats Entrupy à éditer sur leurs liens
   // respectifs — la config statique (config/navigation.ts) ne connaît que la
-  // structure du menu, pas les compteurs vivants.
+  // structure du menu, pas les compteurs vivants. Idem pour les nouveaux
+  // tickets SAV.
   const navigationItems = useMemo(() => {
-    if (!pendingGiftRewardsCount && !pendingEntrupyCount) return visibleItems;
+    if (!pendingGiftRewardsCount && !pendingEntrupyCount && !newSavCount) return visibleItems;
     return visibleItems.map((item) =>
-      item.id !== 'b2b'
+      item.id === 'sav'
+        ? { ...item, subItems: item.subItems?.map((sub) => (sub.id === 'tickets' && newSavCount ? { ...sub, badgeCount: newSavCount } : sub)) }
+        : item.id !== 'b2b'
         ? item
         : {
             ...item,
@@ -62,7 +69,7 @@ function AdminApp() {
             }),
           }
     );
-  }, [visibleItems, pendingGiftRewardsCount, pendingEntrupyCount]);
+  }, [visibleItems, pendingGiftRewardsCount, pendingEntrupyCount, newSavCount]);
 
   const { activeTab, activeSubTab, navigateTo } = useNavigation(navigationItems, navigationItems[0]?.id || 'dashboard');
 
@@ -114,6 +121,8 @@ function AdminApp() {
         return <B2B activeSubTab={activeSubTab} />;
       case 'b2b-traffic':
         return <B2BTraffic />;
+      case 'sav':
+        return <SavAdmin activeSubTab={activeSubTab} />;
       case 'team':
         return isOwner ? <StaffManagement /> : null;
       default:
