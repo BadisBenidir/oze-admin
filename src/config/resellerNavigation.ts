@@ -1,4 +1,4 @@
-import { Gavel, LayoutGrid, Zap, PackageSearch, ShoppingBag, TrendingUp, User, Users, Wallet } from 'lucide-react';
+import { Gavel, LayoutGrid, LifeBuoy, Zap, PackageSearch, ShoppingBag, TrendingUp, User, Users, Wallet } from 'lucide-react';
 import { MenuItem } from '../types';
 
 export const resellerNavigationItems: MenuItem[] = [
@@ -18,6 +18,9 @@ export const resellerNavigationItems: MenuItem[] = [
   { id: 'market-results', label: 'Résultats de ventes', icon: TrendingUp, path: '/ventes' },
   { id: 'wallet', label: 'Mon Portefeuille', icon: Wallet, path: '/portefeuille', hidden: true },
   { id: 'profile', label: 'Mon profil', icon: User, path: '/mon-profil', hidden: true },
+  // SAV (0263) : demandes d'assistance — détail sur /mes-demandes/SAV-AAAA-NNNN
+  // (route lue dans ResellerApp.tsx).
+  { id: 'my-requests', label: 'Mes demandes', icon: LifeBuoy, path: '/mes-demandes', hidden: true },
 ];
 
 /** Visible uniquement pour le contact principal de l'entreprise (voir ResellerApp). */

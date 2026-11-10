@@ -92,8 +92,10 @@ begin
   returning * into v_ticket;
 
   if coalesce(trim(p_message), '') <> '' or jsonb_array_length(coalesce(p_attachments, '[]'::jsonb)) > 0 then
+    -- Ticket du chatbot : le 1er message est le résumé rédigé par le bot
+    -- (message système, rattaché au fil et visible du client).
     insert into public.sav_ticket_messages (ticket_id, author_type, author_id, content, attachments)
-    values (v_ticket.id, 'client', p_profile_id, coalesce(trim(p_message), ''),
+    values (v_ticket.id, case when p_source = 'chatbot' then 'system' else 'client' end, p_profile_id, coalesce(trim(p_message), ''),
             public.sav_check_attachments(p_attachments, p_reseller_id, false));
   end if;
 

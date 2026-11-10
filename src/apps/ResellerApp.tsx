@@ -27,6 +27,8 @@ import { SubscriptionGate } from '../components/auth/SubscriptionGate';
 import { useResellerPresenceTracking } from '../hooks/useResellerPresenceTracking';
 import { Terms } from '../components/pages/reseller/Terms';
 import { PrivacyPolicy } from '../components/pages/reseller/PrivacyPolicy';
+import { MyRequests } from '../components/pages/reseller/MyRequests';
+import { MyRequestDetail } from '../components/pages/reseller/MyRequestDetail';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 import { ShoppingCart, Wallet, X } from 'lucide-react';
 import { WalletCreditNotice } from '../components/reseller/WalletCreditNotice';
@@ -38,6 +40,12 @@ import { CommunityPriceNotice } from '../components/reseller/CommunityPriceNotic
 // comme un onglet normal (voir useNavigation et resellerNavigation.ts).
 const parseProductId = (pathname: string): string | null => {
   const match = pathname.match(/^\/catalogue\/([^/]+)\/?$/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
+// Détail d'une demande SAV : /mes-demandes/SAV-2026-0042 (0263).
+const parseTicketNumber = (pathname: string): string | null => {
+  const match = pathname.match(/^\/mes-demandes\/([^/]+)\/?$/);
   return match ? decodeURIComponent(match[1]) : null;
 };
 
@@ -54,6 +62,8 @@ const TAB_TITLES: Record<string, string> = {
   'market-results': 'Résultats de ventes | OZË Paris',
   wallet: 'Mon Portefeuille | OZË Paris',
   profile: 'Mon Profil | OZË Paris',
+  'my-requests': 'Mes demandes | OZË Paris',
+  assistance: 'Assistance | OZË Paris',
 };
 const DEFAULT_TITLE = 'Portail B2B | OZË Paris';
 const DEFAULT_DESCRIPTION = 'Espace professionnel exclusif OZË Paris - Maroquinerie de luxe de seconde main.';
@@ -146,6 +156,8 @@ function ResellerApp() {
   const closeToRoot = () => navigatePath('/');
 
   const productId = parseProductId(pathname);
+  const ticketNumber = parseTicketNumber(pathname);
+  const openTicket = (number: string) => navigatePath(`/mes-demandes/${encodeURIComponent(number)}`);
   const isCartRoute = pathname === '/panier' || pathname === '/panier/';
   const isTermsRoute = pathname === '/cgv' || pathname === '/cgv/';
   const isPrivacyRoute = pathname === '/confidentialite' || pathname === '/confidentialite/';
@@ -240,8 +252,13 @@ function ResellerApp() {
       return <PrivacyPolicy />;
     }
 
+    // Demandes SAV : ouvertes aussi en consultation seule (abonnement terminé…).
+    if (ticketNumber) {
+      return <MyRequestDetail key={ticketNumber} number={ticketNumber} onBack={() => { closeToRoot(); navigateTo('my-requests', ''); }} />;
+    }
+
     // Abonnement résilié par OZË (0237) : espace en consultation seule.
-    if (readOnly && (isCartRoute || !['my-orders', 'shipments', 'profile', 'team', 'wallet'].includes(currentTab))) {
+    if (readOnly && (isCartRoute || !['my-orders', 'shipments', 'profile', 'team', 'wallet', 'my-requests', 'assistance'].includes(currentTab))) {
       return profile?.subscription_ended ? (
         <SubscriptionEndedScreen onGoToOrders={() => navigateTo('my-orders')} />
       ) : (
@@ -273,6 +290,8 @@ function ResellerApp() {
         return <Team onOpenProduct={openProduct} />;
       case 'wallet':
         return <WalletPage />;
+      case 'my-requests':
+        return <MyRequests onOpen={openTicket} onOpenAssistant={() => navigateTo('assistance', '')} />;
       case 'catalog':
       default:
         return <Catalog key="catalog" cart={cart} onOpenProduct={openProduct} />;
@@ -359,7 +378,7 @@ function ResellerApp() {
         activeSubTab={activeSubTab}
         onTabChange={(tab) => {
           setCheckoutStatus(null);
-          if (productId || isCartRoute || isTermsRoute || isPrivacyRoute) closeToRoot();
+          if (productId || ticketNumber || isCartRoute || isTermsRoute || isPrivacyRoute) closeToRoot();
           navigateTo(tab, '');
         }}
         onSubTabChange={() => {}}

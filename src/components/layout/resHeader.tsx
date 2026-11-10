@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Menu, User, LogOut, ChevronDown, Building2, ShoppingBag, Wallet, Users } from 'lucide-react';
+import { Menu, User, LogOut, ChevronDown, Building2, ShoppingBag, Wallet, Users, LifeBuoy } from 'lucide-react';
 import { useResellerAuth } from '../../hooks/useResellerAuth';
+import { useMySavUnreadCount } from '../../hooks/useMySavTickets';
 import logo from '../landing/assets/logo_oze_paris_b2b.png';
 
 interface ResellerHeaderProps {
@@ -13,6 +14,7 @@ interface ResellerHeaderProps {
 const ACCOUNT_LINKS = [
   { id: 'profile', label: 'Mon profil', icon: User },
   { id: 'my-orders', label: 'Mes commandes', icon: ShoppingBag },
+  { id: 'my-requests', label: 'Mes demandes', icon: LifeBuoy },
   { id: 'wallet', label: 'Mon Portefeuille', icon: Wallet },
 ];
 
@@ -27,6 +29,8 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
   const displayName = hidden ? 'Mon compte' : profile ? `${profile.first_name} ${profile.last_name}` : 'Revendeur';
   const displayEmail = hidden ? '' : profile?.email;
   const [showUserMenu, setShowUserMenu] = useState(false);
+  // Demandes SAV avec une réponse de l'équipe non lue.
+  const unreadRequests = useMySavUnreadCount(Boolean(profile));
 
   return (
     <header className="bg-white border-b border-gray-100 px-4 md:px-6 py-4">
@@ -59,8 +63,9 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
           >
-            <div className="h-8 w-8 bg-gray-900 rounded-full flex items-center justify-center">
+            <div className="relative h-8 w-8 bg-gray-900 rounded-full flex items-center justify-center">
               <User className="h-4 w-4 text-white" />
+              {unreadRequests > 0 && <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-blue-600" />}
             </div>
             <div className="text-sm hidden sm:block">
               <p className="font-medium text-gray-900">{displayName}</p>
@@ -91,7 +96,10 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
                         }`}
                       >
                         <Icon className="h-4 w-4" />
-                        <span>{label}</span>
+                        <span className="flex-1 text-left">{label}</span>
+                        {id === 'my-requests' && unreadRequests > 0 && (
+                          <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{unreadRequests}</span>
+                        )}
                       </button>
                     ))}
                   <button

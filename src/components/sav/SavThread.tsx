@@ -100,9 +100,14 @@ export const SavThread: React.FC<{ messages: SavThreadMessage[]; viewer: 'team' 
     <div className="space-y-4">
       {messages.map((m) => {
         if (m.author_type === 'system') {
+          // Résumé rédigé par l'assistant à l'ouverture du ticket (0264).
           return (
-            <div key={m.id} className="text-center text-xs text-gray-400">
-              {m.content} · {formatSavDate(m.created_at)}
+            <div key={m.id} className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="mb-1 text-xs font-medium text-gray-500">
+                Résumé de l'échange avec l'assistant OZË · {formatSavDate(m.created_at)}
+              </div>
+              <p className="whitespace-pre-wrap break-words text-sm text-gray-800">{m.content}</p>
+              <SavAttachmentList attachments={m.attachments} urls={urls} />
             </div>
           );
         }
