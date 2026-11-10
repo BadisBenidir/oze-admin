@@ -279,19 +279,38 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
               }
             >
               {showChat ? (
-                <div className="max-h-[480px] space-y-3 overflow-y-auto pr-1">
-                  {chat.map((c) => (
-                    <div key={c.id} className="text-sm">
-                      <div className="mb-0.5 flex items-center gap-1.5 text-xs text-gray-500">
-                        {c.role === 'user' ? <User className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-                        <span className="font-medium">{c.role === 'user' ? 'Client' : 'Assistant'}</span>
-                        <span>· {formatSavDate(c.created_at)}</span>
-                        {c.tools.length > 0 && <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px]">{c.tools.join(', ')}</span>}
-                      </div>
-                      {c.display_text && <p className="whitespace-pre-wrap text-gray-800">{c.display_text}</p>}
-                      <SavAttachmentList attachments={c.attachments} urls={chatUrls} />
-                    </div>
-                  ))}
+                // Même présentation que le chat côté client : bulles client à
+                // droite, assistant à gauche ; les résultats d'outils (lignes
+                // sans texte) sont masqués, les appels d'outils en étiquette.
+                <div className="max-h-[560px] space-y-3 overflow-y-auto rounded-xl bg-white pr-1">
+                  {chat
+                    .filter((c) => c.display_text || c.tools.length > 0 || c.attachments.length > 0)
+                    .map((c) => {
+                      const mine = c.role === 'user';
+                      return (
+                        <div key={c.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`flex max-w-[85%] flex-col gap-1 ${mine ? 'items-end' : 'items-start'}`}>
+                            {c.attachments.length > 0 && <SavAttachmentList attachments={c.attachments} urls={chatUrls} />}
+                            {c.display_text && (
+                              <div
+                                className={`whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-sm ${
+                                  mine ? 'rounded-tr-sm bg-gray-900 text-white' : 'rounded-tl-sm bg-gray-100 text-gray-900'
+                                }`}
+                              >
+                                {c.display_text.trim()}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                              {mine ? <User className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+                              <span>{mine ? 'Client' : 'Assistant'} · {formatSavDate(c.created_at)}</span>
+                              {c.tools.map((t, i) => (
+                                <span key={`${t}-${i}`} className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-500">{t}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               ) : (
                 <p className="text-xs text-gray-500">Transcription complète, appels d'outils compris.</p>
