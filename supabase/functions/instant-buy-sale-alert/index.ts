@@ -43,23 +43,19 @@ Deno.serve(async () => {
   const to = Deno.env.get('INSTANT_BUY_ALERT_EMAIL') || DEFAULT_TO;
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
-  // Réserve les alertes en attente (non envoyées, pas déjà prises par un autre appel).
-  const nowIso = new Date().toISOString();
-  const staleIso = new Date(Date.now() - CLAIM_TIMEOUT_MS).toISOString();
-  const { data: claimed, error: claimError } = await admin
-    .from('instant_buy_sale_alerts')
-    .update({ claimed_at: nowIso })
-    .is('sent_at', null)
-    .lt('attempts', MAX_ATTEMPTS)
-    .or(`claimed_at.is.null,claimed_at.lt.${staleIso}`)
-    .select('id, product_id, attempts');
+  // Réserve les alertes en attente (non envoyées, pas déjà prises par un
+  // autre appel) — fonctions SQL de 0261, pas de PATCH PostgREST.
+  const { data: claimed, error: claimError } = await admin.rpc('claim_instant_buy_sale_alerts', {
+    p_max_attempts: MAX_ATTEMPTS,
+    p_claim_timeout: `${CLAIM_TIMEOUT_MS / 1000} seconds`,
+  });
   if (claimError) return json({ error: claimError.message }, 500);
   if (!claimed?.length) return json({ sent: 0 });
 
   let sent = 0;
   const errors: { id: string; error: string }[] = [];
 
-  for (const alert of claimed) {
+  for (const alert of claimed as { id: string; product_id: string; attempts: number }[]) {
     try {
       const { data: p, error: pErr } = await admin
         .from('products')
@@ -115,17 +111,13 @@ Deno.serve(async () => {
       });
       if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
 
-      await admin.from('instant_buy_sale_alerts')
-        .update({ sent_at: new Date().toISOString(), attempts: alert.attempts + 1, last_error: null })
-        .eq('id', alert.id);
+      await admin.rpc('finish_instant_buy_sale_alert', { p_id: alert.id, p_sent: true });
       sent++;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`${LOG_PREFIX} Alerte ${alert.id} non envoyée :`, message);
       errors.push({ id: alert.id, error: message });
-      await admin.from('instant_buy_sale_alerts')
-        .update({ attempts: alert.attempts + 1, last_error: message.slice(0, 500), claimed_at: null })
-        .eq('id', alert.id);
+      await admin.rpc('finish_instant_buy_sale_alert', { p_id: alert.id, p_sent: false, p_error: message });
     }
   }
 
