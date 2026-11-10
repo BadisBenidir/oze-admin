@@ -21,6 +21,8 @@ interface ChatLine {
 }
 
 const MAX_CHARS = 2000;
+/** Sans message depuis 30 min : « Avez-vous encore besoin d'aide ? ». */
+const IDLE_MS = 30 * 60 * 1000;
 const MAX_PHOTOS = 3;
 const SUGGESTIONS = ['Où en est ma commande ?', 'Mon colis est arrivé endommagé', 'Une question sur mon abonnement', 'Parler à un membre de l\'équipe'];
 
@@ -47,6 +49,10 @@ const useSavChat = () => {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  // Conversation clôturée : ticket ouvert par le bot, ou « Non » à la relance.
+  const [closed, setClosed] = useState<null | { reason: 'ticket' | 'ended'; number?: string }>(null);
+  const [lastActivity, setLastActivity] = useState<number | null>(null);
+  const [askStillNeeded, setAskStillNeeded] = useState(false);
 
   // Reprend la dernière conversation (historique lu dans sav_my_chat_messages).
   useEffect(() => {
@@ -61,7 +67,9 @@ const useSavChat = () => {
       .eq('conversation_id', stored)
       .order('created_at')
       .then(({ data }) => {
-        setLines(((data || []) as { id: string; role: 'user' | 'assistant'; display_text: string }[]).map((m) => ({ id: m.id, role: m.role, text: m.display_text })));
+        const rows = (data || []) as { id: string; role: 'user' | 'assistant'; display_text: string; created_at: string }[];
+        setLines(rows.map((m) => ({ id: m.id, role: m.role, text: m.display_text })));
+        if (rows.length) setLastActivity(new Date(rows[rows.length - 1].created_at).getTime());
         setLoadingHistory(false);
       });
   }, [profile?.id]);
@@ -69,12 +77,45 @@ const useSavChat = () => {
   const reset = () => {
     setLines([]);
     setConversationId(null);
+    setClosed(null);
+    setAskStillNeeded(false);
+    setLastActivity(null);
     if (profile?.id) writeStored(storageKey(profile.id), null);
+  };
+
+  // Termine la conversation : affichée jusqu'à la fermeture du chat, puis
+  // une nouvelle conversation démarre à la prochaine ouverture.
+  const close = (reason: 'ticket' | 'ended', number?: string) => {
+    setClosed({ reason, number });
+    setAskStillNeeded(false);
+    if (profile?.id) writeStored(storageKey(profile.id), null);
+  };
+
+  // Relance après 30 min sans message (vérifiée aussi à la réouverture).
+  useEffect(() => {
+    if (closed || streaming || lines.length === 0 || !lastActivity) return;
+    const check = () => {
+      if (Date.now() - lastActivity >= IDLE_MS) setAskStillNeeded(true);
+    };
+    check();
+    const t = window.setInterval(check, 30000);
+    return () => window.clearInterval(t);
+  }, [closed, streaming, lines.length, lastActivity]);
+
+  const answerStillNeeded = (yes: boolean) => {
+    if (yes) {
+      setAskStillNeeded(false);
+      setLastActivity(Date.now());
+    } else {
+      close('ended');
+    }
   };
 
   const send = useCallback(
     async (text: string, files: File[]) => {
-      if (!profile?.reseller_id || streaming) return;
+      if (!profile?.reseller_id || streaming || closed) return;
+      setAskStillNeeded(false);
+      setLastActivity(Date.now());
       const userLine: ChatLine = { id: crypto.randomUUID(), role: 'user', text: text || '📷', photos: files.map((f) => URL.createObjectURL(f)) };
       const botId = crypto.randomUUID();
       setLines((l) => [...l, userLine, { id: botId, role: 'assistant', text: '' }]);
@@ -128,6 +169,8 @@ const useSavChat = () => {
               patchBot((l) => ({ ...l, text: l.text + data.text }));
             } else if (data.type === 'ticket') {
               patchBot((l) => ({ ...l, ticket: { id: data.id, number: data.number } }));
+              // Ticket ouvert : la conversation est terminée, la suite se passe dans « Mes demandes ».
+              close('ticket', data.number);
             } else if (data.type === 'error') {
               patchBot((l) => ({ ...l, text: (l.text ? `${l.text}\n\n` : '') + data.error, error: true }));
             }
@@ -137,13 +180,14 @@ const useSavChat = () => {
         patchBot((l) => ({ ...l, text: e instanceof Error ? e.message : 'Envoi impossible', error: true }));
       } finally {
         setStreaming(false);
+        setLastActivity(Date.now());
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [profile?.id, profile?.reseller_id, conversationId, streaming]
+    [profile?.id, profile?.reseller_id, conversationId, streaming, closed]
   );
 
-  return { lines, send, reset, streaming, loadingHistory, firstName: profile?.first_name };
+  return { lines, send, reset, streaming, loadingHistory, closed, askStillNeeded, answerStillNeeded, firstName: profile?.first_name };
 };
 
 export const SavChatPanel: React.FC<{
@@ -155,7 +199,7 @@ export const SavChatPanel: React.FC<{
   unreadCount?: number;
   onOpenRequests?: () => void;
 }> = ({ onOpenTicket, onClose, onExpand, fullPage, unreadCount = 0, onOpenRequests }) => {
-  const { lines, send, reset, streaming, loadingHistory, firstName } = useSavChat();
+  const { lines, send, reset, streaming, loadingHistory, closed, askStillNeeded, answerStillNeeded, firstName } = useSavChat();
   const [text, setText] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -163,7 +207,7 @@ export const SavChatPanel: React.FC<{
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
-  }, [lines]);
+  }, [lines, closed, askStillNeeded]);
 
   const submit = (value = text) => {
     const v = value.trim();
@@ -252,9 +296,46 @@ export const SavChatPanel: React.FC<{
             </div>
           </div>
         ))}
+        {askStillNeeded && !closed && (
+          <div className="space-y-2">
+            <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-gray-100 px-3.5 py-2.5 text-sm text-gray-900">
+              Avez-vous encore besoin d'aide ?
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => answerStillNeeded(true)} className="rounded-full border border-gray-200 px-4 py-1.5 text-sm text-gray-800 hover:bg-gray-50">
+                Oui
+              </button>
+              <button onClick={() => answerStillNeeded(false)} className="rounded-full border border-gray-200 px-4 py-1.5 text-sm text-gray-800 hover:bg-gray-50">
+                Non
+              </button>
+            </div>
+          </div>
+        )}
+        {closed && (
+          <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-gray-100 px-3.5 py-2.5 text-sm text-gray-900">
+            {closed.reason === 'ticket' ? (
+              <>
+                Cette conversation est clôturée. Votre demande <strong>{closed.number}</strong> est transmise à l'équipe OZË : suivez-la et
+                répondez-y dans « Mes demandes ».
+              </>
+            ) : (
+              <>Merci pour votre échange, belle journée ! Cette conversation est terminée.</>
+            )}
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 
+      {closed ? (
+        <div className="border-t border-gray-100 p-3">
+          <div className="flex items-center justify-between gap-2 rounded-xl bg-gray-50 px-3 py-2.5">
+            <span className="text-xs text-gray-500">Conversation terminée</span>
+            <button onClick={reset} className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800">
+              Nouvelle conversation
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="border-t border-gray-100 p-3">
         {files.length > 0 && (
           <div className="mb-2 flex gap-1.5">
@@ -311,6 +392,7 @@ export const SavChatPanel: React.FC<{
         </div>
         {text.length > MAX_CHARS - 200 && <p className="mt-1 text-right text-[11px] text-gray-400">{text.length} / {MAX_CHARS}</p>}
       </div>
+      )}
     </div>
   );
 };
