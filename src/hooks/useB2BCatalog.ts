@@ -28,6 +28,8 @@ export interface B2BCatalogItem {
    * avant-première d'un drop planifié (0129, réservé aux contacts
    * can_preview_drops) — signal unique pour désactiver l'achat côté UI. */
   drop_preview_scheduled_at: string | null;
+  /** Onglet « Achat immédiat » plutôt que Catalogue (0253). */
+  instant_buy?: boolean;
   brand?: { id: string; name: string };
   category?: { id: string; name: string };
   /** Côté client uniquement : l'article a disparu du catalogue pendant la
@@ -50,6 +52,8 @@ export interface B2BCatalogFacets {
   conditions: string[];
 }
 
+export type B2BCatalogSort = 'recent' | 'price_asc' | 'price_desc';
+
 export interface B2BCatalogFilters {
   search: string;
   brandIds: string[];
@@ -57,6 +61,7 @@ export interface B2BCatalogFilters {
   conditions: string[];
   priceMin: number | null;
   priceMax: number | null;
+  sort: B2BCatalogSort;
 }
 
 const EMPTY_FILTERS: B2BCatalogFilters = {
@@ -66,6 +71,7 @@ const EMPTY_FILTERS: B2BCatalogFilters = {
   conditions: [],
   priceMin: null,
   priceMax: null,
+  sort: 'recent',
 };
 
 const EMPTY_FACETS: B2BCatalogFacets = { brands: [], categories: [], conditions: [] };
@@ -94,7 +100,9 @@ interface UseB2BCatalogResult {
 
 const ITEMS_PER_PAGE = 24;
 
-export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogResult => {
+/** `instantBuy` : onglet « Achat immédiat » (products.instant_buy, 0253) au
+ * lieu du Catalogue — mêmes articles for-sale-b2b, même panier. */
+export const useB2BCatalog = (isAuthenticated: boolean = false, instantBuy: boolean = false): UseB2BCatalogResult => {
   const [items, setItems] = useState<B2BCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +149,8 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
       let query = supabase
         .from('b2b_catalog')
         .select('*, brand:brands(id, name), category:categories(id, name)', { count: 'exact' })
-        .in('status', ['for-sale-b2b', 'draft']);
+        .in('status', ['for-sale-b2b', 'draft'])
+        .eq('instant_buy', instantBuy);
 
       if (currentFilters.search) {
         query = query.or(`name.ilike.%${currentFilters.search}%,product_code.ilike.%${currentFilters.search}%`);
@@ -162,8 +171,12 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
         query = query.lte('price', currentFilters.priceMax);
       }
 
+      // Nouveautés : ordre du drop à sa publication (0234), sinon date de
+      // création. Tri par prix : même ordre en départage.
+      if (currentFilters.sort === 'price_asc' || currentFilters.sort === 'price_desc') {
+        query = query.order('price', { ascending: currentFilters.sort === 'price_asc' });
+      }
       const { data, count, error: fetchError } = await query
-        // Ordre du drop à sa publication (0234), sinon date de création.
         .order('sort_at', { ascending: false })
         .range(from, to);
 
@@ -198,7 +211,7 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [composeItems]);
+  }, [composeItems, instantBuy]);
 
   // Retire les cartes « Vendu » expirées (vérifié chaque minute).
   useEffect(() => {
@@ -217,7 +230,8 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
       const { data, error: fetchError } = await supabase
         .from('b2b_catalog')
         .select('brand:brands(id, name), category:categories(id, name), condition')
-        .in('status', ['for-sale-b2b', 'draft']);
+        .in('status', ['for-sale-b2b', 'draft'])
+        .eq('instant_buy', instantBuy);
 
       if (fetchError) throw new Error(fetchError.message);
 
@@ -243,7 +257,7 @@ export const useB2BCatalog = (isAuthenticated: boolean = false): UseB2BCatalogRe
     } finally {
       setFacetsLoading(false);
     }
-  }, []);
+  }, [instantBuy]);
 
   const setFilters = (partial: Partial<B2BCatalogFilters>) => {
     const next = { ...filtersRef.current, ...partial };

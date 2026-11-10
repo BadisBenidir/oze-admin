@@ -10,6 +10,7 @@ interface ResellerHeaderProps {
 
 const TITLES: Record<string, string> = {
   catalog: 'Catalogue',
+  'instant-buy': 'Achat Immédiat',
   'my-orders': 'Mes commandes',
   wallet: 'Mon Portefeuille',
   team: 'Mon équipe',

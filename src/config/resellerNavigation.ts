@@ -1,10 +1,12 @@
-import { Gavel, LayoutGrid, PackageSearch, ShoppingBag, TrendingUp, User, Users, Wallet } from 'lucide-react';
+import { Gavel, LayoutGrid, Zap, PackageSearch, ShoppingBag, TrendingUp, User, Users, Wallet } from 'lucide-react';
 import { MenuItem } from '../types';
 
 export const resellerNavigationItems: MenuItem[] = [
   // /catalogue est aussi le préfixe de la fiche produit (/catalogue/:id,
   // voir parseProductId dans ResellerApp.tsx) — même racine, cohérent.
   { id: 'catalog', label: 'Catalogue', icon: LayoutGrid, path: '/catalogue' },
+  // Articles marqués achat immédiat par l'admin (products.instant_buy, 0253).
+  { id: 'instant-buy', label: 'Achat Immédiat', icon: Zap, path: '/achat-immediat' },
   // Le suivi de livraison (statut + numéro de tracking) est intégré
   // directement dans "Mes commandes" — voir B2BOrdersList.tsx — plus
   // d'onglet séparé (ex-MyShipments.tsx/useMyShipments.ts, supprimés).

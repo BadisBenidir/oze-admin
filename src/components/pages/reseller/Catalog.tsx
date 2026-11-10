@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { supabase } from '../../../lib/supabase';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
-import { useB2BCatalog, B2BCatalogItem } from '../../../hooks/useB2BCatalog';
+import { useB2BCatalog, B2BCatalogItem, B2BCatalogSort } from '../../../hooks/useB2BCatalog';
 import { useB2BCart } from '../../../hooks/useB2BCart';
 // ⚠️ `cart` doit toujours venir de l'instance unique créée dans ResellerApp
 // et reçue ici en prop, jamais d'un nouvel appel local à useB2BCart() : deux
@@ -32,11 +31,12 @@ import {
   Package,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Clock,
   Eye,
-  SlidersHorizontal,
-  X,
   RotateCcw,
+  Zap,
 } from 'lucide-react';
 
 const PRICE_BRACKETS: { id: string; label: string; min: number | null; max: number | null }[] = [
@@ -55,14 +55,17 @@ const priceBracketId = (min: number | null, max: number | null): string => {
 interface CatalogProps {
   cart: ReturnType<typeof useB2BCart>;
   onOpenProduct: (productId: string) => void;
+  /** Onglet « Achat immédiat » (0253) : mêmes cartes et même panier. */
+  instantBuy?: boolean;
 }
 
-export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
+export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBuy = false }) => {
   const { isReseller } = useResellerAuth();
   const {
     items,
     loading,
     error,
+    totalCount,
     currentPage,
     totalPages,
     hasNextPage,
@@ -73,8 +76,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
     setPage,
     facets,
     refreshSilently,
-  } = useB2BCatalog(isReseller);
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  } = useB2BCatalog(isReseller, instantBuy);
 
   // Le statut "Dans un panier" d'un article (held_by_other) dépend de la
   // réservation exclusive d'un AUTRE revendeur (cart_items) : product_
@@ -97,7 +99,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
     };
 
     const channel = supabase
-      .channel('catalog-reservation-signals')
+      .channel(instantBuy ? 'instant-buy-reservation-signals' : 'catalog-reservation-signals')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'product_reservation_signals' }, scheduleRefresh)
       .subscribe();
 
@@ -111,6 +113,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
       clearInterval(fallbackInterval);
       supabase.removeChannel(channel);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Annonce du prochain drop programmé (0168) — silencieuse en cas d'erreur
@@ -123,25 +126,57 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
     setNextDrop(row && row.scheduled_at ? row : null);
   };
   useEffect(() => {
-    loadNextDrop();
+    if (!instantBuy) loadNextDrop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const toggleInList = (id: string, list: string[]) =>
-    list.includes(id) ? list.filter((v) => v !== id) : [...list, id];
 
   const activeFilterCount =
     filters.brandIds.length +
     filters.categoryIds.length +
     filters.conditions.length +
     (filters.priceMin !== null || filters.priceMax !== null ? 1 : 0);
+  const hasActiveFilters = activeFilterCount > 0 || Boolean(filters.search);
 
   const currentPriceBracket = useMemo(
     () => priceBracketId(filters.priceMin, filters.priceMax),
     [filters.priceMin, filters.priceMax]
   );
 
+  // Retour en haut de la grille au changement de page (comme Résultats de ventes).
+  const topRef = useRef<HTMLDivElement>(null);
+  const goToPage = (page: number) => {
+    setPage(page);
+    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const selectClass =
+    'rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-gray-400 focus:outline-none';
+  const pagerButton =
+    'flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white';
+
+  const pager =
+    !loading && totalPages > 1 ? (
+      <div className="flex items-center justify-center gap-2">
+        <button onClick={() => goToPage(1)} disabled={!hasPreviousPage} className={pagerButton} title="Première page">
+          <ChevronsLeft className="h-4 w-4" />
+        </button>
+        <button onClick={() => goToPage(currentPage - 1)} disabled={!hasPreviousPage} className={pagerButton} title="Page précédente">
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <span className="px-3 text-sm text-gray-600">
+          Page <span className="font-semibold text-gray-900">{currentPage}</span> / {totalPages}
+        </span>
+        <button onClick={() => goToPage(currentPage + 1)} disabled={!hasNextPage} className={pagerButton} title="Page suivante">
+          <ChevronRight className="h-4 w-4" />
+        </button>
+        <button onClick={() => goToPage(totalPages)} disabled={!hasNextPage} className={pagerButton} title="Dernière page">
+          <ChevronsRight className="h-4 w-4" />
+        </button>
+      </div>
+    ) : null;
+
   return (
-    <div className="p-4 md:p-6">
+    <div ref={topRef} className="mx-auto max-w-[1600px] scroll-mt-24 space-y-5 p-4 md:p-6">
       {nextDrop && (
         <ScheduleAnnouncement
           kind="drop"
@@ -161,174 +196,135 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
         />
       )}
 
-      <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Catalogue</h3>
-          <p className="text-sm text-gray-500">Pièces réservées aux revendeurs</p>
-        </div>
-        <button
-          onClick={() => setMobileFiltersOpen(true)}
-          className="lg:hidden relative flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-          Filtres
-          {activeFilterCount > 0 && (
-            <span className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center bg-gray-900 text-white text-[11px] rounded-full">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
+      <div>
+        <h2 className="flex items-center gap-2 text-xl font-semibold text-gray-900">
+          {instantBuy && <Zap className="h-5 w-5" />}
+          {instantBuy ? 'Achat immédiat' : 'Catalogue'}
+        </h2>
+        <p className="text-sm text-gray-500">
+          {instantBuy
+            ? 'Pièces disponibles tout de suite, sans attendre un drop : ajoutez au panier et payez.'
+            : 'Les pièces en vente, réservées aux membres du Club.'}
+        </p>
       </div>
 
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Rechercher un article..."
-          className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:border-gray-400 focus:outline-none"
-          value={filters.search}
-          onChange={(e) => setFilters({ search: e.target.value })}
-        />
-      </div>
-
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">Erreur : {error}</div>
-      )}
-
-      <div className="flex gap-6 items-start">
-        <aside className="hidden lg:block w-64 shrink-0 sticky top-6">
-          <FiltersPanel
-            facets={facets}
-            selectedBrandIds={filters.brandIds}
-            selectedCategoryIds={filters.categoryIds}
-            selectedConditions={filters.conditions}
-            priceBracketId={currentPriceBracket}
-            onToggleBrand={(id) => setFilters({ brandIds: toggleInList(id, filters.brandIds) })}
-            onToggleCategory={(id) => setFilters({ categoryIds: toggleInList(id, filters.categoryIds) })}
-            onToggleCondition={(c) => setFilters({ conditions: toggleInList(c, filters.conditions) })}
-            onSelectPriceBracket={(id) => {
-              const bracket = PRICE_BRACKETS.find((b) => b.id === id) ?? PRICE_BRACKETS[0];
-              setFilters({ priceMin: bracket.min, priceMax: bracket.max });
-            }}
-            onReset={resetFilters}
-            activeFilterCount={activeFilterCount}
+      <div className="flex flex-wrap gap-2">
+        <div className="relative min-w-[220px] flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            value={filters.search}
+            onChange={(e) => setFilters({ search: e.target.value })}
+            placeholder="Rechercher (modèle, marque, référence…)"
+            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none"
           />
-        </aside>
-
-        <div className="flex-1 min-w-0">
-          {!loading && !error && items.length === 0 && (
-            <div className="text-center py-12">
-              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun article disponible</h3>
-              <p className="text-gray-500 mb-4">
-                {activeFilterCount > 0 || filters.search
-                  ? "Essayez d'élargir votre recherche ou vos filtres."
-                  : 'Revenez bientôt, de nouvelles pièces arrivent régulièrement.'}
-              </p>
-              {(activeFilterCount > 0 || filters.search) && (
-                <button
-                  onClick={resetFilters}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Réinitialiser les filtres
-                </button>
-              )}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {loading
-              ? [...Array(8)].map((_, i) => (
-                  <Card key={`skeleton-${i}`}>
-                    <div className="h-40 bg-gray-100 rounded-t-lg animate-pulse" />
-                    <CardContent className="p-3 space-y-2">
-                      <div className="h-4 bg-gray-100 rounded animate-pulse" />
-                      <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
-                    </CardContent>
-                  </Card>
-                ))
-              : items.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    inCart={!product.sold_at && cart.isInCart(product.id)}
-                    onAdd={async () => {
-                      const result = await cart.addItem(product);
-                      // Un autre utilisateur (même collègue) vient de
-                      // réserver ce produit entre-temps : on rafraîchit
-                      // immédiatement plutôt que d'attendre le prochain poll
-                      // (20s), pour que le produit passe en grisé "Dans un
-                      // panier" tout de suite sur cet écran.
-                      if (!result.success) refreshSilently();
-                      return result;
-                    }}
-                    onView={() => onOpenProduct(product.id)}
-                  />
-                ))}
-          </div>
-
-          {!loading && totalPages > 1 && (
-            <div className="flex items-center justify-center gap-4 mt-8">
-              <button
-                onClick={() => setPage(currentPage - 1)}
-                disabled={!hasPreviousPage}
-                className="p-2 rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="text-sm text-gray-600">Page {currentPage} / {totalPages}</span>
-              <button
-                onClick={() => setPage(currentPage + 1)}
-                disabled={!hasNextPage}
-                className="p-2 rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
         </div>
+        <select
+          value={filters.categoryIds[0] || ''}
+          onChange={(e) => setFilters({ categoryIds: e.target.value ? [e.target.value] : [] })}
+          className={selectClass}
+        >
+          <option value="">Toutes les catégories</option>
+          {facets.categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select
+          value={filters.brandIds[0] || ''}
+          onChange={(e) => setFilters({ brandIds: e.target.value ? [e.target.value] : [] })}
+          className={selectClass}
+        >
+          <option value="">Toutes les marques</option>
+          {facets.brands.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+        <select
+          value={filters.conditions[0] || ''}
+          onChange={(e) => setFilters({ conditions: e.target.value ? [e.target.value] : [] })}
+          className={selectClass}
+        >
+          <option value="">Tous les états</option>
+          {facets.conditions.map((c) => (
+            <option key={c} value={c}>État {c}</option>
+          ))}
+        </select>
+        <select
+          value={currentPriceBracket}
+          onChange={(e) => {
+            const bracket = PRICE_BRACKETS.find((b) => b.id === e.target.value) ?? PRICE_BRACKETS[0];
+            setFilters({ priceMin: bracket.min, priceMax: bracket.max });
+          }}
+          className={selectClass}
+        >
+          {PRICE_BRACKETS.map((b) => (
+            <option key={b.id} value={b.id}>{b.label}</option>
+          ))}
+        </select>
+        <select value={filters.sort} onChange={(e) => setFilters({ sort: e.target.value as B2BCatalogSort })} className={selectClass}>
+          <option value="recent">Nouveautés</option>
+          <option value="price_asc">Prix croissant</option>
+          <option value="price_desc">Prix décroissant</option>
+        </select>
       </div>
 
-      {mobileFiltersOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileFiltersOpen(false)} />
-          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white shadow-xl flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-gray-100">
-              <h4 className="font-semibold text-gray-900">Filtres</h4>
-              <button onClick={() => setMobileFiltersOpen(false)} className="p-1 text-gray-500 hover:text-gray-800">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <FiltersPanel
-                facets={facets}
-                selectedBrandIds={filters.brandIds}
-                selectedCategoryIds={filters.categoryIds}
-                selectedConditions={filters.conditions}
-                priceBracketId={currentPriceBracket}
-                onToggleBrand={(id) => setFilters({ brandIds: toggleInList(id, filters.brandIds) })}
-                onToggleCategory={(id) => setFilters({ categoryIds: toggleInList(id, filters.categoryIds) })}
-                onToggleCondition={(c) => setFilters({ conditions: toggleInList(c, filters.conditions) })}
-                onSelectPriceBracket={(id) => {
-                  const bracket = PRICE_BRACKETS.find((b) => b.id === id) ?? PRICE_BRACKETS[0];
-                  setFilters({ priceMin: bracket.min, priceMax: bracket.max });
-                }}
-                onReset={resetFilters}
-                activeFilterCount={activeFilterCount}
-              />
-            </div>
-            <div className="p-4 border-t border-gray-100">
-              <button
-                onClick={() => setMobileFiltersOpen(false)}
-                className="w-full py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800"
-              >
-                Voir les résultats
-              </button>
-            </div>
-          </div>
+      <div className="flex min-h-[40px] flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-gray-600">
+          {loading ? 'Chargement…' : `${totalCount} pièce${totalCount > 1 ? 's' : ''} disponible${totalCount > 1 ? 's' : ''}`}
+        </p>
+        {hasActiveFilters && (
+          <button onClick={resetFilters} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900">
+            <RotateCcw className="h-3.5 w-3.5" /> Réinitialiser les filtres
+          </button>
+        )}
+      </div>
+
+      {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Erreur : {error}</p>}
+
+      {!loading && !error && items.length === 0 && (
+        <div className="rounded-xl border border-gray-200 bg-white py-12 text-center">
+          <Package className="mx-auto mb-4 h-12 w-12 text-gray-300" />
+          <h3 className="mb-2 text-lg font-medium text-gray-900">Aucun article disponible</h3>
+          <p className="text-sm text-gray-500">
+            {hasActiveFilters
+              ? "Essayez d'élargir votre recherche ou vos filtres."
+              : instantBuy
+                ? 'De nouvelles pièces en achat immédiat arrivent régulièrement.'
+                : 'Revenez bientôt, de nouvelles pièces arrivent régulièrement.'}
+          </p>
         </div>
       )}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        {loading
+          ? [...Array(10)].map((_, i) => (
+              <div key={`skeleton-${i}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                <div className="aspect-square animate-pulse bg-gray-100" />
+                <div className="space-y-2 p-4">
+                  <div className="mx-auto h-4 w-24 animate-pulse rounded bg-gray-100" />
+                  <div className="h-4 animate-pulse rounded bg-gray-100" />
+                  <div className="h-9 animate-pulse rounded-lg bg-gray-100" />
+                </div>
+              </div>
+            ))
+          : items.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                inCart={!product.sold_at && cart.isInCart(product.id)}
+                onAdd={async () => {
+                  const result = await cart.addItem(product);
+                  // Un autre utilisateur (même collègue) vient de réserver ce
+                  // produit entre-temps : rafraîchissement immédiat, pour que
+                  // la carte passe tout de suite en « Dans un panier ».
+                  if (!result.success) refreshSilently();
+                  return result;
+                }}
+                onView={() => onOpenProduct(product.id)}
+              />
+            ))}
+      </div>
+
+      {pager}
     </div>
   );
 };
@@ -336,133 +332,6 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct }) => {
 // ---------------------------------------------------------------------------
 // Sous-composants
 // ---------------------------------------------------------------------------
-
-interface FiltersPanelProps {
-  facets: { brands: { id: string; name: string }[]; categories: { id: string; name: string }[]; conditions: string[] };
-  selectedBrandIds: string[];
-  selectedCategoryIds: string[];
-  selectedConditions: string[];
-  priceBracketId: string;
-  onToggleBrand: (id: string) => void;
-  onToggleCategory: (id: string) => void;
-  onToggleCondition: (condition: string) => void;
-  onSelectPriceBracket: (id: string) => void;
-  onReset: () => void;
-  activeFilterCount: number;
-}
-
-const FiltersPanel: React.FC<FiltersPanelProps> = ({
-  facets,
-  selectedBrandIds,
-  selectedCategoryIds,
-  selectedConditions,
-  priceBracketId,
-  onToggleBrand,
-  onToggleCategory,
-  onToggleCondition,
-  onSelectPriceBracket,
-  onReset,
-  activeFilterCount,
-}) => {
-  return (
-    <div className="space-y-6">
-      {activeFilterCount > 0 && (
-        <button
-          onClick={onReset}
-          className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          Réinitialiser ({activeFilterCount})
-        </button>
-      )}
-
-      {facets.categories.length > 0 && (
-        <FilterGroup title="Type">
-          {facets.categories.map((category) => (
-            <CheckboxRow
-              key={category.id}
-              label={category.name}
-              checked={selectedCategoryIds.includes(category.id)}
-              onChange={() => onToggleCategory(category.id)}
-            />
-          ))}
-        </FilterGroup>
-      )}
-
-      {facets.brands.length > 0 && (
-        <FilterGroup title="Marque">
-          {facets.brands.map((brand) => (
-            <CheckboxRow
-              key={brand.id}
-              label={brand.name}
-              checked={selectedBrandIds.includes(brand.id)}
-              onChange={() => onToggleBrand(brand.id)}
-            />
-          ))}
-        </FilterGroup>
-      )}
-
-      {facets.conditions.length > 0 && (
-        <FilterGroup title="État">
-          <div className="flex flex-wrap gap-2">
-            {facets.conditions.map((condition) => {
-              const active = selectedConditions.includes(condition);
-              return (
-                <button
-                  key={condition}
-                  onClick={() => onToggleCondition(condition)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                    active
-                      ? 'bg-gray-900 text-white border-gray-900'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  {condition}
-                </button>
-              );
-            })}
-          </div>
-        </FilterGroup>
-      )}
-
-      <FilterGroup title="Prix">
-        <div className="space-y-1">
-          {PRICE_BRACKETS.map((bracket) => (
-            <label key={bracket.id} className="flex items-center gap-2 py-1 cursor-pointer text-sm text-gray-700">
-              <input
-                type="radio"
-                name="price-bracket"
-                checked={priceBracketId === bracket.id}
-                onChange={() => onSelectPriceBracket(bracket.id)}
-                className="h-3.5 w-3.5 text-gray-900 focus:ring-gray-400"
-              />
-              {bracket.label}
-            </label>
-          ))}
-        </div>
-      </FilterGroup>
-    </div>
-  );
-};
-
-const FilterGroup: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div>
-    <h5 className="text-xs font-semibold text-gray-900 uppercase tracking-wide mb-3">{title}</h5>
-    {children}
-  </div>
-);
-
-const CheckboxRow: React.FC<{ label: string; checked: boolean; onChange: () => void }> = ({ label, checked, onChange }) => (
-  <label className="flex items-center gap-2 py-1 cursor-pointer text-sm text-gray-700">
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      className="h-3.5 w-3.5 rounded border-gray-300 text-gray-900 focus:ring-gray-400"
-    />
-    {label}
-  </label>
-);
 
 interface ProductCardProps {
   product: B2BCatalogItem;
@@ -495,62 +364,57 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
   };
 
   return (
-    <Card
-      hover={!sold}
-      className={`overflow-hidden flex flex-col ${sold ? 'opacity-60 grayscale cursor-default' : 'cursor-pointer'}`}
+    <div
       onClick={sold ? undefined : onView}
+      className={`flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow ${
+        sold ? 'cursor-default opacity-60 grayscale' : 'cursor-pointer hover:shadow-md'
+      }`}
     >
-      <div className="relative h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
+      <div className="relative aspect-square bg-gray-50">
+        {image ? (
+          <img src={image} alt={product.name} loading="lazy" className={`h-full w-full object-cover ${held ? 'opacity-30' : ''}`} />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <ImageOff className="h-8 w-8 text-gray-300" />
+          </div>
+        )}
         {hasDiscount && (
-          <span className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-red-600 text-white text-xs font-semibold rounded">
-            -{discountPercent}%
-          </span>
+          <span className="absolute left-2 top-2 rounded-full bg-red-600 px-2.5 py-1 text-xs font-semibold text-white">-{discountPercent}%</span>
         )}
         {isDropPreview && (
-          <span className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 bg-gray-900/90 text-white text-[10px] font-semibold rounded-full">
+          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-gray-900/90 px-2.5 py-1 text-[11px] font-semibold text-white">
             <Eye className="h-3 w-3" />
             Avant-première
           </span>
         )}
-        {image ? (
-          <img
-            src={image}
-            alt={product.name}
-            className={`w-full h-full object-cover ${held ? 'opacity-30' : ''}`}
-          />
-        ) : (
-          <ImageOff className="h-8 w-8 text-gray-300" />
-        )}
         {sold && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="px-3 py-1 bg-gray-900 text-white text-sm font-semibold uppercase tracking-wide rounded-full">
-              Vendu
-            </span>
+            <span className="rounded-full bg-gray-900 px-3 py-1 text-sm font-semibold uppercase tracking-wide text-white">Vendu</span>
           </div>
         )}
         {held && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="flex items-center gap-1 px-2.5 py-1 bg-gray-900 text-white text-xs font-medium rounded-full">
+            <span className="flex items-center gap-1 rounded-full bg-gray-900 px-2.5 py-1 text-xs font-medium text-white">
               <Clock className="h-3 w-3" />
               Dans un panier
             </span>
           </div>
         )}
       </div>
-      <CardContent className="p-3 flex-1 flex flex-col">
-        <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-1">{product.name}</p>
-        {product.brand?.name && <p className="text-xs text-gray-500 mb-2">{product.brand.name}</p>}
-        <div className="mt-auto space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="flex items-baseline gap-1.5">
-              <span className="text-base font-semibold text-gray-900">{product.price.toFixed(0)} €</span>
-              {hasDiscount && (
-                <span className="text-xs text-gray-400 line-through">{product.original_price!.toFixed(0)} €</span>
-              )}
-            </span>
-            {isGrade(product.condition) && (
-              <Badge variant={GRADE_VARIANTS[product.condition]}>Grade {product.condition}</Badge>
-            )}
+      <div className="flex flex-1 flex-col gap-1.5 p-4 text-sm">
+        <div className="flex min-h-[1.25rem] justify-end">
+          {isGrade(product.condition) ? (
+            <Badge variant={GRADE_VARIANTS[product.condition]}>État {product.condition}</Badge>
+          ) : (
+            product.condition && <span className="text-gray-500">État {product.condition}</span>
+          )}
+        </div>
+        <p className="mt-1 text-center text-base font-semibold uppercase tracking-[0.2em] text-gray-900">{product.brand?.name || '—'}</p>
+        <p className="line-clamp-2 min-h-[2.5rem] text-center text-gray-600">{product.name}</p>
+        <div className="mt-auto space-y-2 border-t border-gray-100 pt-2">
+          <div className="flex items-baseline justify-center gap-2">
+            <span className="text-lg font-semibold text-gray-900">{product.price.toFixed(0)} €</span>
+            {hasDiscount && <span className="text-sm text-gray-400 line-through">{product.original_price!.toFixed(0)} €</span>}
           </div>
           {isDropPreview ? (
             <DropPreviewBadge scheduledAt={product.drop_preview_scheduled_at!} compact />
@@ -559,38 +423,38 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
               <button
                 onClick={handleAdd}
                 disabled={disabled}
-                className={`w-full flex items-center justify-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   inCart
-                    ? 'bg-green-50 text-green-700 cursor-default'
+                    ? 'cursor-default bg-green-50 text-green-700'
                     : disabled
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-gray-900 text-white hover:bg-gray-800'
+                      ? 'cursor-not-allowed bg-gray-100 text-gray-400'
+                      : 'bg-gray-900 text-white hover:bg-gray-800'
                 }`}
               >
                 {sold ? (
                   <span>Vendu</span>
                 ) : inCart ? (
                   <>
-                    <Check className="h-3 w-3" />
+                    <Check className="h-4 w-4" />
                     <span>Dans le panier</span>
                   </>
                 ) : held ? (
                   <>
-                    <Clock className="h-3 w-3" />
+                    <Clock className="h-4 w-4" />
                     <span>Dans un panier</span>
                   </>
                 ) : (
                   <>
-                    <ShoppingCart className="h-3 w-3" />
-                    <span>{adding ? 'Ajout...' : 'Ajouter'}</span>
+                    <ShoppingCart className="h-4 w-4" />
+                    <span>{adding ? 'Ajout…' : 'Ajouter au panier'}</span>
                   </>
                 )}
               </button>
-              {addError && <p className="text-[11px] text-red-600">{addError}</p>}
+              {addError && <p className="text-center text-xs text-red-600">{addError}</p>}
             </>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };

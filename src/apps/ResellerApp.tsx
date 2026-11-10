@@ -46,6 +46,7 @@ const parseProductId = (pathname: string): string | null => {
 // uniquement pour cette app.
 const TAB_TITLES: Record<string, string> = {
   catalog: 'Catalogue B2B | OZË Paris',
+  'instant-buy': 'Achat Immédiat | OZË Paris',
   'my-orders': 'Mes Commandes | OZË Paris',
   sourcing: 'Sourcing sur mesure | OZË Paris',
   auctions: 'Enchères B2B | OZË Paris',
@@ -257,6 +258,8 @@ function ResellerApp() {
         return isDropsPlan && !auctionsUnlocked ? <PlanLockedScreen feature="auctions" community={profile?.community_drops} currentAmount={profile?.subscription_amount} /> : <Auctions />;
       case 'market-results':
         return <MarketResults />;
+      case 'instant-buy':
+        return <Catalog key="instant-buy" cart={cart} onOpenProduct={openProduct} instantBuy />;
       case 'profile':
         return <ResellerProfile />;
       case 'team':
@@ -265,7 +268,7 @@ function ResellerApp() {
         return <WalletPage />;
       case 'catalog':
       default:
-        return <Catalog cart={cart} onOpenProduct={openProduct} />;
+        return <Catalog key="catalog" cart={cart} onOpenProduct={openProduct} />;
     }
   };
 
