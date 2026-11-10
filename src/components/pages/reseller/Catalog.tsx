@@ -37,6 +37,7 @@ import {
   Eye,
   RotateCcw,
   Zap,
+  Lock,
 } from 'lucide-react';
 
 const PRICE_BRACKETS: { id: string; label: string; min: number | null; max: number | null }[] = [
@@ -116,6 +117,16 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Achat immédiat bloqué par l'admin (0254) : cadenas + message, aucun article.
+  const [lock, setLock] = useState<{ locked: boolean; message: string | null } | null>(null);
+  useEffect(() => {
+    if (!instantBuy) return;
+    supabase.rpc('get_instant_buy_lock').then(({ data, error: lockError }) => {
+      const row = data as { locked?: boolean; message?: string | null } | null;
+      setLock(lockError ? { locked: false, message: null } : { locked: Boolean(row?.locked), message: row?.message ?? null });
+    });
+  }, [instantBuy]);
+
   // Annonce du prochain drop programmé (0168) — silencieuse en cas d'erreur
   // (fonction absente avant migration) : pas de bandeau, rien d'autre.
   const [nextDrop, setNextDrop] = useState<NextDropAnnouncement | null>(null);
@@ -174,6 +185,19 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
         </button>
       </div>
     ) : null;
+
+  if (instantBuy && lock?.locked) {
+    return (
+      <div className="mx-auto flex max-w-[1600px] flex-col items-center justify-center p-4 py-24 text-center md:p-6 md:py-32">
+        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gray-900">
+          <Lock className="h-9 w-9 text-white" />
+        </div>
+        <h2 className="text-2xl font-semibold text-gray-900">Achat immédiat</h2>
+        <p className="mt-3 max-w-md whitespace-pre-line text-gray-600">{lock.message || 'Aucun article disponible pour le moment.'}</p>
+        <p className="mt-2 text-sm text-gray-400">Revenez bientôt, de nouvelles pièces arrivent régulièrement.</p>
+      </div>
+    );
+  }
 
   return (
     <div ref={topRef} className="mx-auto max-w-[1600px] scroll-mt-24 space-y-5 p-4 md:p-6">

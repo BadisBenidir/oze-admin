@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Search, Zap, RefreshCw, Package, Undo2, Archive } from 'lucide-react';
+import { Search, Zap, RefreshCw, Package, Undo2, Archive, Lock, Unlock } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 
@@ -45,6 +45,33 @@ export const InstantBuyManager: React.FC = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Blocage de la page côté espace pro (0254).
+  const [locked, setLocked] = useState(false);
+  const [lockMessage, setLockMessage] = useState('');
+  const [lockBusy, setLockBusy] = useState(false);
+  useEffect(() => {
+    supabase.rpc('get_instant_buy_lock').then(({ data }) => {
+      const row = data as { locked?: boolean; message?: string | null } | null;
+      setLocked(Boolean(row?.locked));
+      setLockMessage(row?.message || '');
+    });
+  }, []);
+
+  const saveLock = async (nextLocked: boolean) => {
+    setLockBusy(true);
+    setError(null);
+    const { data, error: lockError } = await supabase.rpc('admin_set_instant_buy_lock', { p_locked: nextLocked, p_message: lockMessage });
+    setLockBusy(false);
+    if (lockError) {
+      setError(lockError.message);
+      return;
+    }
+    const row = data as { locked?: boolean; message?: string | null } | null;
+    setLocked(Boolean(row?.locked));
+    setLockMessage(row?.message || '');
+    setNotice(row?.locked ? "Page Achat immédiat bloquée : les revendeurs voient le cadenas." : 'Page Achat immédiat ouverte aux revendeurs.');
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -159,6 +186,51 @@ export const InstantBuyManager: React.FC = () => {
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Actualiser
         </button>
+      </div>
+
+      <div className={`rounded-xl border p-4 ${locked ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {locked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5 text-gray-500" />}
+            <div>
+              <p className="font-medium">{locked ? 'Page bloquée' : 'Page ouverte'}</p>
+              <p className={`text-sm ${locked ? 'text-gray-300' : 'text-gray-500'}`}>
+                {locked
+                  ? 'Les revendeurs voient un cadenas et le message ci-dessous, aucun article.'
+                  : 'Les revendeurs voient les articles en achat immédiat.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => saveLock(!locked)}
+            disabled={lockBusy}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 ${
+              locked ? 'bg-white text-gray-900 hover:bg-gray-100' : 'bg-gray-900 text-white hover:bg-gray-800'
+            }`}
+          >
+            {locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+            {lockBusy ? 'En cours…' : locked ? 'Débloquer la page' : 'Bloquer la page'}
+          </button>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            value={lockMessage}
+            onChange={(e) => setLockMessage(e.target.value)}
+            placeholder="Message affiché sous le cadenas (par défaut : Aucun article disponible pour le moment.)"
+            className="min-w-[240px] flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-gray-400 focus:outline-none"
+          />
+          {locked && (
+            <button
+              type="button"
+              onClick={() => saveLock(true)}
+              disabled={lockBusy}
+              className="rounded-lg border border-white/30 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-50"
+            >
+              Enregistrer le message
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
