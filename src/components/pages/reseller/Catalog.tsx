@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Badge } from '../../ui/Badge';
 import { supabase } from '../../../lib/supabase';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useB2BCatalog, B2BCatalogItem, B2BCatalogSort } from '../../../hooks/useB2BCatalog';
@@ -9,7 +8,6 @@ import { useB2BCart } from '../../../hooks/useB2BCart';
 // instances = deux états séparés qui écrivent le même localStorage sans se
 // notifier l'une l'autre. C'est ce qui causait un panier "ajouté" qui ne se
 // reflétait dans le badge/la page panier qu'après rechargement complet.
-import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
 import { DropPreviewBadge } from './DropPreviewBadge';
 import { ScheduleAnnouncement } from './ScheduleAnnouncement';
 
@@ -220,16 +218,30 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
         />
       )}
 
-      <div>
-        <h2 className="flex items-center gap-2 text-xl font-semibold text-gray-900">
-          {instantBuy && <Zap className="h-5 w-5" />}
-          {instantBuy ? 'Achat immédiat' : 'Catalogue'}
-        </h2>
-        <p className="text-sm text-gray-500">
-          {instantBuy
-            ? 'Pièces disponibles tout de suite, sans attendre un drop : ajoutez au panier et payez.'
-            : 'Les pièces en vente, réservées aux membres du Club.'}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gray-200 pb-5">
+        <div>
+          <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-gray-900">
+            {instantBuy && <Zap className="h-6 w-6" />}
+            {instantBuy ? 'Achat immédiat' : 'Catalogue'}
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            {instantBuy
+              ? 'Pièces disponibles tout de suite, sans attendre un drop.'
+              : 'Les pièces en vente, réservées aux membres du Club.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          {hasActiveFilters && (
+            <button onClick={resetFilters} className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900">
+              <RotateCcw className="h-3.5 w-3.5" /> Réinitialiser
+            </button>
+          )}
+          {!loading && (
+            <span className="rounded-full bg-gray-900 px-3 py-1 font-medium text-white">
+              {totalCount} pièce{totalCount > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -289,17 +301,6 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
           <option value="price_asc">Prix croissant</option>
           <option value="price_desc">Prix décroissant</option>
         </select>
-      </div>
-
-      <div className="flex min-h-[40px] flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-600">
-          {loading ? 'Chargement…' : `${totalCount} pièce${totalCount > 1 ? 's' : ''} disponible${totalCount > 1 ? 's' : ''}`}
-        </p>
-        {hasActiveFilters && (
-          <button onClick={resetFilters} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900">
-            <RotateCcw className="h-3.5 w-3.5" /> Réinitialiser les filtres
-          </button>
-        )}
       </div>
 
       {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Erreur : {error}</p>}
@@ -405,8 +406,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
         {hasDiscount && (
           <span className="absolute left-2 top-2 rounded-full bg-red-600 px-2.5 py-1 text-xs font-semibold text-white">-{discountPercent}%</span>
         )}
+        {product.condition && (
+          <span className="absolute right-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-gray-900 shadow-sm">
+            État {product.condition.replace(/^grade\s*/i, '')}
+          </span>
+        )}
         {isDropPreview && (
-          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-gray-900/90 px-2.5 py-1 text-[11px] font-semibold text-white">
+          <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-gray-900/90 px-2.5 py-1 text-[11px] font-semibold text-white">
             <Eye className="h-3 w-3" />
             Avant-première
           </span>
@@ -425,19 +431,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
           </div>
         )}
       </div>
-      <div className="flex flex-1 flex-col gap-1.5 p-4 text-sm">
-        <div className="flex min-h-[1.25rem] justify-end">
-          {isGrade(product.condition) ? (
-            <Badge variant={GRADE_VARIANTS[product.condition]}>État {product.condition}</Badge>
-          ) : (
-            product.condition && <span className="text-gray-500">État {product.condition}</span>
-          )}
-        </div>
-        <p className="mt-1 text-center text-base font-semibold uppercase tracking-[0.2em] text-gray-900">{product.brand?.name || '—'}</p>
+      <div className="flex flex-1 flex-col gap-1 p-4 text-sm">
+        <p className="text-center text-base font-semibold uppercase tracking-[0.2em] text-gray-900">{product.brand?.name || '—'}</p>
         <p className="line-clamp-2 min-h-[2.5rem] text-center text-gray-600">{product.name}</p>
-        <div className="mt-auto space-y-2 border-t border-gray-100 pt-2">
+        <div className="mt-auto space-y-3 pt-2">
           <div className="flex items-baseline justify-center gap-2">
-            <span className="text-lg font-semibold text-gray-900">{product.price.toFixed(0)} €</span>
+            <span className="text-xl font-semibold text-gray-900">{product.price.toFixed(0)} €</span>
             {hasDiscount && <span className="text-sm text-gray-400 line-through">{product.original_price!.toFixed(0)} €</span>}
           </div>
           {isDropPreview ? (

@@ -1,22 +1,13 @@
 import React, { useState } from 'react';
 import { Menu, User, LogOut, ChevronDown, Building2, ShoppingBag, Wallet, Users } from 'lucide-react';
 import { useResellerAuth } from '../../hooks/useResellerAuth';
+import logo from '../landing/assets/logo_oze_paris_b2b.png';
 
 interface ResellerHeaderProps {
   activeTab: string;
   onMenuToggle: () => void;
   onTabChange?: (tab: string) => void;
 }
-
-const TITLES: Record<string, string> = {
-  catalog: 'Catalogue',
-  'instant-buy': 'Achat Immédiat',
-  'my-orders': 'Mes commandes',
-  wallet: 'Mon Portefeuille',
-  team: 'Mon équipe',
-  auctions: 'Enchères',
-  profile: 'Mon profil',
-};
 
 // Pages du compte, retirées de la barre de navigation (resellerNavigation.ts).
 const ACCOUNT_LINKS = [
@@ -49,9 +40,15 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
               <Menu className="h-5 w-5" />
             </button>
           </div>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900">{TITLES[activeTab] || 'Portail Revendeur'}</h1>
-          {profile && !profile.hide_identity && (
-            <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+          {/* Le nom de la page est déjà le titre de chaque page : ici, la marque. */}
+          <div className="flex items-center gap-3">
+            <img src={logo} alt="OZË Paris" className="h-8 w-auto md:h-9" />
+            <span className="hidden border-l border-gray-200 pl-3 text-xs font-medium uppercase tracking-[0.2em] text-gray-500 sm:inline">
+              Espace Pro
+            </span>
+          </div>
+          {profile && !profile.hide_identity && profile.company_name && (
+            <p className="text-xs text-gray-500 flex items-center gap-1 mt-1.5">
               <Building2 className="h-3 w-3" /> {profile.company_name}
             </p>
           )}
