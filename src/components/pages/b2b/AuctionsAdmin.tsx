@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { supabase } from '../../../lib/supabase';
 import {
   Gavel, Plus, AlertCircle, Trophy, Radio, CheckCircle2, Trash2, ImageOff,
   Ticket, Receipt, Clock, Zap, TrendingUp, Pencil, Ban, Link2, ChevronUp, ChevronDown, Shuffle,
@@ -76,7 +77,21 @@ export const AuctionsAdmin: React.FC = () => {
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [previewLinksSession, setPreviewLinksSession] = useState<AuctionSession | null>(null);
 
-  const { items, loading: itemsLoading, error: itemsError, addItem, removeItem, generateOrder, cancelItem, moveItem, shuffleItems } = useAdminAuctionItems(selectedSessionId);
+  const { items, loading: itemsLoading, error: itemsError, refresh: refreshItems, addItem, removeItem, generateOrder, cancelItem, moveItem, shuffleItems } = useAdminAuctionItems(selectedSessionId);
+
+  // Pénalité de retard d'un lot impayé : annulée / rétablie sans toucher au dû
+  // (admin_set_auction_late_fee_waived, 0210 — le total redevient le prix du lot).
+  const [waivingOrderId, setWaivingOrderId] = useState<string | null>(null);
+  const toggleLateFee = async (orderId: string, waive: boolean) => {
+    setWaivingOrderId(orderId);
+    const { error: waiveError } = await supabase.rpc('admin_set_auction_late_fee_waived', { p_order_id: orderId, p_waived: waive });
+    setWaivingOrderId(null);
+    if (waiveError) {
+      alert(waiveError.message);
+      return;
+    }
+    await refreshItems();
+  };
 
   const handleMoveItem = async (id: string, direction: -1 | 1) => {
     const result = await moveItem(id, direction);
@@ -460,6 +475,18 @@ export const AuctionsAdmin: React.FC = () => {
                                       // qui supprime le dû, lève la restriction (0166) et remet l'article en brouillon B2B.
                                       <div className="flex items-center gap-1.5">
                                         <Badge variant="danger">En retard</Badge>
+                                        <button
+                                          onClick={() => toggleLateFee(item.order_id!, !item.order_late_fee_waived)}
+                                          disabled={waivingOrderId === item.order_id}
+                                          className="whitespace-nowrap rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                                          title={
+                                            item.order_late_fee_waived
+                                              ? 'Rétablir la pénalité de retard (5 % du lot par jour)'
+                                              : 'Supprimer la pénalité de retard : le revendeur doit toujours payer le lot'
+                                          }
+                                        >
+                                          {waivingOrderId === item.order_id ? '…' : item.order_late_fee_waived ? 'Rétablir la pénalité' : 'Annuler la pénalité'}
+                                        </button>
                                         <button
                                           onClick={() => setCancellingItem(item)}
                                           className="whitespace-nowrap rounded-md border border-red-200 bg-white px-2 py-0.5 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50"
