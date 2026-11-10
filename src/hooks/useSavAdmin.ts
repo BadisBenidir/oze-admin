@@ -30,6 +30,7 @@ export interface SavAdminTicket {
   last_client_message_at: string | null;
   last_team_message_at: string | null;
   resolved_at: string | null;
+  last_team_read_at: string | null;
   company_name: string | null;
   client_name: string | null;
   client_email: string | null;
@@ -37,6 +38,8 @@ export interface SavAdminTicket {
   assignee_name: string | null;
   /** Le client a écrit après la dernière réponse de l'équipe. */
   awaiting_team: boolean;
+  /** Nouveau ticket jamais ouvert, ou message client depuis la dernière ouverture (0266). */
+  unread: boolean;
 }
 
 const TICKET_SELECT =
@@ -45,7 +48,7 @@ const TICKET_SELECT =
   'assignee:profiles!sav_tickets_assigned_to_fkey(first_name, last_name, email)';
 
 type Person = { first_name: string | null; last_name: string | null; email: string | null } | null;
-type TicketRow = Omit<SavAdminTicket, 'company_name' | 'client_name' | 'client_email' | 'order_number' | 'assignee_name' | 'awaiting_team'> & {
+type TicketRow = Omit<SavAdminTicket, 'company_name' | 'client_name' | 'client_email' | 'order_number' | 'assignee_name' | 'awaiting_team' | 'unread'> & {
   reseller: { company_name: string | null } | null;
   order: { order_number: string | null } | null;
   creator: Person;
@@ -65,6 +68,9 @@ const mapTicket = (r: TicketRow): SavAdminTicket => {
     awaiting_team:
       Boolean(rest.last_client_message_at) &&
       (!rest.last_team_message_at || rest.last_client_message_at! > rest.last_team_message_at),
+    unread:
+      rest.status !== 'closed' &&
+      (!rest.last_team_read_at || Boolean(rest.last_client_message_at && rest.last_client_message_at > rest.last_team_read_at)),
   };
 };
 
@@ -99,7 +105,11 @@ export interface SavCounters {
   waiting_client_count: number;
   urgent_count: number;
   disputes_open_count: number;
+  unread_count: number;
 }
+
+/** Émis quand une fiche est ouverte (lue) : pastilles et compteurs à jour tout de suite. */
+export const SAV_ADMIN_READ_EVENT = 'oze-sav-admin-read';
 
 export const useSavCounters = (enabled = true, pollMs = 60000) => {
   const [counters, setCounters] = useState<SavCounters | null>(null);
@@ -112,7 +122,13 @@ export const useSavCounters = (enabled = true, pollMs = 60000) => {
     if (!enabled) return;
     refresh();
     const t = window.setInterval(refresh, pollMs);
-    return () => window.clearInterval(t);
+    window.addEventListener(SAV_ADMIN_READ_EVENT, refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener(SAV_ADMIN_READ_EVENT, refresh);
+      window.removeEventListener('focus', refresh);
+    };
   }, [enabled, refresh, pollMs]);
   return { counters, refresh };
 };
@@ -185,6 +201,9 @@ export const useSavTicketDetail = (ticketId: string | null) => {
     }
     const mapped = mapTicket(t as unknown as TicketRow);
     setTicket(mapped);
+    if (mapped.unread) {
+      supabase.rpc('sav_admin_mark_read', { p_ticket_id: ticketId }).then(() => window.dispatchEvent(new Event(SAV_ADMIN_READ_EVENT)));
+    }
 
     const [msgRes, evRes, otherRes, resellerRes, chatRes] = await Promise.all([
       supabase

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Clock, Inbox, LifeBuoy, RefreshCw, Scale, Search, MessageCircle, Bot } from 'lucide-react';
+import { AlertTriangle, Clock, Inbox, LifeBuoy, RefreshCw, Scale, Search, MessageCircle, Bot, Mail } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { SavAdminTicket, useSavAssignees, useSavCounters, useSavTickets } from '../../../hooks/useSavAdmin';
 import {
@@ -35,6 +35,7 @@ export const SavTicketList: React.FC<{ disputes?: boolean; onOpen: (id: string) 
   const assignees = useSavAssignees();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'' | 'open' | SavStatus>(disputes ? '' : 'open');
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [category, setCategory] = useState<'' | SavCategory>('');
   const [priority, setPriority] = useState<'' | SavPriority>('');
   const [assignee, setAssignee] = useState<'' | 'none' | string>('');
@@ -45,6 +46,7 @@ export const SavTicketList: React.FC<{ disputes?: boolean; onOpen: (id: string) 
     const q = norm(query.trim());
     const rows = tickets.filter((t) => {
       if (disputes && !t.is_dispute) return false;
+      if (unreadOnly && !t.unread) return false;
       if (status === 'open' ? ['resolved', 'closed'].includes(t.status) : status && t.status !== status) return false;
       if (category && t.category !== category) return false;
       if (priority && t.priority !== priority) return false;
@@ -63,7 +65,7 @@ export const SavTicketList: React.FC<{ disputes?: boolean; onOpen: (id: string) 
       if (sort === 'priority') return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || lastActivity(b).localeCompare(lastActivity(a));
       return lastActivity(b).localeCompare(lastActivity(a));
     });
-  }, [tickets, disputes, status, category, priority, assignee, decision, query, sort]);
+  }, [tickets, disputes, unreadOnly, status, category, priority, assignee, decision, query, sort]);
 
   const disputeTotals = useMemo(() => {
     if (!disputes) return null;
@@ -75,6 +77,16 @@ export const SavTicketList: React.FC<{ disputes?: boolean; onOpen: (id: string) 
   }, [disputes, filtered]);
 
   const counterCards = [
+    {
+      label: 'Messages non lus',
+      value: counters?.unread_count,
+      icon: Mail,
+      onClick: () => {
+        setUnreadOnly((v) => !v);
+        setStatus('');
+      },
+      tone: 'text-red-600',
+    },
     { label: 'Ouverts', value: counters?.open_count, icon: Inbox, onClick: () => setStatus('open'), tone: 'text-gray-900' },
     { label: 'En attente client', value: counters?.waiting_client_count, icon: Clock, onClick: () => setStatus('waiting_client'), tone: 'text-amber-600' },
     { label: 'Urgents', value: counters?.urgent_count, icon: AlertTriangle, onClick: () => { setStatus('open'); setPriority('urgent'); }, tone: 'text-red-600' },
@@ -108,13 +120,15 @@ export const SavTicketList: React.FC<{ disputes?: boolean; onOpen: (id: string) 
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {counterCards.map((c) => (
           <button
             key={c.label}
             onClick={c.onClick}
             disabled={!c.onClick || disputes}
-            className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left transition-colors enabled:hover:border-gray-300"
+            className={`flex items-center gap-3 rounded-xl border bg-white p-4 text-left transition-colors enabled:hover:border-gray-300 ${
+              c.label === 'Messages non lus' && unreadOnly ? 'border-red-300 ring-2 ring-red-100' : 'border-gray-200'
+            }`}
           >
             <c.icon className={`h-5 w-5 ${c.tone}`} />
             <div>
@@ -216,12 +230,9 @@ export const SavTicketList: React.FC<{ disputes?: boolean; onOpen: (id: string) 
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">Aucun ticket.</td></tr>
               ) : (
                 filtered.map((t) => (
-                  <tr key={t.id} onClick={() => onOpen(t.id)} className="cursor-pointer hover:bg-gray-50">
+                  <tr key={t.id} onClick={() => onOpen(t.id)} className={`cursor-pointer ${t.unread ? 'bg-red-50/40 hover:bg-red-50' : 'hover:bg-gray-50'}`}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {t.awaiting_team && !['resolved', 'closed'].includes(t.status) && (
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" title="Nouveau message client" />
-                        )}
                         <span className="font-mono text-xs text-gray-500">{t.number}</span>
                         {t.source === 'chatbot' ? (
                           <Bot className="h-3.5 w-3.5 text-gray-400" aria-label="Ouvert par le chatbot" />
@@ -229,7 +240,14 @@ export const SavTicketList: React.FC<{ disputes?: boolean; onOpen: (id: string) 
                           <MessageCircle className="h-3.5 w-3.5 text-gray-300" aria-label="Formulaire" />
                         )}
                       </div>
-                      <div className="mt-0.5 max-w-[320px] truncate font-medium text-gray-900">{t.subject}</div>
+                      <div className="mt-0.5 flex items-center gap-2">
+                        {t.unread && (
+                          <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                            {t.last_client_message_at && t.last_team_read_at ? 'Nouveau message' : 'Nouveau'}
+                          </span>
+                        )}
+                        <span className={`max-w-[320px] truncate text-gray-900 ${t.unread ? 'font-semibold' : 'font-medium'}`}>{t.subject}</span>
+                      </div>
                       {t.order_number && <div className="text-xs text-gray-500">Commande {t.order_number}</div>}
                     </td>
                     <td className="px-4 py-3">

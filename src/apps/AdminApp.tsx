@@ -23,7 +23,8 @@ function AdminApp() {
   const pendingGiftRewardsCount = usePendingGiftRewardsCount(isAdmin);
   const pendingEntrupyCount = usePendingEntrupyCount(isAdmin);
   const { counters: savCounters } = useSavCounters(isAdmin);
-  const newSavCount = savCounters?.new_count ?? 0;
+  // Tickets non lus (nouveaux ou avec un message client depuis la dernière ouverture, 0266).
+  const newSavCount = savCounters?.unread_count ?? savCounters?.new_count ?? 0;
 
   // Compte employé (0208) : seulement les pages cochées par le propriétaire ;
   // « Équipe » réservée au propriétaire ; chiffres masqués d'office sans le
