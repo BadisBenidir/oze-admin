@@ -7,6 +7,7 @@ import { supabase } from '../../../lib/supabase';
 import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
 import { DropPreviewBadge } from './DropPreviewBadge';
 import { ImageLightbox } from '../../ui/ImageLightbox';
+import { ZoomableImage } from '../../ui/ZoomableImage';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -186,17 +187,18 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
           <div className="bg-gray-100 rounded-lg overflow-hidden">
             <div className="relative h-80 md:h-96 flex items-center justify-center">
               {images.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setLightbox({ kind: 'main', index: activeIndex })}
-                  className="group relative h-full w-full cursor-zoom-in"
-                  title="Agrandir"
-                >
-                  <img src={images[activeIndex]} alt={product.name} className="w-full h-full object-cover" />
-                  <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs text-white opacity-80 group-hover:opacity-100">
+                // Loupe au survol (molette pour grossir), clic = plein écran.
+                <div className="group relative h-full w-full" title="Agrandir">
+                  <ZoomableImage
+                    src={images[activeIndex]}
+                    alt={product.name}
+                    fit="cover"
+                    onOpen={() => setLightbox({ kind: 'main', index: activeIndex })}
+                  />
+                  <span className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs text-white opacity-80 group-hover:opacity-0">
                     <ZoomIn className="h-3.5 w-3.5" /> Agrandir
                   </span>
-                </button>
+                </div>
               ) : (
                 <ImageOff className="h-12 w-12 text-gray-300" />
               )}
