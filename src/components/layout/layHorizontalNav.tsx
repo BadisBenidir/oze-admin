@@ -20,7 +20,7 @@ export const HorizontalNav: React.FC<HorizontalNavProps> = ({
       <div className="px-4 md:px-6">
         <div className="flex items-center justify-between overflow-hidden">
           <div className="flex items-center gap-1 md:gap-4 min-w-0">
-            {navigationItems.map((item) => {
+            {navigationItems.filter((item) => !item.hidden).map((item) => {
               const IconComponent = item.icon as any;
               const isActive = activeTab === item.id;
 

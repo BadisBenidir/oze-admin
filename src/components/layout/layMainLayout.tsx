@@ -13,7 +13,7 @@ interface MainLayoutProps {
   onTabChange: (tab: string) => void;
   onSubTabChange: (subTab: string) => void;
   navigationItems?: MenuItem[];
-  renderHeader?: (props: { activeTab: string; onMenuToggle: () => void }) => React.ReactNode;
+  renderHeader?: (props: { activeTab: string; onMenuToggle: () => void; onTabChange: (tab: string) => void }) => React.ReactNode;
   /** Contenu additionnel aligné à droite de la barre de navigation sombre (desktop uniquement). */
   navRightContent?: React.ReactNode;
   /** Contenu additionnel affiché en bas de la liste du menu mobile (hamburger). */
@@ -44,7 +44,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   return (
     <div className="min-h-screen bg-gray-50">
       {renderHeader
-        ? renderHeader({ activeTab, onMenuToggle: toggleMobileMenu })
+        ? renderHeader({ activeTab, onMenuToggle: toggleMobileMenu, onTabChange })
         : <Header activeTab={activeTab} onMenuToggle={toggleMobileMenu} />}
       
       {/* Mobile Menu Overlay */}
@@ -58,7 +58,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             <div className="py-4">
               {/* Mobile Navigation */}
               <nav className="space-y-1 px-4">
-                {navigationItems.map((item) => {
+                {navigationItems.filter((item) => !item.hidden).map((item) => {
                   const IconComponent = item.icon;
                   const isActive = activeTab === item.id;
                   

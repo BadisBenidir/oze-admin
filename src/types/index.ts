@@ -72,6 +72,8 @@ export interface MenuItem {
    * (qui reste celui de la barre de navigation horizontale). Absent : la
    * barre latérale retombe sur `label`. */
   sidebarLabel?: string;
+  /** Route conservée (URL, navigateTo) mais absente de la barre de navigation. */
+  hidden?: boolean;
 }
 
 export interface SubMenuItem {

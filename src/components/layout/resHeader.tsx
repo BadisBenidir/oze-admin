@@ -1,20 +1,29 @@
 import React, { useState } from 'react';
-import { Menu, User, LogOut, ChevronDown, Building2 } from 'lucide-react';
+import { Menu, User, LogOut, ChevronDown, Building2, ShoppingBag, Wallet } from 'lucide-react';
 import { useResellerAuth } from '../../hooks/useResellerAuth';
 
 interface ResellerHeaderProps {
   activeTab: string;
   onMenuToggle: () => void;
+  onTabChange?: (tab: string) => void;
 }
 
 const TITLES: Record<string, string> = {
   catalog: 'Catalogue',
   'my-orders': 'Mes commandes',
+  wallet: 'Mon Portefeuille',
   auctions: 'Enchères',
   profile: 'Mon profil',
 };
 
-export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMenuToggle }) => {
+// Pages du compte, retirées de la barre de navigation (resellerNavigation.ts).
+const ACCOUNT_LINKS = [
+  { id: 'profile', label: 'Mon profil', icon: User },
+  { id: 'my-orders', label: 'Mes commandes', icon: ShoppingBag },
+  { id: 'wallet', label: 'Mon Portefeuille', icon: Wallet },
+];
+
+export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMenuToggle, onTabChange }) => {
   const { profile, signOut } = useResellerAuth();
   // Identité masquée par l'admin (reseller_contacts.hide_identity, 0181) :
   // ni nom, ni email, ni entreprise dans l'en-tête (captures, partage d'écran).
@@ -67,6 +76,22 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
                     <p className="text-sm font-medium text-gray-900">{displayName}</p>
                     <p className="text-xs text-gray-500">{displayEmail}</p>
                   </div>
+                  {onTabChange &&
+                    ACCOUNT_LINKS.map(({ id, label, icon: Icon }) => (
+                      <button
+                        key={id}
+                        onClick={() => {
+                          onTabChange(id);
+                          setShowUserMenu(false);
+                        }}
+                        className={`w-full flex items-center space-x-3 px-4 py-3 text-sm transition-colors ${
+                          activeTab === id ? 'bg-gray-50 font-medium text-gray-900' : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span>{label}</span>
+                      </button>
+                    ))}
                   <button
                     onClick={() => {
                       signOut();

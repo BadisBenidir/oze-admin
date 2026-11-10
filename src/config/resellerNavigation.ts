@@ -8,12 +8,14 @@ export const resellerNavigationItems: MenuItem[] = [
   // Le suivi de livraison (statut + numéro de tracking) est intégré
   // directement dans "Mes commandes" — voir B2BOrdersList.tsx — plus
   // d'onglet séparé (ex-MyShipments.tsx/useMyShipments.ts, supprimés).
-  { id: 'my-orders', label: 'Mes commandes', icon: ShoppingBag, path: '/mes-commandes' },
+  // « Mes commandes », « Mon Portefeuille » et « Mon profil » : dans le menu
+  // « Mon compte » de l'en-tête (resHeader.tsx), plus dans la barre — mêmes URLs.
+  { id: 'my-orders', label: 'Mes commandes', icon: ShoppingBag, path: '/mes-commandes', hidden: true },
   { id: 'sourcing', label: 'Sourcing sur mesure', icon: PackageSearch, path: '/sourcing-sur-mesure' },
   { id: 'auctions', label: 'Enchères', icon: Gavel, path: '/encheres' },
   { id: 'market-results', label: 'Résultats de ventes', icon: TrendingUp, path: '/ventes' },
-  { id: 'wallet', label: 'Mon Portefeuille', icon: Wallet, path: '/portefeuille' },
-  { id: 'profile', label: 'Mon profil', icon: User, path: '/mon-profil' },
+  { id: 'wallet', label: 'Mon Portefeuille', icon: Wallet, path: '/portefeuille', hidden: true },
+  { id: 'profile', label: 'Mon profil', icon: User, path: '/mon-profil', hidden: true },
 ];
 
 /** Visible uniquement pour le contact principal de l'entreprise (voir ResellerApp). */
