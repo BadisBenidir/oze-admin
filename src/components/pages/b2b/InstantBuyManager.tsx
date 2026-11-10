@@ -29,11 +29,11 @@ const STATUS_LABEL: Record<string, { label: string; variant: 'default' | 'info' 
 };
 
 /** Prix en achat immédiat (même règle que instant_buy_price, 0262) : prix
- * d'achat TTC × 1,50 sous 50 €, sinon × 1,40 si le prix dépasse 100 €,
+ * d'achat TTC × 1,55 sous 50 €, sinon × 1,40 si le prix dépasse 100 €,
  * sinon × 1,35 — au multiple de 5 inférieur. */
 const instantPrice = (purchase: number | null): number | null => {
   if (!purchase || purchase <= 0) return null;
-  if (purchase < 50) return Math.floor((purchase * 1.5) / 5) * 5;
+  if (purchase < 50) return Math.floor((purchase * 1.55) / 5) * 5;
   const at40 = Math.floor((purchase * 1.4) / 5) * 5;
   return at40 > 100 ? at40 : Math.floor((purchase * 1.35) / 5) * 5;
 };
@@ -210,7 +210,7 @@ export const InstantBuyManager: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Achat immédiat</h2>
           <p className="text-sm text-gray-500">
-            Articles proposés dans l'onglet « Achat Immédiat » de l'espace pro. Prix appliqué automatiquement depuis le prix d'achat TTC : × 1,50 s'il est sous 50 €, sinon × 1,40 au-dessus de 100 € de prix de vente, × 1,35 en dessous.
+            Articles proposés dans l'onglet « Achat Immédiat » de l'espace pro. Prix appliqué automatiquement depuis le prix d'achat TTC : × 1,55 s'il est sous 50 €, sinon × 1,40 au-dessus de 100 € de prix de vente, × 1,35 en dessous.
           </p>
         </div>
         <button
@@ -459,7 +459,7 @@ export const InstantBuyManager: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-900">
                       {view === 'stock' && instantPrice(r.purchase_price) != null && instantPrice(r.purchase_price) !== Number(r.sale_price) ? (
-                        <span title="Prix appliqué en achat immédiat (50 % sous 50 € de prix d’achat, 40 % au-dessus de 100 €, 35 % entre les deux)">
+                        <span title="Prix appliqué en achat immédiat (55 % sous 50 € de prix d’achat, 40 % au-dessus de 100 €, 35 % entre les deux)">
                           <span className="text-gray-400 line-through">{EUR(r.sale_price)}</span>{' '}
                           <span className="font-medium">→ {EUR(instantPrice(r.purchase_price))}</span>
                         </span>

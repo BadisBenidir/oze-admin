@@ -1,7 +1,7 @@
 -- ============================================================================
--- Achat immédiat : marge de 50 % pour les pièces dont le prix de revient
+-- Achat immédiat : marge de 55 % pour les pièces dont le prix de revient
 -- (prix d'achat taxes comprises) est inférieur à 50 €.
---   prix de revient < 50 €      : × 1,50
+--   prix de revient < 50 €      : × 1,55
 --   sinon, prix > 100 €          : × 1,40
 --   sinon                        : × 1,35
 -- Toujours arrondi au multiple de 5 inférieur (0258). Les pièces déjà en
@@ -15,7 +15,7 @@ immutable
 as $$
   select case
     when coalesce(p_purchase_price, 0) <= 0 then null
-    when p_purchase_price < 50 then floor(p_purchase_price * 1.50 / 5) * 5
+    when p_purchase_price < 50 then floor(p_purchase_price * 1.55 / 5) * 5
     when floor(p_purchase_price * 1.40 / 5) * 5 > 100 then floor(p_purchase_price * 1.40 / 5) * 5
     else floor(p_purchase_price * 1.35 / 5) * 5
   end;
