@@ -3,7 +3,6 @@ import { Bot, ImagePlus, Loader2, MessageCircle, Maximize2, RotateCcw, Send, Tic
 import { supabase } from '../../lib/supabase';
 import { useResellerAuth } from '../../hooks/useResellerAuth';
 import { SavAttachment, uploadSavAttachments } from '../../lib/sav';
-import { useMySavUnreadCount } from '../../hooks/useMySavTickets';
 
 /**
  * Assistant SAV de l'espace pro (Edge Function sav-chat, 0263) : réponses en
@@ -198,7 +197,9 @@ export const SavChatPanel: React.FC<{
   /** Réponses de l'équipe non lues : bandeau vers « Mes demandes ». */
   unreadCount?: number;
   onOpenRequests?: () => void;
-}> = ({ onOpenTicket, onClose, onExpand, fullPage, unreadCount = 0, onOpenRequests }) => {
+  /** Nouveau message de l'assistant (réponse ou relance) : pastille de la bulle. */
+  onBotMessage?: () => void;
+}> = ({ onOpenTicket, onClose, onExpand, fullPage, unreadCount = 0, onOpenRequests, onBotMessage }) => {
   const { lines, send, reset, streaming, loadingHistory, closed, askStillNeeded, answerStillNeeded, firstName } = useSavChat();
   const [text, setText] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -208,6 +209,21 @@ export const SavChatPanel: React.FC<{
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [lines, closed, askStillNeeded]);
+
+  // Réponse de l'assistant terminée, ou relance « encore besoin d'aide ? ».
+  const wasStreaming = useRef(false);
+  useEffect(() => {
+    if (wasStreaming.current && !streaming) {
+      const last = lines[lines.length - 1];
+      if (last?.role === 'assistant' && last.text) onBotMessage?.();
+    }
+    wasStreaming.current = streaming;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streaming]);
+  useEffect(() => {
+    if (askStillNeeded) onBotMessage?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askStillNeeded]);
 
   const submit = (value = text) => {
     const v = value.trim();
@@ -397,19 +413,33 @@ export const SavChatPanel: React.FC<{
   );
 };
 
-/** Bulle flottante en bas à droite, sur toutes les pages de l'espace pro. */
-export const SavChatWidget: React.FC<{ onOpenTicket: (number: string) => void; onExpand: () => void; onOpenRequests: () => void }> = ({
-  onOpenTicket,
-  onExpand,
-  onOpenRequests,
-}) => {
+/**
+ * Bulle flottante en bas à droite, sur toutes les pages de l'espace pro.
+ * Le panneau reste monté quand il est fermé : une réponse en cours continue
+ * d'arriver, et la pastille rouge signale un message de l'assistant non vu
+ * (réponse ou relance après 30 min). Les réponses de l'équipe SAV sont, elles,
+ * signalées sur « Mon compte » (resHeader.tsx).
+ */
+export const SavChatWidget: React.FC<{ onOpenTicket: (number: string) => void; onExpand: () => void }> = ({ onOpenTicket, onExpand }) => {
   const [open, setOpen] = useState(false);
-  const unread = useMySavUnreadCount(true);
+  const [unread, setUnread] = useState(0);
+  const openRef = useRef(open);
+  openRef.current = open;
+  useEffect(() => {
+    if (open) setUnread(0);
+  }, [open]);
   return (
     <>
-      {open && (
-        <div className="fixed inset-0 z-50 sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[600px] sm:max-h-[calc(100vh-8rem)] sm:w-[400px] sm:overflow-hidden sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-2xl">
+      {(
+        <div
+          className={`fixed inset-0 z-50 sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[600px] sm:max-h-[calc(100vh-8rem)] sm:w-[400px] sm:overflow-hidden sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-2xl ${
+            open ? '' : 'hidden'
+          }`}
+        >
           <SavChatPanel
+            onBotMessage={() => {
+              if (!openRef.current) setUnread((n) => n + 1);
+            }}
             onClose={() => setOpen(false)}
             onExpand={() => {
               setOpen(false);
@@ -419,18 +449,13 @@ export const SavChatWidget: React.FC<{ onOpenTicket: (number: string) => void; o
               setOpen(false);
               onOpenTicket(n);
             }}
-            unreadCount={unread}
-            onOpenRequests={() => {
-              setOpen(false);
-              onOpenRequests();
-            }}
           />
         </div>
       )}
       <button
         onClick={() => setOpen((v) => !v)}
         className={`fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gray-900 text-white shadow-lg transition-transform hover:scale-105 sm:bottom-6 sm:right-6 ${open ? 'hidden sm:flex' : ''}`}
-        aria-label={unread > 0 ? `Assistance — ${unread} nouvelle(s) réponse(s)` : 'Assistance'}
+        aria-label={unread > 0 ? `Assistance — ${unread} nouveau(x) message(s)` : 'Assistance'}
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
         {!open && unread > 0 && (

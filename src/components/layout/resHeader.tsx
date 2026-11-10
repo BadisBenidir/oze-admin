@@ -65,7 +65,11 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
           >
             <div className="relative h-8 w-8 bg-gray-900 rounded-full flex items-center justify-center">
               <User className="h-4 w-4 text-white" />
-              {unreadRequests > 0 && <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-blue-600" />}
+              {unreadRequests > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-red-600 px-1 text-[10px] font-bold text-white">
+                  {unreadRequests}
+                </span>
+              )}
             </div>
             <div className="text-sm hidden sm:block">
               <p className="font-medium text-gray-900">{displayName}</p>
@@ -98,7 +102,7 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
                         <Icon className="h-4 w-4" />
                         <span className="flex-1 text-left">{label}</span>
                         {id === 'my-requests' && unreadRequests > 0 && (
-                          <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{unreadRequests}</span>
+                          <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{unreadRequests}</span>
                         )}
                       </button>
                     ))}
