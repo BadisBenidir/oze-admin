@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Bot, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Lock, LockOpen, Scale, Sparkles, User, XCircle } from 'lucide-react';
+import { ArrowLeft, Bot, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Lock, Unlock, Scale, Sparkles, User, XCircle } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
@@ -229,7 +229,7 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
               disabled={savingField === 'status'}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
-              <LockOpen className="h-4 w-4" /> <span className="hidden sm:inline">Rouvrir le ticket</span>
+              <Unlock className="h-4 w-4" /> <span className="hidden sm:inline">Rouvrir le ticket</span>
             </button>
           ) : (
             <button
