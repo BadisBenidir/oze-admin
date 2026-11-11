@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Bot, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Lock, Scale, Sparkles, User } from 'lucide-react';
+import { ArrowLeft, Bot, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Lock, LockOpen, Scale, Sparkles, User, XCircle } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
@@ -84,6 +84,10 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
   const [dispute, setDispute] = useState({ amount: '', decision: '' as '' | SavDisputeDecision, reason: '' });
   const [savingDispute, setSavingDispute] = useState(false);
   const chatUrls = useSignedAttachmentUrls(chat);
+  // Fermeture du ticket par l'équipe : dernier message au client (facultatif).
+  const [closing, setClosing] = useState(false);
+  const [closeMessage, setCloseMessage] = useState("Nous clôturons votre demande. Merci pour votre confiance ! Pour toute nouvelle question, notre assistant reste disponible depuis la bulle de discussion de votre espace pro.");
+  const [closeBusy, setCloseBusy] = useState(false);
 
   useEffect(() => {
     if (!ticket) return;
@@ -134,6 +138,28 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
     await refresh();
     live.notifyMessage();
     if (!internal) savBroadcast(`sav-reseller:${ticket.reseller_id}`);
+  };
+
+  /** Ferme le ticket : message final au client (aussi envoyé par email), puis statut « Fermé ». */
+  const closeTicket = async () => {
+    setCloseBusy(true);
+    setActionError(null);
+    const message = closeMessage.trim();
+    const { error: e } = message
+      ? await supabase.rpc('sav_admin_reply', {
+          p_ticket_id: ticket.id,
+          p_content: message,
+          p_internal: false,
+          p_attachments: [],
+          p_new_status: 'closed',
+        })
+      : await supabase.rpc('sav_admin_update_ticket', { p_ticket_id: ticket.id, p_patch: { status: 'closed' } });
+    setCloseBusy(false);
+    if (e) return setActionError(e.message);
+    setClosing(false);
+    await refresh();
+    live.notifyMessage();
+    savBroadcast(`sav-reseller:${ticket.reseller_id}`);
   };
 
   const suggest = async () => {
@@ -197,8 +223,56 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
             </div>
             <h1 className="truncate text-base font-semibold text-gray-900 sm:text-lg">{ticket.subject}</h1>
           </div>
+          {ticket.status === 'closed' ? (
+            <button
+              onClick={() => update('status', 'in_progress')}
+              disabled={savingField === 'status'}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <LockOpen className="h-4 w-4" /> <span className="hidden sm:inline">Rouvrir le ticket</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setClosing(true)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+            >
+              <XCircle className="h-4 w-4" /> <span className="hidden sm:inline">Fermer le ticket</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {closing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !closeBusy && setClosing(false)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-gray-900">Fermer le ticket {ticket.number} ?</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Le client voit sa demande « Fermée » et ne peut plus y répondre. Le message ci-dessous lui est envoyé dans la demande et par email
+              (laissez vide pour fermer sans message).
+            </p>
+            <textarea
+              value={closeMessage}
+              onChange={(e) => setCloseMessage(e.target.value)}
+              rows={5}
+              maxLength={5000}
+              className="mt-3 w-full rounded-lg border border-gray-200 p-3 text-sm text-gray-800 focus:border-gray-400 focus:outline-none"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setClosing(false)} disabled={closeBusy} className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100">
+                Annuler
+              </button>
+              <button
+                onClick={closeTicket}
+                disabled={closeBusy}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {closeBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                Fermer le ticket
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div>
         <p className="text-sm text-gray-500">
           {SAV_CATEGORY[ticket.category]} · ouvert le {formatSavDate(ticket.created_at)} par {ticket.client_name || '—'}

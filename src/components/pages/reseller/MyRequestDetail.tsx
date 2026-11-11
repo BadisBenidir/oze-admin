@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Bot, ChevronDown, ChevronUp, Loader2, User } from 'lucide-react';
+import { ArrowLeft, Bot, ChevronDown, ChevronUp, Loader2, Lock, User } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
@@ -81,9 +81,15 @@ export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> =
       </div>
 
       {closed ? (
-        <p className="rounded-lg bg-gray-50 p-3 text-center text-sm text-gray-500">
-          Cette demande est fermée. Pour toute nouvelle question, ouvrez une nouvelle demande.
-        </p>
+        <div className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-white p-4">
+          <Lock className="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
+          <div className="text-sm">
+            <p className="font-medium text-gray-900">Demande fermée par l'équipe OZË</p>
+            <p className="mt-0.5 text-gray-500">
+              Vous ne pouvez plus y répondre. Pour toute nouvelle question, notre assistant reste disponible depuis la bulle de discussion en bas à droite.
+            </p>
+          </div>
+        </div>
       ) : (
         <SavReplyBox placeholder="Votre message à l'équipe OZË…" submitLabel="Envoyer" onSubmit={reply} onTyping={live.notifyTyping} scrollKey={messages.length} />
       )}
