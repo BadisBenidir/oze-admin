@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FileText, ImagePlus, Lock, Loader2, Paperclip, Send, X } from 'lucide-react';
+import { FileText, ImagePlus, Lock, Loader2, Paperclip, Send, Sparkles, X } from 'lucide-react';
 import { ImageLightbox } from '../ui/ImageLightbox';
 import {
   SavAttachment,
@@ -25,6 +25,8 @@ export interface SavThreadMessage {
   /** Question Oui / Non de l'équipe (0269) et réponse du client. */
   yes_no?: boolean;
   yes_no_answer?: 'yes' | 'no' | null;
+  /** Proposition de remboursement détectée par l'IA (0271), vue équipe. */
+  action?: { type: 'refund'; order_number: string; amount: number } | null;
 }
 
 const isImage = (a: SavAttachment) => a.type.startsWith('image/') && a.type !== 'image/heic';
@@ -138,6 +140,14 @@ export const SavThread: React.FC<{
                 {m.content && <p className="whitespace-pre-wrap break-words">{m.content}</p>}
                 <SavAttachmentList attachments={m.attachments} urls={urls} />
               </div>
+              {viewer === 'team' && m.action?.type === 'refund' && (
+                <div className={`mt-1 flex ${mine ? 'justify-end' : ''}`}>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                    <Sparkles className="h-3 w-3" /> Proposition de remboursement détectée · {m.action.order_number} ·{' '}
+                    {Number(m.action.amount).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €
+                  </span>
+                </div>
+              )}
               {m.yes_no && (
                 <div className={`mt-2 flex flex-wrap items-center gap-2 ${mine ? 'justify-end' : ''}`}>
                   {m.yes_no_answer ? (

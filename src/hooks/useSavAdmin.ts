@@ -41,6 +41,26 @@ export interface SavAdminTicket {
   awaiting_team: boolean;
   /** Nouveau ticket jamais ouvert, ou message client depuis la dernière ouverture (0266). */
   unread: boolean;
+  /** Proposition de remboursement détectée par l'IA (0271). */
+  pending_action: SavPendingAction | null;
+}
+
+/** Proposition d'annulation / remboursement (0271, sav-detect-action). */
+export interface SavRefundAction {
+  type: 'refund';
+  order_id: string;
+  order_number: string;
+  /** Vide = toute la commande. */
+  order_item_ids: string[];
+  amount: number;
+}
+
+export interface SavPendingAction extends SavRefundAction {
+  message_id: string;
+  state: 'proposed' | 'accepted' | 'declined' | 'done' | 'dismissed';
+  /** Réponse du client : boutons Oui / Non, ou message écrit lu par l'IA. */
+  source?: 'buttons' | 'ai';
+  quote?: string | null;
 }
 
 const TICKET_SELECT =
@@ -184,6 +204,7 @@ export interface SavAdminMessage {
   created_at: string;
   yes_no: boolean;
   yes_no_answer: 'yes' | 'no' | null;
+  action: SavRefundAction | null;
 }
 
 export interface SavEvent {
@@ -221,6 +242,8 @@ export const useSavTicketDetail = (ticketId: string | null) => {
   const [chat, setChat] = useState<SavChatLine[]>([]);
   const [otherTickets, setOtherTickets] = useState<SavAdminTicket[]>([]);
   const [client, setClient] = useState<SavClientInfo | null>(null);
+  /** Solde exact du portefeuille de la personne qui a ouvert la demande. */
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -239,10 +262,10 @@ export const useSavTicketDetail = (ticketId: string | null) => {
       supabase.rpc('sav_admin_mark_read', { p_ticket_id: ticketId }).then(() => window.dispatchEvent(new Event(SAV_ADMIN_READ_EVENT)));
     }
 
-    const [msgRes, evRes, otherRes, resellerRes, chatRes] = await Promise.all([
+    const [msgRes, evRes, otherRes, resellerRes, chatRes, walletRes] = await Promise.all([
       supabase
         .from('sav_ticket_messages')
-        .select('id, author_type, author_id, content, internal, attachments, created_at, yes_no, yes_no_answer, author:profiles(first_name, last_name, email)')
+        .select('id, author_type, author_id, content, internal, attachments, created_at, yes_no, yes_no_answer, action, author:profiles(first_name, last_name, email)')
         .eq('ticket_id', ticketId)
         .order('created_at'),
       supabase
@@ -269,7 +292,12 @@ export const useSavTicketDetail = (ticketId: string | null) => {
             .eq('conversation_id', mapped.conversation_id)
             .order('created_at')
         : Promise.resolve({ data: [], error: null }),
+      mapped.created_by_profile_id
+        ? supabase.from('profiles').select('wallet_balance').eq('id', mapped.created_by_profile_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
     ]);
+    const wallet = walletRes.data as { wallet_balance: number | null } | null;
+    setWalletBalance(wallet ? Number(wallet.wallet_balance ?? 0) : null);
 
     setMessages(
       ((msgRes.data || []) as unknown as (Omit<SavAdminMessage, 'author_name'> & { author: Person })[]).map((m) => ({
@@ -308,5 +336,5 @@ export const useSavTicketDetail = (ticketId: string | null) => {
     refresh();
   }, [refresh]);
 
-  return { ticket, messages, events, chat, otherTickets, client, loading, error, refresh };
+  return { ticket, messages, events, chat, otherTickets, client, walletBalance, loading, error, refresh };
 };

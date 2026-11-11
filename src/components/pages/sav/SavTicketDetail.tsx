@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Bot, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Lock, Unlock, MessageCircleQuestion, Scale, Sparkles, User, XCircle, Zap } from 'lucide-react';
+import { ArrowLeft, Bot, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Lock, Unlock, MessageCircleQuestion, Scale, Sparkles, Undo2, User, Wallet, XCircle, Zap } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { B2BOrder, fetchB2BOrderById } from '../../../hooks/useB2BOrders';
 import { B2BOrderDetailModal } from '../b2b/B2BOrderDetailModal';
-import { useSavAssignees, useSavQuickReplies, useSavTicketDetail, SavEvent } from '../../../hooks/useSavAdmin';
+import { useSavAssignees, useSavQuickReplies, useSavTicketDetail, SavEvent, SavRefundAction } from '../../../hooks/useSavAdmin';
+import { SavRefundModal } from './SavRefundModal';
 import { SavReplyBox, SavThread, SavAttachmentList, SavTypingIndicator, useSignedAttachmentUrls } from '../../sav/SavThread';
 import { savBroadcast, useSavTicketLive } from '../../../hooks/useSavLive';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
@@ -66,7 +67,7 @@ const eventLabel = (e: SavEvent, assigneeName: (id: string | null) => string) =>
 /** Fiche d'un ticket SAV : fil, réponse / note interne, réglages, litige,
  * client, commande, conversation chatbot d'origine, journal. */
 export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; onOpenTicket: (id: string) => void }> = ({ ticketId, onBack, onOpenTicket }) => {
-  const { ticket, messages, events, chat, otherTickets, client, loading, error, refresh } = useSavTicketDetail(ticketId);
+  const { ticket, messages, events, chat, otherTickets, client, walletBalance, loading, error, refresh } = useSavTicketDetail(ticketId);
   // Temps réel : message du client sans recharger, « Prénom écrit… ».
   const live = useSavTicketLive(ticketId, 'team', refresh);
   const { can } = useAdminAuth();
@@ -92,6 +93,9 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
   const [closing, setClosing] = useState(false);
   const [closeMessage, setCloseMessage] = useState("Nous clôturons votre demande. Merci pour votre confiance ! Pour toute nouvelle question, notre assistant reste disponible depuis la bulle de discussion de votre espace pro.");
   const [closeBusy, setCloseBusy] = useState(false);
+  // « Annuler et rembourser » (0271) : proposition acceptée, ou commande liée.
+  const [refundOpen, setRefundOpen] = useState<{ action: SavRefundAction | null } | null>(null);
+  const [dismissing, setDismissing] = useState(false);
 
   useEffect(() => {
     if (!ticket) return;
@@ -129,6 +133,17 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
     }
   };
 
+  /** L'IA regarde si la réponse envoyée propose un remboursement : si oui, le
+   * client reçoit des boutons Oui / Non sous le message (sav-detect-action). */
+  const detectProposal = () => {
+    invokeEdgeFunction<{ action: unknown }>('sav-detect-action', { ticket_id: ticket.id, mode: 'team' }).then(({ data }) => {
+      if (!data?.action) return;
+      refresh();
+      live.notifyMessage();
+      savBroadcast(`sav-reseller:${ticket.reseller_id}`);
+    });
+  };
+
   const send = async (text: string, files: File[], internal: boolean) => {
     // Question Oui / Non : boutons côté client, « Non » ferme la demande.
     if (!internal && askYesNo) {
@@ -139,6 +154,7 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
       await refresh();
       live.notifyMessage();
       savBroadcast(`sav-reseller:${ticket.reseller_id}`);
+      detectProposal();
       return;
     }
     const attachments = files.length ? await uploadSavAttachments(files, `${ticket.reseller_id}/equipe`) : [];
@@ -152,7 +168,26 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
     if (e) throw new Error(e.message);
     await refresh();
     live.notifyMessage();
-    if (!internal) savBroadcast(`sav-reseller:${ticket.reseller_id}`);
+    if (!internal) {
+      savBroadcast(`sav-reseller:${ticket.reseller_id}`);
+      detectProposal();
+    }
+  };
+
+  const dismissProposal = async () => {
+    setDismissing(true);
+    const { error: e } = await supabase.rpc('sav_admin_set_pending_action', { p_ticket_id: ticket.id, p_state: 'dismissed', p_result: null });
+    setDismissing(false);
+    if (e) return setActionError(e.message);
+    await refresh();
+    live.notifyMessage();
+    savBroadcast(`sav-reseller:${ticket.reseller_id}`);
+  };
+
+  const afterRefund = async () => {
+    await refresh();
+    live.notifyMessage();
+    savBroadcast(`sav-reseller:${ticket.reseller_id}`);
   };
 
   /** Ferme le ticket : message final au client (aussi envoyé par email), puis statut « Fermé ». */
@@ -216,6 +251,7 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
   };
 
   const canDecide = can('refunds');
+  const pending = ticket.pending_action;
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-4 sm:p-6">
@@ -296,6 +332,61 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
       </div>
 
       {actionError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actionError}</div>}
+
+      {/* Proposition de remboursement détectée par l'IA (0271). */}
+      {pending && pending.state === 'accepted' && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="font-semibold text-emerald-900">
+              Le client a accepté le remboursement · {pending.order_number} · {EUR(pending.amount)}
+            </p>
+            <p className="text-emerald-800">
+              {pending.source === 'ai'
+                ? <>Détecté par l'IA dans son message{pending.quote ? <> : « {pending.quote} »</> : ''}. Vérifiez avant de valider.</>
+                : 'Réponse « Oui » au bouton de la proposition.'}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button onClick={dismissProposal} disabled={dismissing} className="rounded-lg px-3 py-2 text-sm text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">
+              Ignorer
+            </button>
+            {canDecide ? (
+              <button
+                onClick={() => setRefundOpen({ action: pending })}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+              >
+                <Undo2 className="h-4 w-4" /> Annuler et rembourser
+              </button>
+            ) : (
+              <span className="self-center text-xs text-emerald-800">Droit « remboursements » requis</span>
+            )}
+          </div>
+        </div>
+      )}
+      {pending && pending.state === 'proposed' && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm">
+          <Sparkles className="h-4 w-4 shrink-0 text-blue-600" />
+          <p className="min-w-0 flex-1 text-blue-900">
+            Remboursement proposé au client ({pending.order_number} · {EUR(pending.amount)}) : en attente de sa réponse Oui / Non.
+          </p>
+          <button onClick={dismissProposal} disabled={dismissing} className="rounded-lg px-3 py-1.5 text-blue-800 hover:bg-blue-100 disabled:opacity-50">
+            Retirer la proposition
+          </button>
+        </div>
+      )}
+      {pending && pending.state === 'declined' && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 text-sm">
+          <XCircle className="h-4 w-4 shrink-0 text-gray-400" />
+          <p className="min-w-0 flex-1 text-gray-700">
+            Le client a refusé le remboursement proposé ({pending.order_number})
+            {pending.source === 'ai' && pending.quote ? <> : « {pending.quote} »</> : '.'}
+          </p>
+          <button onClick={dismissProposal} disabled={dismissing} className="rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-50">
+            Masquer
+          </button>
+        </div>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* Fil + réponse */}
@@ -602,6 +693,14 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
               <div className="text-gray-700">{ticket.client_name}</div>
               {ticket.client_email && <a href={`mailto:${ticket.client_email}`} className="block text-gray-600 underline-offset-2 hover:underline">{ticket.client_email}</a>}
               {client?.contact_phone && <div className="text-gray-600">{client.contact_phone}</div>}
+              {walletBalance != null && (
+                <div className="flex items-center gap-1.5 pt-1 text-gray-700">
+                  <Wallet className="h-4 w-4 text-gray-400" /> Portefeuille :{' '}
+                  <strong className="text-gray-900">
+                    {walletBalance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                  </strong>
+                </div>
+              )}
               {client && (
                 <div className="pt-1 text-xs text-gray-500">
                   {client.account_type === 'subscriber' ? 'Abonné Club B2B' : 'Entreprise'} · compte {client.status}
@@ -624,6 +723,14 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
               </button>
             ) : (
               <p className="text-sm text-gray-400">Aucune commande liée.</p>
+            )}
+            {ticket.order_id && canDecide && (
+              <button
+                onClick={() => setRefundOpen({ action: null })}
+                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+              >
+                <Undo2 className="h-4 w-4" /> Annuler et rembourser
+              </button>
             )}
           </Section>
 
@@ -662,6 +769,15 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
       </div>
 
       {order && <B2BOrderDetailModal order={order} onClose={() => setOrder(null)} onOrderUpdated={() => {}} />}
+      {refundOpen && (
+        <SavRefundModal
+          ticket={ticket}
+          action={refundOpen.action}
+          walletBalance={walletBalance}
+          onClose={() => setRefundOpen(null)}
+          onDone={afterRefund}
+        />
+      )}
     </div>
   );
 };

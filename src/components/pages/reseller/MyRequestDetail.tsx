@@ -6,6 +6,7 @@ import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useMySavTicket } from '../../../hooks/useMySavTickets';
 import { SavReplyBox, SavThread, SavTypingIndicator } from '../../sav/SavThread';
 import { savBroadcast, useSavTicketLive } from '../../../hooks/useSavLive';
+import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 import { SAV_CATEGORY, SAV_STATUS_CLIENT, formatSavDate, uploadSavAttachments } from '../../../lib/sav';
 
 /** Détail d'une demande (/mes-demandes/SAV-AAAA-NNNN) : fil client / équipe,
@@ -44,6 +45,16 @@ export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> =
     await refresh();
     live.notifyMessage();
     savBroadcast('sav-admin');
+    // Réponse écrite à une proposition de remboursement : l'IA la lit et
+    // prévient l'équipe si le client accepte ou refuse (sav-detect-action).
+    if (messages.some((m) => m.yes_no && !m.yes_no_answer)) {
+      invokeEdgeFunction<{ decision: string | null }>('sav-detect-action', { ticket_id: ticket.id, mode: 'client' }).then(({ data }) => {
+        if (!data?.decision) return;
+        refresh();
+        live.notifyMessage();
+        savBroadcast('sav-admin');
+      });
+    }
   };
 
   const closed = ticket.status === 'closed';
