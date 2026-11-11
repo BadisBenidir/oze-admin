@@ -178,18 +178,28 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-4 sm:p-6">
-      <div>
-        <button onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
-          <ArrowLeft className="h-4 w-4" /> Tous les tickets
-        </button>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-sm text-gray-500">{ticket.number}</span>
-          <Badge variant={SAV_STATUS[ticket.status].variant}>{SAV_STATUS[ticket.status].label}</Badge>
-          <Badge variant={SAV_PRIORITY[ticket.priority].variant}>{SAV_PRIORITY[ticket.priority].label}</Badge>
-          {ticket.is_dispute && <Badge variant="purple">Litige</Badge>}
-          {ticket.source === 'chatbot' && <Badge variant="default">Chatbot</Badge>}
+      {/* En-tête collant : retour à la liste sans remonter toute la discussion. */}
+      <div className="sticky top-0 z-20 -mx-4 border-b border-gray-200 bg-gray-50/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Tous les tickets</span>
+          </button>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-xs text-gray-500">{ticket.number}</span>
+              <Badge variant={SAV_STATUS[ticket.status].variant}>{SAV_STATUS[ticket.status].label}</Badge>
+              <Badge variant={SAV_PRIORITY[ticket.priority].variant}>{SAV_PRIORITY[ticket.priority].label}</Badge>
+              {ticket.is_dispute && <Badge variant="purple">Litige</Badge>}
+              {ticket.source === 'chatbot' && <Badge variant="default">Chatbot</Badge>}
+            </div>
+            <h1 className="truncate text-base font-semibold text-gray-900 sm:text-lg">{ticket.subject}</h1>
+          </div>
         </div>
-        <h1 className="mt-1 text-xl font-semibold text-gray-900">{ticket.subject}</h1>
+      </div>
+      <div>
         <p className="text-sm text-gray-500">
           {SAV_CATEGORY[ticket.category]} · ouvert le {formatSavDate(ticket.created_at)} par {ticket.client_name || '—'}
           {ticket.company_name ? ` (${ticket.company_name})` : ''}

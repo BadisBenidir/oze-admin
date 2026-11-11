@@ -50,13 +50,25 @@ export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> =
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
-      <div>
-        {back}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-sm text-gray-500">{ticket.number}</span>
-          <Badge variant={SAV_STATUS_CLIENT[ticket.status].variant}>{SAV_STATUS_CLIENT[ticket.status].label}</Badge>
+      {/* En-tête collant : retour à « Mes demandes » sans remonter toute la discussion. */}
+      <div className="sticky top-0 z-20 -mx-4 border-b border-gray-200 bg-gray-50/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Mes demandes</span>
+          </button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-gray-500">{ticket.number}</span>
+              <Badge variant={SAV_STATUS_CLIENT[ticket.status].variant}>{SAV_STATUS_CLIENT[ticket.status].label}</Badge>
+            </div>
+            <h1 className="truncate text-base font-semibold text-gray-900 sm:text-lg">{ticket.subject}</h1>
+          </div>
         </div>
-        <h1 className="mt-1 text-xl font-semibold text-gray-900">{ticket.subject}</h1>
+      </div>
+      <div>
         <p className="text-sm text-gray-500">
           {SAV_CATEGORY[ticket.category]}
           {ticket.order_number ? ` · Commande ${ticket.order_number}` : ''} · ouverte le {formatSavDate(ticket.created_at)}
