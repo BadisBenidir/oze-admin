@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { SavTicketList } from './SavTicketList';
 import { SavTicketDetail } from './SavTicketDetail';
 import { SavKnowledgeBase } from './SavKnowledgeBase';
+import { SavQuickReplies } from './SavQuickReplies';
 
 /** Onglet « SAV » de l'admin : Tickets, Litiges, Base de connaissances. */
 export const SavAdmin: React.FC<{ activeSubTab: string }> = ({ activeSubTab }) => {
@@ -12,6 +13,7 @@ export const SavAdmin: React.FC<{ activeSubTab: string }> = ({ activeSubTab }) =
   }, [activeSubTab]);
 
   if (activeSubTab === 'knowledge-base') return <SavKnowledgeBase />;
+  if (activeSubTab === 'quick-replies') return <SavQuickReplies />;
 
   if (openTicketId) {
     return (

@@ -141,6 +141,30 @@ export const useSavCounters = (enabled = true, pollMs = 60000) => {
   return { counters, refresh };
 };
 
+export interface SavQuickReply {
+  id: string;
+  title: string;
+  content: string;
+  yes_no: boolean;
+  active: boolean;
+  position: number;
+}
+
+/** Réponses rapides de l'équipe (0269). */
+export const useSavQuickReplies = (activeOnly = true) => {
+  const [replies, setReplies] = useState<SavQuickReply[]>([]);
+  const refresh = useCallback(async () => {
+    let q = supabase.from('sav_quick_replies').select('id, title, content, yes_no, active, position').order('position');
+    if (activeOnly) q = q.eq('active', true);
+    const { data } = await q;
+    setReplies((data || []) as SavQuickReply[]);
+  }, [activeOnly]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+  return { replies, refresh };
+};
+
 export const useSavAssignees = () => {
   const [assignees, setAssignees] = useState<{ id: string; name: string; email: string }[]>([]);
   useEffect(() => {
@@ -158,6 +182,8 @@ export interface SavAdminMessage {
   internal: boolean;
   attachments: SavAttachment[];
   created_at: string;
+  yes_no: boolean;
+  yes_no_answer: 'yes' | 'no' | null;
 }
 
 export interface SavEvent {
@@ -216,7 +242,7 @@ export const useSavTicketDetail = (ticketId: string | null) => {
     const [msgRes, evRes, otherRes, resellerRes, chatRes] = await Promise.all([
       supabase
         .from('sav_ticket_messages')
-        .select('id, author_type, author_id, content, internal, attachments, created_at, author:profiles(first_name, last_name, email)')
+        .select('id, author_type, author_id, content, internal, attachments, created_at, yes_no, yes_no_answer, author:profiles(first_name, last_name, email)')
         .eq('ticket_id', ticketId)
         .order('created_at'),
       supabase

@@ -22,6 +22,9 @@ export interface SavThreadMessage {
   attachments: SavAttachment[];
   created_at: string;
   internal?: boolean;
+  /** Question Oui / Non de l'équipe (0269) et réponse du client. */
+  yes_no?: boolean;
+  yes_no_answer?: 'yes' | 'no' | null;
 }
 
 const isImage = (a: SavAttachment) => a.type.startsWith('image/') && a.type !== 'image/heic';
@@ -85,7 +88,13 @@ export const useSignedAttachmentUrls = (messages: { attachments: SavAttachment[]
   return urls;
 };
 
-export const SavThread: React.FC<{ messages: SavThreadMessage[]; viewer: 'team' | 'client' }> = ({ messages, viewer }) => {
+export const SavThread: React.FC<{
+  messages: SavThreadMessage[];
+  viewer: 'team' | 'client';
+  /** Client : répondre à une question Oui / Non (absent = boutons inactifs). */
+  onAnswerYesNo?: (messageId: string, answer: 'yes' | 'no') => Promise<void>;
+}> = ({ messages, viewer, onAnswerYesNo }) => {
+  const [answering, setAnswering] = useState<string | null>(null);
   const urls = useSignedAttachmentUrls(messages);
   const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -129,6 +138,37 @@ export const SavThread: React.FC<{ messages: SavThreadMessage[]; viewer: 'team' 
                 {m.content && <p className="whitespace-pre-wrap break-words">{m.content}</p>}
                 <SavAttachmentList attachments={m.attachments} urls={urls} />
               </div>
+              {m.yes_no && (
+                <div className={`mt-2 flex flex-wrap items-center gap-2 ${mine ? 'justify-end' : ''}`}>
+                  {m.yes_no_answer ? (
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${m.yes_no_answer === 'yes' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                      Réponse : {m.yes_no_answer === 'yes' ? 'Oui' : 'Non'}
+                    </span>
+                  ) : viewer === 'client' && onAnswerYesNo ? (
+                    (['yes', 'no'] as const).map((a) => (
+                      <button
+                        key={a}
+                        disabled={answering !== null}
+                        onClick={async () => {
+                          setAnswering(m.id);
+                          try {
+                            await onAnswerYesNo(m.id, a);
+                          } finally {
+                            setAnswering(null);
+                          }
+                        }}
+                        className={`rounded-full px-5 py-2 text-sm font-medium disabled:opacity-50 ${
+                          a === 'yes' ? 'bg-gray-900 text-white hover:bg-gray-800' : 'border border-gray-300 bg-white text-gray-800 hover:bg-gray-50'
+                        }`}
+                      >
+                        {answering === m.id ? '…' : a === 'yes' ? 'Oui' : 'Non'}
+                      </button>
+                    ))
+                  ) : (
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">En attente d'une réponse Oui / Non</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         );

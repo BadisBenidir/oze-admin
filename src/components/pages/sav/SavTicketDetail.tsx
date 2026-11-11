@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Bot, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Lock, Unlock, Scale, Sparkles, User, XCircle } from 'lucide-react';
+import { ArrowLeft, Bot, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Lock, Unlock, MessageCircleQuestion, Scale, Sparkles, User, XCircle, Zap } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { B2BOrder, fetchB2BOrderById } from '../../../hooks/useB2BOrders';
 import { B2BOrderDetailModal } from '../b2b/B2BOrderDetailModal';
-import { useSavAssignees, useSavTicketDetail, SavEvent } from '../../../hooks/useSavAdmin';
+import { useSavAssignees, useSavQuickReplies, useSavTicketDetail, SavEvent } from '../../../hooks/useSavAdmin';
 import { SavReplyBox, SavThread, SavAttachmentList, SavTypingIndicator, useSignedAttachmentUrls } from '../../sav/SavThread';
 import { savBroadcast, useSavTicketLive } from '../../../hooks/useSavLive';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
@@ -75,6 +75,10 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
   const [draft, setDraft] = useState('');
   const [noteDraft, setNoteDraft] = useState('');
   const [statusAfterReply, setStatusAfterReply] = useState<'' | SavStatus>('waiting_client');
+  // Réponses rapides (0269) et question Oui / Non.
+  const { replies: quickReplies } = useSavQuickReplies();
+  const [showQuick, setShowQuick] = useState(false);
+  const [askYesNo, setAskYesNo] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [savingField, setSavingField] = useState<string | null>(null);
@@ -126,6 +130,17 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
   };
 
   const send = async (text: string, files: File[], internal: boolean) => {
+    // Question Oui / Non : boutons côté client, « Non » ferme la demande.
+    if (!internal && askYesNo) {
+      if (files.length) throw new Error('Une question Oui / Non ne peut pas porter de pièce jointe.');
+      const { error: e } = await supabase.rpc('sav_admin_ask_yes_no', { p_ticket_id: ticket.id, p_content: text });
+      if (e) throw new Error(e.message);
+      setAskYesNo(false);
+      await refresh();
+      live.notifyMessage();
+      savBroadcast(`sav-reseller:${ticket.reseller_id}`);
+      return;
+    }
     const attachments = files.length ? await uploadSavAttachments(files, `${ticket.reseller_id}/equipe`) : [];
     const { error: e } = await supabase.rpc('sav_admin_reply', {
       p_ticket_id: ticket.id,
@@ -328,6 +343,44 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
               </button>
               <div className="flex-1" />
               {mode === 'reply' && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowQuick((v) => !v)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <Zap className="h-4 w-4" /> Réponses rapides
+                  </button>
+                  {showQuick && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setShowQuick(false)} />
+                      <div className="absolute right-0 z-40 mt-2 max-h-[360px] w-80 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
+                        {quickReplies.length === 0 ? (
+                          <p className="p-3 text-sm text-gray-500">Aucune réponse rapide : ajoutez-en dans SAV → Réponses rapides.</p>
+                        ) : (
+                          quickReplies.map((q) => (
+                            <button
+                              key={q.id}
+                              onClick={() => {
+                                setDraft(q.content);
+                                setAskYesNo(q.yes_no);
+                                setShowQuick(false);
+                              }}
+                              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50"
+                            >
+                              <span className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+                                {q.yes_no && <MessageCircleQuestion className="h-3.5 w-3.5 text-blue-600" />}
+                                {q.title}
+                              </span>
+                              <span className="line-clamp-2 text-xs text-gray-500">{q.content}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {mode === 'reply' && (
                 <button
                   onClick={suggest}
                   disabled={suggesting}
@@ -349,6 +402,17 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
                 scrollKey={messages.length}
                 disabled={ticket.status === 'closed'}
                 extra={
+                  <>
+                  <label
+                    className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium ${
+                      askYesNo ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600'
+                    }`}
+                    title="Le client répond par Oui ou Non ; « Non » ferme la demande"
+                  >
+                    <input type="checkbox" checked={askYesNo} onChange={(e) => setAskYesNo(e.target.checked)} className="h-3.5 w-3.5 accent-blue-600" />
+                    Question Oui / Non
+                  </label>
+                  {!askYesNo && (
                   <select
                     value={statusAfterReply}
                     onChange={(e) => setStatusAfterReply(e.target.value as typeof statusAfterReply)}
@@ -360,6 +424,8 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
                     <option value="resolved">→ Résolu</option>
                     <option value="">Statut inchangé</option>
                   </select>
+                  )}
+                  </>
                 }
               />
             ) : (

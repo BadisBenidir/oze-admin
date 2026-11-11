@@ -48,6 +48,18 @@ export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> =
 
   const closed = ticket.status === 'closed';
 
+  // Question « Avez-vous encore besoin d'aide ? » : Non ferme la demande.
+  const answerYesNo = async (messageId: string, answer: 'yes' | 'no') => {
+    const { error: e } = await supabase.rpc('sav_client_answer_yes_no', { p_message_id: messageId, p_answer: answer });
+    if (e) {
+      alert(e.message);
+      return;
+    }
+    await refresh();
+    live.notifyMessage();
+    savBroadcast('sav-admin');
+  };
+
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
       {/* En-tête collant : retour à « Mes demandes » sans remonter toute la discussion. */}
@@ -76,7 +88,7 @@ export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> =
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-        <SavThread viewer="client" messages={messages} />
+        <SavThread viewer="client" messages={messages} onAnswerYesNo={closed ? undefined : answerYesNo} />
         {live.otherTyping && <SavTypingIndicator label="L'équipe OZË écrit…" />}
       </div>
 

@@ -29,6 +29,8 @@ export interface MySavMessage {
   content: string;
   attachments: SavAttachment[];
   created_at: string;
+  yes_no: boolean;
+  yes_no_answer: 'yes' | 'no' | null;
 }
 
 export const useMySavTickets = (enabled: boolean) => {

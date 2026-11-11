@@ -149,6 +149,7 @@ export const navigationItems: MenuItem[] = [
     subItems: [
       { id: 'tickets', label: 'Tickets', path: '/sav/tickets', icon: LifeBuoy },
       { id: 'disputes', label: 'Litiges', path: '/sav/litiges', icon: Scale },
+      { id: 'quick-replies', label: 'Réponses rapides', path: '/sav/reponses-rapides', icon: Zap },
       { id: 'knowledge-base', label: 'Base de connaissances', path: '/sav/base-de-connaissances', icon: BookOpen },
     ]
   },
