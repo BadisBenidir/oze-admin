@@ -18,6 +18,12 @@ export interface Expense {
   spent_at: string // date (YYYY-MM-DD)
   notes: string | null
   created_at: string
+  /** 0276 : 'validated' comptée, 'to_review' À vérifier (non comptée), 'excluded' perso / hors activité. */
+  review_status: 'validated' | 'to_review' | 'excluded'
+  /** Débit Qonto d'origine (import automatique). */
+  bank_transaction_id: string | null
+  /** Clé d'une charge saisie par script (frais Stripe d'un mois, facture OGATE). */
+  external_ref: string | null
 }
 
 export const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
@@ -55,7 +61,8 @@ export const useExpenses = (isAuthenticated: boolean = false): UseExpensesResult
         .select('*')
         .order('spent_at', { ascending: false })
       if (error) throw new Error(error.message)
-      setExpenses((data as Expense[]) || [])
+      // Avant 0276, pas de review_status : tout est compté.
+      setExpenses(((data as Expense[]) || []).map((e) => ({ ...e, review_status: e.review_status ?? 'validated' })))
     } catch (err) {
       console.error('Erreur chargement dépenses:', err)
       setError(err instanceof Error ? err.message : 'Erreur inconnue')

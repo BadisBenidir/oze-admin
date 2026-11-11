@@ -3,7 +3,7 @@ import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { DollarSign, PiggyBank, ShoppingBag, Wallet, Banknote, Receipt, Scale } from 'lucide-react';
+import { DollarSign, PiggyBank, ShoppingBag, Wallet, Banknote, Receipt, Scale, ReceiptText } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
 import { AccountingRawData } from '../../../hooks/useAccountingRawData';
@@ -70,7 +70,7 @@ const SUBSCRIPTION_SHADES = ['#059669', '#10b981', '#34d399', '#047857', '#6ee7b
 interface DashboardGlobalTabProps {
   data: AccountingRawData;
   period: AccountingPeriod;
-  /** Frais externes (Comptabilité → Frais externes), déduits de la marge. */
+  /** Charges (Comptabilité → Charges), déduites de la marge brute. */
   expenses: Expense[];
 }
 
@@ -108,9 +108,13 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     );
   }, [data, period.yoyRange]);
 
-  // Résultat = marge brute (après Sendcloud) − frais externes saisis à la main.
+  // Résultat net = marge brute (après Sendcloud) − charges externes validées
+  // (hors « À vérifier », exclues et achat de marchandise).
   const expensesTotal = useMemo(() => computeExpensesTotal(expenses, period.range), [expenses, period.range]);
   const result = current.global.margin - expensesTotal;
+  const resultRate = current.global.revenue > 0 ? (result / current.global.revenue) * 100 : null;
+  const momExpenses = period.momRange ? computeExpensesTotal(expenses, period.momRange) : null;
+  const yoyExpenses = period.yoyRange ? computeExpensesTotal(expenses, period.yoyRange) : null;
   const momResult = mom && period.momRange ? mom.margin - computeExpensesTotal(expenses, period.momRange) : null;
   const yoyResult = yoy && period.yoyRange ? yoy.margin - computeExpensesTotal(expenses, period.yoyRange) : null;
   const monthlyExpenses = useMemo(() => expensesByMonth(expenses), [expenses]);
@@ -154,7 +158,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         <AccountingKpiCard
           label="Chiffre d'affaires total (TTC)"
           value={EUR(current.global.revenue)}
@@ -186,11 +190,19 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
           deltaYoY={yoy ? pct(current.global.margin, yoy.margin) : undefined}
         />
         <AccountingKpiCard
-          label="Résultat après frais externes"
+          label="Charges externes"
+          value={EUR(expensesTotal)}
+          icon={ReceiptText}
+          hint="Charges validées (hors À vérifier et achat de marchandise)"
+          deltaMoM={momExpenses !== null ? pct(expensesTotal, momExpenses) : undefined}
+          deltaYoY={yoyExpenses !== null ? pct(expensesTotal, yoyExpenses) : undefined}
+        />
+        <AccountingKpiCard
+          label="Résultat net"
           value={EUR(result)}
           icon={Scale}
           tone={result >= 0 ? 'green' : 'red'}
-          hint={`Marge brute − ${EUR(expensesTotal)} de frais externes`}
+          hint={`Marge brute − charges externes${resultRate !== null ? ` · ${resultRate.toFixed(1)}% du CA` : ''}`}
           deltaMoM={momResult !== null ? pct(result, momResult) : undefined}
           deltaYoY={yoyResult !== null ? pct(result, yoyResult) : undefined}
         />
@@ -282,8 +294,9 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap" title="Frais de livraison encaissés (HT) moins factures Sendcloud (HT)">Solde livraisons (HT)</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Marge brute</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Marge %</th>
-                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">Frais externes</th>
-                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Résultat</th>
+                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">Charges externes</th>
+                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">Résultat net</th>
+                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">Résultat %</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Croissance MoM</th>
                 </tr>
               </thead>
@@ -311,6 +324,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{marginRate !== null ? `${marginRate.toFixed(1)}%` : '—'}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(monthlyExpenses[m.ym] || 0)}</td>
                       <td className={`py-2.5 px-4 text-right text-sm font-medium tabular-nums ${m.margin - (monthlyExpenses[m.ym] || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{EUR(m.margin - (monthlyExpenses[m.ym] || 0))}</td>
+                      <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{m.total > 0 ? `${(((m.margin - (monthlyExpenses[m.ym] || 0)) / m.total) * 100).toFixed(1)}%` : '—'}</td>
                       <td className={`py-2.5 px-4 text-right text-sm font-medium tabular-nums ${growth === null ? 'text-gray-400' : growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         {growth === null ? '—' : `${growth >= 0 ? '+' : ''}${growth.toFixed(1)}%`}
                       </td>

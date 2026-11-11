@@ -2,6 +2,7 @@ import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchSourcingFulfillmentOrderIds } from '../utils/sourcingFulfillment';
+import { isCountedCharge } from '../utils/accountingCalc';
 
 export type SalesJournalScope = 'all' | 'web' | 'b2b' | 'sourcing' | 'manual';
 
@@ -194,7 +195,21 @@ export const useSalesJournalExport = () => {
         }
       }
 
-      if (rows.length === 0) {
+      // Charges externes validées (0276) : feuilles « Charges » et « Synthèse »
+      // du périmètre complet uniquement.
+      let charges: { spent_at: string; label: string; category: string | null; amount: number; bank_transaction_id: string | null; review_status: string }[] = [];
+      if (scope === 'all') {
+        const { data, error } = await supabase
+          .from('expenses')
+          .select('spent_at, label, category, amount, bank_transaction_id, review_status')
+          .gte('spent_at', startDate)
+          .lte('spent_at', effectiveEndDate)
+          .order('spent_at');
+        if (error) throw new Error(error.message);
+        charges = ((data || []) as typeof charges).filter(isCountedCharge);
+      }
+
+      if (rows.length === 0 && charges.length === 0) {
         return { success: false, error: 'Aucune vente trouvée sur cette période.' };
       }
 
@@ -214,6 +229,33 @@ export const useSalesJournalExport = () => {
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Ventes');
+
+      if (scope === 'all') {
+        const chargesSheet = XLSX.utils.aoa_to_sheet([
+          ['Date', 'Catégorie', 'Libellé', 'Montant', 'Source'],
+          ...charges.map((c) => [dateStr(new Date(`${c.spent_at}T12:00:00`)), c.category || 'Sans catégorie', c.label, Number(c.amount) || 0, c.bank_transaction_id ? 'Qonto' : 'Saisie']),
+        ]);
+        chargesSheet['!cols'] = [{ wch: 12 }, { wch: 28 }, { wch: 40 }, { wch: 14 }, { wch: 10 }];
+        XLSX.utils.book_append_sheet(wb, chargesSheet, 'Charges');
+
+        const byCategory = new Map<string, number>();
+        for (const c of charges) byCategory.set(c.category || 'Sans catégorie', (byCategory.get(c.category || 'Sans catégorie') || 0) + (Number(c.amount) || 0));
+        const sales = rows.reduce((t, r) => t + r.amountTTC, 0);
+        const chargesTotal = charges.reduce((t, c) => t + (Number(c.amount) || 0), 0);
+        const summary = XLSX.utils.aoa_to_sheet([
+          ['Synthèse', `du ${startDate} au ${effectiveEndDate}`],
+          [],
+          ['CA encaissé (journal des ventes)', sales],
+          [],
+          ['Charges externes par catégorie', ''],
+          ...[...byCategory.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, v]),
+          ['Total charges externes', chargesTotal],
+          [],
+          ["Résultat net = marge brute (CA − coût d'achat produits − Sendcloud) − charges externes : voir Comptabilité → Dashboard Global.", ''],
+        ]);
+        summary['!cols'] = [{ wch: 44 }, { wch: 18 }];
+        XLSX.utils.book_append_sheet(wb, summary, 'Synthèse');
+      }
       XLSX.writeFile(wb, `journal_ventes_du_${startDate}_au_${effectiveEndDate}.xlsx`);
 
       return { success: true, rowsCount: rows.length };

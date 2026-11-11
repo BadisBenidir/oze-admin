@@ -281,13 +281,22 @@ export const expensesInRange = <T extends { spent_at: string }>(expenses: T[], r
     })
     .sort((a, b) => b.spent_at.localeCompare(a.spent_at));
 
-export const computeExpensesTotal = (expenses: { spent_at: string; amount: number }[], range: DateRange): number =>
-  expensesInRange(expenses, range).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+type ChargeLike = { spent_at: string; amount: number; category: string | null; review_status?: string };
 
-/** Frais externes par mois (clé YYYY-MM). */
-export const expensesByMonth = (expenses: { spent_at: string; amount: number }[]): Record<string, number> => {
+/** Achat de marchandise : déjà dans le coût d'achat produits, jamais une charge externe. */
+export const isGoodsPurchase = (category: string | null) => category === 'Achat marchandise' || category === 'achat-marchandise';
+
+/** Charge externe comptée (0276) : validée (ni « À vérifier » ni exclue) et hors achat de marchandise. */
+export const isCountedCharge = (e: { category: string | null; review_status?: string }) =>
+  (e.review_status ?? 'validated') === 'validated' && !isGoodsPurchase(e.category);
+
+export const computeExpensesTotal = (expenses: ChargeLike[], range: DateRange): number =>
+  expensesInRange(expenses, range).filter(isCountedCharge).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+/** Charges externes comptées par mois (clé YYYY-MM). */
+export const expensesByMonth = (expenses: ChargeLike[]): Record<string, number> => {
   const out: Record<string, number> = {};
-  for (const e of expenses || []) {
+  for (const e of (expenses || []).filter(isCountedCharge)) {
     const k = e.spent_at.slice(0, 7);
     out[k] = (out[k] || 0) + (Number(e.amount) || 0);
   }

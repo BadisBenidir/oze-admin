@@ -11,7 +11,7 @@ import { B2CTab } from './accounting/B2CTab';
 import { B2BTab } from './accounting/B2BTab';
 import { LivesTab } from './accounting/LivesTab';
 import { QontoTab } from './accounting/QontoTab';
-import { ExpensesTab } from './accounting/ExpensesTab';
+import { ChargesTab } from './accounting/ChargesTab';
 import { OtherRevenuesTab } from './accounting/OtherRevenuesTab';
 import { useExpenses } from '../../hooks/useExpenses';
 
@@ -23,7 +23,7 @@ const TABS: { id: AccountingTab; label: string; icon: React.ComponentType<{ clas
   { id: 'b2b', label: 'B2B (Revendeurs & Sourcing)', icon: Handshake },
   { id: 'lives', label: 'Lives', icon: Gavel },
   { id: 'other-revenues', label: 'Autres revenus', icon: Banknote },
-  { id: 'expenses', label: 'Frais externes', icon: Receipt },
+  { id: 'expenses', label: 'Charges', icon: Receipt },
   { id: 'qonto', label: 'Trésorerie Qonto', icon: Landmark },
 ];
 
@@ -35,14 +35,14 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
  * mois) partagé par les 4 onglets : changer de période ou d'onglet ne
  * relance jamais de requête, tout est déjà en mémoire. Remplace
  * intégralement l'ancienne page (6 sous-onglets ad hoc, dont "Factures" non
- * fonctionnel faute d'edge function). Les dépenses (`expenses`) reviennent
- * dans l'onglet « Frais externes » (0274, catégories modifiables) et sont
- * déduites de la marge du Dashboard Global. */
+ * fonctionnel faute d'edge function). Les dépenses (`expenses`) sont dans
+ * l'onglet « Charges » (0274 / 0276 : import Qonto, frais Stripe, À vérifier)
+ * et déduites de la marge du Dashboard Global (Résultat net). */
 export const Accounting: React.FC = () => {
   const { isAdmin } = useAdminAuth();
   const { data, loading, error, refresh } = useAccountingRawData(isAdmin);
-  // Frais externes saisis à la main (0274) : onglet dédié + déduits de la
-  // marge du Dashboard Global.
+  // Charges (0274 / 0276) : onglet dédié + déduites de la marge du Dashboard
+  // Global (Résultat net).
   const expensesApi = useExpenses(isAdmin);
 
   const [activeTab, setActiveTab] = useState<AccountingTab>('global');
@@ -129,7 +129,7 @@ export const Accounting: React.FC = () => {
             <OtherRevenuesTab revenues={data.manualRevenues} period={period} onChanged={() => refresh(true)} />
           )}
           {activeTab === 'expenses' && (
-            <ExpensesTab
+            <ChargesTab
               expenses={expensesApi.expenses}
               period={period}
               createExpense={expensesApi.createExpense}
