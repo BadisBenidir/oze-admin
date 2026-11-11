@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Clock, Inbox, LifeBuoy, RefreshCw, Scale, Search, MessageCircle, Bot, Mail } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { SavAdminTicket, useSavAssignees, useSavCounters, useSavTickets } from '../../../hooks/useSavAdmin';
+import { useSavTypingTickets } from '../../../hooks/useSavLive';
 import {
   SAV_CATEGORY,
   SAV_DECISION,
@@ -33,6 +34,7 @@ export const SavTicketList: React.FC<{ disputes?: boolean; onOpen: (id: string) 
   const { tickets, loading, error, refresh } = useSavTickets();
   const { counters, refresh: refreshCounters } = useSavCounters();
   const assignees = useSavAssignees();
+  const typingTickets = useSavTypingTickets();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'' | 'open' | SavStatus>(disputes ? '' : 'open');
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -252,7 +254,18 @@ export const SavTicketList: React.FC<{ disputes?: boolean; onOpen: (id: string) 
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-gray-900">{t.company_name || '—'}</div>
-                      <div className="text-xs text-gray-500">{t.client_name}</div>
+                      {typingTickets.has(t.id) ? (
+                        <div className="flex items-center gap-1 text-xs font-medium text-blue-600">
+                          <span className="inline-flex gap-0.5">
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-blue-500" />
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-blue-500 [animation-delay:120ms]" />
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-blue-500 [animation-delay:240ms]" />
+                          </span>
+                          {t.client_name || 'Le client'} écrit…
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-500">{t.client_name}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-700">{SAV_CATEGORY[t.category]}</td>
                     <td className="px-4 py-3"><Badge variant={SAV_STATUS[t.status].variant}>{SAV_STATUS[t.status].label}</Badge></td>

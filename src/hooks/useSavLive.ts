@@ -13,17 +13,20 @@ import { supabase } from '../lib/supabase';
  *
  *   sav-ticket:<id>        typing / message, entre le client et l'équipe
  *   sav-reseller:<id>      update → badges et liste « Mes demandes » du compte
- *   sav-admin              update → compteurs et liste de l'onglet SAV
+ *   sav-admin              update → compteurs et liste de l'onglet SAV ;
+ *                          typing { ticket_id } → « écrit… » dans la liste
  */
 
 export const SAV_CLIENT_UPDATE_EVENT = 'oze-sav-client-update';
 export const SAV_TEAM_UPDATE_EVENT = 'oze-sav-team-update';
+/** Admin : un client écrit sur un ticket (detail = id du ticket). */
+export const SAV_TEAM_TYPING_EVENT = 'oze-sav-team-typing';
 
 /** Envoi ponctuel sur un canal non écouté (API REST de Realtime, httpSend). */
-export const savBroadcast = async (topic: string, event = 'update') => {
+export const savBroadcast = async (topic: string, event = 'update', payload: Record<string, unknown> = {}) => {
   const ch = supabase.channel(topic);
   try {
-    await ch.httpSend(event, {});
+    await ch.httpSend(event, payload);
   } catch {
     // temps réel indisponible : les écrans se mettent à jour au prochain passage
   } finally {
@@ -50,7 +53,53 @@ export const useSavResellerChannel = (resellerId: string | null | undefined) =>
   useRelay(resellerId ? `sav-reseller:${resellerId}` : null, SAV_CLIENT_UPDATE_EVENT);
 
 /** Admin : nouveaux tickets / messages des clients. */
-export const useSavAdminChannel = (enabled: boolean) => useRelay(enabled ? 'sav-admin' : null, SAV_TEAM_UPDATE_EVENT);
+export const useSavAdminChannel = (enabled: boolean) => {
+  useRelay(enabled ? 'sav-admin' : null, SAV_TEAM_UPDATE_EVENT);
+  // « … écrit » d'un client, relayé à la liste des tickets.
+  useEffect(() => {
+    if (!enabled) return;
+    const ch = supabase
+      .channel('sav-admin-typing')
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (typeof payload?.ticket_id === 'string') {
+          window.dispatchEvent(new CustomEvent(SAV_TEAM_TYPING_EVENT, { detail: payload.ticket_id }));
+        }
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [enabled]);
+};
+
+/** Admin : tickets dont le client est en train d'écrire (4 s après la dernière frappe). */
+export const useSavTypingTickets = () => {
+  const [typing, setTyping] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const timers = new Map<string, number>();
+    const onTyping = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      setTyping((s) => (s.has(id) ? s : new Set(s).add(id)));
+      window.clearTimeout(timers.get(id));
+      timers.set(
+        id,
+        window.setTimeout(() => {
+          setTyping((s) => {
+            const n = new Set(s);
+            n.delete(id);
+            return n;
+          });
+        }, 4000)
+      );
+    };
+    window.addEventListener(SAV_TEAM_TYPING_EVENT, onTyping);
+    return () => {
+      window.removeEventListener(SAV_TEAM_TYPING_EVENT, onTyping);
+      timers.forEach((t) => window.clearTimeout(t));
+    };
+  }, []);
+  return typing;
+};
 
 /**
  * Fil d'un ticket : indicateur « … écrit » de l'autre côté et rechargement
@@ -101,7 +150,9 @@ export const useSavTicketLive = (ticketId: string | null, me: 'client' | 'team',
     if (now - lastTypingSent.current < 2000) return;
     lastTypingSent.current = now;
     channelRef.current?.send({ type: 'broadcast', event: 'typing', payload: { from: me } });
-  }, [me]);
+    // Client : visible aussi dans la liste des tickets de l'admin.
+    if (me === 'client' && ticketId) savBroadcast('sav-admin-typing', 'typing', { ticket_id: ticketId });
+  }, [me, ticketId]);
 
   /** À appeler après l'envoi d'un message. */
   const notifyMessage = useCallback(() => {
