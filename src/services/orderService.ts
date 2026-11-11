@@ -285,7 +285,8 @@ class OrderService {
     const { data: auctionSales, error: auctionError } = await supabase
       .from('products')
       .select('sale_price')
-      .eq('status', 'sold-auction');
+      .eq('status', 'sold-auction')
+      .is('sale_archived_at', null);
 
     if (auctionError) {
       console.error('Error fetching auction sales:', auctionError);

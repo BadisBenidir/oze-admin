@@ -63,6 +63,7 @@ export const LiveAuctionPage: React.FC<LiveAuctionPageProps> = ({ onView }) => {
       .from('products')
       .select('id, name, reference, barcode, images, main_image_index, sale_price, status, condition, created_at, brand:brands(name)')
       .in('status', ['for-auction-live', 'sold-auction'])
+      .is('sale_archived_at', null)
       .order('created_at', { ascending: false });
     if (error) setError(error.message);
     else setItems((data as unknown as AuctionProduct[]) || []);

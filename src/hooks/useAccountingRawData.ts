@@ -128,6 +128,7 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
           .from('products')
           .select('id, name, sale_price, purchase_price, updated_at, brand:brands(name)')
           .eq('status', 'sold-auction')
+          .is('sale_archived_at', null)
           .gte('updated_at', windowStart),
         supabase
           .from('b2b_sourcing_missions')
