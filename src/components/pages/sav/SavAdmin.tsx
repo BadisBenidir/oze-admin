@@ -3,6 +3,7 @@ import { SavTicketList } from './SavTicketList';
 import { SavTicketDetail } from './SavTicketDetail';
 import { SavKnowledgeBase } from './SavKnowledgeBase';
 import { SavQuickReplies } from './SavQuickReplies';
+import { SavConversations } from './SavConversations';
 
 /** Onglet « SAV » de l'admin : Tickets, Litiges, Base de connaissances. */
 export const SavAdmin: React.FC<{ activeSubTab: string }> = ({ activeSubTab }) => {
@@ -25,6 +26,8 @@ export const SavAdmin: React.FC<{ activeSubTab: string }> = ({ activeSubTab }) =
       />
     );
   }
+
+  if (activeSubTab === 'conversations') return <SavConversations onOpenTicket={setOpenTicketId} />;
 
   return <SavTicketList key={activeSubTab} disputes={activeSubTab === 'disputes'} onOpen={setOpenTicketId} />;
 };
