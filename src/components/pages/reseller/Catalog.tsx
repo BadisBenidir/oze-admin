@@ -91,10 +91,20 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
   refreshRef.current = refreshSilently;
 
   useEffect(() => {
+    // Pendant un drop, chaque ajout au panier de n'importe quel membre émet
+    // un signal : sans limite, tous les membres rechargeaient le catalogue
+    // en même temps et saturaient la base. Au plus un rechargement toutes
+    // les 5 s par onglet, décalé au hasard (1 à 4 s) pour étaler la charge.
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastRun = 0;
     const scheduleRefresh = () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => refreshRef.current(), 400);
+      if (debounceTimer) return;
+      const wait = Math.max(lastRun + 5000 - Date.now(), 0) + 1000 + Math.random() * 3000;
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        lastRun = Date.now();
+        refreshRef.current();
+      }, wait);
     };
 
     const channel = supabase
