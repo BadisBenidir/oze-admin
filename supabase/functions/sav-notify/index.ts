@@ -110,17 +110,26 @@ Deno.serve(async () => {
         if (!m) throw new Error('message introuvable');
         const photos = Array.isArray(m.attachments) && m.attachments.length ? `\n\n(${m.attachments.length} pièce(s) jointe(s) à voir sur votre espace)` : '';
         to = clientEmail;
-        subject = `Nouvelle réponse à votre demande #${t.number}`;
+        const closedNow = t.status === 'closed';
+        subject = closedNow ? `Votre demande #${t.number} est fermée` : `Nouvelle réponse à votre demande #${t.number}`;
         html = layout({
-          title: 'Nouvelle réponse de l\'équipe OZË',
-          paragraphs: [hello, `Nous avons répondu à votre demande <strong>${esc(t.number)}</strong> « ${esc(t.subject)} » :`],
+          title: closedNow ? 'Demande fermée' : 'Nouvelle réponse de l\'équipe OZË',
+          paragraphs: [
+            hello,
+            closedNow
+              ? `Notre équipe a fermé votre demande <strong>${esc(t.number)}</strong> « ${esc(t.subject)} » avec ce message :`
+              : `Nous avons répondu à votre demande <strong>${esc(t.number)}</strong> « ${esc(t.subject)} » :`,
+          ],
           quote: excerpt(m.content || '') + photos,
-          cta: { label: 'Voir et répondre', url: ticketUrl },
+          cta: { label: t.status === 'closed' ? 'Voir ma demande' : 'Voir et répondre', url: ticketUrl },
           // Réponse + « Résolu » d'un même geste : un seul email (0265).
+          // Ticket fermé par l'équipe : plus de réponse possible sur la demande.
           note:
-            t.status === 'resolved'
-              ? `Votre demande est désormais marquée comme résolue. Si quelque chose ne vous convient pas, répondez sur la demande : elle sera rouverte. ${NO_REPLY_NOTE}`
-              : NO_REPLY_NOTE,
+            t.status === 'closed'
+              ? "Cette demande est désormais fermée : il n'est plus possible d'y répondre. Pour toute nouvelle question, notre assistant reste disponible depuis la bulle de discussion de votre espace pro. Merci de ne pas répondre à cet email."
+              : t.status === 'resolved'
+                ? `Votre demande est désormais marquée comme résolue. Si quelque chose ne vous convient pas, répondez sur la demande : elle sera rouverte. ${NO_REPLY_NOTE}`
+                : NO_REPLY_NOTE,
         });
       } else if (job.kind === 'resolved') {
         to = clientEmail;
