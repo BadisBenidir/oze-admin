@@ -78,7 +78,7 @@ Tu choisis la « situation » ; la catégorie et la priorité du ticket en déco
 Avant de créer le ticket :
 1. Récupère les informations utiles : le numéro de commande concerné (vérifie-le avec tes outils), une description précise et, si c'est pertinent (dommage, état, authenticité), des photos — le client peut en joindre avec le bouton photo du chat.
 2. Si une information essentielle manque, demande-la en une seule question. Si le client ne l'a pas ou insiste, crée quand même le ticket.
-3. Rédige un résumé factuel et complet pour l'équipe (contexte, statut juridique, commande, problème, ce que le client demande), sans rien inventer.
+3. Remplis les champs du résumé pour l'équipe (problème, demande, commande, éléments fournis, points à vérifier) : une phrase courte et factuelle par champ, sans rien inventer ni répéter.
 Après la création, confirme au client que sa demande est ouverte en donnant son numéro exact (renvoyé par l'outil) et indique qu'il peut la suivre et y répondre dans « Mes demandes » ; l'équipe lui répondra là et par email. N'annonce aucun délai de réponse. La conversation se termine ensuite.
 
 Pour les questions sur les commandes ou l'abonnement, utilise tes outils plutôt que de supposer. Présente les statuts simplement. Ne donne jamais les identifiants techniques (UUID).`;
@@ -142,10 +142,14 @@ const TOOLS: Anthropic.Tool[] = [
           description: Object.entries(TICKET_SITUATIONS).map(([k, v]) => `${k} = ${v.label}`).join(' ; '),
         },
         sujet: { type: 'string', description: 'Sujet court (max 120 caractères)' },
-        resume: { type: 'string', description: "Résumé factuel et complet pour l'équipe" },
+        probleme: { type: 'string', description: 'Le problème, en 1 ou 2 phrases courtes et factuelles' },
+        demande_du_client: { type: 'string', description: 'Ce que le client demande, en 1 phrase' },
+        commande: { type: 'string', description: 'Commande et pièce concernées, avec leur état vérifié par tes outils (1 ligne), si applicable' },
+        elements_fournis: { type: 'string', description: 'Photos ou preuves fournies par le client (ou « aucun »)' },
+        a_verifier: { type: 'string', description: "Points que l'équipe doit vérifier ou confirmer avec le client, s'il y en a (1 ligne)" },
         commande_numero: { type: 'string', description: 'Numéro de commande concerné, si applicable' },
       },
-      required: ['situation', 'sujet', 'resume'],
+      required: ['situation', 'sujet', 'probleme', 'demande_du_client'],
     },
   },
 ];
@@ -339,7 +343,22 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: Ctx): 
       .eq('role', 'user');
     const attachments = (msgs || []).flatMap((m: { attachments: Attachment[] }) => m.attachments || []).slice(0, 5);
 
-    const resume = String(input.resume || '').slice(0, 4000);
+    // Résumé pour l'équipe (bloc « Résumé IA » de l'admin) : rubriques
+    // courtes, une par ligne « Libellé : valeur », jamais un bloc de texte.
+    const { data: who } = await admin.from('profiles').select('first_name, last_name, legal_status').eq('id', ctx.profileId).maybeSingle();
+    const legalLabel = { individual: 'particulier', sole_proprietorship: 'EI', company: 'société' }[String(who?.legal_status)] || 'statut non renseigné';
+    const field = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 600);
+    const resume = [
+      ['Client', `${[who?.first_name, who?.last_name].filter(Boolean).join(' ') || '—'} · ${legalLabel}`],
+      ['Problème', field(input.probleme)],
+      ['Demande', field(input.demande_du_client)],
+      ['Commande', field(input.commande)],
+      ['Éléments fournis', field(input.elements_fournis)],
+      ['À vérifier', field(input.a_verifier)],
+    ]
+      .filter(([, v]) => v)
+      .map(([k, v]) => `${k} : ${v}`)
+      .join('\n');
     const { data, error } = await admin.rpc('sav_bot_create_ticket', {
       p_reseller_id: resellerId,
       p_profile_id: ctx.profileId,

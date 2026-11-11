@@ -15,7 +15,7 @@ export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> =
   const { ticket, messages, chat, loading, error, refresh } = useMySavTicket(number);
   // Temps réel : réponse de l'équipe sans recharger, « L'équipe OZË écrit… ».
   const live = useSavTicketLive(ticket?.id ?? null, 'client', refresh);
-  const [showChat, setShowChat] = useState(false);
+  const [showChat, setShowChat] = useState(true);
 
   if (loading && !ticket) {
     return <div className="flex justify-center p-16 text-gray-400"><Loader2 className="h-6 w-6 animate-spin" /></div>;

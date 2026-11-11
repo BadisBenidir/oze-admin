@@ -174,7 +174,7 @@ export const SavFilePicker: React.FC<{ files: File[]; onChange: (files: File[]) 
         className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
       >
         <ImagePlus className="h-4 w-4" />
-        Ajouter des photos
+        Joindre des fichiers
       </button>
       {files.map((f, i) => (
         <span key={`${f.name}-${i}`} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700">

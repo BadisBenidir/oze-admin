@@ -216,7 +216,20 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
               <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
                 <Sparkles className="h-3.5 w-3.5" /> Résumé IA
               </div>
-              <p className="whitespace-pre-wrap text-sm text-gray-800">{ticket.ai_summary}</p>
+              {/* Rubriques « Libellé : valeur », une par ligne (sav-chat). */}
+              <dl className="space-y-1.5 text-sm text-gray-800">
+                {ticket.ai_summary.split('\n').filter((line) => line.trim()).map((line, i) => {
+                  const m = line.match(/^([^:]{1,30}) : (.*)$/);
+                  return m ? (
+                    <div key={i} className="grid gap-x-3 sm:grid-cols-[140px_minmax(0,1fr)]">
+                      <dt className="font-medium text-gray-500">{m[1]}</dt>
+                      <dd>{m[2]}</dd>
+                    </div>
+                  ) : (
+                    <p key={i} className="whitespace-pre-wrap">{line}</p>
+                  );
+                })}
+              </dl>
             </div>
           )}
 
