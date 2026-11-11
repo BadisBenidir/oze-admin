@@ -25,14 +25,30 @@ export const FULFILLMENT_LABELS: Record<string, string> = {
   delivered: 'Livré',
 };
 
+/**
+ * Base de connaissances pour le prompt : rubriques, réponses types (à
+ * reprendre telles quelles) et consignes de comportement ([BOT], 0267) —
+ * ces dernières sont des instructions pour le modèle, jamais du texte à
+ * montrer au client.
+ */
 export async function loadKnowledgeBase(admin: SupabaseClient): Promise<string> {
   const { data } = await admin
     .from('sav_knowledge_base')
-    .select('title, content')
+    .select('category, title, content, bot_notes')
     .eq('active', true)
     .order('position');
-  return (data || [])
-    .filter((e: { content: string }) => e.content?.trim())
-    .map((e: { title: string; content: string }) => `## ${e.title}\n${e.content.trim()}`)
-    .join('\n\n');
+  const rows = (data || []) as { category: string; title: string; content: string; bot_notes: string }[];
+  const out: string[] = [];
+  let current = '';
+  for (const e of rows) {
+    if (!e.content?.trim() && !e.bot_notes?.trim()) continue;
+    if (e.category !== current) {
+      current = e.category;
+      out.push(`\n## ${current}`);
+    }
+    out.push(`### ${e.title}`);
+    if (e.content?.trim()) out.push(`Réponse type :\n${e.content.trim()}`);
+    if (e.bot_notes?.trim()) out.push(`[Consigne interne, ne pas montrer au client] ${e.bot_notes.trim()}`);
+  }
+  return out.join('\n').trim();
 }

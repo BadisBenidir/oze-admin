@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Bot, ImagePlus, Loader2, MessageCircle, Maximize2, RotateCcw, Send, Ticket, X } from 'lucide-react';
+import { Bot, FileDown, ImagePlus, Loader2, MessageCircle, Maximize2, RotateCcw, Send, Ticket, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useResellerAuth } from '../../hooks/useResellerAuth';
 import { SavAttachment, uploadSavAttachments } from '../../lib/sav';
 import { savBroadcast } from '../../hooks/useSavLive';
+import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
+import { getOrderInvoiceForChat } from '../../hooks/useInvoices';
 
 /**
  * Assistant SAV de l'espace pro (Edge Function sav-chat, 0263) : réponses en
@@ -17,6 +19,8 @@ interface ChatLine {
   text: string;
   photos?: string[];
   ticket?: { id: string; number: string };
+  /** Facture demandée au bot (outil get_facture) : PDF + envoi par email. */
+  invoice?: { state: 'loading' | 'ready' | 'error'; orderNumber: string; number?: string; url?: string; filename?: string; emailedTo?: string | null; error?: string };
   error?: boolean;
 }
 
@@ -25,6 +29,21 @@ const MAX_CHARS = 2000;
 const IDLE_MS = 30 * 60 * 1000;
 const MAX_PHOTOS = 3;
 const SUGGESTIONS = ['Où en est ma commande ?', 'Mon colis est arrivé endommagé', 'Une question sur mon abonnement', 'Parler à un membre de l\'équipe'];
+
+/** Texte du bot avec les liens https://… cliquables. */
+const Linkified: React.FC<{ text: string }> = ({ text }) => (
+  <>
+    {text.split(/(https?:\/\/[^\s)»]+)/g).map((part, i) =>
+      /^https?:\/\//.test(part) ? (
+        <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="break-all font-medium underline underline-offset-2">
+          {part.replace(/^https:\/\/wa\.me\//, 'WhatsApp +')}
+        </a>
+      ) : (
+        <React.Fragment key={i}>{part}</React.Fragment>
+      )
+    )}
+  </>
+);
 
 const storageKey = (profileId: string) => `oze-sav-conversation:${profileId}`;
 const readStored = (k: string) => {
@@ -167,6 +186,32 @@ const useSavChat = () => {
               writeStored(storageKey(profile.id), data.conversation_id);
             } else if (data.type === 'text') {
               patchBot((l) => ({ ...l, text: l.text + data.text }));
+            } else if (data.type === 'invoice') {
+              patchBot((l) => ({ ...l, invoice: { state: 'loading', orderNumber: data.order_number } }));
+              (async () => {
+                try {
+                  const inv = await getOrderInvoiceForChat(data.order_id);
+                  let url: string;
+                  let filename: string | undefined;
+                  let path: string | undefined;
+                  if (inv.kind === 'pdf') {
+                    url = URL.createObjectURL(inv.blob);
+                    filename = inv.filename;
+                    const [up] = await uploadSavAttachments([new File([inv.blob], inv.filename, { type: 'application/pdf' })], `${profile.reseller_id}/factures`);
+                    path = up.path;
+                  } else {
+                    url = inv.url;
+                  }
+                  patchBot((l) => ({ ...l, invoice: { state: 'ready', orderNumber: inv.orderNumber, number: inv.invoiceNumber, url, filename } }));
+                  const { data: sent, error: sendError } = await invokeEdgeFunction<{ to: string }>('sav-send-invoice', { order_id: data.order_id, path });
+                  patchBot((l) => (l.invoice ? { ...l, invoice: { ...l.invoice, emailedTo: sendError ? null : sent?.to ?? null } } : l));
+                } catch (err) {
+                  patchBot((l) => ({
+                    ...l,
+                    invoice: { state: 'error', orderNumber: data.order_number, error: err instanceof Error ? err.message : 'Facture indisponible' },
+                  }));
+                }
+              })();
             } else if (data.type === 'ticket') {
               patchBot((l) => ({ ...l, ticket: { id: data.id, number: data.number } }));
               // Ticket ouvert : la conversation est terminée, la suite se passe dans « Mes demandes ».
@@ -291,7 +336,7 @@ export const SavChatPanel: React.FC<{
                         : 'rounded-tl-sm bg-gray-100 text-gray-900'
                   }`}
                 >
-                  {l.text.trim()}
+                  {l.role === 'assistant' ? <Linkified text={l.text.trim()} /> : l.text.trim()}
                 </div>
               )}
               {l.role === 'assistant' && !l.text && streaming && (
@@ -299,6 +344,42 @@ export const SavChatPanel: React.FC<{
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:120ms]" />
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:240ms]" />
+                </div>
+              )}
+              {l.invoice && (
+                <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm">
+                  {l.invoice.state === 'loading' && (
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Préparation de la facture {l.invoice.orderNumber}…
+                    </div>
+                  )}
+                  {l.invoice.state === 'ready' && (
+                    <>
+                      <a
+                        href={l.invoice.url}
+                        download={l.invoice.filename}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 font-medium text-gray-900 hover:underline"
+                      >
+                        <FileDown className="h-4 w-4 text-gray-500" />
+                        <span className="flex-1">Facture {l.invoice.number} · commande {l.invoice.orderNumber}</span>
+                        <span className="text-xs underline">PDF</span>
+                      </a>
+                      <div className="mt-1 text-xs text-gray-500">
+                        {l.invoice.emailedTo === undefined
+                          ? 'Envoi par email…'
+                          : l.invoice.emailedTo
+                            ? `Envoyée aussi par email à ${l.invoice.emailedTo}`
+                            : "L'envoi par email n'a pas abouti : téléchargez-la ici ou depuis « Mes commandes »."}
+                      </div>
+                    </>
+                  )}
+                  {l.invoice.state === 'error' && (
+                    <div className="text-xs text-red-700">
+                      Facture {l.invoice.orderNumber} indisponible : {l.invoice.error}. Vous pouvez la télécharger depuis « Mes commandes ».
+                    </div>
+                  )}
                 </div>
               )}
               {l.ticket && (

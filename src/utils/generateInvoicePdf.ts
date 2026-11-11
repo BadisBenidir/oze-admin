@@ -292,6 +292,18 @@ export const generateInvoicePdf = async (data: InvoiceData): Promise<void> => {
   doc.save(`OZE-Paris_${data.creditNote ? 'Avoir' : 'Facture'}_${data.orderNumber}.pdf`);
 };
 
+/** Même PDF que generateInvoicePdf, rendu en Blob sans téléchargement
+ * (facture affichée et envoyée par email depuis l'assistant SAV). */
+export const renderInvoicePdfBlob = async (data: InvoiceData): Promise<{ blob: Blob; filename: string }> => {
+  const { jsPDF } = await importOrReload(() => import('jspdf'));
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  drawInvoicePage(doc, data);
+  return {
+    blob: doc.output('blob'),
+    filename: `OZE-Paris_${data.creditNote ? 'Avoir' : 'Facture'}_${data.orderNumber}.pdf`,
+  };
+};
+
 /**
  * "Export groupé des factures du mois" — un unique PDF multi-pages (une
  * facture par page), pas une archive ZIP : aucune bibliothèque de gestion de

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { generateInvoicePdf, buildInvoiceItems, InvoiceData, InvoiceLineItem, InvoiceBillingDetails, InvoiceSourceItem } from '../utils/generateInvoicePdf';
+import { generateInvoicePdf, renderInvoicePdfBlob, buildInvoiceItems, InvoiceData, InvoiceLineItem, InvoiceBillingDetails, InvoiceSourceItem } from '../utils/generateInvoicePdf';
 import { extractFunctionErrorMessage } from '../utils/edgeFunctionError';
 
 export interface OrderInvoiceBadge {
@@ -462,4 +462,70 @@ export const useOrderCreditNotes = (orderId: string | null | undefined) => {
   }, [orderId]);
   useEffect(() => { refresh(); }, [refresh]);
   return { creditNotes, refresh };
+};
+
+export type ChatInvoice =
+  | { invoiceNumber: string; orderNumber: string; kind: 'pdf'; blob: Blob; filename: string }
+  | { invoiceNumber: string; orderNumber: string; kind: 'url'; url: string };
+
+/**
+ * Facture d'une commande pour l'assistant SAV : même chemin que « Télécharger
+ * la facture » (generate_invoice_for_order puis PDF jsPDF, ou PDF Qonto
+ * officiel s'il existe), mais rendue en Blob — affichée dans la conversation
+ * et envoyée par email (sav-send-invoice) au lieu d'être téléchargée.
+ */
+export const getOrderInvoiceForChat = async (orderId: string): Promise<ChatInvoice> => {
+  const { error: genError } = await supabase.rpc('generate_invoice_for_order', { p_order_id: orderId });
+  if (genError) throw new Error(genError.message);
+
+  const [{ data: order }, { data: rows }] = await Promise.all([
+    supabase
+      .from('orders')
+      .select('id, order_number, created_at, late_fee_amount, late_fee_days, order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost)')
+      .eq('id', orderId)
+      .maybeSingle(),
+    supabase
+      .from('invoices')
+      .select('id, invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, kind, merged_into_invoice_id, sourcing_mission:b2b_sourcing_missions(reference, title)')
+      .eq('order_id', orderId)
+      .order('issued_at', { ascending: true }),
+  ]);
+  if (!order || !rows?.length) throw new Error('Facture introuvable');
+  const o = order as unknown as { order_number: string; created_at: string; late_fee_amount: number | null; late_fee_days: number | null; order_items: InvoiceSourceItem[] };
+  const paymentMethod = 'Carte bancaire (Stripe) / Solde revendeur';
+  const invoice = rows.find((r) => r.kind === 'order') ?? rows[0];
+
+  const shared = invoice.kind === 'order' ? await loadSharedInvoice(invoice.id, invoice.merged_into_invoice_id ?? null) : null;
+  const pdfUrl = shared ? shared.primary.pdf_url : invoice.pdf_url;
+  const number = shared ? shared.primary.invoice_number : invoice.invoice_number;
+  if (pdfUrl) return { invoiceNumber: number, orderNumber: o.order_number, kind: 'url', url: pdfUrl };
+
+  const data: InvoiceData = shared
+    ? {
+        invoiceNumber: shared.primary.invoice_number,
+        issuedAt: shared.primary.issued_at,
+        orderNumber: shared.orderNumbers.join(' + '),
+        orderDate: shared.firstOrderDate,
+        totalAmount: Math.round(shared.totalAmount * 100) / 100,
+        legalStatus: shared.primary.legal_status as 'individual' | 'sole_proprietorship' | 'company',
+        billingDetails: (shared.primary.billing_details || {}) as InvoiceBillingDetails,
+        paymentMethod,
+        items: shared.items,
+      }
+    : {
+        invoiceNumber: invoice.invoice_number,
+        issuedAt: invoice.issued_at,
+        orderNumber: o.order_number,
+        orderDate: o.created_at,
+        totalAmount: Number(invoice.total_amount),
+        legalStatus: invoice.legal_status as 'individual' | 'sole_proprietorship' | 'company',
+        billingDetails: (invoice.billing_details || {}) as InvoiceBillingDetails,
+        paymentMethod,
+        items:
+          invoice.kind === 'advance'
+            ? advanceInvoiceItems(invoice)
+            : buildInvoiceItems(o.order_items || [], { amount: o.late_fee_amount, days: o.late_fee_days }, invoice.issued_at),
+      };
+  const { blob, filename } = await renderInvoicePdfBlob(data);
+  return { invoiceNumber: number, orderNumber: o.order_number, kind: 'pdf', blob, filename };
 };
