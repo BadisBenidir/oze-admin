@@ -78,6 +78,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
             'order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost), ' +
             'invoice:invoices!inner(id, kind, merged_into_invoice_id, invoice_number, issued_at, total_amount, legal_status, billing_details)'
         )
+        .is('archived_at', null)
         .gte('created_at', period.range.start.toISOString())
         .lte('created_at', period.range.end.toISOString())
         .order('created_at', { ascending: true });

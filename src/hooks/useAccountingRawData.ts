@@ -121,6 +121,7 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
             'order_items(id, line_total, quantity, status, product_snapshot, product:products(brand:brands(name)))'
           )
           .in('order_channel', ['web', 'b2b'])
+          .is('archived_at', null)
           .gte('created_at', windowStart)
           .order('created_at', { ascending: false }),
         supabase

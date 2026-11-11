@@ -86,6 +86,7 @@ class OrderService {
     const { data: orders, error } = await supabase
       .from('orders')
       .select(ORDERS_SELECT_WITH_RESELLER)
+      .is('archived_at', null)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -113,6 +114,7 @@ class OrderService {
       .from('orders')
       .select(ORDERS_SELECT_WITH_RESELLER)
       .eq('order_channel', 'web')
+      .is('archived_at', null)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -268,6 +270,7 @@ class OrderService {
     const { data: orders, error } = await supabase
       .from('orders')
       .select('id, total_amount, status')
+      .is('archived_at', null)
       .neq('status', 'cancelled')
       .neq('status', 'pending')
       .neq('status', 'refunded');
@@ -366,6 +369,7 @@ class OrderService {
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
       .select('*, order_items(line_total, insured, insurance_cost, status, refund_method)')
+      .is('archived_at', null)
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -511,8 +515,8 @@ class OrderService {
       'reseller:resellers(company_name), placed_by:profiles!orders_placed_by_profile_id_fkey(first_name, last_name), ' +
       'order_items(product_snapshot), auction_items(title, payment_deadline)';
     const [byCreated, byPaid] = await Promise.all([
-      supabase.from('orders').select(select).eq('payment_status', 'paid').order('created_at', { ascending: false }).limit(limit),
-      supabase.from('orders').select(select).not('paid_at', 'is', null).order('paid_at', { ascending: false }).limit(limit),
+      supabase.from('orders').select(select).is('archived_at', null).eq('payment_status', 'paid').order('created_at', { ascending: false }).limit(limit),
+      supabase.from('orders').select(select).is('archived_at', null).not('paid_at', 'is', null).order('paid_at', { ascending: false }).limit(limit),
     ]);
 
     const rows = new Map<string, any>();

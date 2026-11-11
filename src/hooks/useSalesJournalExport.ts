@@ -108,6 +108,7 @@ export const useSalesJournalExport = () => {
           .from('orders')
           .select('order_number, status, payment_status, total_amount, created_at, email, shipping_address, billing_address')
           .eq('order_channel', 'web')
+          .is('archived_at', null)
           .gte('created_at', startIso)
           .lte('created_at', endIso);
         if (error) throw new Error(error.message);
@@ -126,6 +127,7 @@ export const useSalesJournalExport = () => {
           .from('orders')
           .select('id, order_number, status, payment_status, total_amount, created_at, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email)')
           .eq('order_channel', 'b2b')
+          .is('archived_at', null)
           .gte('created_at', startIso)
           .lte('created_at', endIso);
         if (error) throw new Error(error.message);
