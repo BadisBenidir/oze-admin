@@ -12,7 +12,8 @@ export type ExpenseCategory =
 export interface Expense {
   id: string
   label: string
-  category: ExpenseCategory | null
+  /** Nom d'une catégorie de expense_categories (0274), ou ancien code. */
+  category: string | null
   amount: number
   spent_at: string // date (YYYY-MM-DD)
   notes: string | null

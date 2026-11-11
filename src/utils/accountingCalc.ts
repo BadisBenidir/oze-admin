@@ -237,3 +237,29 @@ export const ESTIMATED_GIFT_WALLET_UNIT_COST = 15;
  * pas d'estimation le concernant. */
 export const estimateGatewayFees = (revenue: number, paidOrdersCount: number): number =>
   revenue * 0.015 + paidOrdersCount * 0.25;
+
+/** Frais externes saisis à la main (Comptabilité → Frais externes, 0274).
+ * spent_at est une date sans heure : lue à midi pour ne jamais glisser de
+ * jour avec le fuseau. */
+export const expenseDate = (e: { spent_at: string }) => new Date(`${e.spent_at}T12:00:00`);
+
+export const expensesInRange = <T extends { spent_at: string }>(expenses: T[], range: DateRange): T[] =>
+  (expenses || [])
+    .filter((e) => {
+      const t = expenseDate(e).getTime();
+      return t >= range.start.getTime() && t <= range.end.getTime();
+    })
+    .sort((a, b) => b.spent_at.localeCompare(a.spent_at));
+
+export const computeExpensesTotal = (expenses: { spent_at: string; amount: number }[], range: DateRange): number =>
+  expensesInRange(expenses, range).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+/** Frais externes par mois (clé YYYY-MM). */
+export const expensesByMonth = (expenses: { spent_at: string; amount: number }[]): Record<string, number> => {
+  const out: Record<string, number> = {};
+  for (const e of expenses || []) {
+    const k = e.spent_at.slice(0, 7);
+    out[k] = (out[k] || 0) + (Number(e.amount) || 0);
+  }
+  return out;
+};

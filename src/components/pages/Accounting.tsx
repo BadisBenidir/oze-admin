@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { LayoutDashboard, Globe, Handshake, Gavel, AlertCircle, Landmark } from 'lucide-react';
+import { LayoutDashboard, Globe, Handshake, Gavel, AlertCircle, Landmark, Receipt } from 'lucide-react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useAccountingRawData } from '../../hooks/useAccountingRawData';
 import { buildAccountingPeriod, PeriodPreset } from '../../utils/accountingPeriods';
@@ -11,14 +11,17 @@ import { B2CTab } from './accounting/B2CTab';
 import { B2BTab } from './accounting/B2BTab';
 import { LivesTab } from './accounting/LivesTab';
 import { QontoTab } from './accounting/QontoTab';
+import { ExpensesTab } from './accounting/ExpensesTab';
+import { useExpenses } from '../../hooks/useExpenses';
 
-type AccountingTab = 'global' | 'b2c' | 'b2b' | 'lives' | 'qonto';
+type AccountingTab = 'global' | 'b2c' | 'b2b' | 'lives' | 'expenses' | 'qonto';
 
 const TABS: { id: AccountingTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'global', label: 'Dashboard Global', icon: LayoutDashboard },
   { id: 'b2c', label: 'B2C (Site Web)', icon: Globe },
   { id: 'b2b', label: 'B2B (Revendeurs & Sourcing)', icon: Handshake },
   { id: 'lives', label: 'Lives', icon: Gavel },
+  { id: 'expenses', label: 'Frais externes', icon: Receipt },
   { id: 'qonto', label: 'Trésorerie Qonto', icon: Landmark },
 ];
 
@@ -30,13 +33,15 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
  * mois) partagé par les 4 onglets : changer de période ou d'onglet ne
  * relance jamais de requête, tout est déjà en mémoire. Remplace
  * intégralement l'ancienne page (6 sous-onglets ad hoc, dont "Factures" non
- * fonctionnel faute d'edge function, et le suivi de dépenses/CRUD `expenses`
- * qui n'a pas de place dans cette nouvelle architecture centrée CA/marge —
- * la table et le hook useExpenses restent intacts en base si besoin de les
- * exposer ailleurs plus tard). */
+ * fonctionnel faute d'edge function). Les dépenses (`expenses`) reviennent
+ * dans l'onglet « Frais externes » (0274, catégories modifiables) et sont
+ * déduites de la marge du Dashboard Global. */
 export const Accounting: React.FC = () => {
   const { isAdmin } = useAdminAuth();
   const { data, loading, error } = useAccountingRawData(isAdmin);
+  // Frais externes saisis à la main (0274) : onglet dédié + déduits de la
+  // marge du Dashboard Global.
+  const expensesApi = useExpenses(isAdmin);
 
   const [activeTab, setActiveTab] = useState<AccountingTab>('global');
   const [preset, setPreset] = useState<PeriodPreset>('current-month');
@@ -114,10 +119,20 @@ export const Accounting: React.FC = () => {
         </div>
       ) : (
         <>
-          {activeTab === 'global' && <DashboardGlobalTab data={data} period={period} />}
+          {activeTab === 'global' && <DashboardGlobalTab data={data} period={period} expenses={expensesApi.expenses} />}
           {activeTab === 'b2c' && <B2CTab data={data} period={period} />}
           {activeTab === 'b2b' && <B2BTab data={data} period={period} />}
           {activeTab === 'lives' && <LivesTab data={data} period={period} />}
+          {activeTab === 'expenses' && (
+            <ExpensesTab
+              expenses={expensesApi.expenses}
+              period={period}
+              createExpense={expensesApi.createExpense}
+              updateExpense={expensesApi.updateExpense}
+              deleteExpense={expensesApi.deleteExpense}
+              refreshExpenses={expensesApi.refresh}
+            />
+          )}
           {activeTab === 'qonto' && <QontoTab data={data} />}
         </>
       )}
