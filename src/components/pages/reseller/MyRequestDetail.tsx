@@ -4,7 +4,8 @@ import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useMySavTicket } from '../../../hooks/useMySavTickets';
-import { SavReplyBox, SavThread } from '../../sav/SavThread';
+import { SavReplyBox, SavThread, SavTypingIndicator } from '../../sav/SavThread';
+import { savBroadcast, useSavTicketLive } from '../../../hooks/useSavLive';
 import { SAV_CATEGORY, SAV_STATUS_CLIENT, formatSavDate, uploadSavAttachments } from '../../../lib/sav';
 
 /** Détail d'une demande (/mes-demandes/SAV-AAAA-NNNN) : fil client / équipe,
@@ -12,6 +13,8 @@ import { SAV_CATEGORY, SAV_STATUS_CLIENT, formatSavDate, uploadSavAttachments } 
 export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> = ({ number, onBack }) => {
   const { profile } = useResellerAuth();
   const { ticket, messages, chat, loading, error, refresh } = useMySavTicket(number);
+  // Temps réel : réponse de l'équipe sans recharger, « L'équipe OZË écrit… ».
+  const live = useSavTicketLive(ticket?.id ?? null, 'client', refresh);
   const [showChat, setShowChat] = useState(false);
 
   if (loading && !ticket) {
@@ -39,6 +42,8 @@ export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> =
     const { error: e } = await supabase.rpc('sav_client_reply', { p_ticket_id: ticket.id, p_content: text, p_attachments: attachments });
     if (e) throw new Error(e.message);
     await refresh();
+    live.notifyMessage();
+    savBroadcast('sav-admin');
   };
 
   const closed = ticket.status === 'closed';
@@ -60,6 +65,7 @@ export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> =
 
       <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
         <SavThread viewer="client" messages={messages} />
+        {live.otherTyping && <SavTypingIndicator label="L'équipe OZË écrit…" />}
       </div>
 
       {closed ? (
@@ -67,7 +73,7 @@ export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> =
           Cette demande est fermée. Pour toute nouvelle question, ouvrez une nouvelle demande.
         </p>
       ) : (
-        <SavReplyBox placeholder="Votre message à l'équipe OZË…" submitLabel="Envoyer" onSubmit={reply} />
+        <SavReplyBox placeholder="Votre message à l'équipe OZË…" submitLabel="Envoyer" onSubmit={reply} onTyping={live.notifyTyping} />
       )}
 
       {chat.length > 0 && (

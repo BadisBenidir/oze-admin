@@ -30,6 +30,7 @@ import { PrivacyPolicy } from '../components/pages/reseller/PrivacyPolicy';
 import { MyRequests } from '../components/pages/reseller/MyRequests';
 import { MyRequestDetail } from '../components/pages/reseller/MyRequestDetail';
 import { AssistancePage, SavChatWidget } from '../components/sav/SavChat';
+import { useSavResellerChannel } from '../hooks/useSavLive';
 import { invokeEdgeFunction } from '../utils/invokeEdgeFunction';
 import { ShoppingCart, Wallet, X } from 'lucide-react';
 import { WalletCreditNotice } from '../components/reseller/WalletCreditNotice';
@@ -78,6 +79,8 @@ function ResellerApp() {
   const cart = useB2BCart(profile?.id, Boolean(profile?.legal_status));
   const wallet = useWallet(profile?.id);
   const { notifications, markRead: markNotificationRead } = useResellerNotifications(profile?.id);
+  // SAV : réponses de l'équipe en temps réel (pastilles, « Mes demandes »).
+  useSavResellerChannel(profile?.reseller_id);
   const currentTab = activeTab || 'catalog';
   const isDropsPlan = (profile?.account_type === 'subscriber' && profile.subscription_plan === 'drops') || Boolean(profile?.community_drops);
   // Pass Drops avec un accès enchères offert par l'admin (auction_access,

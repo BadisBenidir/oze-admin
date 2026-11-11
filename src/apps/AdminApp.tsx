@@ -17,12 +17,15 @@ import { setForcedHideFigures } from '../hooks/useHideFigures';
 import { StaffManagement } from '../components/pages/team/StaffManagement';
 import { SavAdmin } from '../components/pages/sav/SavAdmin';
 import { useSavCounters } from '../hooks/useSavAdmin';
+import { useSavAdminChannel } from '../hooks/useSavLive';
 
 function AdminApp() {
   const { isAdmin, isOwner, profile } = useAdminAuth();
   const pendingGiftRewardsCount = usePendingGiftRewardsCount(isAdmin);
   const pendingEntrupyCount = usePendingEntrupyCount(isAdmin);
   const { counters: savCounters } = useSavCounters(isAdmin);
+  // SAV : nouveaux tickets / messages clients en temps réel.
+  useSavAdminChannel(isAdmin);
   // Tickets non lus (nouveaux ou avec un message client depuis la dernière ouverture, 0266).
   const newSavCount = savCounters?.unread_count ?? savCounters?.new_count ?? 0;
 

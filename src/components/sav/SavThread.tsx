@@ -138,6 +138,18 @@ export const SavThread: React.FC<{ messages: SavThreadMessage[]; viewer: 'team' 
   );
 };
 
+/** « L'équipe OZË écrit… » / « Marie écrit… » */
+export const SavTypingIndicator: React.FC<{ label: string }> = ({ label }) => (
+  <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+    <span className="inline-flex gap-1 rounded-full bg-white px-2.5 py-2 shadow-sm">
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:120ms]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:240ms]" />
+    </span>
+    {label}
+  </div>
+);
+
 /** Sélecteur de fichiers (photos / PDF) avec aperçu des noms. */
 export const SavFilePicker: React.FC<{ files: File[]; onChange: (files: File[]) => void; disabled?: boolean }> = ({ files, onChange, disabled }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -187,7 +199,9 @@ export const SavReplyBox: React.FC<{
   extra?: React.ReactNode;
   tone?: 'default' | 'internal';
   disabled?: boolean;
-}> = ({ placeholder, submitLabel, onSubmit, value, onValueChange, extra, tone = 'default', disabled }) => {
+  /** Appelé à chaque frappe (indicateur « … écrit » de l'autre côté). */
+  onTyping?: () => void;
+}> = ({ placeholder, submitLabel, onSubmit, value, onValueChange, extra, tone = 'default', disabled, onTyping }) => {
   const [local, setLocal] = useState('');
   const text = value ?? local;
   const setText = onValueChange ?? setLocal;
@@ -214,7 +228,10 @@ export const SavReplyBox: React.FC<{
     <div className={`rounded-xl border p-3 ${tone === 'internal' ? 'border-amber-200 bg-amber-50/60' : 'border-gray-200 bg-white'}`}>
       <textarea
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (e.target.value) onTyping?.();
+        }}
         placeholder={placeholder}
         rows={4}
         maxLength={5000}

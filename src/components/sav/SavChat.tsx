@@ -3,6 +3,7 @@ import { Bot, ImagePlus, Loader2, MessageCircle, Maximize2, RotateCcw, Send, Tic
 import { supabase } from '../../lib/supabase';
 import { useResellerAuth } from '../../hooks/useResellerAuth';
 import { SavAttachment, uploadSavAttachments } from '../../lib/sav';
+import { savBroadcast } from '../../hooks/useSavLive';
 
 /**
  * Assistant SAV de l'espace pro (Edge Function sav-chat, 0263) : réponses en
@@ -170,6 +171,7 @@ const useSavChat = () => {
               patchBot((l) => ({ ...l, ticket: { id: data.id, number: data.number } }));
               // Ticket ouvert : la conversation est terminée, la suite se passe dans « Mes demandes ».
               close('ticket', data.number);
+              savBroadcast('sav-admin');
             } else if (data.type === 'error') {
               patchBot((l) => ({ ...l, text: (l.text ? `${l.text}\n\n` : '') + data.error, error: true }));
             }

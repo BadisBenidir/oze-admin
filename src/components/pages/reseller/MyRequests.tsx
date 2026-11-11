@@ -4,6 +4,7 @@ import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useMySavTickets } from '../../../hooks/useMySavTickets';
+import { savBroadcast } from '../../../hooks/useSavLive';
 import { SavFilePicker } from '../../sav/SavThread';
 import { SAV_CATEGORY, SAV_STATUS_CLIENT, SavCategory, formatSavDate, uploadSavAttachments } from '../../../lib/sav';
 
@@ -47,6 +48,7 @@ const NewRequestModal: React.FC<{ onClose: () => void; onCreated: (number: strin
       });
       if (e) throw new Error(e.message);
       const row = Array.isArray(data) ? data[0] : data;
+      savBroadcast('sav-admin');
       onCreated(row.number);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Envoi impossible');

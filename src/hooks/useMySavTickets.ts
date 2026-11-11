@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { SavAttachment, SavCategory, SavStatus } from '../lib/sav';
+import { SAV_CLIENT_UPDATE_EVENT } from './useSavLive';
 
 /** « Mes demandes » (espace pro) : vues sav_my_* (0263) — tickets du compte
  * revendeur connecté, sans notes internes ni champs litige. */
@@ -35,8 +36,8 @@ export const useMySavTickets = (enabled: boolean) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const { data, error: e } = await supabase.from('sav_my_tickets').select('*').order('last_activity_at', { ascending: false });
     if (e) setError(e.message);
     else setTickets((data || []) as MySavTicket[]);
@@ -44,7 +45,12 @@ export const useMySavTickets = (enabled: boolean) => {
   }, []);
 
   useEffect(() => {
-    if (enabled) refresh();
+    if (!enabled) return;
+    refresh();
+    // Réponse de l'équipe (temps réel) : liste à jour sans recharger.
+    const onUpdate = () => refresh(true);
+    window.addEventListener(SAV_CLIENT_UPDATE_EVENT, onUpdate);
+    return () => window.removeEventListener(SAV_CLIENT_UPDATE_EVENT, onUpdate);
   }, [enabled, refresh]);
 
   return { tickets, loading, error, refresh };
@@ -67,10 +73,12 @@ export const useMySavUnreadCount = (enabled: boolean) => {
     load();
     const t = window.setInterval(load, 120000);
     window.addEventListener(SAV_READ_EVENT, load);
+    window.addEventListener(SAV_CLIENT_UPDATE_EVENT, load);
     window.addEventListener('focus', load);
     return () => {
       window.clearInterval(t);
       window.removeEventListener(SAV_READ_EVENT, load);
+      window.removeEventListener(SAV_CLIENT_UPDATE_EVENT, load);
       window.removeEventListener('focus', load);
     };
   }, [enabled]);

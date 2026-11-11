@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { SavAttachment, SavCategory, SavDisputeDecision, SavPriority, SavStatus } from '../lib/sav';
+import { SAV_TEAM_UPDATE_EVENT } from './useSavLive';
 
 /** Onglet SAV de l'admin (0263 / 0264) : tickets, fiche, compteurs. */
 
@@ -79,8 +80,8 @@ export const useSavTickets = (enabled = true) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     const { data, error: e } = await supabase
       .from('sav_tickets')
@@ -93,7 +94,12 @@ export const useSavTickets = (enabled = true) => {
   }, []);
 
   useEffect(() => {
-    if (enabled) refresh();
+    if (!enabled) return;
+    refresh();
+    // Nouveau ticket / message client (temps réel) : liste à jour sans recharger.
+    const onUpdate = () => refresh(true);
+    window.addEventListener(SAV_TEAM_UPDATE_EVENT, onUpdate);
+    return () => window.removeEventListener(SAV_TEAM_UPDATE_EVENT, onUpdate);
   }, [enabled, refresh]);
 
   return { tickets, loading, error, refresh };
@@ -123,10 +129,12 @@ export const useSavCounters = (enabled = true, pollMs = 60000) => {
     refresh();
     const t = window.setInterval(refresh, pollMs);
     window.addEventListener(SAV_ADMIN_READ_EVENT, refresh);
+    window.addEventListener(SAV_TEAM_UPDATE_EVENT, refresh);
     window.addEventListener('focus', refresh);
     return () => {
       window.clearInterval(t);
       window.removeEventListener(SAV_ADMIN_READ_EVENT, refresh);
+      window.removeEventListener(SAV_TEAM_UPDATE_EVENT, refresh);
       window.removeEventListener('focus', refresh);
     };
   }, [enabled, refresh, pollMs]);

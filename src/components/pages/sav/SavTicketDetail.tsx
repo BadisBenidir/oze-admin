@@ -6,7 +6,8 @@ import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { B2BOrder, fetchB2BOrderById } from '../../../hooks/useB2BOrders';
 import { B2BOrderDetailModal } from '../b2b/B2BOrderDetailModal';
 import { useSavAssignees, useSavTicketDetail, SavEvent } from '../../../hooks/useSavAdmin';
-import { SavReplyBox, SavThread, SavAttachmentList, useSignedAttachmentUrls } from '../../sav/SavThread';
+import { SavReplyBox, SavThread, SavAttachmentList, SavTypingIndicator, useSignedAttachmentUrls } from '../../sav/SavThread';
+import { savBroadcast, useSavTicketLive } from '../../../hooks/useSavLive';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 import {
   SAV_CATEGORY,
@@ -66,6 +67,8 @@ const eventLabel = (e: SavEvent, assigneeName: (id: string | null) => string) =>
  * client, commande, conversation chatbot d'origine, journal. */
 export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; onOpenTicket: (id: string) => void }> = ({ ticketId, onBack, onOpenTicket }) => {
   const { ticket, messages, events, chat, otherTickets, client, loading, error, refresh } = useSavTicketDetail(ticketId);
+  // Temps réel : message du client sans recharger, « Prénom écrit… ».
+  const live = useSavTicketLive(ticketId, 'team', refresh);
   const { can } = useAdminAuth();
   const assignees = useSavAssignees();
   const [mode, setMode] = useState<'reply' | 'note'>('reply');
@@ -112,6 +115,10 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
     setSavingField(null);
     if (e) setActionError(e.message);
     await refresh();
+    if (!e) {
+      live.notifyMessage();
+      savBroadcast(`sav-reseller:${ticket.reseller_id}`);
+    }
   };
 
   const send = async (text: string, files: File[], internal: boolean) => {
@@ -125,6 +132,8 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
     });
     if (e) throw new Error(e.message);
     await refresh();
+    live.notifyMessage();
+    if (!internal) savBroadcast(`sav-reseller:${ticket.reseller_id}`);
   };
 
   const suggest = async () => {
@@ -203,6 +212,7 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
 
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
             <SavThread viewer="team" messages={messages} />
+            {live.otherTyping && <SavTypingIndicator label={`${ticket.client_name || 'Le client'} écrit…`} />}
           </div>
 
           <div>
@@ -238,6 +248,7 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
                 value={draft}
                 onValueChange={setDraft}
                 onSubmit={(t, f) => send(t, f, false)}
+                onTyping={live.notifyTyping}
                 disabled={ticket.status === 'closed'}
                 extra={
                   <select
