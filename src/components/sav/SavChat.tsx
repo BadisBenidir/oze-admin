@@ -45,6 +45,9 @@ const Linkified: React.FC<{ text: string }> = ({ text }) => (
   </>
 );
 
+/** Bulle et page /assistance : même conversation (voir useSavChat). */
+const SAV_CONVERSATION_EVENT = 'oze-sav-conversation';
+
 const storageKey = (profileId: string) => `oze-sav-conversation:${profileId}`;
 const readStored = (k: string) => {
   try {
@@ -72,18 +75,20 @@ const useSavChat = () => {
   const [closed, setClosed] = useState<null | { reason: 'ticket' | 'ended'; number?: string }>(null);
   const [lastActivity, setLastActivity] = useState<number | null>(null);
   const [askStillNeeded, setAskStillNeeded] = useState(false);
+  // La bulle et la page /assistance partagent la même conversation : chaque
+  // instance annonce ses changements, l'autre recharge l'historique.
+  const instanceId = useRef(crypto.randomUUID());
+  const streamingRef = useRef(false);
+  streamingRef.current = streaming;
+  const announce = (id: string | null) =>
+    window.dispatchEvent(new CustomEvent(SAV_CONVERSATION_EVENT, { detail: { from: instanceId.current, id } }));
 
-  // Reprend la dernière conversation (historique lu dans sav_my_chat_messages).
-  useEffect(() => {
-    if (!profile?.id) return;
-    const stored = readStored(storageKey(profile.id));
-    if (!stored) return;
-    setConversationId(stored);
+  const loadConversation = useCallback((id: string) => {
     setLoadingHistory(true);
     supabase
       .from('sav_my_chat_messages')
       .select('id, role, display_text, created_at')
-      .eq('conversation_id', stored)
+      .eq('conversation_id', id)
       .order('created_at')
       .then(({ data }) => {
         const rows = (data || []) as { id: string; role: 'user' | 'assistant'; display_text: string; created_at: string }[];
@@ -91,7 +96,33 @@ const useSavChat = () => {
         if (rows.length) setLastActivity(new Date(rows[rows.length - 1].created_at).getTime());
         setLoadingHistory(false);
       });
-  }, [profile?.id]);
+  }, []);
+
+  // Reprend la dernière conversation (historique lu dans sav_my_chat_messages).
+  useEffect(() => {
+    if (!profile?.id) return;
+    const stored = readStored(storageKey(profile.id));
+    if (!stored) return;
+    setConversationId(stored);
+    loadConversation(stored);
+  }, [profile?.id, loadConversation]);
+
+  useEffect(() => {
+    const onChange = (e: Event) => {
+      const { from, id } = (e as CustomEvent<{ from: string; id: string | null }>).detail;
+      if (from === instanceId.current || streamingRef.current) return;
+      setClosed(null);
+      setAskStillNeeded(false);
+      setConversationId(id);
+      if (id) loadConversation(id);
+      else {
+        setLines([]);
+        setLastActivity(null);
+      }
+    };
+    window.addEventListener(SAV_CONVERSATION_EVENT, onChange);
+    return () => window.removeEventListener(SAV_CONVERSATION_EVENT, onChange);
+  }, [loadConversation]);
 
   const reset = () => {
     setLines([]);
@@ -100,6 +131,7 @@ const useSavChat = () => {
     setAskStillNeeded(false);
     setLastActivity(null);
     if (profile?.id) writeStored(storageKey(profile.id), null);
+    announce(null);
   };
 
   // Termine la conversation : affichée jusqu'à la fermeture du chat, puis
@@ -108,6 +140,7 @@ const useSavChat = () => {
     setClosed({ reason, number });
     setAskStillNeeded(false);
     if (profile?.id) writeStored(storageKey(profile.id), null);
+    announce(null);
   };
 
   // Relance après 30 min sans message (vérifiée aussi à la réouverture).
@@ -137,6 +170,7 @@ const useSavChat = () => {
       setLastActivity(Date.now());
       const userLine: ChatLine = { id: crypto.randomUUID(), role: 'user', text: text || '📷', photos: files.map((f) => URL.createObjectURL(f)) };
       const botId = crypto.randomUUID();
+      let announcedId = conversationId;
       setLines((l) => [...l, userLine, { id: botId, role: 'assistant', text: '' }]);
       setStreaming(true);
       const patchBot = (fn: (l: ChatLine) => ChatLine) => setLines((all) => all.map((l) => (l.id === botId ? fn(l) : l)));
@@ -184,6 +218,7 @@ const useSavChat = () => {
             if (data.type === 'meta') {
               setConversationId(data.conversation_id);
               writeStored(storageKey(profile.id), data.conversation_id);
+              announcedId = data.conversation_id;
             } else if (data.type === 'text') {
               patchBot((l) => ({ ...l, text: l.text + data.text }));
             } else if (data.type === 'invoice') {
@@ -226,6 +261,8 @@ const useSavChat = () => {
         patchBot((l) => ({ ...l, text: e instanceof Error ? e.message : 'Envoi impossible', error: true }));
       } finally {
         setStreaming(false);
+        // L'autre panneau (bulle ou page /assistance) recharge la même conversation.
+        if (announcedId) announce(announcedId);
         setLastActivity(Date.now());
       }
     },

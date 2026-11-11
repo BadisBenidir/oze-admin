@@ -520,7 +520,18 @@ Deno.serve(async (req: Request) => {
 
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (obj: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      // Client parti en cours de réponse (page rechargée, réseau coupé) : on
+      // n'écrit plus dans le flux, mais la réponse va jusqu'au bout et reste
+      // enregistrée — il la retrouve en rouvrant le chat.
+      let clientGone = false;
+      const send = (obj: unknown) => {
+        if (clientGone) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        } catch {
+          clientGone = true;
+        }
+      };
       send({ type: 'meta', conversation_id: convId });
       const ctx: Ctx = {
         admin,
@@ -580,7 +591,11 @@ Deno.serve(async (req: Request) => {
         console.error('sav-chat', e);
         send({ type: 'error', error: "L'assistant est momentanément indisponible. Vous pouvez ouvrir une demande dans « Mes demandes »." });
       } finally {
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // flux déjà fermé côté client
+        }
       }
     },
   });
