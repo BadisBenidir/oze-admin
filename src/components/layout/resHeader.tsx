@@ -34,25 +34,28 @@ export const ResellerHeader: React.FC<ResellerHeaderProps> = ({ activeTab, onMen
 
   return (
     <header className="bg-white border-b border-gray-100 px-4 md:px-6 py-4">
-      <div className="flex items-center justify-between">
+      <div className="relative flex items-center justify-between">
         <div>
-          <div className="flex items-center space-x-3 md:hidden">
-            <button
-              onClick={onMenuToggle}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          </div>
-          {/* Le nom de la page est déjà le titre de chaque page : ici, la marque. */}
-          <div className="flex items-center gap-3">
+          <button
+            onClick={onMenuToggle}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors md:hidden"
+            aria-label="Menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          {/* Marque : centrée sur mobile ; un clic ramène au catalogue (accueil de l'espace pro). */}
+          <button
+            onClick={() => onTabChange?.('catalog')}
+            className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-3 md:static md:translate-x-0 md:translate-y-0"
+            aria-label="Retour à l'accueil"
+          >
             <img src={logo} alt="OZË Paris" className="h-8 w-auto md:h-9" />
-            <span className="hidden border-l border-gray-200 pl-3 text-xs font-medium uppercase tracking-[0.2em] text-gray-500 sm:inline">
+            <span className="hidden border-l border-gray-200 pl-3 text-xs font-medium uppercase tracking-[0.2em] text-gray-500 md:inline">
               Espace Pro
             </span>
-          </div>
+          </button>
           {profile && !profile.hide_identity && profile.company_name && (
-            <p className="text-xs text-gray-500 flex items-center gap-1 mt-1.5">
+            <p className="mt-1.5 hidden items-center gap-1 text-xs text-gray-500 md:flex">
               <Building2 className="h-3 w-3" /> {profile.company_name}
             </p>
           )}
