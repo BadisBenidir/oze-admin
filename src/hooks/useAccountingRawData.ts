@@ -47,6 +47,9 @@ export interface AccountingSourcingAdvance {
   status: 'active' | 'completed' | 'cancelled';
   order_id: string | null;
   created_at: string;
+  /** Référence (SRC-AAAA-NNNNN) et personne qui a demandé la mission. */
+  reference: string | null;
+  requester_name: string | null;
 }
 
 export interface AccountingGiftReward {
@@ -89,6 +92,8 @@ export interface AccountingRawData {
   orders: AccountingOrder[];
   liveSales: AccountingLiveSale[];
   sourcingAdvances: AccountingSourcingAdvance[];
+  /** Missions en cours dont l'avance n'est pas encore marquée payée (hors CA et hors encours). */
+  pendingAdvances: AccountingSourcingAdvance[];
   giftRewards: AccountingGiftReward[];
   subscriptionPayments: AccountingSubscriptionPayment[];
   /** Sources de CA d'abonnement à afficher, même à 0 (clients, communautés, partenaires). */
@@ -120,7 +125,7 @@ export const isOrderPaid = (o: Pick<AccountingOrder, 'payment_status' | 'status'
  * en mémoire plutôt que de refaire une requête par sélection de période ou
  * de comparaison, ce qui rend le changement de période instantané. */
 export const useAccountingRawData = (isAdmin: boolean = false) => {
-  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [], subscriptionPayments: [], subscriptionSources: [SUBSCRIPTION_SOURCE_CLIENTS], shippingCharges: [], deliveryPayments: [], manualRevenues: [] });
+  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], pendingAdvances: [], giftRewards: [], subscriptionPayments: [], subscriptionSources: [SUBSCRIPTION_SOURCE_CLIENTS], shippingCharges: [], deliveryPayments: [], manualRevenues: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -152,8 +157,7 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
           .gte('updated_at', windowStart),
         supabase
           .from('b2b_sourcing_missions')
-          .select('id, reseller_id, advance_amount, paid_at, status, order_id, created_at, resellers(company_name)')
-          .not('paid_at', 'is', null)
+          .select('id, reference, reseller_id, advance_amount, paid_at, status, order_id, created_at, resellers(company_name), requester:profiles!user_id(first_name, last_name)')
           .neq('status', 'cancelled'),
         supabase.from('b2b_gift_rewards').select('quantity, status, created_at'),
       ]);
@@ -188,8 +192,8 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         sold_at: p.updated_at,
       }));
 
-      type SourcingRow = { id: string; reseller_id: string; advance_amount: number; paid_at: string | null; status: 'active' | 'completed' | 'cancelled'; order_id: string | null; created_at: string; resellers: { company_name: string } | null };
-      const sourcingAdvances: AccountingSourcingAdvance[] = ((sourcingRes.data || []) as unknown as SourcingRow[]).map((m) => ({
+      type SourcingRow = { id: string; reference: string | null; reseller_id: string; advance_amount: number; paid_at: string | null; status: 'active' | 'completed' | 'cancelled'; order_id: string | null; created_at: string; resellers: { company_name: string } | null; requester: { first_name: string | null; last_name: string | null } | null };
+      const allAdvances: AccountingSourcingAdvance[] = ((sourcingRes.data || []) as unknown as SourcingRow[]).map((m) => ({
         id: m.id,
         reseller_id: m.reseller_id,
         company_name: m.resellers?.company_name || '—',
@@ -198,7 +202,12 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         status: m.status,
         order_id: m.order_id,
         created_at: m.created_at,
+        reference: m.reference,
+        requester_name: [m.requester?.first_name, m.requester?.last_name].filter(Boolean).join(' ').trim() || null,
       }));
+      // Encours = avances encaissées ; une mission active non payée reste à part.
+      const sourcingAdvances = allAdvances.filter((m) => m.paid_at);
+      const pendingAdvances = allAdvances.filter((m) => !m.paid_at && m.status === 'active');
 
       // Missions de sourcing clôturées par l'admin SANS validation du revendeur
       // (donc sans commande) : comptées comme une vente B2B à leur date de
@@ -333,7 +342,7 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         purchase_price: r.purchase_price == null ? null : Number(r.purchase_price),
       }));
 
-      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments, subscriptionSources, shippingCharges, deliveryPayments, manualRevenues });
+      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, pendingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments, subscriptionSources, shippingCharges, deliveryPayments, manualRevenues });
     } catch (err) {
       console.error('Erreur lors du chargement des données comptables:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');

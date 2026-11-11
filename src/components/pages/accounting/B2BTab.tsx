@@ -101,13 +101,34 @@ export const B2BTab: React.FC<B2BTabProps> = ({ data, period }) => {
             <div className="space-y-2">
               {activeAdvances.map((m) => (
                 <div key={m.id} className="flex items-center justify-between p-3 bg-amber-50/60 border border-amber-100 rounded-lg">
-                  <span className="text-sm text-gray-800">{m.company_name}</span>
+                  <span className="text-sm text-gray-800">
+                    {m.requester_name || m.company_name}
+                    <span className="ml-2 text-xs text-gray-500">{[m.reference, m.requester_name && m.requester_name !== m.company_name ? m.company_name : null].filter(Boolean).join(' · ')}</span>
+                  </span>
                   <span className="text-sm font-semibold text-amber-700">{EUR(m.advance_amount)}</span>
                 </div>
               ))}
               <div className="flex items-center justify-between pt-2 border-t border-gray-100 mt-2">
                 <span className="text-sm font-medium text-gray-900">Total encours</span>
                 <span className="text-sm font-bold text-amber-700">{EUR(activeAdvancesTotal)}</span>
+              </div>
+            </div>
+          )}
+          {data.pendingAdvances.length > 0 && (
+            <div className="mt-6">
+              <p className="mb-2 text-sm text-gray-500">
+                {data.pendingAdvances.length} mission{data.pendingAdvances.length > 1 ? 's' : ''} en cours dont l'avance n'est pas encore marquée payée (ni CA, ni encours) :
+              </p>
+              <div className="space-y-2">
+                {data.pendingAdvances.map((m) => (
+                  <div key={m.id} className="flex items-center justify-between rounded-lg border border-dashed border-gray-200 p-3">
+                    <span className="text-sm text-gray-700">
+                      {m.requester_name || m.company_name}
+                      <span className="ml-2 text-xs text-gray-500">{[m.reference, m.requester_name && m.requester_name !== m.company_name ? m.company_name : null].filter(Boolean).join(' · ')} · en attente de paiement</span>
+                    </span>
+                    <span className="text-sm font-medium text-gray-500">{EUR(m.advance_amount)}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
