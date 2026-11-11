@@ -201,7 +201,26 @@ export const SavReplyBox: React.FC<{
   disabled?: boolean;
   /** Appelé à chaque frappe (indicateur « … écrit » de l'autre côté). */
   onTyping?: () => void;
-}> = ({ placeholder, submitLabel, onSubmit, value, onValueChange, extra, tone = 'default', disabled, onTyping }) => {
+  /** Change à chaque nouveau message : la page descend jusqu'à la zone de
+   * réponse (aussi à l'ouverture de la discussion). */
+  scrollKey?: number;
+}> = ({ placeholder, submitLabel, onSubmit, value, onValueChange, extra, tone = 'default', disabled, onTyping, scrollKey }) => {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const focusedOnce = useRef(false);
+  useEffect(() => {
+    if (scrollKey === undefined) return;
+    // Après le rendu du fil (et des photos déjà en cache).
+    const id = window.setTimeout(() => {
+      boxRef.current?.scrollIntoView({ block: 'end', behavior: focusedOnce.current ? 'smooth' : 'auto' });
+      // Curseur prêt à écrire à l'ouverture, sur ordinateur seulement (pas de clavier qui surgit sur mobile).
+      if (!focusedOnce.current && window.matchMedia('(pointer: fine)').matches) {
+        textareaRef.current?.focus({ preventScroll: true });
+      }
+      focusedOnce.current = true;
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [scrollKey]);
   const [local, setLocal] = useState('');
   const text = value ?? local;
   const setText = onValueChange ?? setLocal;
@@ -225,8 +244,9 @@ export const SavReplyBox: React.FC<{
   };
 
   return (
-    <div className={`rounded-xl border p-3 ${tone === 'internal' ? 'border-amber-200 bg-amber-50/60' : 'border-gray-200 bg-white'}`}>
+    <div ref={boxRef} className={`scroll-mb-6 rounded-xl border p-3 ${tone === 'internal' ? 'border-amber-200 bg-amber-50/60' : 'border-gray-200 bg-white'}`}>
       <textarea
+        ref={textareaRef}
         value={text}
         onChange={(e) => {
           setText(e.target.value);

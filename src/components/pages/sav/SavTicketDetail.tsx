@@ -249,6 +249,7 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
                 onValueChange={setDraft}
                 onSubmit={(t, f) => send(t, f, false)}
                 onTyping={live.notifyTyping}
+                scrollKey={messages.length}
                 disabled={ticket.status === 'closed'}
                 extra={
                   <select

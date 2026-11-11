@@ -73,7 +73,7 @@ export const MyRequestDetail: React.FC<{ number: string; onBack: () => void }> =
           Cette demande est fermée. Pour toute nouvelle question, ouvrez une nouvelle demande.
         </p>
       ) : (
-        <SavReplyBox placeholder="Votre message à l'équipe OZË…" submitLabel="Envoyer" onSubmit={reply} onTyping={live.notifyTyping} />
+        <SavReplyBox placeholder="Votre message à l'équipe OZË…" submitLabel="Envoyer" onSubmit={reply} onTyping={live.notifyTyping} scrollKey={messages.length} />
       )}
 
       {chat.length > 0 && (
