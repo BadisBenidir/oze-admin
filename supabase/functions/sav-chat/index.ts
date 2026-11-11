@@ -183,6 +183,8 @@ interface Ctx {
   admin: SupabaseClient;
   resellerId: string;
   profileId: string;
+  /** Email du profil connecté (commandes antérieures au suivi par profil). */
+  email: string;
   conversationId: string;
   onTicket: (t: { id: string; number: string }) => void;
   /** Facture à afficher (PDF rendu et envoyé par email par le navigateur). */
@@ -191,12 +193,16 @@ interface Ctx {
 
 async function runTool(name: string, input: Record<string, unknown>, ctx: Ctx): Promise<unknown> {
   const { admin, resellerId } = ctx;
+  // Uniquement les commandes passées par CE profil : un compte revendeur peut
+  // regrouper des dizaines de personnes (communauté partenaire, équipe).
+  const mine = `placed_by_profile_id.eq.${ctx.profileId},email.eq."${ctx.email.replace(/"/g, "")}"`;
 
   if (name === 'get_mes_commandes') {
     const { data, error } = await admin
       .from('orders')
       .select('order_number, created_at, payment_status, total_amount, order_items(status, fulfillment_status)')
       .eq('reseller_id', resellerId)
+      .or(mine)
       .eq('order_channel', 'b2b')
       .order('created_at', { ascending: false })
       .limit(20);
@@ -232,6 +238,7 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: Ctx): 
           'shipment_parcel:shipment_parcels(tracking_number, tracking_url))'
       )
       .eq('reseller_id', resellerId)
+      .or(mine)
       .eq('order_channel', 'b2b')
       .ilike('order_number', likeExact(numero))
       .maybeSingle();
@@ -273,6 +280,7 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: Ctx): 
       .from('orders')
       .select('id, order_number, payment_status, placed_by_profile_id, email')
       .eq('reseller_id', resellerId)
+      .or(mine)
       .ilike('order_number', likeExact(numero))
       .maybeSingle();
     if (!o) return { erreur: `Aucune commande « ${numero} » sur votre compte.` };
@@ -330,6 +338,7 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: Ctx): 
         .from('orders')
         .select('id')
         .eq('reseller_id', resellerId)
+      .or(mine)
         .ilike('order_number', likeExact(numero))
         .maybeSingle();
       if (!o) return { erreur: `La commande « ${numero} » n'existe pas sur ce compte. Vérifiez le numéro avec le client ou créez le ticket sans commande.` };
@@ -517,6 +526,7 @@ Deno.serve(async (req: Request) => {
         admin,
         resellerId: resellerId as string,
         profileId: user.id,
+        email: user.email || "",
         conversationId: convId,
         onTicket: (t) => send({ type: 'ticket', ...t }),
         onInvoice: (i) => send({ type: 'invoice', ...i }),
