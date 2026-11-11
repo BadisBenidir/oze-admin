@@ -1,4 +1,4 @@
-import { AccountingOrder, AccountingLiveSale, AccountingRawData, AccountingSubscriptionPayment, isOrderPaid } from '../hooks/useAccountingRawData';
+import { AccountingOrder, AccountingLiveSale, AccountingManualRevenue, AccountingRawData, AccountingSubscriptionPayment, isOrderPaid } from '../hooks/useAccountingRawData';
 import { DateRange, isWithinRange, monthKey } from './accountingPeriods';
 
 export interface ChannelTotals {
@@ -87,6 +87,25 @@ export const computeDeliveryTotals = (payments: { date: string; amount: number }
   return { revenue, cogs: 0, margin: revenue, marginRate: revenue > 0 ? 100 : null, count: 0, averageBasket: 0 };
 };
 
+/** Autres revenus saisis à la main (0275) sur une plage : coût d'achat =
+ * purchase_price si renseigné (vente d'article), 0 sinon (prestation). */
+export const manualRevenueDate = (r: { revenue_date: string }) => `${r.revenue_date}T12:00:00`;
+
+export const computeManualRevenueTotals = (revenues: AccountingManualRevenue[], range: DateRange): ChannelTotals => {
+  const rows = (revenues || []).filter((r) => isWithinRange(manualRevenueDate(r), range));
+  const revenue = rows.reduce((s, r) => s + r.amount, 0);
+  const cogs = rows.reduce((s, r) => s + (r.purchase_price || 0), 0);
+  const margin = revenue - cogs;
+  return {
+    revenue,
+    cogs,
+    margin,
+    marginRate: revenue > 0 ? (margin / revenue) * 100 : null,
+    count: rows.length,
+    averageBasket: rows.length > 0 ? revenue / rows.length : 0,
+  };
+};
+
 /** Totaux après déduction des frais d'expédition (marge nette des envois). */
 export const withShipping = (t: ChannelTotals, shipping: number): ChannelTotals => {
   const margin = t.margin - shipping;
@@ -122,6 +141,8 @@ export interface MonthlyChannelRow {
   shipping: number;
   /** Frais de livraison payés par les clients (demandes de livraison B2B). */
   deliveries: number;
+  /** Autres revenus saisis à la main (0275). */
+  other: number;
   margin: number;
 }
 
@@ -143,7 +164,7 @@ export const computeMonthlySeries = (data: AccountingRawData, months: number): M
     if (key >= COMPANY_ACTIVITY_START_MONTH) keys.push(key);
   }
 
-  const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, subscriptions: 0, subsBySource: {}, total: 0, cogs: 0, shipping: 0, deliveries: 0, margin: 0 }]));
+  const rows = new Map<string, MonthlyChannelRow>(keys.map((k) => [k, { ym: k, web: 0, b2b: 0, live: 0, subscriptions: 0, subsBySource: {}, total: 0, cogs: 0, shipping: 0, deliveries: 0, other: 0, margin: 0 }]));
 
   data.orders.filter(isOrderPaid).forEach((o) => {
     const key = monthKey(o.created_at);
@@ -183,6 +204,15 @@ export const computeMonthlySeries = (data: AccountingRawData, months: number): M
     row.deliveries += d.amount;
     row.total += d.amount;
     row.margin += d.amount;
+  });
+
+  (data.manualRevenues || []).forEach((r) => {
+    const row = rows.get(monthKey(manualRevenueDate(r)));
+    if (!row) return;
+    row.other += r.amount;
+    row.total += r.amount;
+    row.cogs += r.purchase_price || 0;
+    row.margin += r.amount - (r.purchase_price || 0);
   });
 
   (data.shippingCharges || []).forEach((c) => {

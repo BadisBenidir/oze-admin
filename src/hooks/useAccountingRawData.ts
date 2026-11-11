@@ -66,6 +66,22 @@ export interface AccountingSubscriptionPayment {
   source: string;
 }
 
+/** Revenu encaissé hors plateforme (virement, PayPal, prestation), saisi à
+ * la main dans Comptabilité → Autres revenus (0275). Franchise de TVA :
+ * amount = montant encaissé ; purchase_price = coût d'achat (marge). */
+export interface AccountingManualRevenue {
+  id: string;
+  revenue_date: string;
+  client_name: string;
+  label: string;
+  amount: number;
+  category: 'vente' | 'prestation' | 'autre';
+  payment_method: 'virement' | 'paypal' | 'especes' | 'autre' | null;
+  purchase_price: number | null;
+  qonto_transaction_id: string | null;
+  notes: string | null;
+}
+
 /** Abonnés Club sans code promo de partenaire. */
 export const SUBSCRIPTION_SOURCE_CLIENTS = 'Clients';
 
@@ -81,6 +97,8 @@ export interface AccountingRawData {
   shippingCharges: { date: string; amount: number }[];
   /** Frais de livraison payés par les clients B2B (demandes de livraison payées par carte, non remboursées). */
   deliveryPayments: { date: string; amount: number }[];
+  /** Autres revenus saisis à la main (0275). */
+  manualRevenues: AccountingManualRevenue[];
 }
 
 /** Prédicat "encaissé" partagé avec useSalesJournalExport.ts / Accounting.tsx
@@ -102,13 +120,15 @@ export const isOrderPaid = (o: Pick<AccountingOrder, 'payment_status' | 'status'
  * en mémoire plutôt que de refaire une requête par sélection de période ou
  * de comparaison, ce qui rend le changement de période instantané. */
 export const useAccountingRawData = (isAdmin: boolean = false) => {
-  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [], subscriptionPayments: [], subscriptionSources: [SUBSCRIPTION_SOURCE_CLIENTS], shippingCharges: [], deliveryPayments: [] });
+  const [data, setData] = useState<AccountingRawData>({ orders: [], liveSales: [], sourcingAdvances: [], giftRewards: [], subscriptionPayments: [], subscriptionSources: [SUBSCRIPTION_SOURCE_CLIENTS], shippingCharges: [], deliveryPayments: [], manualRevenues: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAll = useCallback(async () => {
+  // silent : rechargement après une saisie (Autres revenus) sans repasser
+  // toute la page en squelette de chargement.
+  const fetchAll = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       const windowStart = rawDataWindowStart().toISOString();
 
@@ -302,7 +322,18 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         .filter((s) => s.shipping_refund_status !== 'succeeded')
         .map((s) => ({ date: s.created_at, amount: Number(s.shipping_cost) || 0 }));
 
-      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments, subscriptionSources, shippingCharges, deliveryPayments });
+      // Autres revenus (0275) : lecture tolérante, comme Sendcloud.
+      const manualRes = await supabase
+        .from('manual_revenues')
+        .select('id, revenue_date, client_name, label, amount, category, payment_method, purchase_price, qonto_transaction_id, notes')
+        .order('revenue_date', { ascending: false });
+      const manualRevenues = ((manualRes.error ? [] : manualRes.data || []) as AccountingManualRevenue[]).map((r) => ({
+        ...r,
+        amount: Number(r.amount) || 0,
+        purchase_price: r.purchase_price == null ? null : Number(r.purchase_price),
+      }));
+
+      setData({ orders: [...orders, ...closedMissionOrders], liveSales, sourcingAdvances, giftRewards: giftsRes.data || [], subscriptionPayments, subscriptionSources, shippingCharges, deliveryPayments, manualRevenues });
     } catch (err) {
       console.error('Erreur lors du chargement des données comptables:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');

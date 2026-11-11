@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
 import { AccountingRawData } from '../../../hooks/useAccountingRawData';
 import { AccountingPeriod, isWithinRange, monthKeyLabel } from '../../../utils/accountingPeriods';
-import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries, computeShippingCharges, withShipping, computeDeliveryTotals, computeExpensesTotal, expensesByMonth } from '../../../utils/accountingCalc';
+import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries, computeShippingCharges, withShipping, computeDeliveryTotals, computeExpensesTotal, expensesByMonth, computeManualRevenueTotals } from '../../../utils/accountingCalc';
 import { Expense } from '../../../hooks/useExpenses';
 import { SUBSCRIPTION_SOURCE_CLIENTS } from '../../../hooks/useAccountingRawData';
 
@@ -17,12 +17,13 @@ const pct = (current: number, previous: number): number | null => (previous ? ((
 
 // Infobulle du graphique mensuel : CA total du mois en tête, puis le
 // détail par canal et les courbes, toujours dans le même ordre.
-const MONTHLY_TOOLTIP_ROWS: { key: 'web' | 'b2b' | 'live' | 'subscriptions' | 'deliveries' | 'cogs' | 'shipping' | 'margin'; label: string; color: string }[] = [
+const MONTHLY_TOOLTIP_ROWS: { key: 'web' | 'b2b' | 'live' | 'subscriptions' | 'deliveries' | 'other' | 'cogs' | 'shipping' | 'margin'; label: string; color: string }[] = [
   { key: 'web', label: 'CA B2C', color: '#2563eb' },
   { key: 'b2b', label: 'CA B2B', color: '#7c3aed' },
   { key: 'live', label: 'CA Lives', color: '#d97706' },
   { key: 'subscriptions', label: 'CA Abonnements', color: '#059669' },
   { key: 'deliveries', label: 'CA Livraisons', color: '#0891b2' },
+  { key: 'other', label: 'CA Autres revenus', color: '#db2777' },
   { key: 'cogs', label: "Coût d'achat", color: '#dc2626' },
   { key: 'shipping', label: "Frais d'expédition (HT)", color: '#ea580c' },
   { key: 'margin', label: 'Marge brute', color: '#16a34a' },
@@ -35,7 +36,7 @@ const subscriptionLabel = (source: string) =>
 const MonthlyTooltip: React.FC<{ active?: boolean; label?: string; payload?: { payload: Record<string, unknown> }[]; sources: string[] }> = ({ active, label, payload, sources }) => {
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0].payload as Record<string, number> & { subsBySource?: Record<string, number> };
-  const total = (row.web || 0) + (row.b2b || 0) + (row.live || 0) + (row.subscriptions || 0) + (row.deliveries || 0);
+  const total = (row.web || 0) + (row.b2b || 0) + (row.live || 0) + (row.subscriptions || 0) + (row.deliveries || 0) + (row.other || 0);
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-md">
       <p className="mb-1.5 font-medium text-gray-900">{label}</p>
@@ -62,7 +63,7 @@ const MonthlyTooltip: React.FC<{ active?: boolean; label?: string; payload?: { p
   );
 };
 
-const CHANNEL_COLORS = { web: '#2563eb', b2b: '#7c3aed', live: '#d97706', subscriptions: '#059669', deliveries: '#0891b2' };
+const CHANNEL_COLORS = { web: '#2563eb', b2b: '#7c3aed', live: '#d97706', subscriptions: '#059669', deliveries: '#0891b2', other: '#db2777' };
 /** Nuances de vert des sources d'abonnement (répartition du CA). */
 const SUBSCRIPTION_SHADES = ['#059669', '#10b981', '#34d399', '#047857', '#6ee7b7', '#065f46', '#a7f3d0'];
 
@@ -81,7 +82,8 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     const subscriptions = computeSubscriptionTotals(data.subscriptionPayments, period.range);
     const deliveries = computeDeliveryTotals(data.deliveryPayments, period.range);
     const shipping = computeShippingCharges(data.shippingCharges, period.range);
-    return { web, b2b, live, subscriptions, deliveries, shipping, global: withShipping(combineTotals(web, b2b, live, subscriptions, deliveries), shipping) };
+    const other = computeManualRevenueTotals(data.manualRevenues, period.range);
+    return { web, b2b, live, subscriptions, deliveries, other, shipping, global: withShipping(combineTotals(web, b2b, live, subscriptions, deliveries, other), shipping) };
   }, [data, period.range]);
 
   const mom = useMemo(() => {
@@ -90,7 +92,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     const b2b = computeChannelTotals(data.orders, 'b2b', period.momRange);
     const live = computeLiveTotals(data.liveSales, period.momRange);
     return withShipping(
-      combineTotals(web, b2b, live, computeSubscriptionTotals(data.subscriptionPayments, period.momRange), computeDeliveryTotals(data.deliveryPayments, period.momRange)),
+      combineTotals(web, b2b, live, computeSubscriptionTotals(data.subscriptionPayments, period.momRange), computeDeliveryTotals(data.deliveryPayments, period.momRange), computeManualRevenueTotals(data.manualRevenues, period.momRange)),
       computeShippingCharges(data.shippingCharges, period.momRange)
     );
   }, [data, period.momRange]);
@@ -101,7 +103,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     const b2b = computeChannelTotals(data.orders, 'b2b', period.yoyRange);
     const live = computeLiveTotals(data.liveSales, period.yoyRange);
     return withShipping(
-      combineTotals(web, b2b, live, computeSubscriptionTotals(data.subscriptionPayments, period.yoyRange), computeDeliveryTotals(data.deliveryPayments, period.yoyRange)),
+      combineTotals(web, b2b, live, computeSubscriptionTotals(data.subscriptionPayments, period.yoyRange), computeDeliveryTotals(data.deliveryPayments, period.yoyRange), computeManualRevenueTotals(data.manualRevenues, period.yoyRange)),
       computeShippingCharges(data.shippingCharges, period.yoyRange)
     );
   }, [data, period.yoyRange]);
@@ -126,6 +128,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
       { name: 'B2B', value: current.b2b.revenue, color: CHANNEL_COLORS.b2b },
       { name: 'Lives', value: current.live.revenue, color: CHANNEL_COLORS.live },
       { name: 'Livraisons', value: current.deliveries.revenue, color: CHANNEL_COLORS.deliveries },
+      { name: 'Autres revenus', value: current.other.revenue, color: CHANNEL_COLORS.other },
       ...subsBySource.map((s, i) => ({
         name: subscriptionLabel(s.source).replace(/^CA a/, 'A'),
         value: s.revenue,
@@ -216,7 +219,8 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                 <Bar dataKey="b2b" stackId="ca" name="CA B2B" fill={CHANNEL_COLORS.b2b} />
                 <Bar dataKey="live" stackId="ca" name="CA Lives" fill={CHANNEL_COLORS.live} />
                 <Bar dataKey="subscriptions" stackId="ca" name="CA Abonnements" fill={CHANNEL_COLORS.subscriptions} />
-                <Bar dataKey="deliveries" stackId="ca" name="CA Livraisons" fill={CHANNEL_COLORS.deliveries} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="deliveries" stackId="ca" name="CA Livraisons" fill={CHANNEL_COLORS.deliveries} />
+                <Bar dataKey="other" stackId="ca" name="CA Autres revenus" fill={CHANNEL_COLORS.other} radius={[4, 4, 0, 0]} />
                 <Line type="monotone" dataKey="cogs" name="Coût d'achat" stroke="#dc2626" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="margin" name="Marge brute" stroke="#16a34a" strokeWidth={2} dot={false} />
               </ComposedChart>
@@ -271,6 +275,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                     <th key={s} className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">{subscriptionLabel(s)}</th>
                   ))}
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">CA Livraisons</th>
+                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">CA autres revenus</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA Total</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Coût d'achat</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">Expédition Sendcloud (HT)</th>
@@ -297,6 +302,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                         <td key={s} className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.subsBySource[s] || 0)}</td>
                       ))}
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.deliveries)}</td>
+                      <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.other)}</td>
                       <td className="py-2.5 px-4 text-right text-sm font-medium text-gray-900 tabular-nums">{EUR(m.total)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.cogs)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.shipping)}</td>

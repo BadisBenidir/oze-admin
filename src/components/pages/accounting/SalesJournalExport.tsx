@@ -72,6 +72,7 @@ export const SalesJournalExport: React.FC = () => {
               <option value="web">Web B2C uniquement</option>
               <option value="b2b">Commandes B2B uniquement</option>
               <option value="sourcing">Avances Sourcing uniquement</option>
+              <option value="manual">Autres revenus uniquement</option>
             </select>
           </div>
         </div>

@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchSourcingFulfillmentOrderIds } from '../utils/sourcingFulfillment';
 
-export type SalesJournalScope = 'all' | 'web' | 'b2b' | 'sourcing';
+export type SalesJournalScope = 'all' | 'web' | 'b2b' | 'sourcing' | 'manual';
 
 interface SalesJournalRow {
   date: Date;
@@ -81,7 +81,8 @@ export interface SalesJournalResult {
  * Génère et télécharge le "Journal des Ventes" (.xlsx) : commandes web
  * (order_channel='web'), commandes B2B (order_channel='b2b') et avances de
  * sourcing sur mesure (b2b_sourcing_missions.advance_amount, paid_at dans
- * l'intervalle), triées chronologiquement.
+ * l'intervalle) et autres revenus saisis à la main (manual_revenues, 0275),
+ * triées chronologiquement.
  *
  * OZË Paris est en franchise en base de TVA (article 293 B du CGI, voir
  * config/legal.ts et Terms.tsx) : aucune TVA n'est facturée sur ces ventes,
@@ -177,6 +178,19 @@ export const useSalesJournalExport = () => {
         for (const m of (sourcingData || []) as unknown as SourcingMissionRow[]) {
           const client = profileDisplayName(m.requester) || m.reseller?.company_name || 'Revendeur';
           rows.push({ date: new Date(m.paid_at), reference: m.reference || m.title, client, amountTTC: Number(m.advance_amount) || 0 });
+        }
+      }
+
+      // Autres revenus saisis à la main (0275) : virements, PayPal, prestations.
+      if (scope === 'all' || scope === 'manual') {
+        const { data, error } = await supabase
+          .from('manual_revenues')
+          .select('revenue_date, client_name, label, amount')
+          .gte('revenue_date', startDate)
+          .lte('revenue_date', effectiveEndDate);
+        if (error) throw new Error(error.message);
+        for (const r of (data || []) as { revenue_date: string; client_name: string; label: string; amount: number }[]) {
+          rows.push({ date: new Date(`${r.revenue_date}T12:00:00`), reference: r.label, client: r.client_name, amountTTC: Number(r.amount) || 0 });
         }
       }
 

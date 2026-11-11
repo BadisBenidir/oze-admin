@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { LayoutDashboard, Globe, Handshake, Gavel, AlertCircle, Landmark, Receipt } from 'lucide-react';
+import { LayoutDashboard, Globe, Handshake, Gavel, AlertCircle, Landmark, Receipt, Banknote } from 'lucide-react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useAccountingRawData } from '../../hooks/useAccountingRawData';
 import { buildAccountingPeriod, PeriodPreset } from '../../utils/accountingPeriods';
@@ -12,15 +12,17 @@ import { B2BTab } from './accounting/B2BTab';
 import { LivesTab } from './accounting/LivesTab';
 import { QontoTab } from './accounting/QontoTab';
 import { ExpensesTab } from './accounting/ExpensesTab';
+import { OtherRevenuesTab } from './accounting/OtherRevenuesTab';
 import { useExpenses } from '../../hooks/useExpenses';
 
-type AccountingTab = 'global' | 'b2c' | 'b2b' | 'lives' | 'expenses' | 'qonto';
+type AccountingTab = 'global' | 'b2c' | 'b2b' | 'lives' | 'other-revenues' | 'expenses' | 'qonto';
 
 const TABS: { id: AccountingTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'global', label: 'Dashboard Global', icon: LayoutDashboard },
   { id: 'b2c', label: 'B2C (Site Web)', icon: Globe },
   { id: 'b2b', label: 'B2B (Revendeurs & Sourcing)', icon: Handshake },
   { id: 'lives', label: 'Lives', icon: Gavel },
+  { id: 'other-revenues', label: 'Autres revenus', icon: Banknote },
   { id: 'expenses', label: 'Frais externes', icon: Receipt },
   { id: 'qonto', label: 'Trésorerie Qonto', icon: Landmark },
 ];
@@ -38,7 +40,7 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
  * déduites de la marge du Dashboard Global. */
 export const Accounting: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const { data, loading, error } = useAccountingRawData(isAdmin);
+  const { data, loading, error, refresh } = useAccountingRawData(isAdmin);
   // Frais externes saisis à la main (0274) : onglet dédié + déduits de la
   // marge du Dashboard Global.
   const expensesApi = useExpenses(isAdmin);
@@ -123,6 +125,9 @@ export const Accounting: React.FC = () => {
           {activeTab === 'b2c' && <B2CTab data={data} period={period} />}
           {activeTab === 'b2b' && <B2BTab data={data} period={period} />}
           {activeTab === 'lives' && <LivesTab data={data} period={period} />}
+          {activeTab === 'other-revenues' && (
+            <OtherRevenuesTab revenues={data.manualRevenues} period={period} onChanged={() => refresh(true)} />
+          )}
           {activeTab === 'expenses' && (
             <ExpensesTab
               expenses={expensesApi.expenses}
