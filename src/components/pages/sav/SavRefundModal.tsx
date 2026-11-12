@@ -4,6 +4,7 @@ import { supabase } from '../../../lib/supabase';
 import { B2BOrder, fetchB2BOrderById } from '../../../hooks/useB2BOrders';
 import { cancelOrder, cancelOrderItem } from '../../../hooks/useCancelOrderItem';
 import type { SavAdminTicket, SavRefundAction } from '../../../hooks/useSavAdmin';
+import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 
 type Restock = 'draft' | 'for-sale-b2b' | 'archived';
 type Method = 'wallet' | 'stripe';
@@ -71,6 +72,8 @@ export const SavRefundModal: React.FC<{
   const whole = items.length > 0 && items.length === active.length;
   const amount = items.reduce((s, i) => s + i.line_total + (i.insured ? i.insurance_cost : 0), 0);
   const isPaid = order?.payment_status === 'paid';
+  // Commande d'enchère : un seul lot, annulé en entier.
+  const isAuction = Boolean(order?.order_number?.startsWith('AUC-'));
 
   // Message au client recalculé à chaque changement d'articles / de mode.
   useEffect(() => {
@@ -84,10 +87,29 @@ export const SavRefundModal: React.FC<{
     setBusy(true);
     setError(null);
     const refundMethod = isPaid ? method : undefined;
-    const results = whole
+    const results = whole && !isAuction
       ? [await cancelOrder(order.id, reason.trim(), restock, refundMethod)]
       : [];
-    if (!whole) {
+    if (isAuction) {
+      // Lot d'enchère (AUC-) : jamais annulable par les chemins génériques
+      // (0146) — on annule le lot (cancel-auction-item), qui annule aussi la
+      // commande et rembourse si payé, comme depuis la fiche commande.
+      const { data: lot, error: lotError } = await supabase
+        .from('auction_items')
+        .select('id')
+        .eq('order_id', order.id)
+        .neq('status', 'cancelled')
+        .maybeSingle();
+      if (lotError || !lot) {
+        results.push({ success: false, error: lotError?.message || "Lot d'enchère introuvable pour cette commande" });
+      } else {
+        const { data, error: fnError } = await invokeEdgeFunction<{ refund_status?: 'not_applicable' | 'succeeded' | 'failed'; refund_error?: string }>(
+          'cancel-auction-item',
+          { item_id: lot.id, reason: reason.trim(), restock_action: restock, refund_method: refundMethod }
+        );
+        results.push(fnError ? { success: false, error: fnError } : { success: true, ...(data || {}) });
+      }
+    } else if (!whole) {
       for (const item of items) {
         const r = await cancelOrderItem(item.id, reason.trim(), restock, refundMethod);
         results.push(r);
@@ -169,7 +191,7 @@ export const SavRefundModal: React.FC<{
                 <div className="space-y-1.5">
                   {active.map((i) => (
                     <label key={i.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 p-2 hover:bg-gray-50">
-                      <input type="checkbox" checked={selected.includes(i.id)} onChange={() => toggle(i.id)} className="h-4 w-4 accent-gray-900" />
+                      <input type="checkbox" checked={selected.includes(i.id)} disabled={isAuction} onChange={() => toggle(i.id)} className="h-4 w-4 accent-gray-900" />
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-gray-100 bg-white">
                         {i.product_snapshot?.images?.[0] ? <img src={i.product_snapshot.images[0]} alt="" className="h-full w-full object-cover" /> : <Package className="h-4 w-4 text-gray-300" />}
                       </div>
