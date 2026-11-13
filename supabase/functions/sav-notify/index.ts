@@ -4,6 +4,7 @@
 //   - ticket_created  : confirmation au client (n° + lien vers sa demande) ;
 //   - team_new_ticket : alerte équipe (SAV_TEAM_EMAIL), objet « URGENT » si urgent ;
 //   - team_reply      : « Nouvelle réponse à votre demande #… » (extrait + bouton) ;
+//   - client_reply    : alerte équipe quand le client répond (0277) ;
 //   - resolved        : demande passée en « Résolu ».
 // Le client ne répond pas par email : les boutons mènent à la demande sur
 // pro.ozeparis.com.
@@ -165,6 +166,23 @@ Deno.serve(async () => {
             `Sujet : ${esc(t.subject)}`,
           ],
           quote: first?.content ? excerpt(first.content, 800) : undefined,
+          cta: { label: 'Ouvrir le SAV', url: ADMIN_URL },
+          footer: 'OZË PARIS — SAV (notification interne)',
+        });
+      } else if (job.kind === 'client_reply') {
+        const { data: m } = await admin.from('sav_ticket_messages').select('content, attachments').eq('id', job.message_id!).maybeSingle();
+        if (!m) throw new Error('message introuvable');
+        const photos = Array.isArray(m.attachments) && m.attachments.length ? `\n\n(${m.attachments.length} pièce(s) jointe(s))` : '';
+        const who = [creator?.first_name, creator?.last_name].filter(Boolean).join(' ') || creator?.email || '—';
+        to = teamEmail;
+        subject = `Réponse client ${t.number} : ${t.subject}`;
+        html = layout({
+          title: `Nouvelle réponse sur ${esc(t.number)}`,
+          paragraphs: [
+            `<strong>${esc(reseller?.company_name || '—')}</strong> · ${esc(who)}${order?.order_number ? ` · Commande ${esc(order.order_number)}` : ''}`,
+            `Sujet : ${esc(t.subject)}`,
+          ],
+          quote: excerpt(m.content || '', 800) + photos,
           cta: { label: 'Ouvrir le SAV', url: ADMIN_URL },
           footer: 'OZË PARIS — SAV (notification interne)',
         });
