@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, FileText, Loader2, Percent, RefreshCw, Save, Send, Undo2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Loader2, Percent, RefreshCw, Save, Send, Undo2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
@@ -165,6 +165,10 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
   const toProvision = rows.filter((r) => (r.decl?.status ?? 'a_declarer') === 'a_declarer').reduce((s, r) => s + r.net, 0);
   const declaredUnpaid = rows.filter((r) => r.decl?.status === 'declaree').reduce((s, r) => s + r.net, 0);
   const drafts = rectifications.filter((r) => r.status === 'draft' && !r.cancelled);
+  // Traitées (émises ici, régularisées ailleurs, annulées) : historique replié.
+  const done = rectifications.filter((r) => !(r.status === 'draft' && !r.cancelled));
+  const [showDone, setShowDone] = useState(false);
+  const visible = showDone ? [...drafts, ...done] : drafts;
 
   const saveDeclaration = async (ym: string, patch: Partial<Declaration>) => {
     setBusy(`decl-${ym}`);
@@ -317,7 +321,7 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {rectifications.length === 0 ? (
+          {visible.length === 0 ? (
             <p className="py-10 text-center text-sm text-gray-500">Aucune facture à rectifier.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -335,7 +339,7 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                   </tr>
                 </thead>
                 <tbody>
-                  {rectifications.map((r) => (
+                  {visible.map((r) => (
                     <tr key={r.id} className="border-b border-gray-50 text-sm hover:bg-gray-50">
                       <td className="px-3 py-2.5 font-medium text-gray-900">{r.original_number}{r.credit_note_id && <span className="ml-1 text-xs text-gray-500">(avoir)</span>}</td>
                       <td className="px-3 py-2.5 text-gray-600">{parisDate(r.original_issued_at)}</td>
@@ -390,6 +394,12 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                 </tbody>
               </table>
             </div>
+          )}
+          {done.length > 0 && (
+            <button onClick={() => setShowDone((v) => !v)} className="flex w-full items-center justify-center gap-1 border-t border-gray-100 py-2.5 text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-800">
+              {showDone ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              {showDone ? 'Masquer les factures traitées' : `Factures traitées (${done.length}) : émises, régularisées ou annulées`}
+            </button>
           )}
         </CardContent>
       </Card>
