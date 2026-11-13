@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { LayoutDashboard, Globe, Handshake, Gavel, AlertCircle, Landmark, Receipt, Banknote, Wallet, Percent } from 'lucide-react';
+import { LayoutDashboard, Globe, Handshake, Gavel, AlertCircle, Landmark, Receipt, Banknote, Wallet, Percent, RefreshCw, Loader2 } from 'lucide-react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useAccountingRawData } from '../../hooks/useAccountingRawData';
 import { buildAccountingPeriod, PeriodPreset } from '../../utils/accountingPeriods';
@@ -18,6 +18,7 @@ import { useExpenses } from '../../hooks/useExpenses';
 import { VatTab } from './accounting/VatTab';
 import { useVatSettings } from '../../utils/vat';
 import { toHtData, toHtExpenses } from '../../utils/accountingCalc';
+import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 
 type AccountingTab = 'global' | 'b2c' | 'b2b' | 'lives' | 'other-revenues' | 'expenses' | 'associate' | 'vat' | 'qonto';
 
@@ -63,6 +64,20 @@ export const Accounting: React.FC = () => {
   const [compareMoM, setCompareMoM] = useState(true);
   const [compareYoY, setCompareYoY] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  // « Actualiser » : synchro Qonto (rapprochements, débits importés,
+  // compte courant) puis rechargement de toutes les données et de tous les
+  // onglets (ceux qui chargent leurs propres données sont remontés).
+  const [reloadKey, setReloadKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+  const refreshAll = async () => {
+    setRefreshing(true);
+    await invokeEdgeFunction('qonto-sync', {});
+    await Promise.all([refresh(true), expensesApi.refresh(), vat.refresh()]);
+    setReloadKey((k) => k + 1);
+    setRefreshedAt(new Date());
+    setRefreshing(false);
+  };
 
   const period = useMemo(
     () => buildAccountingPeriod(preset, compareMoM, compareYoY, customStart, customEnd),
@@ -71,9 +86,25 @@ export const Accounting: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6">
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">Comptabilité & Finances</h3>
-        <p className="text-sm text-gray-500">Chiffre d'affaires, marges et trésorerie consolidés — tous canaux</p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Comptabilité & Finances</h3>
+          <p className="text-sm text-gray-500">Chiffre d'affaires, marges et trésorerie consolidés — tous canaux</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {refreshedAt && !refreshing && (
+            <span className="text-xs text-gray-500">À jour à {refreshedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+          )}
+          <button
+            onClick={refreshAll}
+            disabled={refreshing}
+            title="Synchronise Qonto puis recharge tous les onglets"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {refreshing ? 'Synchro Qonto…' : 'Actualiser'}
+          </button>
+        </div>
       </div>
 
       <AccountingToolbar
@@ -122,6 +153,7 @@ export const Accounting: React.FC = () => {
         })}
       </div>
 
+      <div key={reloadKey}>
       {loading ? (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -163,6 +195,7 @@ export const Accounting: React.FC = () => {
           {activeTab === 'qonto' && <QontoTab data={data} />}
         </>
       )}
+      </div>
     </div>
   );
 };
