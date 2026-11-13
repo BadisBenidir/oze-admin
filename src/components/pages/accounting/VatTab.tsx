@@ -162,7 +162,12 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
     });
   }, [start, vatSales, expenses, declarations, settings, sendcloud]);
 
-  const toProvision = rows.filter((r) => (r.decl?.status ?? 'a_declarer') === 'a_declarer').reduce((s, r) => s + r.net, 0);
+  // Indicateurs sur les mois pas encore payés (à déclarer ou déclarés) :
+  // TVA à payer = TVA due − TVA déductible (autoliquidation des deux côtés).
+  const unpaid = rows.filter((r) => r.decl?.status !== 'payee');
+  const vatDue = unpaid.reduce((s, r) => s + r.collected + r.autoliq, 0);
+  const vatDeductible = unpaid.reduce((s, r) => s + r.deductible + r.autoliq, 0);
+  const vatToPay = vatDue - vatDeductible;
   const declaredUnpaid = rows.filter((r) => r.decl?.status === 'declaree').reduce((s, r) => s + r.net, 0);
   const drafts = rectifications.filter((r) => r.status === 'draft' && !r.cancelled);
   // Traitées (émises ici, régularisées ailleurs, annulées) : historique replié.
@@ -240,20 +245,14 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
       {start && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <AccountingKpiCard
-            label={`TVA à provisionner depuis le ${parisDate(start).slice(0, 5)}`}
-            value={EUR(toProvision)}
+            label="TVA à payer"
+            value={EUR(vatToPay)}
             icon={Percent}
-            tone={toProvision > 0 ? 'red' : 'default'}
-            hint="TVA nette des mois pas encore déclarés"
+            tone={vatToPay > 0 ? 'red' : 'green'}
+            hint={`Depuis le ${parisDate(start).slice(0, 5)}, mois non payés${declaredUnpaid ? ` · dont ${EUR(declaredUnpaid)} déjà déclarée` : ''}${drafts.length ? ` · ${drafts.length} facture${drafts.length > 1 ? 's' : ''} à rectifier` : ''}`}
           />
-          <AccountingKpiCard label="Déclarée, à payer" value={EUR(declaredUnpaid)} icon={Percent} />
-          <AccountingKpiCard
-            label="Factures à rectifier"
-            value={String(drafts.length)}
-            icon={FileText}
-            tone={drafts.length ? 'red' : 'default'}
-            hint={drafts.length ? `TVA ${EUR(drafts.reduce((s, r) => s + r.vat_amount, 0))} sur ${EUR(drafts.reduce((s, r) => s + r.amount_ttc, 0))} TTC` : 'Aucune'}
-          />
+          <AccountingKpiCard label="TVA due totale" value={EUR(vatDue)} icon={Percent} hint="TVA collectée sur les ventes (+ autoliquidée)" />
+          <AccountingKpiCard label="TVA déductible" value={EUR(vatDeductible)} icon={FileText} tone="green" hint="TVA sur les achats pro (+ autoliquidée)" />
         </div>
       )}
 
