@@ -536,7 +536,7 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
 
           {ticket.conversation_id && (
             <Section
-              title={`Conversation chatbot d'origine (${chat.length} messages)`}
+              title={`Conversation chatbot d'origine (${chat.filter((c) => c.display_text?.trim() || c.attachments.length > 0).length} messages)`}
               icon={<Bot className="h-4 w-4 text-gray-500" />}
               right={
                 <button onClick={() => setShowChat((v) => !v)} className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900">
