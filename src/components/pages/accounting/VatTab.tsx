@@ -8,7 +8,7 @@ import { VatSale, expenseDeductibleVat } from '../../../utils/accountingCalc';
 import { VatSettings, vatRateAt } from '../../../utils/vat';
 import { monthKey } from '../../../utils/accountingPeriods';
 import { buildInvoiceItems, generateInvoicePdf, InvoiceBillingDetails, InvoiceSourceItem } from '../../../utils/generateInvoicePdf';
-import { CREDIT_NOTE_SELECT, CreditNoteRow, creditNotePdfData } from '../../../hooks/useInvoices';
+import { CREDIT_NOTE_SELECT, CreditNoteRow, advanceInvoiceItems, creditNotePdfData } from '../../../hooks/useInvoices';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -530,7 +530,7 @@ const downloadRectificationPdf = async (r: Rectification) => {
     billingDetails: inv.billing_details || {},
     paymentMethod: isAdvance ? 'virement' : paymentText(inv.order?.stripe_payment_intent_id),
     items: isAdvance
-      ? [{ description: `Avance — Sourcing sur mesure${ref ? ` — ${ref}` : ''}`, unitPrice: Number(inv.total_amount), quantity: 1, lineTotal: Number(inv.total_amount) }]
+      ? advanceInvoiceItems(inv)
       : buildInvoiceItems(inv.order?.order_items || [], { amount: inv.order?.late_fee_amount, days: inv.order?.late_fee_days }, inv.issued_at),
     vatRate: r.vat_rate,
     rectification,

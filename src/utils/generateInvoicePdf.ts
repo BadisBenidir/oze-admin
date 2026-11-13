@@ -108,7 +108,9 @@ export interface InvoiceData {
   rectification?: { originalNumber: string; originalIssuedAt: string };
 }
 
-const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+// Espaces insécables (fines) du format fr-FR remplacées : la police standard
+// de jsPDF ne les a pas (« 1/325,00 € » au lieu de « 1 325,00 € »).
+const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/[\u202F\u00A0]/g, ' ') + ' €';
 const dateStr = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
 
 /**
@@ -243,29 +245,29 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
 
   const totals = splitTtc(data.totalAmount, vatRate);
   doc.setFontSize(9.5);
-  doc.text(vatRate ? 'Sous-total HT' : 'Sous-total', pageWidth - 60, y);
+  doc.text(vatRate ? 'Sous-total HT' : 'Sous-total', pageWidth - 80, y);
   doc.text(EUR(splitTtc(subtotal, vatRate).ht), pageWidth - marginX, y, { align: 'right' });
   if (Math.abs(shipping) > 0.005) {
     y += 5;
-    doc.text(`${shipping < 0 ? 'Remise' : 'Livraison'}${vatRate ? ' HT' : ''}`, pageWidth - 60, y);
+    doc.text(`${shipping < 0 ? 'Remise' : 'Livraison'}${vatRate ? ' HT' : ''}`, pageWidth - 80, y);
     doc.text(EUR(splitTtc(shipping, vatRate).ht), pageWidth - marginX, y, { align: 'right' });
   }
   if (vatRate) {
     y += 5;
-    doc.text('Total HT', pageWidth - 60, y);
+    doc.text('Total HT', pageWidth - 80, y);
     doc.text(EUR(totals.ht), pageWidth - marginX, y, { align: 'right' });
     y += 5;
-    doc.text(`TVA ${String(vatRate).replace('.', ',')} %`, pageWidth - 60, y);
+    doc.text(`TVA ${String(vatRate).replace('.', ',')} %`, pageWidth - 80, y);
     doc.text(EUR(totals.vat), pageWidth - marginX, y, { align: 'right' });
   }
   y += 3;
   doc.setDrawColor(0);
-  doc.line(pageWidth - 60, y, pageWidth - marginX, y);
+  doc.line(pageWidth - 80, y, pageWidth - marginX, y);
   y += 6;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.text(data.creditNote ? (vatRate ? 'TOTAL AVOIR TTC' : 'TOTAL AVOIR') : vatRate ? 'TOTAL TTC' : 'TOTAL', pageWidth - 60, y);
+  doc.text(data.creditNote ? (vatRate ? 'TOTAL AVOIR TTC' : 'TOTAL AVOIR') : vatRate ? 'TOTAL TTC' : 'TOTAL', pageWidth - 80, y);
   doc.text(EUR(data.totalAmount), pageWidth - marginX, y, { align: 'right' });
   y += 12;
 
