@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, FileText, Loader2, Percent, RefreshCw, Save, Send } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileText, Loader2, Percent, RefreshCw, Save, Send, Undo2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
@@ -57,9 +57,11 @@ interface Rectification {
   vat_rate: number;
   amount_ht: number;
   vat_amount: number;
-  status: 'draft' | 'issued';
+  /** external (0282) : régularisée hors de l'admin (ex. avoir + facture sur Qonto). */
+  status: 'draft' | 'issued' | 'external';
   rectification_number: string | null;
   issued_at: string | null;
+  external_note: string | null;
 }
 
 interface VatTabProps {
@@ -177,6 +179,20 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
     setBusy(r.id);
     setError(null);
     const { error: e } = await supabase.rpc('vat_issue_rectification', { p_id: r.id });
+    setBusy(null);
+    if (e) return setError(e.message);
+    await load();
+  };
+
+  const markExternal = async (r: Rectification, undo = false) => {
+    let note: string | null = null;
+    if (!undo) {
+      note = window.prompt(`${r.original_number} déjà régularisée hors de l'admin (ex. avoir + nouvelle facture sur Qonto) ?\n\nRéférence de la régularisation :`, 'Régularisée sur Qonto');
+      if (note === null || !note.trim()) return;
+    } else if (!window.confirm(`Remettre ${r.original_number} dans les factures à rectifier ?`)) return;
+    setBusy(r.id);
+    setError(null);
+    const { error: e } = await supabase.rpc('vat_mark_rectification_external', { p_id: r.id, p_note: note });
     setBusy(null);
     if (e) return setError(e.message);
     await load();
@@ -310,12 +326,22 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                       <td className="px-3 py-2.5">
                         {r.status === 'issued' ? (
                           <span className="text-green-700">{r.rectification_number} · {r.issued_at && parisDate(r.issued_at)}</span>
+                        ) : r.status === 'external' ? (
+                          <span className="text-green-700" title={r.external_note || undefined}>
+                            Régularisée ailleurs{r.external_note ? ` · ${r.external_note}` : ''}
+                          </span>
                         ) : (
                           <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">Brouillon</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-right">
                         <div className="flex justify-end gap-1.5">
+                          {r.status === 'external' ? (
+                            <button onClick={() => markExternal(r, true)} disabled={busy === r.id} className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-50">
+                              <Undo2 className="h-3.5 w-3.5" /> Annuler
+                            </button>
+                          ) : (
+                          <>
                           <button onClick={() => pdf(r)} disabled={busy === `pdf-${r.id}`} className="inline-flex h-8 items-center gap-1 rounded-lg border border-gray-200 px-2.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50">
                             {busy === `pdf-${r.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
                             {r.status === 'issued' ? 'PDF' : 'Aperçu'}
@@ -324,6 +350,13 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                             <button onClick={() => issue(r)} disabled={busy === r.id} className="inline-flex h-8 items-center gap-1 rounded-lg bg-gray-900 px-2.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50">
                               {busy === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Émettre
                             </button>
+                          )}
+                          {r.status === 'draft' && (
+                            <button onClick={() => markExternal(r)} disabled={busy === r.id} title="Déjà régularisée hors de l'admin (ex. sur Qonto)" className="inline-flex h-8 items-center gap-1 rounded-lg border border-gray-200 px-2.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Régularisée ailleurs
+                            </button>
+                          )}
+                          </>
                           )}
                         </div>
                       </td>
