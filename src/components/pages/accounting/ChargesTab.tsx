@@ -89,6 +89,9 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
   // Justificatifs Qonto : filtre « sans justificatif » et dépôt depuis l'admin.
   const [missingOnly, setMissingOnly] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
+  // Déposés pendant la session : verts tout de suite, sans attendre le rechargement.
+  const [uploaded, setUploaded] = useState<Set<string>>(new Set());
+  const isMissing = useCallback((e: Expense) => missingReceipt(e) && !uploaded.has(e.id), [uploaded]);
 
   const inPeriod = useMemo(() => expensesInRange(expenses, period.range), [expenses, period.range]);
   const counted = useMemo(() => inPeriod.filter(isCountedCharge), [inPeriod]);
@@ -100,9 +103,9 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
   const shown = useMemo(() => {
     const base = status === 'to_review' ? toReview : inPeriod.filter((e) => status === 'all' || e.review_status === status);
     const byCategory = category ? base.filter((e) => (e.category || UNCATEGORIZED) === category) : base;
-    return missingOnly ? byCategory.filter(missingReceipt) : byCategory;
-  }, [status, toReview, inPeriod, category, missingOnly]);
-  const missingCount = useMemo(() => counted.filter(missingReceipt).length, [counted]);
+    return missingOnly ? byCategory.filter(isMissing) : byCategory;
+  }, [status, toReview, inPeriod, category, missingOnly, isMissing]);
+  const missingCount = useMemo(() => counted.filter(isMissing).length, [counted, isMissing]);
 
   // Dépose le justificatif sur la transaction Qonto (qonto-upload-attachment).
   const uploadReceipt = async (e: Expense, file: File) => {
@@ -122,6 +125,7 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
     const { error } = await invokeEdgeFunction('qonto-upload-attachment', { expense_id: e.id, filename: file.name, content_type: type, data_base64 });
     setUploading(null);
     if (error) return setNotice({ tone: 'error', text: `Justificatif « ${e.label} » : ${error}` });
+    setUploaded((prev) => new Set(prev).add(e.id));
     setNotice({ tone: 'ok', text: `Justificatif déposé sur Qonto pour « ${e.label} ». Si Qonto lit la TVA, elle sera reprise à la prochaine synchro.` });
     await refreshExpenses();
   };
@@ -331,7 +335,7 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
                         {e.label}
                         {e.bank_transaction_id && <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">Qonto</span>}
                         {e.bank_transaction_id && (
-                          missingReceipt(e) ? (
+                          isMissing(e) ? (
                             <label
                               className={`ml-1.5 inline-flex cursor-pointer items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 hover:bg-amber-100 ${uploading === e.id ? 'pointer-events-none opacity-60' : ''}`}
                               title="Ajouter le justificatif : il est déposé directement sur la transaction Qonto"
