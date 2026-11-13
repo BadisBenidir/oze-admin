@@ -26,8 +26,8 @@ export interface Expense {
   external_ref: string | null
   /** TVA déductible saisie à la main (0280), prioritaire sur celle lue par Qonto. */
   vat_amount?: number | null
-  /** Débit Qonto relié : TVA lue par Qonto (0280). */
-  bank?: { vat_amount: number | null } | null
+  /** Débit Qonto relié : TVA lue par Qonto (0280) et justificatifs déposés sur Qonto. */
+  bank?: { vat_amount: number | null; attachment_ids?: string[] | null } | null
 }
 
 export const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
@@ -62,7 +62,7 @@ export const useExpenses = (isAuthenticated: boolean = false): UseExpensesResult
       setError(null)
       const { data, error } = await supabase
         .from('expenses')
-        .select('*, bank:bank_transactions!expenses_bank_transaction_id_fkey(vat_amount)')
+        .select('*, bank:bank_transactions!expenses_bank_transaction_id_fkey(vat_amount, attachment_ids)')
         .order('spent_at', { ascending: false })
       if (error) throw new Error(error.message)
       // Avant 0276, pas de review_status : tout est compté.

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CreditCard, Landmark, Loader2, Pencil, Plus, ReceiptText, Settings2, Trash2, X } from 'lucide-react';
+import { AlertTriangle, CreditCard, Landmark, Loader2, Paperclip, Pencil, Plus, ReceiptText, Settings2, Trash2, Upload, X } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
@@ -73,6 +73,9 @@ interface ChargesTabProps {
  * validées (hors achat de marchandise) sont déduites de la marge brute
  * dans le Dashboard Global (Résultat net).
  */
+/** Charge reliée à un débit Qonto sans justificatif déposé sur Qonto. */
+const missingReceipt = (e: Expense) => Boolean(e.bank_transaction_id) && !(e.bank?.attachment_ids?.length);
+
 export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, createExpense, updateExpense, deleteExpense, refreshExpenses }) => {
   const { categories, refresh: refreshCategories } = useExpenseCategories();
   const [editing, setEditing] = useState<Expense | 'new' | null>(null);
@@ -83,6 +86,9 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   // Catégorie choisie pour classer une ligne « À vérifier ».
   const [pick, setPick] = useState<Record<string, string>>({});
+  // Justificatifs Qonto : filtre « sans justificatif » et dépôt depuis l'admin.
+  const [missingOnly, setMissingOnly] = useState(false);
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const inPeriod = useMemo(() => expensesInRange(expenses, period.range), [expenses, period.range]);
   const counted = useMemo(() => inPeriod.filter(isCountedCharge), [inPeriod]);
@@ -93,8 +99,32 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
   // « À vérifier » : toutes périodes confondues, pour tout classer d'un coup.
   const shown = useMemo(() => {
     const base = status === 'to_review' ? toReview : inPeriod.filter((e) => status === 'all' || e.review_status === status);
-    return category ? base.filter((e) => (e.category || UNCATEGORIZED) === category) : base;
-  }, [status, toReview, inPeriod, category]);
+    const byCategory = category ? base.filter((e) => (e.category || UNCATEGORIZED) === category) : base;
+    return missingOnly ? byCategory.filter(missingReceipt) : byCategory;
+  }, [status, toReview, inPeriod, category, missingOnly]);
+  const missingCount = useMemo(() => counted.filter(missingReceipt).length, [counted]);
+
+  // Dépose le justificatif sur la transaction Qonto (qonto-upload-attachment).
+  const uploadReceipt = async (e: Expense, file: File) => {
+    const type = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : '');
+    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(type)) {
+      setNotice({ tone: 'error', text: 'Qonto accepte les PDF, JPEG et PNG.' });
+      return;
+    }
+    setUploading(e.id);
+    setNotice(null);
+    const data_base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    const { error } = await invokeEdgeFunction('qonto-upload-attachment', { expense_id: e.id, filename: file.name, content_type: type, data_base64 });
+    setUploading(null);
+    if (error) return setNotice({ tone: 'error', text: `Justificatif « ${e.label} » : ${error}` });
+    setNotice({ tone: 'ok', text: `Justificatif déposé sur Qonto pour « ${e.label} ». Si Qonto lit la TVA, elle sera reprise à la prochaine synchro.` });
+    await refreshExpenses();
+  };
 
   // Tableau catégorie × mois (charges comptées).
   const months = useMemo(() => monthsOf(period), [period]);
@@ -253,6 +283,13 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
                 <option value="">Toutes les catégories</option>
                 {[UNCATEGORIZED, ...categories.map((c) => c.name)].map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
+              <button
+                onClick={() => setMissingOnly((v) => !v)}
+                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm ${missingOnly ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}
+                title="Charges comptées de la période sans justificatif sur Qonto"
+              >
+                <Paperclip className="h-4 w-4" /> Sans justificatif ({missingCount})
+              </button>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button onClick={importQonto} disabled={busy !== null} className={btn} title="Classe les nouveaux débits Qonto selon les règles (IWG, Entrupy, DHL…)">
@@ -293,6 +330,31 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
                       <td className="px-4 py-2.5 text-sm text-gray-900">
                         {e.label}
                         {e.bank_transaction_id && <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">Qonto</span>}
+                        {e.bank_transaction_id && (
+                          missingReceipt(e) ? (
+                            <label
+                              className={`ml-1.5 inline-flex cursor-pointer items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 hover:bg-amber-100 ${uploading === e.id ? 'pointer-events-none opacity-60' : ''}`}
+                              title="Ajouter le justificatif : il est déposé directement sur la transaction Qonto"
+                            >
+                              {uploading === e.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                              {uploading === e.id ? 'Envoi…' : 'Justificatif manquant'}
+                              <input
+                                type="file"
+                                accept="application/pdf,image/jpeg,image/png"
+                                className="hidden"
+                                onChange={(ev) => {
+                                  const f = ev.target.files?.[0];
+                                  ev.target.value = '';
+                                  if (f) uploadReceipt(e, f);
+                                }}
+                              />
+                            </label>
+                          ) : (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700" title="Justificatif présent sur Qonto">
+                              <Paperclip className="h-3 w-3" /> Justificatif
+                            </span>
+                          )
+                        )}
                         {e.notes && e.notes !== 'Import Qonto' && <p className="text-xs text-gray-500">{e.notes}</p>}
                       </td>
                       <td className="px-4 py-2.5 text-sm text-gray-600">
