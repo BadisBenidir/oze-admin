@@ -78,7 +78,8 @@ export interface AccountingManualRevenue {
   client_name: string;
   label: string;
   amount: number;
-  category: 'vente' | 'prestation' | 'autre';
+  /** 'remboursement' (0278) : remboursement client hors plateforme, montant négatif (avoir). */
+  category: 'vente' | 'prestation' | 'autre' | 'remboursement';
   payment_method: 'virement' | 'paypal' | 'especes' | 'autre' | null;
   purchase_price: number | null;
   qonto_transaction_id: string | null;

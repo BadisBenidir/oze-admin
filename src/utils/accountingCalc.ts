@@ -88,7 +88,9 @@ export const computeDeliveryTotals = (payments: { date: string; amount: number }
 };
 
 /** Autres revenus saisis à la main (0275) sur une plage : coût d'achat =
- * purchase_price si renseigné (vente d'article), 0 sinon (prestation). */
+ * purchase_price si renseigné (vente d'article), 0 sinon (prestation). Les
+ * remboursements clients (0278, montant négatif) réduisent le CA mais ne
+ * comptent pas comme encaissements. */
 export const manualRevenueDate = (r: { revenue_date: string }) => `${r.revenue_date}T12:00:00`;
 
 export const computeManualRevenueTotals = (revenues: AccountingManualRevenue[], range: DateRange): ChannelTotals => {
@@ -96,13 +98,14 @@ export const computeManualRevenueTotals = (revenues: AccountingManualRevenue[], 
   const revenue = rows.reduce((s, r) => s + r.amount, 0);
   const cogs = rows.reduce((s, r) => s + (r.purchase_price || 0), 0);
   const margin = revenue - cogs;
+  const sales = rows.filter((r) => r.category !== 'remboursement');
   return {
     revenue,
     cogs,
     margin,
     marginRate: revenue > 0 ? (margin / revenue) * 100 : null,
-    count: rows.length,
-    averageBasket: rows.length > 0 ? revenue / rows.length : 0,
+    count: sales.length,
+    averageBasket: sales.length > 0 ? sales.reduce((s, r) => s + r.amount, 0) / sales.length : 0,
   };
 };
 

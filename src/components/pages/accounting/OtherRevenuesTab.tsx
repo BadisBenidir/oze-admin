@@ -14,6 +14,7 @@ export const MANUAL_REVENUE_CATEGORIES: Record<AccountingManualRevenue['category
   vente: 'Vente',
   prestation: 'Prestation',
   autre: 'Autre',
+  remboursement: 'Remboursement client',
 };
 
 export const MANUAL_REVENUE_METHODS: Record<NonNullable<AccountingManualRevenue['payment_method']>, string> = {
@@ -43,6 +44,7 @@ export const OtherRevenuesTab: React.FC<OtherRevenuesTabProps> = ({ revenues, pe
   const totals = useMemo(() => computeManualRevenueTotals(revenues, period.range), [revenues, period.range]);
   const mom = useMemo(() => (period.momRange ? computeManualRevenueTotals(revenues, period.momRange) : null), [revenues, period.momRange]);
   const prestations = rows.filter((r) => r.category === 'prestation').reduce((s, r) => s + r.amount, 0);
+  const refunds = rows.filter((r) => r.category === 'remboursement').reduce((s, r) => s + r.amount, 0);
 
   const remove = async (r: AccountingManualRevenue) => {
     if (!window.confirm(`Supprimer « ${r.label} » (${r.client_name}, ${EUR(r.amount)}) ?`)) return;
@@ -59,7 +61,7 @@ export const OtherRevenuesTab: React.FC<OtherRevenuesTabProps> = ({ revenues, pe
           value={EUR(totals.revenue)}
           icon={Banknote}
           tone="green"
-          hint={`${totals.count} encaissement${totals.count > 1 ? 's' : ''} · compté${totals.count > 1 ? 's' : ''} dans le CA total`}
+          hint={`${totals.count} encaissement${totals.count > 1 ? 's' : ''}${refunds ? `, remboursements déduits (${EUR(refunds)})` : ''} · compté${totals.count > 1 ? 's' : ''} dans le CA total`}
           deltaMoM={mom && mom.revenue ? ((totals.revenue - mom.revenue) / mom.revenue) * 100 : undefined}
         />
         <AccountingKpiCard label="Dont prestations" value={EUR(prestations)} icon={TrendingUp} />
@@ -78,7 +80,7 @@ export const OtherRevenuesTab: React.FC<OtherRevenuesTabProps> = ({ revenues, pe
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-semibold text-gray-900">Revenus hors plateforme</h3>
-              <p className="text-sm text-gray-500">Virements, PayPal, prestations encaissés sur Qonto. Franchise de TVA : montant = montant encaissé.</p>
+              <p className="text-sm text-gray-500">Virements, PayPal, prestations encaissés sur Qonto. Franchise de TVA : montant = montant encaissé. Les remboursements clients hors plateforme sont déduits du CA (montant négatif).</p>
             </div>
             <button onClick={() => setEditing('new')} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800">
               <Plus className="h-4 w-4" /> Ajouter un revenu
@@ -114,7 +116,7 @@ export const OtherRevenuesTab: React.FC<OtherRevenuesTabProps> = ({ revenues, pe
                       </td>
                       <td className="px-4 py-2.5 text-sm text-gray-600">{MANUAL_REVENUE_CATEGORIES[r.category]}</td>
                       <td className="px-4 py-2.5 text-sm text-gray-600">{r.payment_method ? MANUAL_REVENUE_METHODS[r.payment_method] : '—'}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-right text-sm font-medium tabular-nums text-gray-900">{EUR(r.amount)}</td>
+                      <td className={`whitespace-nowrap px-4 py-2.5 text-right text-sm font-medium tabular-nums ${r.amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>{EUR(r.amount)}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right text-sm tabular-nums text-gray-600">{r.purchase_price != null ? EUR(r.purchase_price) : '—'}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right">
                         <button onClick={() => setEditing(r)} className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700" title="Modifier">
@@ -163,7 +165,7 @@ const RevenueFormModal: React.FC<{ revenue: AccountingManualRevenue | null; onCl
     revenue_date: revenue?.revenue_date ?? todayIso(),
     client_name: revenue?.client_name ?? '',
     label: revenue?.label ?? '',
-    amount: revenue ? String(revenue.amount).replace('.', ',') : '',
+    amount: revenue ? String(Math.abs(revenue.amount)).replace('.', ',') : '',
     category: revenue?.category ?? ('vente' as AccountingManualRevenue['category']),
     payment_method: revenue?.payment_method ?? ('virement' as NonNullable<AccountingManualRevenue['payment_method']>),
     purchase_price: revenue?.purchase_price != null ? String(revenue.purchase_price).replace('.', ',') : '',
@@ -181,6 +183,8 @@ const RevenueFormModal: React.FC<{ revenue: AccountingManualRevenue | null; onCl
     if (!form.client_name.trim()) return setError('Le client est obligatoire.');
     if (!form.label.trim()) return setError('Le libellé est obligatoire.');
     if (!form.amount.trim() || Number.isNaN(amount) || amount <= 0) return setError('Montant invalide.');
+    const isRefund = form.category === 'remboursement';
+    if (isRefund && purchase !== null) return setError("Pas de coût d'achat sur un remboursement.");
     if (purchase !== null && (Number.isNaN(purchase) || purchase < 0)) return setError("Coût d'achat invalide.");
     setBusy(true);
     setError(null);
@@ -188,7 +192,8 @@ const RevenueFormModal: React.FC<{ revenue: AccountingManualRevenue | null; onCl
       revenue_date: form.revenue_date,
       client_name: form.client_name.trim(),
       label: form.label.trim(),
-      amount,
+      // Remboursement client : saisi en positif, enregistré en négatif (0278).
+      amount: isRefund ? -amount : amount,
       category: form.category,
       payment_method: form.payment_method || null,
       purchase_price: purchase,
@@ -217,7 +222,7 @@ const RevenueFormModal: React.FC<{ revenue: AccountingManualRevenue | null; onCl
           <form onSubmit={submit} className="space-y-3 p-4">
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm font-medium text-gray-700">
-                Date d'encaissement
+                {form.category === 'remboursement' ? 'Date du remboursement' : "Date d'encaissement"}
                 <input type="date" value={form.revenue_date} onChange={(e) => set('revenue_date', e.target.value)} className={inputCls} />
               </label>
               <label className="block text-sm font-medium text-gray-700">
@@ -245,7 +250,7 @@ const RevenueFormModal: React.FC<{ revenue: AccountingManualRevenue | null; onCl
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm font-medium text-gray-700">
-                Montant encaissé (€)
+                {form.category === 'remboursement' ? 'Montant remboursé (€)' : 'Montant encaissé (€)'}
                 <input inputMode="decimal" value={form.amount} onChange={(e) => set('amount', e.target.value)} placeholder="0,00" className={inputCls} />
               </label>
               <label className="block text-sm font-medium text-gray-700">
