@@ -62,6 +62,8 @@ interface Rectification {
   rectification_number: string | null;
   issued_at: string | null;
   external_note: string | null;
+  /** Facture d'origine annulée (ex. avoir total sur Qonto) : plus rien à rectifier. */
+  cancelled?: boolean;
 }
 
 interface VatTabProps {
@@ -85,13 +87,22 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
   const load = useCallback(async () => {
     const [d, r] = await Promise.all([
       supabase.from('vat_declarations').select('*'),
-      supabase.from('vat_invoice_rectifications').select('*').order('original_issued_at'),
+      supabase.from('vat_invoice_rectifications').select('*, invoice:invoices(transmission_status)').order('original_issued_at'),
     ]);
     if (d.error || r.error) setError((d.error || r.error)!.message);
     const map: Record<string, Declaration> = {};
     for (const row of (d.data || []) as Declaration[]) map[row.period.slice(0, 7)] = { ...row, import_autoliquidation: Number(row.import_autoliquidation) || 0 };
     setDeclarations(map);
-    setRectifications(((r.data || []) as Rectification[]).map((x) => ({ ...x, amount_ttc: Number(x.amount_ttc), amount_ht: Number(x.amount_ht), vat_amount: Number(x.vat_amount) })));
+    type Row = Rectification & { invoice: { transmission_status: string | null } | null };
+    setRectifications(
+      ((r.data || []) as Row[]).map(({ invoice, ...x }) => ({
+        ...x,
+        amount_ttc: Number(x.amount_ttc),
+        amount_ht: Number(x.amount_ht),
+        vat_amount: Number(x.vat_amount),
+        cancelled: invoice?.transmission_status === 'cancelled',
+      }))
+    );
   }, []);
 
   useEffect(() => {
@@ -144,7 +155,7 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
 
   const toProvision = rows.filter((r) => (r.decl?.status ?? 'a_declarer') === 'a_declarer').reduce((s, r) => s + r.net, 0);
   const declaredUnpaid = rows.filter((r) => r.decl?.status === 'declaree').reduce((s, r) => s + r.net, 0);
-  const drafts = rectifications.filter((r) => r.status === 'draft');
+  const drafts = rectifications.filter((r) => r.status === 'draft' && !r.cancelled);
 
   const saveDeclaration = async (ym: string, patch: Partial<Declaration>) => {
     setBusy(`decl-${ym}`);
@@ -324,7 +335,12 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                       <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{EUR(r.amount_ht)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{EUR(r.vat_amount)}</td>
                       <td className="px-3 py-2.5">
-                        {r.status === 'issued' ? (
+                        {r.cancelled && r.status !== 'issued' ? (
+                          <span className="text-gray-500" title={r.external_note || undefined}>
+                            <span className="mr-1 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">Annulée</span>
+                            {r.external_note || 'Facture annulée : rien à rectifier'}
+                          </span>
+                        ) : r.status === 'issued' ? (
                           <span className="text-green-700">{r.rectification_number} · {r.issued_at && parisDate(r.issued_at)}</span>
                         ) : r.status === 'external' ? (
                           <span className="text-green-700" title={r.external_note || undefined}>
@@ -336,7 +352,7 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-right">
                         <div className="flex justify-end gap-1.5">
-                          {r.status === 'external' ? (
+                          {r.cancelled && r.status !== 'issued' ? null : r.status === 'external' ? (
                             <button onClick={() => markExternal(r, true)} disabled={busy === r.id} className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-50">
                               <Undo2 className="h-3.5 w-3.5" /> Annuler
                             </button>
