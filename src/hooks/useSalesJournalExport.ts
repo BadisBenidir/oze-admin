@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { fetchSourcingFulfillmentOrderIds } from '../utils/sourcingFulfillment';
 import { isCountedCharge } from '../utils/accountingCalc';
+import { ASSOCIATE_TYPES, AssociateEntryType, associateSigned } from '../utils/associateAccount';
+import { fetchVatSettings, splitTtc, vatRateAt } from '../utils/vat';
 
 export type SalesJournalScope = 'all' | 'web' | 'b2b' | 'sourcing' | 'manual';
 
@@ -85,12 +87,11 @@ export interface SalesJournalResult {
  * l'intervalle) et autres revenus saisis à la main (manual_revenues, 0275),
  * triées chronologiquement.
  *
- * OZË Paris est en franchise en base de TVA (article 293 B du CGI, voir
- * config/legal.ts et Terms.tsx) : aucune TVA n'est facturée sur ces ventes,
- * donc Base HT = Prix Encaissé TTC et TVA Collectée = 0 sur chaque ligne —
- * corrige une version antérieure de cet export qui appliquait à tort un
- * taux de 20% (confirmé depuis : pas de régime de marge NI de TVA standard
- * tant que ce statut de franchise s'applique).
+ * TVA (0280) : franchise en base (art. 293 B) jusqu'à la bascule
+ * (vat_settings.vat_start_at) — Base HT = Prix Encaissé et TVA nulle ; à
+ * partir de la bascule, prix encaissé TTC, Base HT = TTC / (1 + taux), TVA
+ * collectée = TTC − HT. Feuille « TVA » : collectée, déductible et nette par
+ * mois (périmètre complet).
  */
 export const useSalesJournalExport = () => {
   const [exporting, setExporting] = useState(false);
@@ -197,16 +198,32 @@ export const useSalesJournalExport = () => {
 
       // Charges externes validées (0276) : feuilles « Charges » et « Synthèse »
       // du périmètre complet uniquement.
-      let charges: { spent_at: string; label: string; category: string | null; amount: number; bank_transaction_id: string | null; review_status: string }[] = [];
+      let charges: { spent_at: string; label: string; category: string | null; amount: number; bank_transaction_id: string | null; review_status: string; vat_amount: number | null; bank: { vat_amount: number | null } | null }[] = [];
       if (scope === 'all') {
         const { data, error } = await supabase
           .from('expenses')
-          .select('spent_at, label, category, amount, bank_transaction_id, review_status')
+          .select('spent_at, label, category, amount, bank_transaction_id, review_status, vat_amount, bank:bank_transactions!expenses_bank_transaction_id_fkey(vat_amount)')
           .gte('spent_at', startDate)
           .lte('spent_at', effectiveEndDate)
           .order('spent_at');
         if (error) throw new Error(error.message);
-        charges = ((data || []) as typeof charges).filter(isCountedCharge);
+        charges = ((data || []) as unknown as typeof charges).filter(isCountedCharge);
+      }
+
+      // Compte courant d'associé (0279) : solde à la date de fin (ni CA ni
+      // charge), mouvements de la période.
+      let associate: { entry_date: string; type: string; label: string; amount: number }[] = [];
+      let associateBalance = 0;
+      if (scope === 'all') {
+        const { data, error } = await supabase
+          .from('associate_account_entries')
+          .select('entry_date, type, label, amount')
+          .lte('entry_date', effectiveEndDate)
+          .order('entry_date');
+        if (error) throw new Error(error.message);
+        const all = (data || []) as typeof associate;
+        associateBalance = all.reduce((t, e) => t + associateSigned({ type: e.type as AssociateEntryType, amount: Number(e.amount) }), 0);
+        associate = all.filter((e) => e.entry_date >= startDate);
       }
 
       if (rows.length === 0 && charges.length === 0) {
@@ -216,12 +233,19 @@ export const useSalesJournalExport = () => {
       rows.sort((a, b) => a.date.getTime() - b.date.getTime());
 
       const dateStr = (d: Date) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const vat = await fetchVatSettings();
       const header = ['Date', 'N° Commande / Facture', 'Client', 'Prix Encaissé TTC', 'Base HT', 'TVA Collectée', 'Régime'];
+      const split = rows.map((r) => {
+        const rate = vatRateAt(vat, r.date);
+        return { r, rate, ...splitTtc(r.amountTTC, rate) };
+      });
       const aoa: (string | number)[][] = [
         header,
-        // Franchise en base : rien à extraire, la base HT est le montant
-        // encaissé lui-même et la TVA collectée est nulle sur chaque ligne.
-        ...rows.map((r) => [dateStr(r.date), r.reference, r.client, r.amountTTC, r.amountTTC, 0, 'Franchise en base (art. 293 B) — TVA non applicable']),
+        // Avant la bascule (franchise) : base HT = montant encaissé, TVA nulle.
+        ...split.map(({ r, rate, ht, vat: v }) => [
+          dateStr(r.date), r.reference, r.client, r.amountTTC, ht, v,
+          rate ? `TVA ${String(rate).replace('.', ',')} %` : 'Franchise en base (art. 293 B) — TVA non applicable',
+        ]),
       ];
 
       const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -231,30 +255,74 @@ export const useSalesJournalExport = () => {
       XLSX.utils.book_append_sheet(wb, ws, 'Ventes');
 
       if (scope === 'all') {
+        const deductibleOf = (c: (typeof charges)[number]) =>
+          vatRateAt(vat, new Date(`${c.spent_at}T12:00:00`)) ? Number(c.vat_amount ?? c.bank?.vat_amount ?? 0) || 0 : 0;
         const chargesSheet = XLSX.utils.aoa_to_sheet([
-          ['Date', 'Catégorie', 'Libellé', 'Montant', 'Source'],
-          ...charges.map((c) => [dateStr(new Date(`${c.spent_at}T12:00:00`)), c.category || 'Sans catégorie', c.label, Number(c.amount) || 0, c.bank_transaction_id ? 'Qonto' : 'Saisie']),
+          ['Date', 'Catégorie', 'Libellé', 'Montant TTC', 'TVA déductible', 'Source'],
+          ...charges.map((c) => [dateStr(new Date(`${c.spent_at}T12:00:00`)), c.category || 'Sans catégorie', c.label, Number(c.amount) || 0, deductibleOf(c), c.bank_transaction_id ? 'Qonto' : 'Saisie']),
         ]);
-        chargesSheet['!cols'] = [{ wch: 12 }, { wch: 28 }, { wch: 40 }, { wch: 14 }, { wch: 10 }];
+        chargesSheet['!cols'] = [{ wch: 12 }, { wch: 28 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 10 }];
         XLSX.utils.book_append_sheet(wb, chargesSheet, 'Charges');
 
         const byCategory = new Map<string, number>();
         for (const c of charges) byCategory.set(c.category || 'Sans catégorie', (byCategory.get(c.category || 'Sans catégorie') || 0) + (Number(c.amount) || 0));
         const sales = rows.reduce((t, r) => t + r.amountTTC, 0);
+        const salesHt = split.reduce((t, x) => t + x.ht, 0);
+        const vatCollected = split.reduce((t, x) => t + x.vat, 0);
+        const vatDeductible = charges.reduce((t, c) => t + deductibleOf(c), 0);
         const chargesTotal = charges.reduce((t, c) => t + (Number(c.amount) || 0), 0);
         const summary = XLSX.utils.aoa_to_sheet([
           ['Synthèse', `du ${startDate} au ${effectiveEndDate}`],
           [],
-          ['CA encaissé (journal des ventes)', sales],
+          ['CA encaissé TTC (journal des ventes)', sales],
+          ['CA HT', salesHt],
+          ['TVA collectée', vatCollected],
+          ['TVA déductible (charges)', vatDeductible],
+          ['TVA nette (hors autoliquidation, voir Comptabilité → TVA)', vatCollected - vatDeductible],
           [],
           ['Charges externes par catégorie', ''],
           ...[...byCategory.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, v]),
           ['Total charges externes', chargesTotal],
           [],
+          [`Compte courant d'associé au ${effectiveEndDate} (dû par la société, négatif = dû par l'associé)`, associateBalance],
+          [],
           ["Résultat net = marge brute (CA − coût d'achat produits − Sendcloud) − charges externes : voir Comptabilité → Dashboard Global.", ''],
         ]);
         summary['!cols'] = [{ wch: 44 }, { wch: 18 }];
         XLSX.utils.book_append_sheet(wb, summary, 'Synthèse');
+
+        // TVA par mois (0280) : autoliquidation import et statut des
+        // déclarations saisis dans Comptabilité → TVA.
+        const { data: declRows } = await supabase.from('vat_declarations').select('period, status, import_autoliquidation, declared_at, paid_at, paid_amount');
+        const decl = new Map(((declRows || []) as { period: string; status: string; import_autoliquidation: number; declared_at: string | null; paid_at: string | null; paid_amount: number | null }[]).map((d) => [d.period.slice(0, 7), d]));
+        const months = new Map<string, { ht: number; collected: number; deductible: number }>();
+        const bucket = (k: string) => months.get(k) || months.set(k, { ht: 0, collected: 0, deductible: 0 }).get(k)!;
+        for (const x of split) if (x.rate) { const b = bucket(x.r.date.toISOString().slice(0, 7)); b.ht += x.ht; b.collected += x.vat; }
+        for (const c of charges) { const d = deductibleOf(c); if (d) bucket(c.spent_at.slice(0, 7)).deductible += d; }
+        const statusLabel: Record<string, string> = { a_declarer: 'À déclarer', declaree: 'Déclarée', payee: 'Payée' };
+        const vatSheet = XLSX.utils.aoa_to_sheet([
+          ['Mois', 'CA HT', 'TVA collectée', 'TVA déductible', 'TVA import autoliquidée', 'TVA nette', 'Statut', 'Déclarée le', 'Payée le', 'Montant payé'],
+          ...[...months.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, m]) => {
+            const d = decl.get(k);
+            return [k, m.ht, m.collected, m.deductible, Number(d?.import_autoliquidation) || 0, m.collected - m.deductible, statusLabel[d?.status || 'a_declarer'], d?.declared_at || '', d?.paid_at || '', d?.paid_amount ?? ''];
+          }),
+        ]);
+        vatSheet['!cols'] = [{ wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, vatSheet, 'TVA');
+
+        const associateSheet = XLSX.utils.aoa_to_sheet([
+          ['Date', 'Type', 'Libellé', 'Montant (+ dû par la société / − diminue la dette)'],
+          ...associate.map((e) => [
+            dateStr(new Date(`${e.entry_date}T12:00:00`)),
+            ASSOCIATE_TYPES[e.type as AssociateEntryType]?.label || e.type,
+            e.label,
+            associateSigned({ type: e.type as AssociateEntryType, amount: Number(e.amount) }),
+          ]),
+          [],
+          [`Solde au ${effectiveEndDate}`, '', '', associateBalance],
+        ]);
+        associateSheet['!cols'] = [{ wch: 12 }, { wch: 26 }, { wch: 44 }, { wch: 18 }];
+        XLSX.utils.book_append_sheet(wb, associateSheet, 'Compte courant associé');
       }
       XLSX.writeFile(wb, `journal_ventes_du_${startDate}_au_${effectiveEndDate}.xlsx`);
 

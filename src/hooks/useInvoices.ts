@@ -88,7 +88,7 @@ export const loadSharedInvoice = async (invoiceId: string, mergedIntoId: string 
   const primaryId = mergedIntoId || invoiceId;
   const { data: group } = await supabase
     .from('invoices')
-    .select('id, order_id, invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, merged_into_invoice_id')
+    .select('id, order_id, invoice_number, issued_at, total_amount, vat_rate, legal_status, billing_details, pdf_url, merged_into_invoice_id')
     .or(`id.eq.${primaryId},merged_into_invoice_id.eq.${primaryId}`);
   if (!group || group.length < 2) return null;
   const primary = group.find((g) => g.id === primaryId);
@@ -163,7 +163,7 @@ export const useInvoices = () => {
       // sourcing (plusieurs depuis 0220, avance en plusieurs fois).
       const { data: rows, error: fetchError } = await supabase
         .from('invoices')
-        .select('id, invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, kind, merged_into_invoice_id, sourcing_mission:b2b_sourcing_missions(reference, title)')
+        .select('id, invoice_number, issued_at, total_amount, vat_rate, legal_status, billing_details, pdf_url, kind, merged_into_invoice_id, sourcing_mission:b2b_sourcing_missions(reference, title)')
         .eq('order_id', order.id)
         .order('issued_at', { ascending: true });
       if (fetchError || !rows?.length) {
@@ -185,6 +185,7 @@ export const useInvoices = () => {
             orderNumber: shared.orderNumbers.join(' + '),
             orderDate: shared.firstOrderDate,
             totalAmount: Math.round(shared.totalAmount * 100) / 100,
+            vatRate: shared.primary.vat_rate,
             legalStatus: shared.primary.legal_status as 'individual' | 'sole_proprietorship' | 'company',
             billingDetails: (shared.primary.billing_details || {}) as InvoiceBillingDetails,
             paymentMethod: order.paymentMethod,
@@ -224,6 +225,7 @@ export const useInvoices = () => {
           orderNumber: order.order_number,
           orderDate: order.created_at,
           totalAmount: Number(invoice.total_amount),
+          vatRate: invoice.vat_rate,
           legalStatus: invoice.legal_status as 'individual' | 'sole_proprietorship' | 'company',
           billingDetails: (invoice.billing_details || {}) as InvoiceBillingDetails,
           paymentMethod: order.paymentMethod,
@@ -370,7 +372,7 @@ export const useAdvanceInvoices = (missionId: string | null) => {
   const download = async (invoiceId: string) => {
     const { data } = await supabase
       .from('invoices')
-      .select('invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, transmission_status, sourcing_mission:b2b_sourcing_missions(reference, title, created_at, paid_at)')
+      .select('invoice_number, issued_at, total_amount, vat_rate, legal_status, billing_details, pdf_url, transmission_status, sourcing_mission:b2b_sourcing_missions(reference, title, created_at, paid_at)')
       .eq('id', invoiceId)
       .maybeSingle();
     if (!data) return;
@@ -387,6 +389,7 @@ export const useAdvanceInvoices = (missionId: string | null) => {
       orderNumber: mission?.reference || data.invoice_number,
       orderDate: mission?.created_at || data.issued_at,
       totalAmount: Number(data.total_amount),
+      vatRate: data.vat_rate,
       legalStatus: data.legal_status as 'individual' | 'sole_proprietorship' | 'company',
       billingDetails: (data.billing_details || {}) as InvoiceBillingDetails,
       paymentMethod: 'virement bancaire',
@@ -424,12 +427,14 @@ export interface CreditNoteRow {
   billing_details: InvoiceBillingDetails;
   lines: InvoiceLineItem[];
   order_item_id: string;
+  /** Taux figé (0281) ; null = avoir émis sous la franchise. */
+  vat_rate: number | null;
   invoice: { invoice_number: string } | null;
   order: { order_number: string; created_at: string } | null;
 }
 
 export const CREDIT_NOTE_SELECT =
-  'id, credit_note_number, issued_at, amount, refund_method, reason, legal_status, billing_details, lines, order_item_id, ' +
+  'id, credit_note_number, issued_at, amount, vat_rate, refund_method, reason, legal_status, billing_details, lines, order_item_id, ' +
   'invoice:invoices(invoice_number), order:orders(order_number, created_at)';
 
 const refundMethodText = (m: string | null) =>
@@ -441,6 +446,7 @@ export const creditNotePdfData = (cn: CreditNoteRow): InvoiceData => ({
   orderNumber: cn.order?.order_number || '',
   orderDate: cn.order?.created_at || cn.issued_at,
   totalAmount: Number(cn.amount),
+  vatRate: cn.vat_rate,
   legalStatus: cn.legal_status,
   billingDetails: cn.billing_details || {},
   paymentMethod: '',
@@ -486,7 +492,7 @@ export const getOrderInvoiceForChat = async (orderId: string): Promise<ChatInvoi
       .maybeSingle(),
     supabase
       .from('invoices')
-      .select('id, invoice_number, issued_at, total_amount, legal_status, billing_details, pdf_url, kind, merged_into_invoice_id, sourcing_mission:b2b_sourcing_missions(reference, title)')
+      .select('id, invoice_number, issued_at, total_amount, vat_rate, legal_status, billing_details, pdf_url, kind, merged_into_invoice_id, sourcing_mission:b2b_sourcing_missions(reference, title)')
       .eq('order_id', orderId)
       .order('issued_at', { ascending: true }),
   ]);
@@ -507,6 +513,7 @@ export const getOrderInvoiceForChat = async (orderId: string): Promise<ChatInvoi
         orderNumber: shared.orderNumbers.join(' + '),
         orderDate: shared.firstOrderDate,
         totalAmount: Math.round(shared.totalAmount * 100) / 100,
+        vatRate: shared.primary.vat_rate,
         legalStatus: shared.primary.legal_status as 'individual' | 'sole_proprietorship' | 'company',
         billingDetails: (shared.primary.billing_details || {}) as InvoiceBillingDetails,
         paymentMethod,
@@ -518,6 +525,7 @@ export const getOrderInvoiceForChat = async (orderId: string): Promise<ChatInvoi
         orderNumber: o.order_number,
         orderDate: o.created_at,
         totalAmount: Number(invoice.total_amount),
+        vatRate: invoice.vat_rate,
         legalStatus: invoice.legal_status as 'individual' | 'sole_proprietorship' | 'company',
         billingDetails: (invoice.billing_details || {}) as InvoiceBillingDetails,
         paymentMethod,

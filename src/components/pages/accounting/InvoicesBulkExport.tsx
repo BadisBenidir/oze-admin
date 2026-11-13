@@ -13,6 +13,8 @@ interface InvoiceEmbed {
   invoice_number: string;
   issued_at: string;
   total_amount: number;
+  /** Taux figé (0281) ; null = facture émise sous la franchise. */
+  vat_rate: number | null;
   legal_status: 'individual' | 'sole_proprietorship' | 'company';
   billing_details: InvoiceBillingDetails;
 }
@@ -76,7 +78,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
         .select(
           'order_number, created_at, stripe_payment_intent_id, late_fee_amount, late_fee_days, ' +
             'order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost), ' +
-            'invoice:invoices!inner(id, kind, merged_into_invoice_id, invoice_number, issued_at, total_amount, legal_status, billing_details)'
+            'invoice:invoices!inner(id, kind, merged_into_invoice_id, invoice_number, issued_at, total_amount, vat_rate, legal_status, billing_details)'
         )
         .is('archived_at', null)
         .gte('created_at', period.range.start.toISOString())
@@ -118,6 +120,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
               orderNumber: group.orderNumbers.join(' + '),
               orderDate: group.firstOrderDate,
               totalAmount: Math.round(group.totalAmount * 100) / 100,
+              vatRate: invoice.vat_rate,
               legalStatus: invoice.legal_status,
               billingDetails: invoice.billing_details || {},
               paymentMethod: row.stripe_payment_intent_id ? 'Carte bancaire (Stripe)' : 'Solde revendeur (wallet)',
@@ -132,6 +135,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
             orderNumber: row.order_number,
             orderDate: row.created_at,
             totalAmount: Number(invoice.total_amount),
+            vatRate: invoice.vat_rate,
             legalStatus: invoice.legal_status,
             billingDetails: invoice.billing_details || {},
             paymentMethod: row.stripe_payment_intent_id ? 'Carte bancaire (Stripe)' : 'Solde revendeur (wallet)',

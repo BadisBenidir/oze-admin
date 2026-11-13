@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { LayoutDashboard, Globe, Handshake, Gavel, AlertCircle, Landmark, Receipt, Banknote } from 'lucide-react';
+import { LayoutDashboard, Globe, Handshake, Gavel, AlertCircle, Landmark, Receipt, Banknote, Wallet, Percent } from 'lucide-react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useAccountingRawData } from '../../hooks/useAccountingRawData';
 import { buildAccountingPeriod, PeriodPreset } from '../../utils/accountingPeriods';
@@ -13,9 +13,13 @@ import { LivesTab } from './accounting/LivesTab';
 import { QontoTab } from './accounting/QontoTab';
 import { ChargesTab } from './accounting/ChargesTab';
 import { OtherRevenuesTab } from './accounting/OtherRevenuesTab';
+import { AssociateAccountTab } from './accounting/AssociateAccountTab';
 import { useExpenses } from '../../hooks/useExpenses';
+import { VatTab } from './accounting/VatTab';
+import { useVatSettings } from '../../utils/vat';
+import { toHtData, toHtExpenses } from '../../utils/accountingCalc';
 
-type AccountingTab = 'global' | 'b2c' | 'b2b' | 'lives' | 'other-revenues' | 'expenses' | 'qonto';
+type AccountingTab = 'global' | 'b2c' | 'b2b' | 'lives' | 'other-revenues' | 'expenses' | 'associate' | 'vat' | 'qonto';
 
 const TABS: { id: AccountingTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'global', label: 'Dashboard Global', icon: LayoutDashboard },
@@ -24,6 +28,8 @@ const TABS: { id: AccountingTab; label: string; icon: React.ComponentType<{ clas
   { id: 'lives', label: 'Lives', icon: Gavel },
   { id: 'other-revenues', label: 'Autres revenus', icon: Banknote },
   { id: 'expenses', label: 'Charges', icon: Receipt },
+  { id: 'associate', label: 'Compte courant associé', icon: Wallet },
+  { id: 'vat', label: 'TVA', icon: Percent },
   { id: 'qonto', label: 'Trésorerie Qonto', icon: Landmark },
 ];
 
@@ -44,6 +50,11 @@ export const Accounting: React.FC = () => {
   // Charges (0274 / 0276) : onglet dédié + déduites de la marge du Dashboard
   // Global (Résultat net).
   const expensesApi = useExpenses(isAdmin);
+  // TVA (0280) : à partir de la bascule, CA, marge et résultat en HT (prix
+  // inchangés, désormais TTC) ; charges diminuées de la TVA déductible.
+  const vat = useVatSettings();
+  const htData = useMemo(() => toHtData(data, vat.settings), [data, vat.settings]);
+  const htExpenses = useMemo(() => toHtExpenses(expensesApi.expenses, vat.settings), [expensesApi.expenses, vat.settings]);
 
   const [activeTab, setActiveTab] = useState<AccountingTab>('global');
   const [preset, setPreset] = useState<PeriodPreset>('current-month');
@@ -121,12 +132,23 @@ export const Accounting: React.FC = () => {
         </div>
       ) : (
         <>
-          {activeTab === 'global' && <DashboardGlobalTab data={data} period={period} expenses={expensesApi.expenses} />}
-          {activeTab === 'b2c' && <B2CTab data={data} period={period} />}
-          {activeTab === 'b2b' && <B2BTab data={data} period={period} />}
-          {activeTab === 'lives' && <LivesTab data={data} period={period} />}
+          {activeTab === 'global' && <DashboardGlobalTab data={htData} period={period} expenses={htExpenses} vatSales={htData.vatSales} />}
+          {activeTab === 'b2c' && <B2CTab data={htData} period={period} />}
+          {activeTab === 'b2b' && <B2BTab data={htData} period={period} />}
+          {activeTab === 'lives' && <LivesTab data={htData} period={period} />}
           {activeTab === 'other-revenues' && (
             <OtherRevenuesTab revenues={data.manualRevenues} period={period} onChanged={() => refresh(true)} />
+          )}
+          {activeTab === 'vat' && (
+            <VatTab
+              settings={vat.settings}
+              onSettingsChanged={vat.refresh}
+              vatSales={htData.vatSales}
+              expenses={expensesApi.expenses}
+            />
+          )}
+          {activeTab === 'associate' && (
+            <AssociateAccountTab onOpenTab={setActiveTab} onExpensesChanged={expensesApi.refresh} />
           )}
           {activeTab === 'expenses' && (
             <ChargesTab

@@ -1,4 +1,5 @@
 import { AccountingOrder, AccountingLiveSale, AccountingManualRevenue, AccountingRawData, AccountingSubscriptionPayment, isOrderPaid } from '../hooks/useAccountingRawData';
+import { VatSettings, splitTtc, vatRateAt } from './vat';
 import { DateRange, isWithinRange, monthKey } from './accountingPeriods';
 
 export interface ChannelTotals {
@@ -305,3 +306,79 @@ export const expensesByMonth = (expenses: ChargeLike[]): Record<string, number> 
   }
   return out;
 };
+
+/** Une vente datée découpée HT / TVA (0280), pour les totaux TTC et l'onglet TVA. */
+export interface VatSale {
+  date: string;
+  ht: number;
+  vat: number;
+  source: 'web' | 'b2b' | 'live' | 'subscription' | 'delivery' | 'other';
+}
+
+/** Données comptables en HT (0280) : à partir de la bascule TVA, chaque
+ * montant encaissé (prix inchangés, désormais TTC) est ramené au HT — CA,
+ * marge et résultat sont alors calculés HT. Avant la bascule, rien ne
+ * change (franchise : HT = TTC). `vatSales` liste la TVA collectée par vente
+ * (commandes encaissées uniquement). Les montants d'origine restent dans
+ * `data` (onglet Autres revenus : saisie en montant encaissé). */
+export const toHtData = (data: AccountingRawData, settings: VatSettings | null): AccountingRawData & { vatSales: VatSale[] } => {
+  const vatSales: VatSale[] = [];
+  const conv = (ttc: number, at: string, source: VatSale['source'], record = true) => {
+    const { ht, vat } = splitTtc(ttc, vatRateAt(settings, at));
+    if (record && vat !== 0) vatSales.push({ date: at, ht, vat, source });
+    return ht;
+  };
+  const orders = data.orders.map((o) => {
+    const at = o.created_at;
+    const rate = vatRateAt(settings, at);
+    if (!rate) return o;
+    return {
+      ...o,
+      total_amount: conv(Number(o.total_amount) || 0, at, o.order_channel, isOrderPaid(o)),
+      shipping_cost: splitTtc(Number(o.shipping_cost) || 0, rate).ht,
+      order_items: o.order_items.map((i) => ({ ...i, line_total: splitTtc(Number(i.line_total) || 0, rate).ht })),
+    };
+  });
+  return {
+    ...data,
+    orders,
+    liveSales: data.liveSales.map((p) => ({ ...p, sale_price: conv(p.sale_price, p.sold_at, 'live') })),
+    subscriptionPayments: data.subscriptionPayments.map((p) => ({ ...p, amount: conv(p.amount, p.paid_at, 'subscription') })),
+    deliveryPayments: data.deliveryPayments.map((d) => ({ ...d, amount: conv(d.amount, d.date, 'delivery') })),
+    manualRevenues: data.manualRevenues.map((r) => ({ ...r, amount: conv(r.amount, manualRevenueDate(r), 'other') })),
+    vatSales,
+  };
+};
+
+/** TVA collectée sur une plage. */
+export const computeVatCollected = (sales: VatSale[], range: DateRange): number =>
+  (sales || []).filter((s) => isWithinRange(s.date, range)).reduce((t, s) => t + s.vat, 0);
+
+/** TVA collectée par mois (clé YYYY-MM). */
+export const vatCollectedByMonth = (sales: VatSale[]): Record<string, number> => {
+  const out: Record<string, number> = {};
+  for (const s of sales || []) {
+    const k = monthKey(s.date);
+    out[k] = (out[k] || 0) + s.vat;
+  }
+  return out;
+};
+
+/** TVA déductible d'une charge (0280) : saisie à la main, sinon lue par
+ * Qonto sur le débit relié ; nulle avant la bascule (franchise). */
+export const expenseDeductibleVat = (
+  e: { spent_at: string; vat_amount?: number | null; bank?: { vat_amount: number | null } | null },
+  settings: VatSettings | null
+): number => {
+  if (!vatRateAt(settings, expenseDate(e))) return 0;
+  return Number(e.vat_amount ?? e.bank?.vat_amount ?? 0) || 0;
+};
+
+/** Charges en HT : TVA déductible retirée du montant (après la bascule). */
+export const toHtExpenses = <T extends { spent_at: string; amount: number; vat_amount?: number | null; bank?: { vat_amount: number | null } | null }>(
+  expenses: T[],
+  settings: VatSettings | null
+): T[] => (expenses || []).map((e) => {
+  const vat = expenseDeductibleVat(e, settings);
+  return vat ? { ...e, amount: (Number(e.amount) || 0) - vat } : e;
+});

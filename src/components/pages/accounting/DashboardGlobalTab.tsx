@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
 import { AccountingRawData } from '../../../hooks/useAccountingRawData';
 import { AccountingPeriod, isWithinRange, monthKeyLabel } from '../../../utils/accountingPeriods';
-import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries, computeShippingCharges, withShipping, computeDeliveryTotals, computeExpensesTotal, expensesByMonth, computeManualRevenueTotals } from '../../../utils/accountingCalc';
+import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries, computeShippingCharges, withShipping, computeDeliveryTotals, computeExpensesTotal, expensesByMonth, computeManualRevenueTotals, computeVatCollected, vatCollectedByMonth, VatSale } from '../../../utils/accountingCalc';
 import { Expense } from '../../../hooks/useExpenses';
 import { SUBSCRIPTION_SOURCE_CLIENTS } from '../../../hooks/useAccountingRawData';
 
@@ -72,9 +72,13 @@ interface DashboardGlobalTabProps {
   period: AccountingPeriod;
   /** Charges (Comptabilité → Charges), déduites de la marge brute. */
   expenses: Expense[];
+  /** TVA collectée par vente (0280) : `data` est déjà en HT après la bascule. */
+  vatSales?: VatSale[];
 }
 
-export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, period, expenses }) => {
+export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, period, expenses, vatSales = [] }) => {
+  const vatCollected = useMemo(() => computeVatCollected(vatSales, period.range), [vatSales, period.range]);
+  const monthlyVat = useMemo(() => vatCollectedByMonth(vatSales), [vatSales]);
   const current = useMemo(() => {
     const web = computeChannelTotals(data.orders, 'web', period.range);
     const b2b = computeChannelTotals(data.orders, 'b2b', period.range);
@@ -160,11 +164,11 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         <AccountingKpiCard
-          label="Chiffre d'affaires total (TTC)"
+          label="Chiffre d'affaires total (HT)"
           value={EUR(current.global.revenue)}
           icon={DollarSign}
           tone="green"
-          hint={`HT ≈ ${EUR(current.global.revenue / 1.2)}`}
+          hint={vatCollected ? `TTC : ${EUR(current.global.revenue + vatCollected)} · TVA collectée ${EUR(vatCollected)}` : 'Franchise de TVA sur la période : HT = TTC'}
           deltaMoM={mom ? pct(current.global.revenue, mom.revenue) : undefined}
           deltaYoY={yoy ? pct(current.global.revenue, yoy.revenue) : undefined}
         />
@@ -288,7 +292,8 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                   ))}
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">CA Livraisons</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">CA autres revenus</th>
-                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">CA Total</th>
+                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">CA Total HT</th>
+                  <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap" title="HT + TVA collectée (à partir de la bascule TVA)">CA Total TTC</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs">Coût d'achat</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap">Expédition Sendcloud (HT)</th>
                   <th className="text-right py-2.5 px-4 font-medium text-gray-500 text-xs whitespace-nowrap" title="Frais de livraison encaissés (HT) moins factures Sendcloud (HT)">Solde livraisons (HT)</th>
@@ -317,6 +322,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.deliveries)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.other)}</td>
                       <td className="py-2.5 px-4 text-right text-sm font-medium text-gray-900 tabular-nums">{EUR(m.total)}</td>
+                      <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.total + (monthlyVat[m.ym] || 0))}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.cogs)}</td>
                       <td className="py-2.5 px-4 text-right text-sm text-gray-600 tabular-nums">{EUR(m.shipping)}</td>
                       <td className={`py-2.5 px-4 text-right text-sm font-medium tabular-nums ${m.deliveries / 1.2 - m.shipping >= 0 ? 'text-green-600' : 'text-red-600'}`}>{EUR(m.deliveries / 1.2 - m.shipping)}</td>

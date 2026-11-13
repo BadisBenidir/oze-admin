@@ -8,6 +8,7 @@ import {
 } from '../config/legal';
 import { OZE_LOGO_BASE64, OZE_LOGO_ASPECT_RATIO } from '../assets/ozeLogoBase64';
 import { importOrReload } from './reloadOnStaleChunk';
+import { FRANCHISE_MENTION, fetchVatSettings, splitTtc } from './vat';
 
 export interface InvoiceLineItem {
   description: string;
@@ -98,6 +99,13 @@ export interface InvoiceData {
   paid?: boolean;
   /** Avoir (0232) : titre « AVOIR », référence à la facture d'origine. */
   creditNote?: { invoiceNumber: string; reason?: string | null; refundMethod: string };
+  /** Taux de TVA figé sur le document (invoices / credit_notes.vat_rate, 0281) :
+   * > 0 → HT, TVA, TTC sans la mention 293 B ; null / 0 → franchise. */
+  vatRate?: number | null;
+  /** N° de TVA intracommunautaire de la société (vat_settings, 0280). */
+  vatNumber?: string | null;
+  /** Facture (ou avoir) rectificative d'un document émis sans TVA (0281). */
+  rectification?: { originalNumber: string; originalIssuedAt: string };
 }
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -128,7 +136,9 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
   // Titre facture + références, aligné à droite — même hauteur que le logo.
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
-  doc.text(data.creditNote ? 'AVOIR' : 'FACTURE', pageWidth - marginX, 20, { align: 'right' });
+  const vatRate = Number(data.vatRate) || 0;
+  const title = data.rectification ? (data.creditNote ? 'AVOIR RECTIFICATIF' : 'FACTURE RECTIFICATIVE') : data.creditNote ? 'AVOIR' : 'FACTURE';
+  doc.text(title, pageWidth - marginX, 20, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(110);
@@ -139,7 +149,15 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
     doc.text(`Date : ${dateStr(data.issuedAt)}`, pageWidth - marginX, 42, { align: 'right' });
   } else {
     doc.text(`Commande : ${data.orderNumber}`, pageWidth - marginX, 32, { align: 'right' });
-    doc.text(`Date : ${dateStr(data.orderDate)}`, pageWidth - marginX, 37, { align: 'right' });
+    doc.text(`Date : ${dateStr(data.rectification ? data.issuedAt : data.orderDate)}`, pageWidth - marginX, 37, { align: 'right' });
+  }
+  if (data.rectification) {
+    doc.text(
+      `Rectifie : ${data.rectification.originalNumber} du ${dateStr(data.rectification.originalIssuedAt)}`,
+      pageWidth - marginX,
+      data.creditNote ? 47 : 42,
+      { align: 'right' }
+    );
   }
   doc.setTextColor(0);
 
@@ -159,7 +177,7 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
     COMPANY_LEGAL_NAME,
     COMPANY_ADDRESS,
     `SIRET : ${COMPANY_SIRET}`,
-    `TVA : ${COMPANY_VAT_NUMBER}`,
+    `TVA : ${data.vatNumber || COMPANY_VAT_NUMBER}`,
     COMPANY_RCS,
   ];
 
@@ -200,8 +218,8 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
   doc.setFontSize(9);
   doc.text('Article', col.desc, y + 5.5);
   doc.text('Qté', col.qty, y + 5.5, { align: 'right' });
-  doc.text('P.U.', col.unit, y + 5.5, { align: 'right' });
-  doc.text('Total', col.total, y + 5.5, { align: 'right' });
+  doc.text(vatRate ? 'P.U. HT' : 'P.U.', col.unit, y + 5.5, { align: 'right' });
+  doc.text(vatRate ? 'Total HT' : 'Total', col.total, y + 5.5, { align: 'right' });
   y += 13;
 
   doc.setFont('helvetica', 'normal');
@@ -209,8 +227,9 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
     const wrapped = doc.splitTextToSize(item.description, col.qty - marginX - 8);
     doc.text(wrapped, col.desc, y);
     doc.text(String(item.quantity), col.qty, y, { align: 'right' });
-    doc.text(EUR(item.unitPrice), col.unit, y, { align: 'right' });
-    doc.text(EUR(item.lineTotal), col.total, y, { align: 'right' });
+    // Prix inchangés, TTC depuis la bascule : lignes affichées HT.
+    doc.text(EUR(splitTtc(item.unitPrice, vatRate).ht), col.unit, y, { align: 'right' });
+    doc.text(EUR(splitTtc(item.lineTotal, vatRate).ht), col.total, y, { align: 'right' });
     y += 4.5 * wrapped.length + 3;
   });
 
@@ -222,13 +241,22 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
   // Reliquat = livraison, ou remise (volume / code promo) quand il est négatif.
   const shipping = data.totalAmount - subtotal;
 
+  const totals = splitTtc(data.totalAmount, vatRate);
   doc.setFontSize(9.5);
-  doc.text('Sous-total', pageWidth - 60, y);
-  doc.text(EUR(subtotal), pageWidth - marginX, y, { align: 'right' });
+  doc.text(vatRate ? 'Sous-total HT' : 'Sous-total', pageWidth - 60, y);
+  doc.text(EUR(splitTtc(subtotal, vatRate).ht), pageWidth - marginX, y, { align: 'right' });
   if (Math.abs(shipping) > 0.005) {
     y += 5;
-    doc.text(shipping < 0 ? 'Remise' : 'Livraison', pageWidth - 60, y);
-    doc.text(EUR(shipping), pageWidth - marginX, y, { align: 'right' });
+    doc.text(`${shipping < 0 ? 'Remise' : 'Livraison'}${vatRate ? ' HT' : ''}`, pageWidth - 60, y);
+    doc.text(EUR(splitTtc(shipping, vatRate).ht), pageWidth - marginX, y, { align: 'right' });
+  }
+  if (vatRate) {
+    y += 5;
+    doc.text('Total HT', pageWidth - 60, y);
+    doc.text(EUR(totals.ht), pageWidth - marginX, y, { align: 'right' });
+    y += 5;
+    doc.text(`TVA ${String(vatRate).replace('.', ',')} %`, pageWidth - 60, y);
+    doc.text(EUR(totals.vat), pageWidth - marginX, y, { align: 'right' });
   }
   y += 3;
   doc.setDrawColor(0);
@@ -237,7 +265,7 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.text(data.creditNote ? 'TOTAL AVOIR' : 'TOTAL', pageWidth - 60, y);
+  doc.text(data.creditNote ? (vatRate ? 'TOTAL AVOIR TTC' : 'TOTAL AVOIR') : vatRate ? 'TOTAL TTC' : 'TOTAL', pageWidth - 60, y);
   doc.text(EUR(data.totalAmount), pageWidth - marginX, y, { align: 'right' });
   y += 12;
 
@@ -265,17 +293,23 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
     y += 6;
   }
 
-  // Mention légale de TVA — franchise en base (art. 293 B), jamais un
-  // régime de marge qui ne s'applique pas à OZË Paris actuellement.
+  // Mention légale de TVA : franchise en base (art. 293 B) tant que le
+  // document est antérieur à la bascule (0280) ; ensuite aucune mention de
+  // franchise. Une rectificative rappelle le document qu'elle corrige.
   doc.setFontSize(8);
   doc.setTextColor(120);
-  const vatMention = doc.splitTextToSize(
-    'TVA non applicable, article 293 B du Code Général des Impôts (franchise en base de TVA).',
-    pageWidth - marginX * 2
-  );
-  doc.text(vatMention, marginX, y);
+  const mention = data.rectification
+    ? `Ce document rectifie le n° ${data.rectification.originalNumber} du ${dateStr(data.rectification.originalIssuedAt)}, émis à tort avec la mention « ${FRANCHISE_MENTION} » : montant TTC inchangé, TVA ${String(vatRate).replace('.', ',')} % incluse.`
+    : vatRate
+      ? null
+      : 'TVA non applicable, article 293 B du Code Général des Impôts (franchise en base de TVA).';
+  if (mention) doc.text(doc.splitTextToSize(mention, pageWidth - marginX * 2), marginX, y);
   doc.setTextColor(0);
 };
+
+/** N° de TVA intracom de la société lu dans vat_settings (0280) si absent. */
+const withVatNumber = async (data: InvoiceData): Promise<InvoiceData> =>
+  data.vatNumber !== undefined ? data : { ...data, vatNumber: (await fetchVatSettings())?.vat_number ?? null };
 
 /** Génère et télécharge le PDF d'UNE facture — jsPDF chargé en dynamique
  * pour ne pas alourdir le bundle principal (déjà une dépendance de ce repo,
@@ -283,7 +317,7 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
 export const generateInvoicePdf = async (data: InvoiceData): Promise<void> => {
   const { jsPDF } = await importOrReload(() => import('jspdf'));
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-  drawInvoicePage(doc, data);
+  drawInvoicePage(doc, await withVatNumber(data));
   // Le numéro séquentiel (obligatoire, art. 242 nonies A du CGI) reste
   // affiché SUR le PDF, mais n'a pas à apparaître dans le nom du fichier :
   // un client qui télécharge sa facture ne doit pas voir, rien qu'en
@@ -297,7 +331,7 @@ export const generateInvoicePdf = async (data: InvoiceData): Promise<void> => {
 export const renderInvoicePdfBlob = async (data: InvoiceData): Promise<{ blob: Blob; filename: string }> => {
   const { jsPDF } = await importOrReload(() => import('jspdf'));
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-  drawInvoicePage(doc, data);
+  drawInvoicePage(doc, await withVatNumber(data));
   return {
     blob: doc.output('blob'),
     filename: `OZE-Paris_${data.creditNote ? 'Avoir' : 'Facture'}_${data.orderNumber}.pdf`,
@@ -314,9 +348,10 @@ export const renderInvoicePdfBlob = async (data: InvoiceData): Promise<{ blob: B
 export const generateInvoicesBulkPdf = async (invoices: InvoiceData[], filename: string): Promise<void> => {
   const { jsPDF } = await importOrReload(() => import('jspdf'));
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const settings = await fetchVatSettings();
   invoices.forEach((data, index) => {
     if (index > 0) doc.addPage();
-    drawInvoicePage(doc, data);
+    drawInvoicePage(doc, { ...data, vatNumber: data.vatNumber ?? settings?.vat_number ?? null });
   });
   doc.save(filename);
 };

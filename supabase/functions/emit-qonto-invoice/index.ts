@@ -47,6 +47,13 @@ const QONTO_BASE_URL = 'https://thirdparty.qonto.com/v2';
 // régime réel de l'entreprise, pas celui indiqué dans une demande antérieure.
 const VAT_NOTE = 'TVA non applicable, article 293 B du Code Général des Impôts (franchise en base de TVA).';
 
+// Sortie de la franchise (0280 / 0281) : le taux est figé sur la facture
+// (invoices.vat_rate, d'après la date de l'opération). Prix inchangés,
+// désormais TTC : Qonto attend un prix unitaire HT et le taux en décimal
+// (0.2 pour 20 %) ; il recalcule la TVA et le TTC.
+const qontoVatRate = (ratePct: number) => String(Math.round(ratePct * 100) / 10000);
+const unitHt = (ttc: number, ratePct: number) => (ratePct ? ttc / (1 + ratePct / 100) : ttc).toFixed(2);
+
 // Qonto exige un ISO 3166-1 alpha-2 STRICT (2 caractères) sur
 // billing_address.country_code — un 422 réel a confirmé qu'une valeur en
 // toutes lettres ("France") ou plus longue est rejetée. Filet de sécurité
@@ -148,7 +155,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: invoiceRow, error: invoiceFetchError } = await adminClient
       .from('invoices')
-      .select('id, invoice_number, legal_status, profile_id, qonto_invoice_id, pdf_url, kind, sourcing_mission_id, total_amount, issued_at, merged_into_invoice_id')
+      .select('id, invoice_number, legal_status, profile_id, qonto_invoice_id, pdf_url, kind, sourcing_mission_id, total_amount, issued_at, merged_into_invoice_id, vat_rate')
       .eq('id', targetInvoiceId)
       .single();
     if (invoiceFetchError || !invoiceRow) {
@@ -389,6 +396,9 @@ Deno.serve(async (req: Request) => {
     // Une facture de commande est déjà réglée (échéance = émission) ; une
     // facture d'avance demande le paiement : échéance à 7 jours.
     const dueDate = isAdvance ? new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().slice(0, 10) : today;
+    // null = facture créée avant 0281 (franchise).
+    const vatRatePct = Number(invoiceRow.vat_rate) || 0;
+    const vatRate = qontoVatRate(vatRatePct);
     const invoicePayload = {
       client_id: qontoClientId,
       currency: 'EUR',
@@ -406,8 +416,8 @@ Deno.serve(async (req: Request) => {
       items: advanceLine ? [{
         title: advanceLine.title,
         quantity: '1',
-        unit_price: { value: advanceLine.amount.toFixed(2), currency: 'EUR' },
-        vat_rate: '0',
+        unit_price: { value: unitHt(advanceLine.amount, vatRatePct), currency: 'EUR' },
+        vat_rate: vatRate,
       }] : activeItems.flatMap((item) => {
         const rawTitle = String(
           [item.product_snapshot?.name, item.product_snapshot?.condition].filter(Boolean).join(' — ') || 'Article'
@@ -420,21 +430,20 @@ Deno.serve(async (req: Request) => {
           ? rawTitle.slice(0, QONTO_ITEM_TITLE_MAX - 1) + '…'
           : rawTitle;
         const productName = String(item.product_snapshot?.name || 'Article').slice(0, 80);
-        // OZË Paris est en franchise en base de TVA (art. 293 B du CGI) :
-        // jamais de TVA facturée.
+        // Franchise en base (art. 293 B) avant la bascule : TVA à 0.
         const lines = [{
           title,
           quantity: String(item.quantity || '1'),
-          unit_price: { value: Number(item.unit_price || 1).toFixed(2), currency: 'EUR' },
-          vat_rate: '0',
+          unit_price: { value: unitHt(Number(item.unit_price || 1), vatRatePct), currency: 'EUR' },
+          vat_rate: vatRate,
         }];
         const insurance = Number(item.insurance_cost) || 0;
         if (item.insured && insurance > 0) {
           lines.push({
             title: `Assurance transport — ${productName}`,
             quantity: '1',
-            unit_price: { value: insurance.toFixed(2), currency: 'EUR' },
-            vat_rate: '0',
+            unit_price: { value: unitHt(insurance, vatRatePct), currency: 'EUR' },
+            vat_rate: vatRate,
           });
         }
         const entrupy = Number(item.entrupy_cost) || 0;
@@ -442,18 +451,19 @@ Deno.serve(async (req: Request) => {
           lines.push({
             title: `Certificat Entrupy — ${productName}`,
             quantity: '1',
-            unit_price: { value: entrupy.toFixed(2), currency: 'EUR' },
-            vat_rate: '0',
+            unit_price: { value: unitHt(entrupy, vatRatePct), currency: 'EUR' },
+            vat_rate: vatRate,
           });
         }
         return lines;
       }).concat(lateFee ? [{
         title: `Pénalité de retard de paiement (${lateFee.days} jour${lateFee.days > 1 ? 's' : ''} × 5 % du prix du lot)`,
         quantity: '1',
-        unit_price: { value: lateFee.amount.toFixed(2), currency: 'EUR' },
-        vat_rate: '0',
+        unit_price: { value: unitHt(lateFee.amount, vatRatePct), currency: 'EUR' },
+        vat_rate: vatRate,
       }] : []),
-      footer: VAT_NOTE,
+      // Plus de mention de franchise une fois assujetti.
+      ...(vatRatePct ? {} : { footer: VAT_NOTE }),
       finalize: true,
     };
 
