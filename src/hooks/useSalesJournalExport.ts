@@ -299,6 +299,13 @@ export const useSalesJournalExport = () => {
         const bucket = (k: string) => months.get(k) || months.set(k, { ht: 0, collected: 0, deductible: 0 }).get(k)!;
         for (const x of split) if (x.rate) { const b = bucket(x.r.date.toISOString().slice(0, 7)); b.ht += x.ht; b.collected += x.vat; }
         for (const c of charges) { const d = deductibleOf(c); if (d) bucket(c.spent_at.slice(0, 7)).deductible += d; }
+        // Factures Sendcloud (0239) : TVA = TTC − HT.
+        const { data: scRows } = await supabase.from('sendcloud_invoices').select('invoice_date, price_excl, price_incl').gte('invoice_date', startDate).lte('invoice_date', effectiveEndDate);
+        for (const f of (scRows || []) as { invoice_date: string; price_excl: number; price_incl: number }[]) {
+          if (!vatRateAt(vat, new Date(`${f.invoice_date}T12:00:00`))) continue;
+          const d = Math.round(((Number(f.price_incl) || 0) - (Number(f.price_excl) || 0)) * 100) / 100;
+          if (d > 0) bucket(f.invoice_date.slice(0, 7)).deductible += d;
+        }
         const statusLabel: Record<string, string> = { a_declarer: 'À déclarer', declaree: 'Déclarée', payee: 'Payée' };
         const vatSheet = XLSX.utils.aoa_to_sheet([
           ['Mois', 'CA HT', 'TVA collectée', 'TVA déductible', 'TVA import autoliquidée', 'TVA nette', 'Statut', 'Déclarée le', 'Payée le', 'Montant payé'],

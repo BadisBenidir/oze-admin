@@ -312,7 +312,10 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
                       <td className="px-4 py-2.5">
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[e.review_status].cls}`}>{STATUS_BADGE[e.review_status].label}</span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-right text-sm font-medium tabular-nums text-gray-900">{EUR(e.amount)}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right text-sm font-medium tabular-nums text-gray-900">
+                        {EUR(e.amount)}
+                        {(e.vat_amount ?? e.bank?.vat_amount) ? <p className="text-[11px] font-normal text-gray-500">dont TVA {EUR(Number(e.vat_amount ?? e.bank?.vat_amount))}</p> : null}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right">
                         {busy === e.id ? (
                           <Loader2 className="ml-auto h-4 w-4 animate-spin text-gray-400" />
@@ -402,7 +405,10 @@ const ExpenseFormModal: React.FC<{
     amount: expense ? String(expense.amount).replace('.', ',') : '',
     spent_at: expense?.spent_at ?? todayIso(),
     notes: expense?.notes ?? '',
+    // TVA déductible (0280) : saisie ici si Qonto ne la connaît pas.
+    vat: expense?.vat_amount != null ? String(expense.vat_amount).replace('.', ',') : '',
   });
+  const qontoVat = expense?.bank?.vat_amount ?? null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Catégorie d'une dépense qui n'existe plus dans la liste : on la garde sélectionnable.
@@ -413,10 +419,12 @@ const ExpenseFormModal: React.FC<{
     const amount = Number(form.amount.replace(/\s/g, '').replace(',', '.'));
     if (!form.label.trim()) return setError('Le libellé est obligatoire.');
     if (!form.amount.trim() || Number.isNaN(amount) || amount < 0) return setError('Montant invalide.');
+    const vat = form.vat.trim() ? Number(form.vat.replace(/\s/g, '').replace(',', '.')) : null;
+    if (vat !== null && (Number.isNaN(vat) || vat < 0 || vat > amount)) return setError('TVA invalide.');
     setBusy(true);
     setError(null);
     try {
-      await onSave({ label: form.label.trim(), category: form.category || null, amount, spent_at: form.spent_at, notes: form.notes.trim() || null });
+      await onSave({ label: form.label.trim(), category: form.category || null, amount, spent_at: form.spent_at, notes: form.notes.trim() || null, vat_amount: vat });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Enregistrement impossible');
       setBusy(false);
@@ -447,6 +455,31 @@ const ExpenseFormModal: React.FC<{
             <input type="date" value={form.spent_at} onChange={(e) => setForm({ ...form, spent_at: e.target.value })} className={inputCls} />
           </label>
         </div>
+        <label className="block text-sm font-medium text-gray-700">
+          <span className="flex items-center justify-between">
+            TVA déductible (€)
+            <button
+              type="button"
+              onClick={() => {
+                const ttc = Number(form.amount.replace(/\s/g, '').replace(',', '.')) || 0;
+                setForm({ ...form, vat: (Math.round((ttc - ttc / 1.2) * 100) / 100).toFixed(2).replace('.', ',') });
+              }}
+              className="text-xs font-normal text-blue-600 hover:underline"
+            >
+              20 % du montant
+            </button>
+          </span>
+          <input
+            inputMode="decimal"
+            value={form.vat}
+            onChange={(e) => setForm({ ...form, vat: e.target.value })}
+            placeholder={qontoVat != null ? `Qonto : ${String(qontoVat).replace('.', ',')}` : 'Montant de TVA sur la facture'}
+            className={inputCls}
+          />
+          <span className="mt-1 block text-xs font-normal text-gray-500">
+            Montant indiqué sur la facture. Vide : TVA lue par Qonto sur le débit relié. Déduite seulement à partir de la bascule TVA.
+          </span>
+        </label>
         <label className="block text-sm font-medium text-gray-700">
           Note (facultatif)
           <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border border-gray-200 p-2.5 text-sm font-normal focus:border-gray-400 focus:outline-none" />

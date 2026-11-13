@@ -86,6 +86,7 @@ export const useExpenses = (isAuthenticated: boolean = false): UseExpensesResult
       amount: data.amount ?? 0,
       spent_at: data.spent_at || new Date().toISOString().slice(0, 10),
       notes: data.notes ?? null,
+      vat_amount: data.vat_amount ?? null,
     }])
     if (error) throw new Error(error.message)
     await fetchExpenses()
@@ -98,6 +99,7 @@ export const useExpenses = (isAuthenticated: boolean = false): UseExpensesResult
       amount: data.amount ?? 0,
       spent_at: data.spent_at,
       notes: data.notes ?? null,
+      vat_amount: data.vat_amount ?? null,
     }).eq('id', id)
     if (error) throw new Error(error.message)
     await fetchExpenses()

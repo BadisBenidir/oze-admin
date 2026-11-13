@@ -83,12 +83,16 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
   const [rectifications, setRectifications] = useState<Rectification[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Factures Sendcloud (0239) : TVA = TTC − HT, déductible (hors charges).
+  const [sendcloud, setSendcloud] = useState<{ invoice_date: string; price_excl: number; price_incl: number }[]>([]);
 
   const load = useCallback(async () => {
-    const [d, r] = await Promise.all([
+    const [d, r, sc] = await Promise.all([
       supabase.from('vat_declarations').select('*'),
       supabase.from('vat_invoice_rectifications').select('*, invoice:invoices(transmission_status)').order('original_issued_at'),
+      supabase.from('sendcloud_invoices').select('invoice_date, price_excl, price_incl'),
     ]);
+    setSendcloud(((sc.data || []) as { invoice_date: string; price_excl: number; price_incl: number }[]));
     if (d.error || r.error) setError((d.error || r.error)!.message);
     const map: Record<string, Declaration> = {};
     for (const row of (d.data || []) as Declaration[]) map[row.period.slice(0, 7)] = { ...row, import_autoliquidation: Number(row.import_autoliquidation) || 0 };
@@ -135,6 +139,11 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
       const v = expenseDeductibleVat(e, settings);
       if (v) deductible[e.spent_at.slice(0, 7)] = (deductible[e.spent_at.slice(0, 7)] || 0) + v;
     }
+    for (const f of sendcloud) {
+      if (!vatRateAt(settings, new Date(`${f.invoice_date}T12:00:00`))) continue;
+      const v = Math.round(((Number(f.price_incl) || 0) - (Number(f.price_excl) || 0)) * 100) / 100;
+      if (v > 0) deductible[f.invoice_date.slice(0, 7)] = (deductible[f.invoice_date.slice(0, 7)] || 0) + v;
+    }
     return keys.map((ym) => {
       const decl = declarations[ym];
       const autoliq = decl?.import_autoliquidation || 0;
@@ -151,7 +160,7 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
         decl,
       };
     });
-  }, [start, vatSales, expenses, declarations, settings]);
+  }, [start, vatSales, expenses, declarations, settings, sendcloud]);
 
   const toProvision = rows.filter((r) => (r.decl?.status ?? 'a_declarer') === 'a_declarer').reduce((s, r) => s + r.net, 0);
   const declaredUnpaid = rows.filter((r) => r.decl?.status === 'declaree').reduce((s, r) => s + r.net, 0);
@@ -251,7 +260,7 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
           <CardHeader>
             <h3 className="text-base font-semibold text-gray-900">TVA par mois</h3>
             <p className="text-sm text-gray-500">
-              Depuis la bascule. CA HT et TVA collectée : ventes encaissées (prix inchangés, désormais TTC). TVA déductible : charges validées, TVA saisie sur la charge ou lue par Qonto sur le débit relié.
+              Depuis la bascule. CA HT et TVA collectée : ventes encaissées (prix inchangés, désormais TTC). TVA déductible : charges validées (TVA saisie sur la charge, sinon lue par Qonto sur le débit relié) et factures Sendcloud.
             </p>
           </CardHeader>
           <CardContent className="p-0">
