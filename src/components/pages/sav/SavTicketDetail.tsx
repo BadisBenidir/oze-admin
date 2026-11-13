@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Bot, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Lock, Unlock, MessageCircleQuestion, Scale, Sparkles, Undo2, User, Wallet, XCircle, Zap } from 'lucide-react';
+import { ArrowLeft, Bot, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Lock, Unlock, MessageCircleQuestion, Scale, Sparkles, Undo2, User, Wallet, Wand2, XCircle, Zap } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
@@ -81,6 +81,9 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
   const [showQuick, setShowQuick] = useState(false);
   const [askYesNo, setAskYesNo] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [rephrasing, setRephrasing] = useState(false);
+  // Texte d'avant la reformulation, pour revenir en arrière.
+  const [beforeRephrase, setBeforeRephrase] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [savingField, setSavingField] = useState<string | null>(null);
   const [order, setOrder] = useState<B2BOrder | null>(null);
@@ -219,6 +222,19 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
     setSuggesting(false);
     if (e || !data) return setActionError(e || 'Suggestion impossible');
     setMode('reply');
+    setDraft(data.draft);
+    setBeforeRephrase(null);
+  };
+
+  const rephrase = async () => {
+    const text = draft.trim();
+    if (!text) return;
+    setRephrasing(true);
+    setActionError(null);
+    const { data, error: e } = await invokeEdgeFunction<{ draft: string }>('sav-suggest-reply', { ticket_id: ticket.id, text });
+    setRephrasing(false);
+    if (e || !data?.draft) return setActionError(e || 'Reformulation impossible');
+    setBeforeRephrase(draft);
     setDraft(data.draft);
   };
 
@@ -479,6 +495,28 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
                 >
                   {suggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                   Suggérer une réponse
+                </button>
+              )}
+              {mode === 'reply' && (
+                <button
+                  onClick={rephrase}
+                  disabled={rephrasing || !draft.trim()}
+                  title={draft.trim() ? "L'IA réécrit votre texte (même fond, mieux tourné)" : "Écrivez d'abord votre réponse"}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {rephrasing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                  Reformuler
+                </button>
+              )}
+              {mode === 'reply' && beforeRephrase !== null && (
+                <button
+                  onClick={() => {
+                    setDraft(beforeRephrase);
+                    setBeforeRephrase(null);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                >
+                  <Undo2 className="h-4 w-4" /> Texte d'origine
                 </button>
               )}
             </div>

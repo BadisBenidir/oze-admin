@@ -6,7 +6,10 @@
 // est renvoyé à l'admin, qui le relit et le modifie : rien n'est jamais
 // envoyé automatiquement.
 //
-// Réservé à l'équipe (hasAdminAccess). Body : { ticket_id }.
+// « Reformuler » : avec `text`, Claude réécrit le texte saisi par l'admin
+// (même fond, mêmes faits, mieux tourné) au lieu de rédiger un brouillon.
+//
+// Réservé à l'équipe (hasAdminAccess). Body : { ticket_id, text? }.
 // Déploiement : `supabase functions deploy sav-suggest-reply`
 // Secrets : ANTHROPIC_API_KEY, SAV_CHAT_MODEL (facultatif)
 
@@ -34,6 +37,15 @@ const RULES = `Tu rédiges, pour l'équipe du service client d'OZË Paris (maroq
 - Les notes internes sont confidentielles : ne les cite jamais telles quelles au client.
 - Réponds UNIQUEMENT par le texte du message, sans commentaire autour.`;
 
+const REPHRASE_RULES = `Un membre de l'équipe du service client d'OZË Paris (maroquinerie de luxe de seconde main achetée au Japon, vendue aux revendeurs du Club B2B) a écrit une réponse à un client. Tu la REFORMULES pour qu'elle soit claire, professionnelle et chaleureuse.
+
+- Français, vouvoiement, orthographe et ponctuation correctes.
+- Garde exactement le même fond : mêmes informations, mêmes décisions, mêmes montants, délais et engagements. N'ajoute aucune promesse, aucun fait ni geste commercial ; n'en retire aucun.
+- Reste concis : pas plus long que nécessaire.
+- Commence par « Bonjour <prénom>, » si le prénom est connu (sinon « Bonjour, ») et termine par « Belle journée,\\nL'équipe OZË Paris », sauf si le texte a déjà une formule équivalente.
+- Le contexte du ticket ne sert qu'à comprendre le message : ne cite jamais les notes internes.
+- Réponds UNIQUEMENT par le texte reformulé, sans commentaire autour.`;
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -51,8 +63,9 @@ Deno.serve(async (req: Request) => {
     if (!user) return json({ error: 'Non authentifié' }, 401);
     if (!(await hasAdminAccess(caller, user.id))) return json({ error: 'Réservé à l\'équipe' }, 403);
 
-    const { ticket_id } = await req.json();
+    const { ticket_id, text } = await req.json();
     if (!ticket_id) return json({ error: 'ticket_id requis' }, 400);
+    const rephrase = typeof text === 'string' && text.trim() ? text.trim().slice(0, 8000) : null;
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: t } = await admin
@@ -105,8 +118,15 @@ ${thread || '(vide)'}`;
     const res = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 800,
-      system: `${RULES}\n\n# Base de connaissances OZË\n${knowledge || '(vide)'}`,
-      messages: [{ role: 'user', content: `${context}\n\nRédige le brouillon de la prochaine réponse de l'équipe au client.` }],
+      system: `${rephrase ? REPHRASE_RULES : RULES}\n\n# Base de connaissances OZË\n${knowledge || '(vide)'}`,
+      messages: [
+        {
+          role: 'user',
+          content: rephrase
+            ? `${context}\n\n# Texte de l'équipe à reformuler\n${rephrase}`
+            : `${context}\n\nRédige le brouillon de la prochaine réponse de l'équipe au client.`,
+        },
+      ],
     });
     const draft = res.content
       .filter((b) => b.type === 'text')
