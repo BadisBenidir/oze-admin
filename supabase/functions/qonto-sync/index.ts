@@ -281,15 +281,103 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // 5. Factures à rectifier (TVA, 0281 / 0282) régularisées directement
+    // sur Qonto : avoir sur la facture d'origine émise sur Qonto, ou nouvelle
+    // facture AVEC TVA du même montant TTC émise après l'originale (ou citant
+    // son numéro). La rectificative passe alors en « Régularisée ailleurs »
+    // avec la référence Qonto — jamais renumérotée dans l'admin.
+    let rectificationsMatched = 0;
+    try {
+      rectificationsMatched = await detectQontoRegularizations(adminClient, qontoHeaders);
+    } catch (e) {
+      console.error('qonto-sync: détection des régularisations', e instanceof Error ? e.message : e);
+    }
+
     return json({
       success: true,
       balance: account.balance,
       transactions_synced: totalSynced,
       auto_matched: totalMatched,
       advances_paid: advancesPaid,
+      rectifications_regularized: rectificationsMatched,
     });
   } catch (err) {
     console.error('qonto-sync: erreur non gérée', err instanceof Error ? err.stack || err.message : err);
     return json({ error: err instanceof Error ? err.message : 'Erreur inconnue' }, 500);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Régularisations TVA faites sur Qonto (voir étape 5).
+// ---------------------------------------------------------------------------
+type Money = { value?: string | number } | string | number | null | undefined;
+const money = (m: Money): number => Number(typeof m === 'object' && m !== null ? m.value : m) || 0;
+const frDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' }) : '');
+
+const fetchAllQonto = async (path: string, key: string, headers: Record<string, string>) => {
+  const out: Record<string, unknown>[] = [];
+  for (let page = 1; page <= 20; page++) {
+    const sep = path.includes('?') ? '&' : '?';
+    const res = await fetch(`${QONTO_BASE_URL}${path}${sep}per_page=100&page=${page}`, { headers });
+    if (!res.ok) {
+      console.error(`qonto-sync: ${path} a échoué (${res.status})`, await res.text());
+      break;
+    }
+    const body = await res.json();
+    const rows = (body?.[key] || []) as Record<string, unknown>[];
+    out.push(...rows);
+    if (!body?.meta?.next_page || rows.length === 0) break;
+  }
+  return out;
+};
+
+// deno-lint-ignore no-explicit-any
+async function detectQontoRegularizations(adminClient: any, headers: Record<string, string>): Promise<number> {
+  const { data: drafts } = await adminClient
+    .from('vat_invoice_rectifications')
+    .select('id, invoice_id, original_number, original_issued_at, amount_ttc, invoice:invoices(qonto_invoice_id)')
+    .eq('status', 'draft');
+  if (!drafts?.length) return 0;
+
+  const [qontoInvoices, creditNotes, { data: ours }] = await Promise.all([
+    fetchAllQonto('/client_invoices', 'client_invoices', headers),
+    fetchAllQonto('/credit_notes', 'credit_notes', headers),
+    adminClient.from('invoices').select('qonto_invoice_id').not('qonto_invoice_id', 'is', null),
+  ]);
+  // Factures émises par l'admin : jamais prises pour une régularisation.
+  const emittedByAdmin = new Set((ours || []).map((r: { qonto_invoice_id: string }) => r.qonto_invoice_id));
+  const used = new Set<string>();
+  let matched = 0;
+
+  for (const d of drafts as { id: string; original_number: string; original_issued_at: string; amount_ttc: number; invoice: { qonto_invoice_id: string | null } | null }[]) {
+    const ttc = Number(d.amount_ttc) || 0;
+    const qontoId = d.invoice?.qonto_invoice_id || null;
+    const parts: string[] = [];
+
+    // a) Avoir Qonto sur la facture d'origine.
+    const cn = qontoId ? creditNotes.find((c) => c.invoice_id === qontoId) : undefined;
+    if (cn) parts.push(`Avoir Qonto ${cn.number || ''} du ${frDate((cn.issue_date || cn.created_at) as string)}`.trim());
+
+    // b) Nouvelle facture avec TVA : cite le n° d'origine, ou même TTC émise après.
+    const candidates = qontoInvoices.filter((q) =>
+      !emittedByAdmin.has(q.id as string) && !used.has(q.id as string) && q.status !== 'canceled' && money(q.vat_amount as Money) > 0
+    );
+    const text = (q: Record<string, unknown>) => JSON.stringify([q.header, q.footer, q.terms_and_conditions, q.items]);
+    const replacement =
+      candidates.find((q) => text(q).includes(d.original_number)) ||
+      candidates.find((q) =>
+        Math.abs(money(q.total_amount as Money) - ttc) < 0.015 &&
+        new Date((q.issue_date || q.created_at) as string).getTime() >= new Date(d.original_issued_at).setHours(0, 0, 0, 0)
+      );
+    if (replacement) {
+      used.add(replacement.id as string);
+      parts.push(`facture Qonto ${replacement.number || ''} du ${frDate((replacement.issue_date || replacement.created_at) as string)} (TVA ${money(replacement.vat_amount as Money).toFixed(2)} €)`.trim());
+    }
+
+    if (!parts.length) continue;
+    const { error } = await adminClient.rpc('vat_mark_rectification_external', { p_id: d.id, p_note: `Régularisée sur Qonto : ${parts.join(' + ')}` });
+    if (error) console.error('qonto-sync: marquage rectificative', d.original_number, error.message);
+    else matched += 1;
+  }
+  return matched;
+}
