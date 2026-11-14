@@ -7,6 +7,7 @@ import { Expense } from '../../../hooks/useExpenses';
 import { VatSale, expenseDeductibleVat } from '../../../utils/accountingCalc';
 import { VatSettings, vatRateAt } from '../../../utils/vat';
 import { monthKey } from '../../../utils/accountingPeriods';
+import { paymentMethodLabel } from '../../../utils/paymentMethod';
 import { buildInvoiceItems, generateInvoicePdf, InvoiceBillingDetails, InvoiceSourceItem } from '../../../utils/generateInvoicePdf';
 import { CREDIT_NOTE_SELECT, CreditNoteRow, advanceInvoiceItems, creditNotePdfData } from '../../../hooks/useInvoices';
 
@@ -552,7 +553,6 @@ const VatSettingsCard: React.FC<{ settings: VatSettings | null; onSaved: () => P
   );
 };
 
-const paymentText = (stripe: string | null | undefined) => (stripe ? 'Carte bancaire (Stripe)' : 'Solde revendeur (wallet)');
 
 /** PDF d'une rectificative (brouillon : « BROUILLON » à la place du numéro). */
 const downloadRectificationPdf = async (r: Rectification) => {
@@ -572,7 +572,7 @@ const downloadRectificationPdf = async (r: Rectification) => {
     .from('invoices')
     .select(
       'invoice_number, issued_at, total_amount, legal_status, billing_details, kind, ' +
-        'order:orders!invoices_order_id_fkey(order_number, created_at, stripe_payment_intent_id, late_fee_amount, late_fee_days, order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost)), ' +
+        'order:orders!invoices_order_id_fkey(order_number, created_at, stripe_payment_intent_id, payment_method_effective, late_fee_amount, late_fee_days, order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost)), ' +
         'sourcing_mission:b2b_sourcing_missions(reference, title)'
     )
     .eq('id', r.invoice_id!)
@@ -581,7 +581,7 @@ const downloadRectificationPdf = async (r: Rectification) => {
   type Row = {
     invoice_number: string; issued_at: string; total_amount: number; kind: string;
     legal_status: 'individual' | 'sole_proprietorship' | 'company'; billing_details: InvoiceBillingDetails | null;
-    order: { order_number: string; created_at: string; stripe_payment_intent_id: string | null; late_fee_amount: number | null; late_fee_days: number | null; order_items: InvoiceSourceItem[] } | null;
+    order: { order_number: string; created_at: string; stripe_payment_intent_id: string | null; payment_method_effective: string | null; late_fee_amount: number | null; late_fee_days: number | null; order_items: InvoiceSourceItem[] } | null;
     sourcing_mission: { reference: string | null; title: string | null } | null;
   };
   const inv = data as unknown as Row;
@@ -595,7 +595,7 @@ const downloadRectificationPdf = async (r: Rectification) => {
     totalAmount: Number(inv.total_amount),
     legalStatus: inv.legal_status,
     billingDetails: inv.billing_details || {},
-    paymentMethod: isAdvance ? 'virement' : paymentText(inv.order?.stripe_payment_intent_id),
+    paymentMethod: isAdvance ? 'virement bancaire' : paymentMethodLabel(inv.order?.payment_method_effective),
     items: isAdvance
       ? advanceInvoiceItems(inv)
       : buildInvoiceItems(inv.order?.order_items || [], { amount: inv.order?.late_fee_amount, days: inv.order?.late_fee_days }, inv.issued_at),

@@ -3,6 +3,7 @@ import { supabase } from '../../../lib/supabase';
 import { generateInvoicesBulkPdf, buildInvoiceItems, InvoiceData, InvoiceBillingDetails, InvoiceSourceItem } from '../../../utils/generateInvoicePdf';
 import { loadSharedInvoice, CREDIT_NOTE_SELECT, CreditNoteRow, creditNotePdfData } from '../../../hooks/useInvoices';
 import { AccountingPeriod } from '../../../utils/accountingPeriods';
+import { paymentMethodLabel } from '../../../utils/paymentMethod';
 import { FileDown, Loader2 } from 'lucide-react';
 
 interface InvoicesBulkExportProps {
@@ -23,6 +24,7 @@ interface OrderRow {
   order_number: string;
   created_at: string;
   stripe_payment_intent_id: string | null;
+  payment_method_effective: string | null;
   order_items: InvoiceSourceItem[] | null;
   late_fee_amount?: number | null;
   late_fee_days?: number | null;
@@ -76,7 +78,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
       const { data, error: fetchError } = await supabase
         .from('orders')
         .select(
-          'order_number, created_at, stripe_payment_intent_id, late_fee_amount, late_fee_days, ' +
+          'order_number, created_at, stripe_payment_intent_id, payment_method_effective, late_fee_amount, late_fee_days, ' +
             'order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost), ' +
             'invoice:invoices!inner(id, kind, merged_into_invoice_id, invoice_number, issued_at, total_amount, vat_rate, legal_status, billing_details)'
         )
@@ -123,7 +125,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
               vatRate: invoice.vat_rate,
               legalStatus: invoice.legal_status,
               billingDetails: invoice.billing_details || {},
-              paymentMethod: row.stripe_payment_intent_id ? 'Carte bancaire (Stripe)' : 'Solde revendeur (wallet)',
+              paymentMethod: paymentMethodLabel(row.payment_method_effective),
               items: group.items,
             };
             return groupData;
@@ -138,7 +140,7 @@ export const InvoicesBulkExport: React.FC<InvoicesBulkExportProps> = ({ period }
             vatRate: invoice.vat_rate,
             legalStatus: invoice.legal_status,
             billingDetails: invoice.billing_details || {},
-            paymentMethod: row.stripe_payment_intent_id ? 'Carte bancaire (Stripe)' : 'Solde revendeur (wallet)',
+            paymentMethod: paymentMethodLabel(row.payment_method_effective),
             items,
           };
           return invoiceData;

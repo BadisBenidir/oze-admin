@@ -69,7 +69,6 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
         order_number: order.order_number,
         created_at: order.created_at,
         total_amount: order.total_amount,
-        paymentMethod: order.stripe_payment_intent_id ? 'Carte bancaire (Stripe)' : 'Solde revendeur (wallet)',
       },
       items
     );
@@ -495,6 +494,13 @@ export const Orders: React.FC<OrdersProps> = ({ activeSubTab }) => {
                             <Badge variant={invoiceBadges[order.id].invoiceType === 'b2b_facturx' ? 'purple' : 'info'}>
                               {invoiceBadges[order.id].invoiceType === 'b2b_facturx' ? 'B2B · Factur-X' : 'B2C · Standard'}
                             </Badge>
+                          )}
+                          {invoiceBadges[order.id]?.rectifiesInvoiceNumber && (
+                            <span title={invoiceBadges[order.id].rectificationReason || undefined}>
+                              <Badge variant="warning">
+                                {invoiceBadges[order.id].invoiceNumber} rectifie {invoiceBadges[order.id].rectifiesInvoiceNumber}
+                              </Badge>
+                            </span>
                           )}
                           {invoiceBadges[order.id]?.qontoEmitted ? (
                             <button

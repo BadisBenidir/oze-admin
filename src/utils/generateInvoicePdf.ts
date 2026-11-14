@@ -105,7 +105,9 @@ export interface InvoiceData {
   /** N° de TVA intracommunautaire de la société (vat_settings, 0280). */
   vatNumber?: string | null;
   /** Facture (ou avoir) rectificative d'un document émis sans TVA (0281). */
-  rectification?: { originalNumber: string; originalIssuedAt: string };
+  /** reason : motif libre (ex. moyen de paiement corrigé, 0287) — sinon
+   * rectification TVA (document émis à tort en franchise). */
+  rectification?: { originalNumber: string; originalIssuedAt: string; reason?: string | null };
 }
 
 // Espaces insécables (fines) du format fr-FR remplacées : la police standard
@@ -286,9 +288,10 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
     y += 1;
   } else {
     doc.text(
+      // Moyen de paiement inconnu : on ne précise rien (jamais deviné).
       data.paid === false
-        ? `Facture à régler par ${data.paymentMethod} à réception.`
-        : `Facture acquittée — paiement par ${data.paymentMethod}.`,
+        ? data.paymentMethod ? `Facture à régler par ${data.paymentMethod} à réception.` : 'Facture à régler à réception.'
+        : data.paymentMethod ? `Facture acquittée — paiement par ${data.paymentMethod}.` : 'Facture acquittée.',
       marginX,
       y
     );
@@ -300,7 +303,13 @@ const drawInvoicePage = (doc: JsPDFType, data: InvoiceData): void => {
   // franchise. Une rectificative rappelle le document qu'elle corrige.
   doc.setFontSize(8);
   doc.setTextColor(120);
-  const mention = data.rectification
+  if (data.rectification?.reason) {
+    const line = `Facture rectificative de la facture n° ${data.rectification.originalNumber} du ${dateStr(data.rectification.originalIssuedAt)} — ${data.rectification.reason}`;
+    const wrapped = doc.splitTextToSize(line, pageWidth - marginX * 2);
+    doc.text(wrapped, marginX, y);
+    y += 4 * wrapped.length + 1;
+  }
+  const mention = data.rectification && !data.rectification.reason
     ? `Ce document rectifie le n° ${data.rectification.originalNumber} du ${dateStr(data.rectification.originalIssuedAt)}, émis à tort avec la mention « ${FRANCHISE_MENTION} » : montant TTC inchangé, TVA ${String(vatRate).replace('.', ',')} % incluse.`
     : vatRate
       ? null

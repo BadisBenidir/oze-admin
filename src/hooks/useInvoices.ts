@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { generateInvoicePdf, renderInvoicePdfBlob, buildInvoiceItems, InvoiceData, InvoiceLineItem, InvoiceBillingDetails, InvoiceSourceItem } from '../utils/generateInvoicePdf';
 import { extractFunctionErrorMessage } from '../utils/edgeFunctionError';
+import { paymentMethodLabel } from '../utils/paymentMethod';
 
 export interface OrderInvoiceBadge {
   invoiceType: 'b2b_facturx' | 'b2c_retail';
@@ -9,6 +10,10 @@ export interface OrderInvoiceBadge {
   qontoEmitted: boolean;
   qontoInvoiceNumber: string | null;
   pdfUrl: string | null;
+  /** Facture rectificative (0287) : numéro et motif de la facture rectifiée. */
+  invoiceNumber?: string;
+  rectifiesInvoiceNumber?: string | null;
+  rectificationReason?: string | null;
 }
 
 /**
@@ -29,7 +34,7 @@ export const useOrderInvoiceBadges = (orderIds: string[]) => {
     }
     const { data } = await supabase
       .from('invoices')
-      .select('order_id, invoice_type, transmission_status, qonto_invoice_id, qonto_invoice_number, pdf_url')
+      .select('order_id, invoice_number, invoice_type, transmission_status, qonto_invoice_id, qonto_invoice_number, pdf_url, rectifies_invoice_number, rectification_reason')
       .in('order_id', key.split(','));
     if (!data) return;
     const next: Record<string, OrderInvoiceBadge> = {};
@@ -40,6 +45,9 @@ export const useOrderInvoiceBadges = (orderIds: string[]) => {
         qontoEmitted: Boolean(row.qonto_invoice_id),
         qontoInvoiceNumber: row.qonto_invoice_number,
         pdfUrl: row.pdf_url,
+        invoiceNumber: row.invoice_number,
+        rectifiesInvoiceNumber: row.rectifies_invoice_number,
+        rectificationReason: row.rectification_reason,
       };
     });
     setBadges(next);
@@ -125,7 +133,8 @@ export interface InvoiceOrderInput {
   order_number: string;
   created_at: string;
   total_amount: number;
-  paymentMethod: string;
+  /** Ignoré : la mention vient du moyen réel (payment_method_effective, 0287). */
+  paymentMethod?: string;
 }
 
 /**
@@ -163,9 +172,13 @@ export const useInvoices = () => {
       // sourcing (plusieurs depuis 0220, avance en plusieurs fois).
       const { data: rows, error: fetchError } = await supabase
         .from('invoices')
-        .select('id, invoice_number, issued_at, total_amount, vat_rate, legal_status, billing_details, pdf_url, kind, merged_into_invoice_id, sourcing_mission:b2b_sourcing_missions(reference, title)')
+        .select('id, invoice_number, issued_at, total_amount, vat_rate, legal_status, billing_details, pdf_url, kind, merged_into_invoice_id, rectifies_invoice_number, rectifies_invoice_date, rectification_reason, sourcing_mission:b2b_sourcing_missions(reference, title)')
         .eq('order_id', order.id)
         .order('issued_at', { ascending: true });
+      // Mention « Facture acquittée — paiement par … » : moyen RÉEL de la
+      // commande (0287), jamais déduit à l'aveugle.
+      const { data: pm } = await supabase.from('orders').select('payment_method_effective').eq('id', order.id).maybeSingle();
+      const paymentMethod = paymentMethodLabel((pm as { payment_method_effective?: string | null } | null)?.payment_method_effective);
       if (fetchError || !rows?.length) {
         throw new Error(fetchError?.message || 'Facture introuvable après génération');
       }
@@ -188,7 +201,7 @@ export const useInvoices = () => {
             vatRate: shared.primary.vat_rate,
             legalStatus: shared.primary.legal_status as 'individual' | 'sole_proprietorship' | 'company',
             billingDetails: (shared.primary.billing_details || {}) as InvoiceBillingDetails,
-            paymentMethod: order.paymentMethod,
+            paymentMethod,
             items: shared.items,
           });
           return { success: true as const };
@@ -228,7 +241,10 @@ export const useInvoices = () => {
           vatRate: invoice.vat_rate,
           legalStatus: invoice.legal_status as 'individual' | 'sole_proprietorship' | 'company',
           billingDetails: (invoice.billing_details || {}) as InvoiceBillingDetails,
-          paymentMethod: order.paymentMethod,
+          paymentMethod,
+          rectification: invoice.rectifies_invoice_number
+            ? { originalNumber: invoice.rectifies_invoice_number, originalIssuedAt: invoice.rectifies_invoice_date || invoice.issued_at, reason: invoice.rectification_reason }
+            : undefined,
           // Facture d'avance de sourcing rattachée à la commande (0196) : elle
           // ne facture que l'avance, jamais le détail des pièces.
           items: invoice.kind === 'advance' ? advanceInvoiceItems(invoice) : orderItems,
@@ -487,7 +503,7 @@ export const getOrderInvoiceForChat = async (orderId: string): Promise<ChatInvoi
   const [{ data: order }, { data: rows }] = await Promise.all([
     supabase
       .from('orders')
-      .select('id, order_number, created_at, late_fee_amount, late_fee_days, order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost)')
+      .select('id, order_number, created_at, late_fee_amount, late_fee_days, payment_method_effective, order_items(product_snapshot, unit_price, quantity, line_total, status, cancelled_at, insured, insurance_cost, entrupy_requested, entrupy_cost)')
       .eq('id', orderId)
       .maybeSingle(),
     supabase
@@ -497,8 +513,8 @@ export const getOrderInvoiceForChat = async (orderId: string): Promise<ChatInvoi
       .order('issued_at', { ascending: true }),
   ]);
   if (!order || !rows?.length) throw new Error('Facture introuvable');
-  const o = order as unknown as { order_number: string; created_at: string; late_fee_amount: number | null; late_fee_days: number | null; order_items: InvoiceSourceItem[] };
-  const paymentMethod = 'Carte bancaire (Stripe) / Solde revendeur';
+  const o = order as unknown as { order_number: string; created_at: string; late_fee_amount: number | null; late_fee_days: number | null; payment_method_effective: string | null; order_items: InvoiceSourceItem[] };
+  const paymentMethod = paymentMethodLabel(o.payment_method_effective);
   const invoice = rows.find((r) => r.kind === 'order') ?? rows[0];
 
   const shared = invoice.kind === 'order' ? await loadSharedInvoice(invoice.id, invoice.merged_into_invoice_id ?? null) : null;

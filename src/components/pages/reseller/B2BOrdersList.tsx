@@ -211,7 +211,6 @@ export const B2BOrdersList: React.FC<B2BOrdersListProps> = ({
         order_number: order.order_number,
         created_at: order.created_at,
         total_amount: order.total_amount,
-        paymentMethod: 'Carte bancaire (Stripe) / Solde revendeur',
       },
       items
     );

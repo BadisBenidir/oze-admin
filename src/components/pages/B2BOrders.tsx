@@ -49,7 +49,6 @@ export const B2BOrders: React.FC = () => {
         order_number: order.order_number,
         created_at: order.created_at,
         total_amount: order.total_amount,
-        paymentMethod: order.stripe_payment_intent_id ? 'Carte bancaire (Stripe)' : 'Solde revendeur (wallet)',
       },
       items
     );
