@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
 import { AccountingRawData } from '../../../hooks/useAccountingRawData';
 import { AccountingPeriod, isWithinRange, monthKeyLabel } from '../../../utils/accountingPeriods';
-import { computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries, computeShippingCharges, withShipping, computeDeliveryTotals, computeExpensesTotal, expensesByMonth, computeManualRevenueTotals, computeVatCollected, vatCollectedByMonth, VatSale } from '../../../utils/accountingCalc';
+import { computeGlobalTotals, computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries, computeShippingCharges, withShipping, computeDeliveryTotals, computeExpensesTotal, expensesByMonth, computeManualRevenueTotals, computeVatCollected, vatCollectedByMonth, VatSale } from '../../../utils/accountingCalc';
 import { Expense } from '../../../hooks/useExpenses';
 import { SUBSCRIPTION_SOURCE_CLIENTS } from '../../../hooks/useAccountingRawData';
 
@@ -79,16 +79,7 @@ interface DashboardGlobalTabProps {
 export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, period, expenses, vatSales = [] }) => {
   const vatCollected = useMemo(() => computeVatCollected(vatSales, period.range), [vatSales, period.range]);
   const monthlyVat = useMemo(() => vatCollectedByMonth(vatSales), [vatSales]);
-  const current = useMemo(() => {
-    const web = computeChannelTotals(data.orders, 'web', period.range);
-    const b2b = computeChannelTotals(data.orders, 'b2b', period.range);
-    const live = computeLiveTotals(data.liveSales, period.range);
-    const subscriptions = computeSubscriptionTotals(data.subscriptionPayments, period.range);
-    const deliveries = computeDeliveryTotals(data.deliveryPayments, period.range);
-    const shipping = computeShippingCharges(data.shippingCharges, period.range);
-    const other = computeManualRevenueTotals(data.manualRevenues, period.range);
-    return { web, b2b, live, subscriptions, deliveries, other, shipping, global: withShipping(combineTotals(web, b2b, live, subscriptions, deliveries, other), shipping) };
-  }, [data, period.range]);
+  const current = useMemo(() => computeGlobalTotals(data, period.range), [data, period.range]);
 
   const mom = useMemo(() => {
     if (!period.momRange) return null;

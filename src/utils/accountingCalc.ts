@@ -382,3 +382,17 @@ export const toHtExpenses = <T extends { spent_at: string; amount: number; vat_a
   const vat = expenseDeductibleVat(e, settings);
   return vat ? { ...e, amount: (Number(e.amount) || 0) - vat } : e;
 });
+
+/** Totaux globaux d'une période, tous canaux (web, B2B, lives, abonnements,
+ * livraisons, autres revenus) + frais de port : le calcul du « Chiffre
+ * d'affaires total » du Dashboard Global, réutilisé par le Dashboard. */
+export const computeGlobalTotals = (data: AccountingRawData, range: DateRange) => {
+  const web = computeChannelTotals(data.orders, 'web', range);
+  const b2b = computeChannelTotals(data.orders, 'b2b', range);
+  const live = computeLiveTotals(data.liveSales, range);
+  const subscriptions = computeSubscriptionTotals(data.subscriptionPayments, range);
+  const deliveries = computeDeliveryTotals(data.deliveryPayments, range);
+  const shipping = computeShippingCharges(data.shippingCharges, range);
+  const other = computeManualRevenueTotals(data.manualRevenues, range);
+  return { web, b2b, live, subscriptions, deliveries, other, shipping, global: withShipping(combineTotals(web, b2b, live, subscriptions, deliveries, other), shipping) };
+};

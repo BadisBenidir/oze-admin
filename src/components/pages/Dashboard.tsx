@@ -5,6 +5,11 @@ import { useHideFigures, HIDDEN_FIGURE } from '../../hooks/useHideFigures';
 import { useState, useEffect } from 'react'; // Ajoute useState et useEffect
 import { orderService } from '../../services/orderService';
 import { JpyEurRateCard } from './JpyEurRateCard';
+import { useMemo } from 'react';
+import { useAdminAuth } from '../../hooks/useAdminAuth';
+import { useAccountingRawData } from '../../hooks/useAccountingRawData';
+import { useVatSettings } from '../../utils/vat';
+import { toHtData, computeGlobalTotals } from '../../utils/accountingCalc';
 
 interface DashboardProps {
   activeSubTab: string;
@@ -21,6 +26,21 @@ const LOAD_MORE_STEP = 10;
 export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
 
   const [stats, setStats] = useState<any>(null);
+  // CA : exactement celui de Comptabilité & Finances (Dashboard Global, année
+  // en cours, HT) — avant, ce compteur additionnait toutes les commandes
+  // depuis le début, TTC, avec un périmètre différent.
+  const { isAdmin } = useAdminAuth();
+  const { data: accountingData, loading: accountingLoading } = useAccountingRawData(isAdmin);
+  const vat = useVatSettings();
+  const ytd = useMemo(() => {
+    if (!isAdmin || accountingLoading) return null;
+    const now = new Date();
+    const range = { start: new Date(now.getFullYear(), 0, 1), end: now };
+    const ht = computeGlobalTotals(toHtData(accountingData, vat.settings), range).global.revenue;
+    const ttc = computeGlobalTotals(accountingData, range).global.revenue;
+    return { ht, ttc };
+  }, [isAdmin, accountingLoading, accountingData, vat.settings]);
+  const eur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // « Masquer les chiffres » (interrupteur global dans l'en-tête).
   // CA total : masqué pour un employé sans ce droit ; montants unitaires et
   // compteurs : seulement via l'interrupteur « Masquer les chiffres ».
@@ -244,12 +264,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
           <CardContent className="p-4 md:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Chiffre d'Affaires</p>
-                <p className="text-xl md:text-2xl font-bold text-gray-900">{showRevenue(stats?.total_revenue?.toLocaleString())} €</p>
-                <div className="flex items-center mt-2">
-                  <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-sm text-green-600">{showRevenue('+12.5%')}</span>
-                </div>
+                <p className="text-sm font-medium text-gray-600">Chiffre d'Affaires (HT)</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">
+                  {ytd ? showRevenue(eur(ytd.ht)) : showRevenue(stats?.total_revenue?.toLocaleString('fr-FR'))} €
+                </p>
+                <p className="mt-2 text-xs text-gray-500">
+                  {ytd ? <>Année en cours · TTC {showRevenue(eur(ytd.ttc))} €</> : 'Chargement…'}
+                </p>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-green-50 rounded-lg flex items-center justify-center">
                 <DollarSign className="h-6 w-6 text-green-600" />
@@ -264,10 +285,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
               <div>
                 <p className="text-sm font-medium text-gray-600">Commandes</p>
                 <p className="text-xl md:text-2xl font-bold text-gray-900">{show(stats?.web_orders || 0)}</p>
-                <div className="flex items-center mt-2">
-                  <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-sm text-green-600">{show('+8.2%')}</span>
-                </div>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-blue-50 rounded-lg flex items-center justify-center">
                 <ShoppingCart className="h-6 w-6 text-blue-600" />
@@ -282,10 +299,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
               <div>
                 <p className="text-sm font-medium text-gray-600">Clients</p>
                 <p className="text-xl md:text-2xl font-bold text-gray-900">{show(stats?.total_customers || 0)}</p>
-                <div className="flex items-center mt-2">
-                  <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-sm text-green-600">{show('+5.7%')}</span>
-                </div>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-purple-50 rounded-lg flex items-center justify-center">
                 <Users className="h-6 w-6 text-purple-600" />
@@ -300,10 +313,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
               <div>
                 <p className="text-sm font-medium text-gray-600">Produits</p>
                 <p className="text-xl md:text-2xl font-bold text-gray-900">{show(stats?.total_products || 0)}</p>
-                <div className="flex items-center mt-2">
-                  <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-                  <span className="text-sm text-red-600">{show('-2.1%')}</span>
-                </div>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-orange-50 rounded-lg flex items-center justify-center">
                 <Package className="h-6 w-6 text-orange-600" />
