@@ -98,6 +98,34 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
   const [closeBusy, setCloseBusy] = useState(false);
   // « Annuler et rembourser » (0271) : proposition acceptée, ou commande liée.
   const [refundOpen, setRefundOpen] = useState<{ action: SavRefundAction | null } | null>(null);
+  // Commandes citées dans le ticket (résumé IA, sujet, messages) en plus de la
+  // commande liée : le chatbot ne rattache qu'une commande, même quand la
+  // demande en concerne plusieurs.
+  const [relatedOrders, setRelatedOrders] = useState<{ id: string; order_number: string; status: string }[]>([]);
+  const mentionText = ticket ? [ticket.subject, ticket.ai_summary, ...messages.map((m) => m.content)].join(' ') : '';
+  const resellerId = ticket?.reseller_id;
+  const linkedOrderId = ticket?.order_id;
+  useEffect(() => {
+    const numbers = [...new Set((mentionText.match(/\b(?:B2B|AUC|OZ)-[0-9A-Za-z-]{6,30}\b/g) || []).map((n) => n.replace(/[.,;:)]+$/, '')))];
+    if (!resellerId || numbers.length === 0) {
+      setRelatedOrders([]);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from('orders')
+      .select('id, order_number, status')
+      .in('order_number', numbers)
+      .eq('reseller_id', resellerId)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const rows = ((data || []) as { id: string; order_number: string; status: string }[]).filter((o) => o.id !== linkedOrderId);
+        setRelatedOrders(rows.sort((a, b) => numbers.indexOf(a.order_number) - numbers.indexOf(b.order_number)));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mentionText, resellerId, linkedOrderId]);
   const [dismissing, setDismissing] = useState(false);
 
   useEffect(() => {
@@ -257,10 +285,10 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
     await refresh();
   };
 
-  const openOrder = async () => {
-    if (!ticket.order_id) return;
+  const openOrder = async (orderId: string | null = ticket.order_id) => {
+    if (!orderId) return;
     setLoadingOrder(true);
-    const o = await fetchB2BOrderById(ticket.order_id);
+    const o = await fetchB2BOrderById(orderId);
     setLoadingOrder(false);
     if (o) setOrder(o);
     else setActionError('Commande introuvable');
@@ -749,10 +777,10 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
             </dl>
           </Section>
 
-          <Section title="Commande liée">
+          <Section title={relatedOrders.length ? `Commandes liées (${relatedOrders.length + (ticket.order_id ? 1 : 0)})` : 'Commande liée'}>
             {ticket.order_id ? (
               <button
-                onClick={openOrder}
+                onClick={() => openOrder()}
                 disabled={loadingOrder}
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-900 underline-offset-2 hover:underline"
               >
@@ -769,6 +797,32 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
               >
                 <Undo2 className="h-4 w-4" /> Annuler et rembourser
               </button>
+            )}
+            {relatedOrders.length > 0 && (
+              <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
+                <p className="text-xs text-gray-500">Aussi citées dans la demande :</p>
+                {relatedOrders.map((o) => (
+                  <div key={o.id} className="flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => openOrder(o.id)}
+                      disabled={loadingOrder}
+                      className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-gray-900 underline-offset-2 hover:underline"
+                    >
+                      <ExternalLink className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{o.order_number}</span>
+                    </button>
+                    {canDecide && !['cancelled', 'canceled'].includes(o.status) && (
+                      <button
+                        onClick={() => setRefundOpen({ action: { type: 'refund', order_id: o.id, order_number: o.order_number, order_item_ids: [], amount: 0 } })}
+                        title="Annuler et rembourser cette commande"
+                        className="shrink-0 rounded-lg border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                      >
+                        <Undo2 className="inline h-3.5 w-3.5" /> Rembourser
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </Section>
 
