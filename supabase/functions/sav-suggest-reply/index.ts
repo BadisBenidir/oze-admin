@@ -70,22 +70,30 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: t } = await admin
       .from('sav_tickets')
-      .select('id, number, category, subject, status, order_id, ai_summary, is_dispute, dispute_decision, dispute_reason, creator:profiles!sav_tickets_created_by_profile_id_fkey(first_name)')
+      .select('id, number, category, subject, status, order_id, reseller_id, ai_summary, is_dispute, dispute_decision, dispute_reason, creator:profiles!sav_tickets_created_by_profile_id_fkey(first_name)')
       .eq('id', ticket_id)
       .maybeSingle();
     if (!t) return json({ error: 'Ticket introuvable' }, 404);
 
-    const [{ data: msgs }, knowledge, orderRes] = await Promise.all([
+    const [{ data: msgs }, knowledge] = await Promise.all([
       admin.from('sav_ticket_messages').select('author_type, internal, content, attachments, created_at').eq('ticket_id', ticket_id).order('created_at'),
       loadKnowledgeBase(admin),
-      t.order_id
-        ? admin
-            .from('orders')
-            .select('order_number, created_at, payment_status, total_amount, order_items(product_snapshot, unit_price, status, fulfillment_status, shipped_at, delivered_at)')
-            .eq('id', t.order_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
     ]);
+
+    // Commandes : la commande liée + toutes celles citées dans le sujet, le
+    // résumé ou les messages (le chatbot ne rattache qu'une commande même
+    // quand la demande en concerne plusieurs), du même revendeur uniquement.
+    const mentionText = [t.subject, t.ai_summary, ...(msgs || []).map((m: { content: string }) => m.content)].join(' ');
+    const numbers = [...new Set((mentionText.match(/\b(?:B2B|AUC|OZ)-[0-9A-Za-z-]{6,30}\b/g) || []).map((n: string) => n.replace(/[.,;:)]+$/, '')))];
+    const ORDER_SELECT = 'id, order_number, created_at, payment_status, total_amount, order_items(product_snapshot, unit_price, status, fulfillment_status, shipped_at, delivered_at)';
+    const [linkedRes, mentionedRes] = await Promise.all([
+      t.order_id ? admin.from('orders').select(ORDER_SELECT).eq('id', t.order_id).maybeSingle() : Promise.resolve({ data: null }),
+      numbers.length && t.reseller_id
+        ? admin.from('orders').select(ORDER_SELECT).in('order_number', numbers).eq('reseller_id', t.reseller_id)
+        : Promise.resolve({ data: [] }),
+    ]);
+    const orderRows = [linkedRes.data, ...((mentionedRes.data || []) as Record<string, unknown>[])]
+      .filter((o, i, all): o is Record<string, unknown> => Boolean(o) && all.findIndex((x) => x && (x as Record<string, unknown>).id === (o as Record<string, unknown>).id) === i);
 
     const thread = (msgs || [])
       .map((m: { author_type: string; internal: boolean; content: string; attachments: unknown[]; created_at: string }) => {
@@ -95,12 +103,15 @@ Deno.serve(async (req: Request) => {
       })
       .join('\n\n');
 
-    const o = orderRes.data as Record<string, unknown> | null;
-    const order = o
-      ? `Commande ${o.order_number} du ${String(o.created_at).slice(0, 10)}, paiement ${o.payment_status}, total ${o.total_amount} €.\n` +
-        ((o.order_items as Record<string, unknown>[]) || [])
-          .map((i) => `- ${(i.product_snapshot as { name?: string })?.name || 'Article'} : ${i.unit_price} €, ${i.status === 'cancelled' ? 'annulé' : FULFILLMENT_LABELS[String(i.fulfillment_status)] || i.fulfillment_status}`)
-          .join('\n')
+    const order = orderRows.length
+      ? orderRows
+          .map((o) =>
+            `Commande ${o.order_number} du ${String(o.created_at).slice(0, 10)}, paiement ${o.payment_status}, total ${o.total_amount} €.\n` +
+            ((o.order_items as Record<string, unknown>[]) || [])
+              .map((i) => `- ${(i.product_snapshot as { name?: string })?.name || 'Article'} : ${i.unit_price} €, ${i.status === 'cancelled' ? 'annulé' : FULFILLMENT_LABELS[String(i.fulfillment_status)] || i.fulfillment_status}`)
+              .join('\n')
+          )
+          .join('\n\n')
       : 'Aucune commande liée.';
 
     const creator = t.creator as { first_name?: string } | null;
@@ -108,7 +119,7 @@ Deno.serve(async (req: Request) => {
 Prénom du client : ${creator?.first_name || 'inconnu'}.
 ${t.is_dispute ? `Litige : décision ${t.dispute_decision || 'pas encore prise'}${t.dispute_reason ? `, motif : ${t.dispute_reason}` : ''}.` : ''}
 
-# Commande
+# Commandes concernées
 ${order}
 
 # Fil du ticket
