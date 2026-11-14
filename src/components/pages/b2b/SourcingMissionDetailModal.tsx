@@ -11,6 +11,7 @@ import { LinkSourcingProductModal } from './LinkSourcingProductModal';
 import { ProductDetail } from '../ProductDetail';
 import { FULFILLMENT_LABELS, ProductFulfillmentStatus } from '../../../hooks/useProductFulfillment';
 import { supabase } from '../../../lib/supabase';
+import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
 import { useHideFigures } from '../../../hooks/useHideFigures';
 
 interface SourcingMissionDetailModalProps {
@@ -148,7 +149,32 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     emitting: emittingAdvance,
     emit: emitAdvance,
     download: downloadAdvanceInvoice,
+    refresh: refreshAdvanceInvoices,
   } = useAdvanceInvoices(mission?.id ?? null);
+  // Facture d'avance émise et pas encore payée : à l'ouverture de la fiche,
+  // on interroge Qonto (qonto-sync) pour afficher « Payée » sans attendre la
+  // synchro automatique (6 h / 18 h).
+  const [checkingQonto, setCheckingQonto] = useState(false);
+  const hasUnpaidEmitted = advanceInvoices.some((i) => i.qontoEmitted && i.transmissionStatus !== 'paid' && i.transmissionStatus !== 'cancelled');
+  const [qontoCheckedFor, setQontoCheckedFor] = useState<string | null>(null);
+  const checkQontoPayments = async () => {
+    setCheckingQonto(true);
+    try {
+      await invokeEdgeFunction('qonto-sync', {});
+      await refreshAdvanceInvoices();
+      onItemsChanged();
+    } catch (e) {
+      console.error('qonto-sync', e);
+    } finally {
+      setCheckingQonto(false);
+    }
+  };
+  useEffect(() => {
+    if (!mission?.id || !hasUnpaidEmitted || qontoCheckedFor === mission.id) return;
+    setQontoCheckedFor(mission.id);
+    checkQontoPayments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mission?.id, hasUnpaidEmitted]);
   const advanceInvoice = advanceInvoices[0] ?? null;
   const [advanceAmountInput, setAdvanceAmountInput] = useState('');
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
@@ -551,7 +577,17 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                             ) : inv.transmissionStatus === 'cancelled' ? (
                               <Badge variant="default">Annulée</Badge>
                             ) : inv.qontoEmitted ? (
-                              <Badge variant="warning">En attente de paiement</Badge>
+                              <>
+                                <Badge variant="warning">En attente de paiement</Badge>
+                                <button
+                                  type="button"
+                                  onClick={checkQontoPayments}
+                                  disabled={checkingQonto}
+                                  className="text-xs text-gray-500 underline hover:text-gray-800 disabled:opacity-50"
+                                >
+                                  {checkingQonto ? 'Vérification sur Qonto…' : 'Vérifier le paiement'}
+                                </button>
+                              </>
                             ) : (
                               <Badge variant="default">Non émise sur Qonto</Badge>
                             )}
