@@ -83,6 +83,9 @@ Après la création, confirme au client que sa demande est ouverte en donnant so
 
 Pour les questions sur les commandes ou l'abonnement, utilise tes outils plutôt que de supposer. Présente les statuts simplement. Ne donne jamais les identifiants techniques (UUID).`;
 
+/** Jours entiers écoulés depuis une date (commande, paiement). */
+const daysSince = (iso: string | null | undefined) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null);
+
 /** Situation → catégorie et priorité du ticket (tableau validé). Toute
  * situation hors liste est refusée : jamais de ticket pour le sourcing ou le
  * retour d'un pro hors authenticité / état. */
@@ -218,6 +221,9 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: Ctx): 
         return {
           numero: o.order_number,
           date: String(o.created_at).slice(0, 10),
+          // Seuil du ticket « commande bloquée » (21 jours) : calculé ici
+          // plutôt que laissé au modèle.
+          jours_depuis_commande: daysSince(o.created_at as string),
           paiement: o.payment_status,
           montant_total_eur: o.total_amount,
           nb_articles: items.length,
@@ -249,6 +255,7 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: Ctx): 
       date: String(order.created_at).slice(0, 10),
       paiement: order.payment_status,
       paye_le: order.paid_at ? String(order.paid_at).slice(0, 10) : null,
+      jours_depuis_commande: daysSince((order.paid_at || order.created_at) as string),
       sous_total_eur: order.subtotal,
       frais_de_port_eur: order.shipping_cost,
       total_eur: order.total_amount,
