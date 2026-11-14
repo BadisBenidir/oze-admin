@@ -53,7 +53,7 @@ const renderAdminInvoicePdf = async (i: AttachableInvoice): Promise<Blob> => {
   const { blob } = await renderInvoicePdfBlob({
     invoiceNumber: i.invoice_number,
     issuedAt: i.issued_at,
-    orderNumber: i.kind === 'advance' ? i.sourcing_mission?.reference || i.invoice_number : 'Prestation',
+    orderNumber: i.kind === 'advance' ? i.sourcing_mission?.reference || i.invoice_number : i.invoice_number,
     orderDate: i.issued_at,
     totalAmount: Number(i.total_amount),
     vatRate: i.vat_rate,
