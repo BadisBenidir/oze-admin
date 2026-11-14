@@ -36,8 +36,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
     if (!isAdmin || accountingLoading) return null;
     const now = new Date();
     const range = { start: new Date(now.getFullYear(), 0, 1), end: now };
-    const ht = computeGlobalTotals(toHtData(accountingData, vat.settings), range).global.revenue;
-    const ttc = computeGlobalTotals(accountingData, range).global.revenue;
+    // Hors lives (demande admin) : CA global moins le CA des ventes live.
+    const noLive = (t: ReturnType<typeof computeGlobalTotals>) => t.global.revenue - t.live.revenue;
+    const ht = noLive(computeGlobalTotals(toHtData(accountingData, vat.settings), range));
+    const ttc = noLive(computeGlobalTotals(accountingData, range));
     return { ht, ttc };
   }, [isAdmin, accountingLoading, accountingData, vat.settings]);
   const eur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -269,7 +271,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                   {ytd ? showRevenue(eur(ytd.ht)) : showRevenue(stats?.total_revenue?.toLocaleString('fr-FR'))} €
                 </p>
                 <p className="mt-2 text-xs text-gray-500">
-                  {ytd ? <>Année en cours · TTC {showRevenue(eur(ytd.ttc))} €</> : 'Chargement…'}
+                  {ytd ? <>Année en cours, hors lives · TTC {showRevenue(eur(ytd.ttc))} €</> : 'Chargement…'}
                 </p>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-green-50 rounded-lg flex items-center justify-center">
