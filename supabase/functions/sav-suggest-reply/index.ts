@@ -42,8 +42,9 @@ const REPHRASE_RULES = `Un membre de l'équipe du service client d'OZË Paris (m
 - Français, vouvoiement, orthographe et ponctuation correctes.
 - Garde exactement le même fond : mêmes informations, mêmes décisions, mêmes montants, délais et engagements. N'ajoute aucune promesse, aucun fait ni geste commercial ; n'en retire aucun.
 - Reste concis : pas plus long que nécessaire.
-- Commence par « Bonjour <prénom>, » si le prénom est connu (sinon « Bonjour, ») et termine par « Belle journée,\\nL'équipe OZË Paris », sauf si le texte a déjà une formule équivalente.
-- Le contexte du ticket ne sert qu'à comprendre le message : ne cite jamais les notes internes.
+- Commence par « Bonjour <prénom>, » avec le prénom du client de CE ticket (sinon « Bonjour, ») et termine par « Belle journée,\\nL'équipe OZË Paris », sauf si le texte a déjà une formule équivalente.
+- Le texte peut être un message réutilisé d'un autre dossier : si il cite un autre prénom, d'autres numéros de commande, d'autres articles ou d'autres statuts que ceux de CE ticket, remplace-les par ceux du ticket (prénom du client, commandes concernées avec leurs articles et leur état réel). Plusieurs commandes concernées : cite-les toutes. Garde l'explication, les délais et les engagements du texte ; si un fait du texte ne correspond pas aux données du ticket (ex. article déjà expédié), suis les données du ticket.
+- Le contexte du ticket ne sert qu'à comprendre et adapter le message : ne cite jamais les notes internes.
 - Réponds UNIQUEMENT par le texte reformulé, sans commentaire autour.`;
 
 Deno.serve(async (req: Request) => {
