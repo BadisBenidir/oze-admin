@@ -271,7 +271,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
                   {ytd ? showRevenue(eur(ytd.ht)) : showRevenue(stats?.total_revenue?.toLocaleString('fr-FR'))} €
                 </p>
                 <p className="mt-2 text-xs text-gray-500">
-                  {ytd ? <>Année en cours, hors lives · TTC {showRevenue(eur(ytd.ttc))} €</> : 'Chargement…'}
+                  {ytd ? <>Année en cours · TTC {showRevenue(eur(ytd.ttc))} €</> : 'Chargement…'}
                 </p>
               </div>
               <div className="h-10 w-10 md:h-12 md:w-12 bg-green-50 rounded-lg flex items-center justify-center">
