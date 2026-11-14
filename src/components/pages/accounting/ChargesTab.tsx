@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CreditCard, Landmark, Loader2, Paperclip, Pencil, Plus, ReceiptText, Settings2, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Boxes, CreditCard, Landmark, Loader2, Paperclip, Pencil, Plus, ReceiptText, Settings2, Trash2, Upload, X } from 'lucide-react';
+import { ExpenseAllocationModal } from './ExpenseAllocationModal';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
@@ -92,6 +93,18 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
   // Déposés pendant la session : verts tout de suite, sans attendre le rechargement.
   const [uploaded, setUploaded] = useState<Set<string>>(new Set());
   const isMissing = useCallback((e: Expense) => missingReceipt(e) && !uploaded.has(e.id), [uploaded]);
+  // Frais d'approche (0290) : paiements DHL détectés, répartis sur le coût des
+  // articles de l'envoi (TVA d'import déductible séparée).
+  const [allocating, setAllocating] = useState<Expense | null>(null);
+  const [allocated, setAllocated] = useState<Record<string, number>>({});
+  const loadAllocated = useCallback(async () => {
+    const { data } = await supabase.from('expense_cost_allocations').select('expense_id');
+    const next: Record<string, number> = {};
+    for (const r of (data || []) as { expense_id: string }[]) next[r.expense_id] = (next[r.expense_id] || 0) + 1;
+    setAllocated(next);
+  }, []);
+  useEffect(() => { loadAllocated(); }, [loadAllocated, expenses]);
+  const isImportFee = (e: Expense) => /\bDHL\b/i.test(e.label) || Boolean(allocated[e.id]);
 
   const inPeriod = useMemo(() => expensesInRange(expenses, period.range), [expenses, period.range]);
   const counted = useMemo(() => inPeriod.filter(isCountedCharge), [inPeriod]);
@@ -334,6 +347,16 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
                       <td className="px-4 py-2.5 text-sm text-gray-900">
                         {e.label}
                         {e.bank_transaction_id && <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">Qonto</span>}
+                        {isImportFee(e) && (
+                          <button
+                            onClick={() => setAllocating(e)}
+                            className={`ml-1.5 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${allocated[e.id] ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                            title="Frais d'approche : TVA d'import déductible + répartition sur le coût des articles de l'envoi"
+                          >
+                            <Boxes className="h-3 w-3" />
+                            {allocated[e.id] ? `Réparti · ${allocated[e.id]} article(s)` : 'À répartir sur les articles'}
+                          </button>
+                        )}
                         {e.bank_transaction_id && (
                           isMissing(e) ? (
                             <label
@@ -425,6 +448,17 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
             if (editing === 'new') await createExpense(data);
             else await updateExpense(editing.id, data);
             setEditing(null);
+          }}
+        />
+      )}
+      {allocating && (
+        <ExpenseAllocationModal
+          expense={allocating}
+          onClose={() => setAllocating(null)}
+          updateExpense={updateExpense}
+          onDone={async () => {
+            await refreshExpenses();
+            await loadAllocated();
           }}
         />
       )}
