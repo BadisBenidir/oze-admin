@@ -31,10 +31,11 @@ const MODEL = Deno.env.get('SAV_CHAT_MODEL') || 'claude-sonnet-5-5';
 // Ouverture / clôture : varier d'un message à l'autre (l'admin trouvait
 // toutes les réponses identiques : « Je vous remercie pour… » / « Nous sommes
 // désolés… Belle journée »).
-const VARIETY_RULES = `- Salutation : « Bonjour <prénom>, » si le prénom est connu, sinon « Bonjour, ».
+const VARIETY_RULES = `- Salutation : SEULEMENT si le contexte indique « Premier message de l'équipe : oui » → « Bonjour <prénom>, » (sinon « Bonjour, »). Si l'équipe a déjà répondu dans ce fil, PAS de « Bonjour » ni d'autre salutation : la conversation est en cours, commence directement par le fond (tu peux glisser le prénom dans la phrase si c'est naturel).
 - VARIE l'ouverture et la clôture. Regarde les messages déjà envoyés par l'équipe dans le fil et n'en reprends ni la première phrase ni la formule finale. Évite les attaques toutes faites comme « Je vous remercie pour votre message » ou « Nous vous remercions pour… » : entre directement dans le sujet (ex. « Bonne nouvelle : … », « J'ai bien regardé votre commande… », « Suite à votre message, … », « Merci pour les photos, … »), en choisissant une tournure naturelle et différente à chaque fois.
 - Ne termine pas systématiquement par des excuses ou par « merci de votre patience » : seulement si c'est pertinent, et formulé autrement que dans les messages précédents.
-- Formule de fin variée et adaptée (ex. « Belle journée », « Bonne soirée », « Bien à vous », « À très vite », « Excellente fin de semaine »), puis à la ligne « L'équipe OZË Paris » (signature toujours identique).`;
+- Premier message de l'équipe : formule de fin variée et adaptée (ex. « Belle journée », « Bonne soirée », « Bien à vous », « À très vite »), puis à la ligne « L'équipe OZË Paris ». Conversation déjà en cours : PAS de formule de fin ni de signature, termine simplement sur la dernière information utile.
+- Si le texte à reformuler contient une salutation ou une signature contraire à ces règles, retire-la.`;
 
 const RULES = `Tu rédiges, pour l'équipe du service client d'OZË Paris (maroquinerie de luxe de seconde main achetée au Japon, vendue aux revendeurs du Club B2B), un BROUILLON de réponse au client. Un membre de l'équipe le relira et le modifiera avant envoi.
 
@@ -127,6 +128,7 @@ Deno.serve(async (req: Request) => {
     const creator = t.creator as { first_name?: string } | null;
     const context = `Ticket ${t.number} — ${SAV_CATEGORIES[t.category] || t.category} — « ${t.subject} » — statut ${t.status}.
 Prénom du client : ${creator?.first_name || 'inconnu'}.
+Premier message de l'équipe : ${(msgs || []).some((m: { author_type: string; internal: boolean }) => m.author_type === 'team' && !m.internal) ? 'non (conversation en cours)' : 'oui'}.
 ${t.is_dispute ? `Litige : décision ${t.dispute_decision || 'pas encore prise'}${t.dispute_reason ? `, motif : ${t.dispute_reason}` : ''}.` : ''}
 
 # Commandes concernées
