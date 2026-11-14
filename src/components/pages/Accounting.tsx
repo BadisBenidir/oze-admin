@@ -55,6 +55,10 @@ export const Accounting: React.FC = () => {
   // inchangés, désormais TTC) ; charges diminuées de la TVA déductible.
   const vat = useVatSettings();
   const htData = useMemo(() => toHtData(data, vat.settings), [data, vat.settings]);
+  // Dashboard Global HORS lives (demande admin) : CA, coût d'achat, marge,
+  // résultat et graphiques sans les ventes live ; l'onglet « Lives » et la
+  // TVA (onglet TVA) les gardent.
+  const globalData = useMemo(() => ({ ...htData, liveSales: [], vatSales: htData.vatSales.filter((s) => s.source !== 'live') }), [htData]);
   const htExpenses = useMemo(() => toHtExpenses(expensesApi.expenses, vat.settings), [expensesApi.expenses, vat.settings]);
 
   const [activeTab, setActiveTab] = useState<AccountingTab>('global');
@@ -164,7 +168,7 @@ export const Accounting: React.FC = () => {
         </div>
       ) : (
         <>
-          {activeTab === 'global' && <DashboardGlobalTab data={htData} period={period} expenses={htExpenses} vatSales={htData.vatSales} />}
+          {activeTab === 'global' && <DashboardGlobalTab data={globalData} period={period} expenses={htExpenses} vatSales={globalData.vatSales} />}
           {activeTab === 'b2c' && <B2CTab data={htData} period={period} />}
           {activeTab === 'b2b' && <B2BTab data={htData} period={period} />}
           {activeTab === 'lives' && <LivesTab data={htData} period={period} />}
