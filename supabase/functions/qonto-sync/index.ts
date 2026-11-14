@@ -112,6 +112,11 @@ Deno.serve(async (req: Request) => {
       url.searchParams.set('sort_by', 'settled_at:desc');
       url.searchParams.set('per_page', '100');
       url.searchParams.set('current_page', String(page));
+      // Par défaut Qonto ne renvoie que les opérations débitées : un paiement
+      // carte reste « pending » 1 à 3 jours, il manquait donc aux charges.
+      // Refusés / annulés : récupérés pour mettre à jour leur statut (jamais
+      // importés en charges, voir 0291).
+      for (const st of ['pending', 'completed', 'declined', 'reversed']) url.searchParams.append('status[]', st);
 
       const txRes = await fetch(url.toString(), { headers: qontoHeaders });
       if (!txRes.ok) {
@@ -220,6 +225,16 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // 3 bis. Débits importés en charges (accounting_import_bank_expenses,
+    // 0276 / 0291) : à chaque synchro (cron 6 h / 18 h, « Actualiser »), plus
+    // seulement au clic « Importer Qonto ».
+    let expensesImported: unknown = null;
+    {
+      const { data: imp, error: impError } = await adminClient.rpc('accounting_import_bank_expenses');
+      if (impError) console.error('qonto-sync: import des charges', impError.message);
+      else expensesImported = imp;
+    }
+
     // 4. Factures d'avance de sourcing (0196) émises sur Qonto : relit leur
     // statut ; une facture passée « paid » côté Qonto (virement rapproché
     // dans Qonto) marque l'avance de la mission comme encaissée.
@@ -300,6 +315,7 @@ Deno.serve(async (req: Request) => {
       auto_matched: totalMatched,
       advances_paid: advancesPaid,
       rectifications_regularized: rectificationsMatched,
+      expenses_imported: expensesImported,
     });
   } catch (err) {
     console.error('qonto-sync: erreur non gérée', err instanceof Error ? err.stack || err.message : err);
