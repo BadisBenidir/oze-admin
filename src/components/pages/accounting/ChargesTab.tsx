@@ -403,7 +403,6 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right text-sm font-medium tabular-nums text-gray-900">
                         {EUR(e.amount)}
-                        {(e.vat_amount ?? e.bank?.vat_amount) ? <p className="text-[11px] font-normal text-gray-500">dont TVA {EUR(Number(e.vat_amount ?? e.bank?.vat_amount))}</p> : null}
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right">
                         {busy === e.id ? (
