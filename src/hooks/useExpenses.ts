@@ -93,14 +93,13 @@ export const useExpenses = (isAuthenticated: boolean = false): UseExpensesResult
   }
 
   const updateExpense = async (id: string, data: Partial<Expense>) => {
-    const { error } = await supabase.from('expenses').update({
-      label: data.label,
-      category: data.category ?? null,
-      amount: data.amount ?? 0,
-      spent_at: data.spent_at,
-      notes: data.notes ?? null,
-      vat_amount: data.vat_amount ?? null,
-    }).eq('id', id)
+    // Mise à jour PARTIELLE : seuls les champs fournis sont modifiés (un appel
+    // avec { vat_amount } seul ne doit jamais remettre le montant à 0).
+    const patch: Record<string, unknown> = {}
+    for (const k of ['label', 'category', 'amount', 'spent_at', 'notes', 'vat_amount'] as const) {
+      if (k in data) patch[k] = data[k] ?? null
+    }
+    const { error } = await supabase.from('expenses').update(patch).eq('id', id)
     if (error) throw new Error(error.message)
     await fetchExpenses()
   }
