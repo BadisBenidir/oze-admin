@@ -403,7 +403,8 @@ export const useAdvanceInvoices = (missionId: string | null) => {
       invoiceNumber: data.invoice_number,
       issuedAt: data.issued_at,
       orderNumber: mission?.reference || data.invoice_number,
-      orderDate: mission?.created_at || data.issued_at,
+      // Date de la facture = date d'émission (jamais celle de la mission).
+      orderDate: data.issued_at,
       totalAmount: Number(data.total_amount),
       vatRate: data.vat_rate,
       legalStatus: data.legal_status as 'individual' | 'sole_proprietorship' | 'company',

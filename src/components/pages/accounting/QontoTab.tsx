@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Wallet, TrendingUp, ShieldAlert, FileWarning, RefreshCw, Upload, Link2, Download, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
+import { UnjustifiedCreditsCard } from './UnjustifiedCreditsCard';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { useBankTransactions, BankTransaction, MatchedType } from '../../../hooks/useBankTransactions';
@@ -303,6 +304,8 @@ export const QontoTab: React.FC<QontoTabProps> = ({ data }) => {
           </div>
         </CardContent>
       </Card>
+
+      <UnjustifiedCreditsCard />
 
       {/* Export comptable */}
       <Card>
