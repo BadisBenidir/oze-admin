@@ -46,15 +46,16 @@ ${VARIETY_RULES}
 - Les notes internes sont confidentielles : ne les cite jamais telles quelles au client.
 - Réponds UNIQUEMENT par le texte du message, sans commentaire autour.`;
 
-const REPHRASE_RULES = `Un membre de l'équipe du service client d'OZË Paris (maroquinerie de luxe de seconde main achetée au Japon, vendue aux revendeurs du Club B2B) a écrit une réponse à un client. Tu la REFORMULES pour qu'elle soit claire, professionnelle et chaleureuse.
+// Reformuler : RÉÉCRIRE le texte de l'admin, pas rédiger une autre réponse
+// (le modèle répondait au dernier message du client au lieu de reformuler).
+const REPHRASE_RULES = `Un membre de l'équipe du service client d'OZË Paris (maroquinerie de luxe de seconde main achetée au Japon, vendue aux revendeurs du Club B2B) a écrit un message pour un client. Ta seule tâche : RÉÉCRIRE CE TEXTE pour qu'il soit correct, clair, professionnel et chaleureux.
 
-- Français, vouvoiement, orthographe et ponctuation correctes.
-- Garde exactement le même fond : mêmes informations, mêmes décisions, mêmes montants, délais et engagements. N'ajoute aucune promesse, aucun fait ni geste commercial ; n'en retire aucun.
-- Reste concis : pas plus long que nécessaire.
-${VARIETY_RULES}
-- Le prénom à utiliser est celui du client de CE ticket.
-- Le texte peut être un message réutilisé d'un autre dossier : si il cite un autre prénom, d'autres numéros de commande, d'autres articles ou d'autres statuts que ceux de CE ticket, remplace-les par ceux du ticket (prénom du client, commandes concernées avec leurs articles et leur état réel). Plusieurs commandes concernées : cite-les toutes. Garde l'explication, les délais et les engagements du texte ; si un fait du texte ne correspond pas aux données du ticket (ex. article déjà expédié), suis les données du ticket.
-- Le contexte du ticket ne sert qu'à comprendre et adapter le message : ne cite jamais les notes internes.
+- Tu ne rédiges PAS une nouvelle réponse et tu ne réponds PAS toi-même au client : tu corriges et reformules le texte fourni, phrase par phrase.
+- Chaque idée du texte doit se retrouver dans ta version, dans le même ordre ; n'ajoute AUCUNE idée, information, explication, excuse, promesse ou geste commercial qui n'y figure pas (même si le fil ou la base de connaissances en parlent).
+- Français, vouvoiement (même si le texte tutoie), orthographe et ponctuation correctes. Longueur proche du texte d'origine.
+- Salutation : seulement si le contexte indique « Premier message de l'équipe : oui » → « Bonjour <prénom>, ». Sinon, aucune salutation ni signature (retire celles du texte s'il y en a). Au premier message, termine par une formule de fin puis « L'équipe OZË Paris ».
+- Seule exception au « rien changer » : si le texte est manifestement repris d'un autre dossier (autre prénom, autres numéros de commande, autres articles), remplace ces éléments par ceux de CE ticket (prénom du client, commandes concernées). Sinon n'utilise le contexte du ticket que pour comprendre le texte.
+- Ne cite jamais les notes internes.
 - Réponds UNIQUEMENT par le texte reformulé, sans commentaire autour.`;
 
 Deno.serve(async (req: Request) => {
@@ -146,7 +147,7 @@ ${thread || '(vide)'}`;
         {
           role: 'user',
           content: rephrase
-            ? `${context}\n\n# Texte de l'équipe à reformuler\n${rephrase}`
+            ? `${context}\n\n# TEXTE À REFORMULER (c'est ce texte, et lui seul, que tu réécris)\n${rephrase}`
             : `${context}\n\nRédige le brouillon de la prochaine réponse de l'équipe au client.`,
         },
       ],
