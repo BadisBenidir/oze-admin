@@ -36,7 +36,7 @@ export const UnjustifiedCreditsCard: React.FC = () => {
     const [{ data: tx }, { data: inv }] = await Promise.all([
       supabase
         .from('bank_transactions')
-        .select('id, label, counterparty_name, amount, settled_at, emitted_at, attachment_ids, matched_type, matched_sourcing_mission_id, matched_order_id, qonto_status')
+        .select('id, label, counterparty_name, amount, settled_at, emitted_at, attachment_ids, matched_type, matched_sourcing_mission_id, matched_order_id, qonto_status, reconciliation_status')
         .eq('side', 'credit')
         .eq('qonto_status', 'completed')
         .gt('amount', 0)
@@ -45,9 +45,12 @@ export const UnjustifiedCreditsCard: React.FC = () => {
     ]);
     // Hors reversements Stripe (ventes groupées), virements internes et
     // apports en compte courant : pas de facture client à joindre.
-    const rows = ((tx || []) as unknown as (UnjustifiedCredit & { attachment_ids: string[] | null; matched_type: string | null })[]).filter(
+    // « Pas de facture » (micro-dépôt de vérification, remboursement
+    // fournisseur…) : transaction ignorée, sortie de la liste.
+    const rows = ((tx || []) as unknown as (UnjustifiedCredit & { attachment_ids: string[] | null; matched_type: string | null; reconciliation_status: string })[]).filter(
       (t) =>
         !(t.attachment_ids || []).length &&
+        t.reconciliation_status !== 'ignored' &&
         t.matched_type !== 'stripe_payout' &&
         !/STRIPE|^OZ[EË] PARIS|RESERVE|BADIS BENIDIR|BENIDIR BADIS/i.test(`${t.counterparty_name || ''} ${t.label || ''}`)
     );
@@ -73,6 +76,17 @@ export const UnjustifiedCreditsCard: React.FC = () => {
     } catch (e) {
       setState((s) => ({ ...s, [tx.id]: e instanceof Error ? e.message : 'Erreur' }));
     }
+  };
+
+  const noInvoice = async (tx: UnjustifiedCredit) => {
+    const reason = prompt(`Pourquoi cet encaissement de ${EUR(tx.amount)} n'a pas de facture ?`, 'Pas une vente (ex. vérification de compte, remboursement)');
+    if (reason === null) return;
+    const { error } = await supabase
+      .from('bank_transactions')
+      .update({ reconciliation_status: 'ignored', note: reason.trim() || 'Pas de facture', updated_at: new Date().toISOString() })
+      .eq('id', tx.id);
+    if (error) return setState((s) => ({ ...s, [tx.id]: error.message }));
+    setCredits((c) => c.filter((t) => t.id !== tx.id));
   };
 
   const pending = credits.filter((t) => choice[t.id] && state[t.id] !== 'done');
@@ -155,6 +169,15 @@ export const UnjustifiedCreditsCard: React.FC = () => {
                         {st === 'done' ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Déposée</span>
                         ) : (
+                          <span className="inline-flex items-center gap-1.5">
+                          <button
+                            onClick={() => noInvoice(tx)}
+                            disabled={st === 'busy' || bulk}
+                            title="Encaissement qui n'est pas une vente (vérification de compte, remboursement…) : retiré de la liste"
+                            className="rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-800 disabled:opacity-40"
+                          >
+                            Pas de facture
+                          </button>
                           <button
                             onClick={() => attach(tx)}
                             disabled={!inv || st === 'busy' || bulk}
@@ -162,6 +185,7 @@ export const UnjustifiedCreditsCard: React.FC = () => {
                           >
                             {st === 'busy' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />} Joindre
                           </button>
+                          </span>
                         )}
                       </td>
                     </tr>
