@@ -24,7 +24,23 @@ interface PreviewRow { product_id: string; code: string; name: string; before: n
 interface Preview { base: number; count: number; total_cost_before: number; rows: PreviewRow[] }
 interface Allocation { amount: number; purchase_price_before: number | null; product: { product_code: string | null; reference: string | null; name: string; purchase_price: number | null } | null }
 
-const parseRefs = (text: string) => [...new Set(text.split(/[\s,;]+/).map((r) => r.trim()).filter(Boolean))];
+// Références reconnues dans un texte collé tel quel (liste OGATE : dates,
+// marques, prix…) : n° de lot Aucnet (889-42873), EcoRing / EcoAuc (269047868,
+// 2260008008820), codes admin (LB-…, OZ-…, OZE-B2B-…). Les prix « 28,886 » et
+// les dates « 2026/10/16 » ne sont pas pris. Sans aucun motif reconnu : liste
+// libre séparée par espaces / virgules.
+const REF_PATTERNS = [
+  /\b\d{3}-\d{5}\b/g,
+  /\b\d{9,13}\b/g,
+  /\bLB-[A-Z]+-[A-Z]-\d{4}-\d{2}-\d{6}\b/gi,
+  /\bOZE-B2B-\d{4}-\d+\b/gi,
+  /\bOZ-[A-Z]+-\d+\b/gi,
+];
+const parseRefs = (text: string) => {
+  const found = REF_PATTERNS.flatMap((re) => text.match(re) || []);
+  const list = found.length ? found : text.split(/[\s,;]+/);
+  return [...new Set(list.map((r) => r.trim()).filter(Boolean))];
+};
 
 export const ExpenseAllocationModal: React.FC<{
   expense: Expense;
@@ -42,6 +58,8 @@ export const ExpenseAllocationModal: React.FC<{
   const [refs, setRefs] = useState('');
   const [productIds, setProductIds] = useState<string[] | null>(null);
   const [unmatched, setUnmatched] = useState<string[]>([]);
+  const [duplicates, setDuplicates] = useState<string[]>([]);
+  const detected = useMemo(() => parseRefs(refs), [refs]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [existing, setExisting] = useState<Allocation[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -85,14 +103,31 @@ export const ExpenseAllocationModal: React.FC<{
       const inList = list.map((r) => `"${r.replace(/"/g, '')}"`).join(',');
       const { data, error: qError } = await supabase
         .from('products')
-        .select('id, product_code, reference, b2b_reference, source_reference')
+        .select('id, product_code, reference, b2b_reference, source_reference, created_at')
         .or(`product_code.in.(${inList}),reference.in.(${inList}),b2b_reference.in.(${inList}),source_reference.in.(${inList})`);
       if (qError) throw new Error(qError.message);
-      const rows = (data || []) as { id: string; product_code: string | null; reference: string | null; b2b_reference: string | null; source_reference: string | null }[];
-      const found = new Set(rows.flatMap((p) => [p.product_code, p.reference, p.b2b_reference, p.source_reference]).filter(Boolean) as string[]);
-      setUnmatched(list.filter((r) => !found.has(r)));
-      if (!rows.length) throw new Error('Aucun article trouvé pour ces références');
-      await runPreview([...new Set(rows.map((p) => p.id))]);
+      type Row = { id: string; product_code: string | null; reference: string | null; b2b_reference: string | null; source_reference: string | null; created_at: string };
+      const rows = (data || []) as Row[];
+      // Une référence = un article. Si plusieurs fiches portent la même
+      // référence fournisseur (article recréé), on garde la plus récente et
+      // on le signale.
+      const ids = new Set<string>();
+      const missing: string[] = [];
+      const dups: string[] = [];
+      for (const ref of list) {
+        const matches = rows
+          .filter((p) => [p.product_code, p.reference, p.b2b_reference, p.source_reference].includes(ref))
+          .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        if (!matches.length) missing.push(ref);
+        else {
+          ids.add(matches[0].id);
+          if (matches.length > 1) dups.push(`${ref} → ${matches[0].product_code || matches[0].id} (${matches.length} fiches)`);
+        }
+      }
+      setUnmatched(missing);
+      setDuplicates(dups);
+      if (!ids.size) throw new Error('Aucun article trouvé pour ces références');
+      await runPreview([...ids]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -103,6 +138,7 @@ export const ExpenseAllocationModal: React.FC<{
   const previewMonth = async () => {
     setError('');
     setUnmatched([]);
+    setDuplicates([]);
     setBusy('month');
     try {
       const d = new Date(`${expense.spent_at}T12:00:00`);
@@ -205,11 +241,16 @@ export const ExpenseAllocationModal: React.FC<{
                 <textarea
                   value={refs}
                   onChange={(e) => { setRefs(e.target.value); setPreview(null); }}
-                  rows={4}
-                  placeholder="Une référence par ligne (ou séparées par des espaces / virgules) : LB-SAC-U-2026-11-000176, OZ-LV-571, OZE-B2B-2026-5132…"
+                  rows={6}
+                  placeholder="Colle la liste de l'envoi telle quelle (page OGATE : dates, marques, prix…) — les n° Aucnet (889-42873), EcoRing (269047868, 2260008008820) et codes admin (LB-…, OZ-…) sont détectés automatiquement."
                   className="mt-1 w-full rounded-lg border border-gray-200 px-2.5 py-2 font-mono text-xs text-gray-900 focus:border-gray-400 focus:outline-none"
                 />
               </label>
+              {refs.trim() && (
+                <p className="-mt-2 text-xs text-gray-500">
+                  {detected.length} référence(s) détectée(s){detected.length ? ` : ${detected.slice(0, 6).join(', ')}${detected.length > 6 ? '…' : ''}` : ''}
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
                 <button onClick={previewFromRefs} disabled={busy !== null} className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50">
                   {busy === 'preview' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aperçu de la répartition'}
@@ -222,6 +263,12 @@ export const ExpenseAllocationModal: React.FC<{
               {unmatched.length > 0 && (
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   Références introuvables ({unmatched.length}) : {unmatched.join(', ')}
+                </p>
+              )}
+
+              {duplicates.length > 0 && (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Références présentes sur plusieurs fiches (la plus récente est retenue) : {duplicates.join(' ; ')}
                 </p>
               )}
 
