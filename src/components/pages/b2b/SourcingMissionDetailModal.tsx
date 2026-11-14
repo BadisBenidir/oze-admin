@@ -607,7 +607,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                                 {resendingEmail === inv.id ? 'Envoi...' : "Renvoyer l'email"}
                               </button>
                             )}
-                            {!inv.qontoEmitted && mission.status !== 'cancelled' && (
+                            {!inv.qontoEmitted && inv.transmissionStatus !== 'paid' && mission.status !== 'cancelled' && (
                               <button
                                 type="button"
                                 onClick={() => handleEmitAdvance({ invoiceId: inv.id })}
