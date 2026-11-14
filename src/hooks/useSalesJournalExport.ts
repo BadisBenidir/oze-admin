@@ -198,6 +198,10 @@ export const useSalesJournalExport = () => {
 
       // Charges externes validées (0276) : feuilles « Charges » et « Synthèse »
       // du périmètre complet uniquement.
+      // TVA déductible : toutes les dépenses validées, y compris les achats de
+      // marchandise (ex. TVA import d'un dédouanement DHL) — jamais comptés en
+      // charge externe, mais leur TVA se déduit.
+      let vatCharges: { spent_at: string; vat_amount: number | null; bank: { vat_amount: number | null } | null }[] = [];
       let charges: { spent_at: string; label: string; category: string | null; amount: number; bank_transaction_id: string | null; review_status: string; vat_amount: number | null; bank: { vat_amount: number | null } | null }[] = [];
       if (scope === 'all') {
         const { data, error } = await supabase
@@ -207,7 +211,9 @@ export const useSalesJournalExport = () => {
           .lte('spent_at', effectiveEndDate)
           .order('spent_at');
         if (error) throw new Error(error.message);
-        charges = ((data || []) as unknown as typeof charges).filter(isCountedCharge);
+        const all = (data || []) as unknown as typeof charges;
+        charges = all.filter(isCountedCharge);
+        vatCharges = all.filter((c) => (c.review_status ?? 'validated') === 'validated');
       }
 
       // Compte courant d'associé (0279) : solde à la date de fin (ni CA ni
@@ -255,7 +261,7 @@ export const useSalesJournalExport = () => {
       XLSX.utils.book_append_sheet(wb, ws, 'Ventes');
 
       if (scope === 'all') {
-        const deductibleOf = (c: (typeof charges)[number]) =>
+        const deductibleOf = (c: (typeof vatCharges)[number]) =>
           vatRateAt(vat, new Date(`${c.spent_at}T12:00:00`)) ? Number(c.vat_amount ?? c.bank?.vat_amount ?? 0) || 0 : 0;
         const chargesSheet = XLSX.utils.aoa_to_sheet([
           ['Date', 'Catégorie', 'Libellé', 'Montant TTC', 'TVA déductible', 'Source'],
@@ -269,7 +275,7 @@ export const useSalesJournalExport = () => {
         const sales = rows.reduce((t, r) => t + r.amountTTC, 0);
         const salesHt = split.reduce((t, x) => t + x.ht, 0);
         const vatCollected = split.reduce((t, x) => t + x.vat, 0);
-        const vatDeductible = charges.reduce((t, c) => t + deductibleOf(c), 0);
+        const vatDeductible = vatCharges.reduce((t, c) => t + deductibleOf(c), 0);
         const chargesTotal = charges.reduce((t, c) => t + (Number(c.amount) || 0), 0);
         const summary = XLSX.utils.aoa_to_sheet([
           ['Synthèse', `du ${startDate} au ${effectiveEndDate}`],
@@ -298,7 +304,7 @@ export const useSalesJournalExport = () => {
         const months = new Map<string, { ht: number; collected: number; deductible: number }>();
         const bucket = (k: string) => months.get(k) || months.set(k, { ht: 0, collected: 0, deductible: 0 }).get(k)!;
         for (const x of split) if (x.rate) { const b = bucket(x.r.date.toISOString().slice(0, 7)); b.ht += x.ht; b.collected += x.vat; }
-        for (const c of charges) { const d = deductibleOf(c); if (d) bucket(c.spent_at.slice(0, 7)).deductible += d; }
+        for (const c of vatCharges) { const d = deductibleOf(c); if (d) bucket(c.spent_at.slice(0, 7)).deductible += d; }
         // Factures Sendcloud (0239) : TVA = TTC − HT.
         const { data: scRows } = await supabase.from('sendcloud_invoices').select('invoice_date, price_excl, price_incl').gte('invoice_date', startDate).lte('invoice_date', effectiveEndDate);
         for (const f of (scRows || []) as { invoice_date: string; price_excl: number; price_incl: number }[]) {
