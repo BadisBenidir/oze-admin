@@ -27,6 +27,9 @@ export interface SourcingMission {
   /** Avance en plusieurs fois (0220) : somme des factures d'avance payées.
    * paid_at n'est posé qu'une fois tout advance_amount encaissé. */
   paid_amount?: number | string | null;
+  /** Allonges de budget (0285) : chaque allonge augmente l'avance et
+   * l'enveloppe d'achat dans la même proportion (même % de marge). */
+  budget_extensions?: { amount: number; cost_budget_added: number; previous_advance: number; at: string }[] | null;
   notes: string | null;
   created_at: string;
   /** Commande B2B réelle créée à la validation par le revendeur — voir

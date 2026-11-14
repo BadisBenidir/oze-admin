@@ -66,7 +66,7 @@ export const B2BSourcing: React.FC = () => {
   // la facture d'avance est payée). Les avances facturées non payées à part.
   // Avance en plusieurs fois (0220) : les factures déjà payées comptent
   // dans l'encaissé, le reste du budget dans « en attente ».
-  const encaisse = (m: (typeof activeMissions)[number]) => (m.paid_at ? m.advance_amount : Math.min(m.advance_amount, Number(m.paid_amount) || 0));
+  const encaisse = (m: (typeof activeMissions)[number]) => (m.paid_at && !(Number(m.paid_amount) > 0) ? m.advance_amount : Math.min(m.advance_amount, Number(m.paid_amount) || 0));
   const totalAdvance = activeMissions.reduce((sum, m) => sum + encaisse(m), 0);
   const totalAdvancePending = activeMissions.reduce((sum, m) => sum + (m.advance_amount - encaisse(m)), 0);
   const totalCostBudget = activeMissions.reduce((sum, m) => sum + getSourcingMissionMetrics(m).envelope, 0);

@@ -152,6 +152,30 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   const advanceInvoice = advanceInvoices[0] ?? null;
   const [advanceAmountInput, setAdvanceAmountInput] = useState('');
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
+  // Allonge de budget (0285) : avance et enveloppe d'achat augmentées dans la
+  // même proportion (même % de marge), puis facture d'avance de l'allonge.
+  const [showExtensionForm, setShowExtensionForm] = useState(false);
+  const [extensionInput, setExtensionInput] = useState('');
+  const [extending, setExtending] = useState(false);
+  const handleExtendBudget = async () => {
+    if (!mission) return;
+    const value = Math.round(Number(extensionInput.replace(',', '.')) * 100) / 100;
+    if (!value || value <= 0) return alert("Indique le montant de l'allonge");
+    const costAdded = mission.advance_amount > 0 ? (value * mission.allocated_cost_budget) / mission.advance_amount : 0;
+    if (!confirm(`Allonger le budget de ${value.toFixed(2)} € ? Budget ${mission.advance_amount.toFixed(2)} € → ${(mission.advance_amount + value).toFixed(2)} €, enveloppe d'achat +${costAdded.toFixed(2)} € (même % de marge). Tu pourras ensuite émettre la facture d'avance de l'allonge.`)) return;
+    setExtending(true);
+    const { error } = await supabase.rpc('extend_sourcing_mission_budget', { p_mission_id: mission.id, p_amount: value });
+    setExtending(false);
+    if (error) return alert(error.message);
+    setShowExtensionForm(false);
+    setExtensionInput('');
+    onItemsChanged();
+    // Prépare la facture d'avance de l'allonge (émise seulement au clic sur
+    // « Émettre et envoyer »).
+    setAdvanceAmountInput(value.toFixed(2));
+    setShowAdvanceForm(true);
+    setSuccessToast(`Budget allongé de ${value.toFixed(2)} €. Vérifie le montant puis émets la facture d'avance de l'allonge.`);
+  };
 
   const handleEmitAdvance = async (opts: { amount?: number; invoiceId?: string } = {}) => {
     const label = opts.amount !== undefined ? `de ${opts.amount.toFixed(2)} € ` : '';
@@ -187,6 +211,8 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     setStatusError('');
     setShowAdvanceForm(false);
     setAdvanceAmountInput('');
+    setShowExtensionForm(false);
+    setExtensionInput('');
   }, [mission?.id]);
 
   if (!mission) return null;
@@ -561,7 +587,17 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                     </ul>
                   )}
 
-                  {canAdd && (
+                  {Array.isArray(mission.budget_extensions) && mission.budget_extensions.length > 0 && (
+                    <ul className="mt-2 space-y-0.5 text-xs text-gray-500">
+                      {mission.budget_extensions.map((ext, i) => (
+                        <li key={i}>
+                          Allonge n°{i + 1} : +{Number(ext.amount).toFixed(2)} € le {new Date(ext.at).toLocaleDateString('fr-FR')} (budget {Number(ext.previous_advance).toFixed(2)} € → {(Number(ext.previous_advance) + Number(ext.amount)).toFixed(2)} €, enveloppe d'achat +{showFigure(Number(ext.cost_budget_added).toFixed(2))} €)
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {(canAdd || (showAdvanceForm && !pendingDraft)) && (
                     showAdvanceForm ? (
                       <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 p-3">
                         <span className="text-sm text-gray-700">Nouvelle facture de</span>
@@ -608,6 +644,61 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                       </button>
                     )
                   )}
+
+                  {mission.status === 'active' && !showAdvanceForm && (
+                    showExtensionForm ? (
+                      <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm text-gray-700">Allonge de budget de</span>
+                          <span className="relative">
+                            <input
+                              value={extensionInput}
+                              onChange={(e) => setExtensionInput(e.target.value)}
+                              inputMode="decimal"
+                              autoFocus
+                              placeholder="0.00"
+                              className="w-32 rounded-lg border border-gray-200 py-1.5 pl-3 pr-7 text-right text-sm tabular-nums focus:border-gray-400 focus:outline-none"
+                            />
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
+                          </span>
+                          <span className="ml-auto flex gap-2">
+                            <button type="button" onClick={() => setShowExtensionForm(false)} className="rounded-lg px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100">
+                              Annuler
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleExtendBudget}
+                              disabled={extending}
+                              className="flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> {extending ? 'Allonge...' : 'Allonger le budget'}
+                            </button>
+                          </span>
+                        </div>
+                        {(() => {
+                          const value = Number(extensionInput.replace(',', '.'));
+                          if (!value || value <= 0 || mission.advance_amount <= 0) return null;
+                          const costAdded = (value * mission.allocated_cost_budget) / mission.advance_amount;
+                          const pct = ((mission.advance_amount - mission.allocated_cost_budget) / mission.advance_amount) * 100;
+                          return (
+                            <p className="mt-2 text-xs text-gray-500">
+                              Budget {mission.advance_amount.toFixed(2)} € → <strong className="text-gray-900">{(mission.advance_amount + value).toFixed(2)} €</strong>
+                              {' · '}enveloppe d'achat +<strong className="text-gray-900">{showFigure(costAdded.toFixed(2))} €</strong> (marge {showFigure(pct.toFixed(1))} % conservée, prix des pièces inchangés).
+                              {' '}Tu émettras ensuite la facture d'avance de {value.toFixed(2)} €.
+                            </p>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowExtensionForm(true)}
+                        className="mt-3 ml-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Allonge de budget
+                      </button>
+                    )
+                  )}
                 </div>
               );
             })()}
@@ -640,6 +731,11 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                     Reste à dépenser
                   </p>
                   <p className={`text-sm font-semibold ${overBudget ? 'text-red-600' : 'text-gray-900'}`}>{remainingAfter.toFixed(2)} €</p>
+                  {hasPricedItems && remainingAfter > 0 && defaultMarginPercent != null && (
+                    <p className="text-[11px] text-gray-500" title="Montant d'achats à faire pour facturer ce reste au même % de marge">
+                      soit ≈ {showFigure((remainingAfter / (1 + defaultMarginPercent / 100)).toFixed(2))} € d'achats
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">{marginLabel}</p>

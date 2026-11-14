@@ -158,7 +158,7 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
           .gte('updated_at', windowStart),
         supabase
           .from('b2b_sourcing_missions')
-          .select('id, reference, reseller_id, advance_amount, paid_at, status, order_id, created_at, resellers(company_name), requester:profiles!user_id(first_name, last_name)')
+          .select('id, reference, reseller_id, advance_amount, paid_amount, paid_at, status, order_id, created_at, resellers(company_name), requester:profiles!user_id(first_name, last_name)')
           .neq('status', 'cancelled'),
         supabase.from('b2b_gift_rewards').select('quantity, status, created_at'),
       ]);
@@ -193,12 +193,16 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         sold_at: p.updated_at,
       }));
 
-      type SourcingRow = { id: string; reference: string | null; reseller_id: string; advance_amount: number; paid_at: string | null; status: 'active' | 'completed' | 'cancelled'; order_id: string | null; created_at: string; resellers: { company_name: string } | null; requester: { first_name: string | null; last_name: string | null } | null };
+      type SourcingRow = { id: string; reference: string | null; reseller_id: string; advance_amount: number; paid_amount: number | null; paid_at: string | null; status: 'active' | 'completed' | 'cancelled'; order_id: string | null; created_at: string; resellers: { company_name: string } | null; requester: { first_name: string | null; last_name: string | null } | null };
       const allAdvances: AccountingSourcingAdvance[] = ((sourcingRes.data || []) as unknown as SourcingRow[]).map((m) => ({
         id: m.id,
         reseller_id: m.reseller_id,
         company_name: m.resellers?.company_name || '—',
-        advance_amount: Number(m.advance_amount) || 0,
+        // Avance encaissée : une allonge de budget (0285) pas encore payée
+        // n'entre pas dans le CA — on compte l'encaissé réel (paid_amount).
+        advance_amount: m.paid_at && Number(m.paid_amount) > 0
+          ? Math.min(Number(m.advance_amount) || 0, Number(m.paid_amount))
+          : Number(m.advance_amount) || 0,
         paid_at: m.paid_at,
         status: m.status,
         order_id: m.order_id,
