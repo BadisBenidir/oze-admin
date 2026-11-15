@@ -78,7 +78,7 @@ export const WalletPage: React.FC = () => {
   // vérification automatique passe chaque minute).
   const [checking, setChecking] = useState(false);
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
-  // Virement annoncé : la page surveille le solde (toutes les 10 s, 15 min
+  // Virement annoncé : la page surveille le solde (toutes les 10 s, 5 min
   // max) et affiche un grand bandeau dès qu'il est crédité ; le solde de la
   // barre du haut est rafraîchi en même temps (notifyWalletChanged).
   const [waitingSince, setWaitingSince] = useState<{ at: number; balance: number; bonus: number } | null>(null);
@@ -91,13 +91,11 @@ export const WalletPage: React.FC = () => {
   const settleIfReceived = useCallback(async (start: { balance: number; bonus: number }) => {
     const now = await readBalances();
     if (now.balance > start.balance + 0.004) {
-      setReceived({ amount: Math.round((now.balance - start.balance) * 100) / 100, bonus: Math.max(0, Math.round((now.bonus - start.bonus) * 100) / 100) });
       setWaitingSince(null);
       setCheckMessage(null);
       setBonusBalance(now.bonus);
       await refreshWallet();
       notifyWalletChanged();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
       return true;
     }
     return false;
@@ -105,7 +103,11 @@ export const WalletPage: React.FC = () => {
   useEffect(() => {
     if (!waitingSince) return;
     const timer = setInterval(async () => {
-      if (Date.now() - waitingSince.at > 15 * 60 * 1000) return setWaitingSince(null);
+      if (Date.now() - waitingSince.at > 5 * 60 * 1000) {
+        setWaitingSince(null);
+        setCheckMessage("Toujours pas reçu après 5 minutes. Dès qu'il arrive, votre solde sera crédité automatiquement et vous serez prévenu.");
+        return;
+      }
       await settleIfReceived(waitingSince);
     }, 10000);
     return () => clearInterval(timer);
