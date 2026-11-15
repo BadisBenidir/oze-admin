@@ -79,9 +79,16 @@ export const WalletPage: React.FC = () => {
   const [checking, setChecking] = useState(false);
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
   const checkTransfer = async () => {
+    if (!transferValid) {
+      setCheckMessage('Indiquez le montant viré ci-dessus.');
+      return;
+    }
     setChecking(true);
     setCheckMessage(null);
     const before = balance;
+    // Annonce du virement (0295) : permet de le reconnaître au nom du payeur
+    // si la banque n'a pas transmis le motif.
+    await supabase.rpc('declare_wallet_transfer', { p_amount: transferValue });
     await supabase.functions.invoke('qonto-wallet-transfers', { body: {} });
     await refreshWallet();
     const { data } = await supabase.from('profiles').select('wallet_balance').eq('id', profile?.id || '').maybeSingle();
@@ -90,7 +97,7 @@ export const WalletPage: React.FC = () => {
     setCheckMessage(
       after > before
         ? `Virement reçu : +${eur(after - before)} crédités sur votre solde.`
-        : "Pas encore reçu. Un virement instantané arrive en général en moins de 2 minutes ; votre solde sera crédité automatiquement dès réception."
+        : "Virement annoncé, pas encore reçu. Un virement instantané arrive en général en moins de 2 minutes : votre solde sera crédité automatiquement dès réception, même si le motif n'a pas été transmis."
     );
   };
   const transferValue = Number(transferAmount.replace(',', '.'));
@@ -249,7 +256,8 @@ export const WalletPage: React.FC = () => {
               </p>
             </div>
             <p className="text-sm text-gray-600">
-              Indiquez <strong>obligatoirement votre référence</strong> dans le libellé du virement. Vous recevez {ratePct.toLocaleString('fr-FR')} € offerts
+              Indiquez votre référence dans le champ <strong>« Motif »</strong> du virement (parfois appelé « Libellé » ou « Message pour le bénéficiaire »),
+              et non dans le champ « Référence » de votre banque, qui n'est pas toujours transmis. Vous recevez {ratePct.toLocaleString('fr-FR')} € offerts
               par tranche complète de 100 € (à partir de {eur(minAmount)}).
             </p>
             <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
@@ -257,7 +265,7 @@ export const WalletPage: React.FC = () => {
                 { key: 'beneficiary', label: 'Bénéficiaire', value: settings?.beneficiary || 'OZË PARIS SAS', display: settings?.beneficiary || 'OZË PARIS SAS' },
                 { key: 'iban', label: 'IBAN', value: (settings?.iban || '').replace(/\s+/g, ''), display: settings?.iban ? formatIban(settings.iban) : '—' },
                 { key: 'bic', label: 'BIC', value: settings?.bic || '', display: settings?.bic || '—' },
-                { key: 'reference', label: 'Référence à indiquer', value: reference || '', display: reference || '…', strong: true },
+                { key: 'reference', label: 'À indiquer dans le motif du virement', value: reference || '', display: reference || '…', strong: true },
               ].map((row) => (
                 <div key={row.key} className={`flex items-center justify-between gap-3 px-3 py-2 ${row.strong ? 'bg-amber-50' : ''}`}>
                   <div className="min-w-0">
