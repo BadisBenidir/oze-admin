@@ -74,6 +74,25 @@ export const WalletPage: React.FC = () => {
       setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
     } catch { /* presse-papiers indisponible */ }
   };
+  // « J'ai fait mon virement » : vérifie tout de suite sur Qonto (sinon la
+  // vérification automatique passe chaque minute).
+  const [checking, setChecking] = useState(false);
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
+  const checkTransfer = async () => {
+    setChecking(true);
+    setCheckMessage(null);
+    const before = balance;
+    await supabase.functions.invoke('qonto-wallet-transfers', { body: {} });
+    await refreshWallet();
+    const { data } = await supabase.from('profiles').select('wallet_balance').eq('id', profile?.id || '').maybeSingle();
+    const after = Number((data as { wallet_balance?: number } | null)?.wallet_balance) || before;
+    setChecking(false);
+    setCheckMessage(
+      after > before
+        ? `Virement reçu : +${eur(after - before)} crédités sur votre solde.`
+        : "Pas encore reçu. Un virement instantané arrive en général en moins de 2 minutes ; votre solde sera crédité automatiquement dès réception."
+    );
+  };
   const transferValue = Number(transferAmount.replace(',', '.'));
   const transferValid = transferAmount.trim() !== '' && Number.isFinite(transferValue) && transferValue > 0;
   const transferPreviewBonus = transferValid ? transferBonus(transferValue, settings) : 0;
@@ -223,9 +242,14 @@ export const WalletPage: React.FC = () => {
 
         {mode === 'transfer' ? (
           <div className="space-y-3">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
+              <p className="font-semibold">Faites un virement instantané : votre solde est crédité en 1 à 2 minutes.</p>
+              <p className="mt-0.5 text-emerald-800">
+                Dans votre application bancaire, choisissez « virement instantané » (SEPA Instant). Un virement classique peut prendre jusqu'à 1 jour ouvré.
+              </p>
+            </div>
             <p className="text-sm text-gray-600">
-              Faites un virement vers le compte ci-dessous en indiquant <strong>obligatoirement votre référence</strong> dans le libellé.
-              Votre solde est crédité automatiquement à réception (en général sous 1 jour ouvré), avec {ratePct.toLocaleString('fr-FR')} € offerts
+              Indiquez <strong>obligatoirement votre référence</strong> dans le libellé du virement. Vous recevez {ratePct.toLocaleString('fr-FR')} € offerts
               par tranche complète de 100 € (à partir de {eur(minAmount)}).
             </p>
             <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
@@ -278,6 +302,17 @@ export const WalletPage: React.FC = () => {
                 )}
               </div>
             )}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={checkTransfer}
+                disabled={checking}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                {checking ? 'Vérification…' : "J'ai fait mon virement"}
+              </button>
+              {checkMessage && <p className="text-sm text-gray-700">{checkMessage}</p>}
+            </div>
             <p className="text-xs text-gray-400">
               Le bonus est utilisable uniquement pour vos achats sur la plateforme : il n'est ni remboursable ni retirable.
               Sans référence dans le libellé, le virement est attribué manuellement par notre équipe.
