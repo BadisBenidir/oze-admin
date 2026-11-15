@@ -1,14 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { supabase } from '../../../lib/supabase';
+import { useVatSettings, vatRateAt } from '../../../utils/vat';
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { DollarSign, PiggyBank, ShoppingBag, Wallet, Banknote, Receipt, Scale, ReceiptText } from 'lucide-react';
+import { DollarSign, PiggyBank, ShoppingBag, Wallet, Banknote, Receipt, Scale, ReceiptText, Percent } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
 import { AccountingRawData } from '../../../hooks/useAccountingRawData';
 import { AccountingPeriod, isWithinRange, monthKeyLabel } from '../../../utils/accountingPeriods';
-import { computeGlobalTotals, computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries, computeShippingCharges, withShipping, computeDeliveryTotals, computeExpensesTotal, expensesByMonth, computeManualRevenueTotals, computeVatCollected, vatCollectedByMonth, VatSale } from '../../../utils/accountingCalc';
+import { computeGlobalTotals, computeChannelTotals, computeLiveTotals, computeSubscriptionTotals, computeSubscriptionBySource, combineTotals, computeMonthlySeries, computeShippingCharges, withShipping, computeDeliveryTotals, computeExpensesTotal, expensesByMonth, computeManualRevenueTotals, computeVatCollected, vatCollectedByMonth, VatSale, expenseDeductibleVat } from '../../../utils/accountingCalc';
 import { Expense } from '../../../hooks/useExpenses';
 import { SUBSCRIPTION_SOURCE_CLIENTS } from '../../../hooks/useAccountingRawData';
 
@@ -106,6 +108,30 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
   // Résultat net = marge brute (après Sendcloud) − charges externes validées
   // (hors « À vérifier », exclues et achat de marchandise).
   const expensesTotal = useMemo(() => computeExpensesTotal(expenses, period.range), [expenses, period.range]);
+
+  // TVA de la période, même calcul que l'onglet TVA : collectée sur les
+  // ventes, déductible sur les charges validées (y compris achats de
+  // marchandise : TVA d'import) et les factures Sendcloud.
+  const { settings: vatSettings } = useVatSettings();
+  const [sendcloud, setSendcloud] = useState<{ invoice_date: string; price_excl: number; price_incl: number }[]>([]);
+  useEffect(() => {
+    supabase.from('sendcloud_invoices').select('invoice_date, price_excl, price_incl').then(({ data }) => setSendcloud((data || []) as typeof sendcloud));
+  }, []);
+  const vatDeductible = useMemo(() => {
+    let total = 0;
+    for (const e of expenses) {
+      if ((e.review_status ?? 'validated') !== 'validated' || !isWithinRange(`${e.spent_at}T12:00:00`, period.range)) continue;
+      total += expenseDeductibleVat(e, vatSettings);
+    }
+    for (const f of sendcloud) {
+      const d = new Date(`${f.invoice_date}T12:00:00`);
+      if (!isWithinRange(`${f.invoice_date}T12:00:00`, period.range) || !vatRateAt(vatSettings, d)) continue;
+      const v = Math.round(((Number(f.price_incl) || 0) - (Number(f.price_excl) || 0)) * 100) / 100;
+      if (v > 0) total += v;
+    }
+    return Math.round(total * 100) / 100;
+  }, [expenses, sendcloud, vatSettings, period.range]);
+  const vatToPay = Math.round((vatCollected - vatDeductible) * 100) / 100;
   const result = current.global.margin - expensesTotal;
   const resultRate = current.global.revenue > 0 ? (result / current.global.revenue) * 100 : null;
   const momExpenses = period.momRange ? computeExpensesTotal(expenses, period.momRange) : null;
@@ -208,6 +234,20 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
           hint={`Panier moyen : ${EUR(current.global.averageBasket)}`}
           deltaMoM={mom ? pct(current.global.count, mom.count) : undefined}
           deltaYoY={yoy ? pct(current.global.count, yoy.count) : undefined}
+        />
+      </div>
+
+      {/* TVA de la période (assujettie depuis le 06/11/2026) : hors CA et hors
+          résultat, l'argent est reversé à l'État. Détail dans l'onglet TVA. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <AccountingKpiCard label="TVA collectée" value={EUR(vatCollected)} icon={Percent} hint="Sur les ventes de la période (incluse dans le TTC)" />
+        <AccountingKpiCard label="TVA déductible" value={EUR(vatDeductible)} icon={Percent} hint="Sur les charges et achats de la période (TVA d'import, Sendcloud…)" />
+        <AccountingKpiCard
+          label={vatToPay >= 0 ? 'TVA à payer' : 'Crédit de TVA'}
+          value={EUR(Math.abs(vatToPay))}
+          icon={Percent}
+          tone={vatToPay > 0 ? 'red' : 'green'}
+          hint="Collectée − déductible · hors CA et hors résultat (reversée à l'État)"
         />
       </div>
 
