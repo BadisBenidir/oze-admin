@@ -357,11 +357,11 @@ export const WalletPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={checkTransfer}
-                disabled={checking}
+                disabled={checking || Boolean(waitingSince)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
               >
                 {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                {checking ? 'Vérification…' : "J'ai fait mon virement"}
+                {checking ? 'Vérification…' : waitingSince ? 'En attente du virement…' : "J'ai fait mon virement"}
               </button>
               {checkMessage && <p className="text-sm text-gray-700">{checkMessage}</p>}
             </div>
