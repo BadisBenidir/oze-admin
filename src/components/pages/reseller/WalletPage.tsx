@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
-import { useWallet, WalletTransaction } from '../../../hooks/useWallet';
+import { useWallet, WalletTransaction, notifyWalletChanged } from '../../../hooks/useWallet';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
-import { Wallet, PlusCircle, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, AlertCircle, Loader2, Gift, Sparkles, Landmark, CreditCard, Copy, Check } from 'lucide-react';
+import { Wallet, PlusCircle, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, AlertCircle, Loader2, Gift, Sparkles, Landmark, CreditCard, Copy, Check, CheckCircle2 } from 'lucide-react';
 
 const PRESET_AMOUNTS = [100, 500];
 
@@ -78,6 +78,38 @@ export const WalletPage: React.FC = () => {
   // vérification automatique passe chaque minute).
   const [checking, setChecking] = useState(false);
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
+  // Virement annoncé : la page surveille le solde (toutes les 10 s, 15 min
+  // max) et affiche un grand bandeau dès qu'il est crédité ; le solde de la
+  // barre du haut est rafraîchi en même temps (notifyWalletChanged).
+  const [waitingSince, setWaitingSince] = useState<{ at: number; balance: number; bonus: number } | null>(null);
+  const [received, setReceived] = useState<{ amount: number; bonus: number } | null>(null);
+  const readBalances = useCallback(async () => {
+    const { data } = await supabase.from('profiles').select('wallet_balance, wallet_bonus_balance').eq('id', profile?.id || '').maybeSingle();
+    const d = data as { wallet_balance?: number; wallet_bonus_balance?: number } | null;
+    return { balance: Number(d?.wallet_balance) || 0, bonus: Number(d?.wallet_bonus_balance) || 0 };
+  }, [profile?.id]);
+  const settleIfReceived = useCallback(async (start: { balance: number; bonus: number }) => {
+    const now = await readBalances();
+    if (now.balance > start.balance + 0.004) {
+      setReceived({ amount: Math.round((now.balance - start.balance) * 100) / 100, bonus: Math.max(0, Math.round((now.bonus - start.bonus) * 100) / 100) });
+      setWaitingSince(null);
+      setCheckMessage(null);
+      setBonusBalance(now.bonus);
+      await refreshWallet();
+      notifyWalletChanged();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
+    }
+    return false;
+  }, [readBalances, refreshWallet]);
+  useEffect(() => {
+    if (!waitingSince) return;
+    const timer = setInterval(async () => {
+      if (Date.now() - waitingSince.at > 15 * 60 * 1000) return setWaitingSince(null);
+      await settleIfReceived(waitingSince);
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [waitingSince, settleIfReceived]);
   const checkTransfer = async () => {
     if (!transferValid) {
       setCheckMessage('Indiquez le montant viré ci-dessus.');
@@ -85,20 +117,18 @@ export const WalletPage: React.FC = () => {
     }
     setChecking(true);
     setCheckMessage(null);
-    const before = balance;
+    setReceived(null);
+    const start = await readBalances();
     // Annonce du virement (0295) : permet de le reconnaître au nom du payeur
     // si la banque n'a pas transmis le motif.
     await supabase.rpc('declare_wallet_transfer', { p_amount: transferValue });
     await supabase.functions.invoke('qonto-wallet-transfers', { body: {} });
-    await refreshWallet();
-    const { data } = await supabase.from('profiles').select('wallet_balance').eq('id', profile?.id || '').maybeSingle();
-    const after = Number((data as { wallet_balance?: number } | null)?.wallet_balance) || before;
+    const ok = await settleIfReceived(start);
     setChecking(false);
-    setCheckMessage(
-      after > before
-        ? `Virement reçu : +${eur(after - before)} crédités sur votre solde.`
-        : "Virement annoncé, pas encore reçu. Un virement instantané arrive en général en moins de 2 minutes : votre solde sera crédité automatiquement dès réception, même si le motif n'a pas été transmis."
-    );
+    if (!ok) {
+      setWaitingSince({ at: Date.now(), ...start });
+      setCheckMessage("Virement annoncé, en attente de réception. Un virement instantané arrive en général en moins de 2 minutes : cette page se met à jour toute seule dès qu'il est crédité.");
+    }
   };
   const transferValue = Number(transferAmount.replace(',', '.'));
   const transferValid = transferAmount.trim() !== '' && Number.isFinite(transferValue) && transferValue > 0;
@@ -130,6 +160,20 @@ export const WalletPage: React.FC = () => {
         <h3 className="text-lg font-semibold text-gray-900">Mon Portefeuille</h3>
         <p className="text-sm text-gray-500">Rechargez votre solde pour payer vos commandes instantanément, sans Stripe.</p>
       </div>
+
+      {received && (
+        <div className="flex items-start gap-3 rounded-xl border-2 border-emerald-400 bg-emerald-50 p-5 shadow-sm">
+          <CheckCircle2 className="h-8 w-8 flex-shrink-0 text-emerald-600" />
+          <div className="flex-1">
+            <p className="text-lg font-semibold text-emerald-900">Virement reçu : +{eur(received.amount)} crédités sur votre solde</p>
+            {received.bonus > 0 && (
+              <p className="mt-0.5 text-sm text-emerald-800">dont {eur(received.bonus)} de bonus virement offerts 🎁</p>
+            )}
+            <p className="mt-1 text-sm text-emerald-800">Votre solde est disponible tout de suite pour vos achats.</p>
+          </div>
+          <button onClick={() => setReceived(null)} className="rounded p-1 text-emerald-700 hover:bg-emerald-100" aria-label="Fermer">✕</button>
+        </div>
+      )}
 
       <div className="rounded-xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 px-4 py-3 flex items-center gap-3">
         <span className="text-2xl flex-shrink-0">🎁</span>

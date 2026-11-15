@@ -27,6 +27,11 @@ const LOYALTY_TIER_AMOUNT = 1000;
  * credit_wallet_topup côté serveur), jamais partagée entre contacts d'une
  * même entreprise revendeuse.
  */
+/** Solde modifié (rechargement par virement crédité…) : toutes les instances
+ * de useWallet (barre du haut, page Portefeuille) relisent le solde. */
+const WALLET_CHANGED_EVENT = 'oze:wallet-changed';
+export const notifyWalletChanged = () => window.dispatchEvent(new Event(WALLET_CHANGED_EVENT));
+
 export const useWallet = (profileId: string | undefined) => {
   const [balance, setBalance] = useState<number>(0);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
@@ -105,8 +110,19 @@ export const useWallet = (profileId: string | undefined) => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') refresh();
     };
+    const onChanged = () => refresh();
+    // Rechargement par virement crédité par la synchro de chaque minute (0293) :
+    // relecture du solde chaque minute tant que l'onglet est visible.
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') refresh();
+    }, 60000);
     document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
+    window.addEventListener(WALLET_CHANGED_EVENT, onChanged);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener(WALLET_CHANGED_EVENT, onChanged);
+      clearInterval(timer);
+    };
   }, [refresh]);
 
   const topUp = async (amount: number): Promise<TopUpResult> => {
