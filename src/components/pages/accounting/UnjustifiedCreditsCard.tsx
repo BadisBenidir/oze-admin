@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Loader2, Paperclip } from 'lucide-react';
+import { CheckCircle2, Loader2, Paperclip, Wallet } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import {
@@ -52,6 +52,7 @@ export const UnjustifiedCreditsCard: React.FC = () => {
         !(t.attachment_ids || []).length &&
         t.reconciliation_status !== 'ignored' &&
         t.matched_type !== 'stripe_payout' &&
+        t.matched_type !== 'wallet_topup' &&
         !/STRIPE|^OZ[EË] PARIS|RESERVE|BADIS BENIDIR|BENIDIR BADIS/i.test(`${t.counterparty_name || ''} ${t.label || ''}`)
     );
     const invs = (inv || []) as unknown as AttachableInvoice[];
@@ -89,7 +90,46 @@ export const UnjustifiedCreditsCard: React.FC = () => {
     setCredits((c) => c.filter((t) => t.id !== tx.id));
   };
 
-  const pending = credits.filter((t) => choice[t.id] && state[t.id] !== 'done');
+  // Virement sans référence (ou référence inconnue) = recharge du
+  // portefeuille d'un membre (0292) : attribution manuelle, crédit + bonus.
+  const [members, setMembers] = useState<{ id: string; label: string }[] | null>(null);
+  const [assigning, setAssigning] = useState<string | null>(null);
+  const [member, setMember] = useState('');
+  const openAssign = async (tx: UnjustifiedCredit) => {
+    setAssigning(tx.id);
+    setMember('');
+    if (members) return;
+    const { data } = await supabase
+      .from('reseller_contacts')
+      .select('profile:profiles(id, first_name, last_name, email, wallet_transfer_reference), reseller:resellers(company_name)');
+    type Row = { profile: { id: string; first_name: string | null; last_name: string | null; email: string | null; wallet_transfer_reference: string | null } | null; reseller: { company_name: string | null } | null };
+    const list = ((data || []) as unknown as Row[])
+      .filter((r) => r.profile)
+      .map((r) => ({
+        id: r.profile!.id,
+        label: [
+          [r.profile!.first_name, r.profile!.last_name].filter(Boolean).join(' ') || r.profile!.email || '—',
+          r.reseller?.company_name ? `(${r.reseller.company_name})` : '',
+          r.profile!.wallet_transfer_reference || '',
+        ].filter(Boolean).join(' '),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+    setMembers(list);
+  };
+  const assign = async (tx: UnjustifiedCredit) => {
+    if (!member) return;
+    const who = members?.find((m) => m.id === member)?.label || '';
+    if (!confirm(`Créditer ${EUR(tx.amount)} (+ bonus virement) sur le portefeuille de ${who} ?`)) return;
+    setState((s) => ({ ...s, [tx.id]: 'busy' }));
+    const { data, error } = await supabase.rpc('credit_wallet_transfer', { p_bank_transaction_id: tx.id, p_profile_id: member });
+    if (error) return setState((s) => ({ ...s, [tx.id]: error.message }));
+    const bonus = Number((data as { bonus?: number } | null)?.bonus) || 0;
+    setAssigning(null);
+    setState((s) => ({ ...s, [tx.id]: 'done' }));
+    setChoice((c) => ({ ...c, [tx.id]: `wallet:${bonus}` }));
+  };
+
+  const pending = credits.filter((t) => choice[t.id] && !choice[t.id].startsWith('wallet:') && state[t.id] !== 'done');
   const attachAll = async () => {
     if (!confirm(`Déposer ${pending.length} facture(s) sur les encaissements Qonto correspondants ?`)) return;
     setBulk(true);
@@ -163,13 +203,38 @@ export const UnjustifiedCreditsCard: React.FC = () => {
                         {inv && Math.abs(Number(inv.total_amount) - Number(tx.amount)) >= 0.005 && st !== 'done' && (
                           <p className="mt-0.5 text-[11px] text-gray-500">Facture de {EUR(inv.total_amount)} réglée en plusieurs paiements</p>
                         )}
+                        {assigning === tx.id && st !== 'done' && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            {members ? (
+                              <select value={member} onChange={(e) => setMember(e.target.value)} className="h-8 max-w-[22rem] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700">
+                                <option value="">Membre à créditer…</option>
+                                {members.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                              </select>
+                            ) : (
+                              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                            )}
+                            <button onClick={() => assign(tx)} disabled={!member || st === 'busy'} className="rounded-lg bg-gray-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-40">Créditer</button>
+                            <button onClick={() => setAssigning(null)} className="rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-gray-100">Annuler</button>
+                          </div>
+                        )}
                         {st && st !== 'busy' && st !== 'done' && <p className="mt-0.5 text-[11px] text-red-600">{st}</p>}
                       </td>
                       <td className="whitespace-nowrap px-4 py-2 text-right">
                         {st === 'done' ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Déposée</span>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                            <CheckCircle2 className="h-4 w-4" />
+                            {choice[tx.id]?.startsWith('wallet:') ? `Portefeuille crédité${Number(choice[tx.id].slice(7)) > 0 ? ` (+${EUR(Number(choice[tx.id].slice(7)))} de bonus)` : ''}` : 'Déposée'}
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5">
+                          <button
+                            onClick={() => openAssign(tx)}
+                            disabled={st === 'busy' || bulk}
+                            title="Virement d'un membre pour recharger son portefeuille (sans référence ou référence inconnue) : crédit + bonus virement"
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-800 disabled:opacity-40"
+                          >
+                            <Wallet className="h-3.5 w-3.5" /> Recharge portefeuille
+                          </button>
                           <button
                             onClick={() => noInvoice(tx)}
                             disabled={st === 'busy' || bulk}

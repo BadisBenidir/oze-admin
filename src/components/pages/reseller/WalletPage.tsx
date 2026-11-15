@@ -1,15 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { supabase } from '../../../lib/supabase';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useWallet, WalletTransaction } from '../../../hooks/useWallet';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
-import { Wallet, PlusCircle, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, AlertCircle, Loader2, Gift, Sparkles } from 'lucide-react';
+import { Wallet, PlusCircle, ArrowUpCircle, ArrowDownCircle, RotateCcw, Settings2, AlertCircle, Loader2, Gift, Sparkles, Landmark, CreditCard, Copy, Check } from 'lucide-react';
 
 const PRESET_AMOUNTS = [100, 500];
 
-// +5€ offerts par tranche COMPLÈTE de 100€ rechargés — aperçu client
-// uniquement (le montant réellement crédité est recalculé côté serveur dans
-// credit_wallet_topup, jamais accepté tel quel d'ici).
-const computeBonus = (amount: number): number => Math.floor(amount / 100) * 5;
+// Rechargement par virement (0292) : bonus = floor(montant / 100) × taux × 100
+// à partir du minimum (réglages wallet_settings, modifiables dans l'admin).
+// Aperçu uniquement : le bonus réellement crédité est calculé côté serveur
+// (credit_wallet_transfer). La carte ne donne plus de bonus.
+interface WalletSettings { transfer_bonus_rate: number; transfer_min_amount: number; beneficiary: string; iban: string | null; bic: string | null }
+const transferBonus = (amount: number, s: WalletSettings | null): number =>
+  s && amount >= Number(s.transfer_min_amount) ? Math.round(Math.floor(amount / 100) * Number(s.transfer_bonus_rate) * 100 * 100) / 100 : 0;
+const eur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+const formatIban = (iban: string) => iban.replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim();
 
 const TYPE_LABEL: Record<string, string> = {
   rechargement: 'Recharge',
@@ -46,6 +52,34 @@ export const WalletPage: React.FC = () => {
     }
     refreshWallet();
   };
+  // Virement : réglages (IBAN, taux, minimum), référence du membre, bonus en cours.
+  const [mode, setMode] = useState<'transfer' | 'card'>('transfer');
+  const [settings, setSettings] = useState<WalletSettings | null>(null);
+  const [reference, setReference] = useState<string | null>(null);
+  const [bonusBalance, setBonusBalance] = useState(0);
+  const [transferAmount, setTransferAmount] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
+  useEffect(() => {
+    if (!profile?.id) return;
+    supabase.from('wallet_settings').select('transfer_bonus_rate, transfer_min_amount, beneficiary, iban, bic').maybeSingle()
+      .then(({ data }) => setSettings((data as WalletSettings) || null));
+    supabase.rpc('ensure_wallet_transfer_reference').then(({ data }) => setReference((data as string) || null));
+    supabase.from('profiles').select('wallet_bonus_balance').eq('id', profile.id).maybeSingle()
+      .then(({ data }) => setBonusBalance(Number((data as { wallet_bonus_balance?: number } | null)?.wallet_bonus_balance) || 0));
+  }, [profile?.id, transactions.length]);
+  const copy = async (key: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(key);
+      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
+    } catch { /* presse-papiers indisponible */ }
+  };
+  const transferValue = Number(transferAmount.replace(',', '.'));
+  const transferValid = transferAmount.trim() !== '' && Number.isFinite(transferValue) && transferValue > 0;
+  const transferPreviewBonus = transferValid ? transferBonus(transferValue, settings) : 0;
+  const ratePct = settings ? Math.round(Number(settings.transfer_bonus_rate) * 100 * 100) / 100 : 5;
+  const minAmount = settings ? Number(settings.transfer_min_amount) : 100;
+
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,8 +97,6 @@ export const WalletPage: React.FC = () => {
 
   const customValue = Number(customAmount);
   const customValid = customAmount.trim() !== '' && Number.isFinite(customValue) && customValue >= 10 && customValue <= 5000;
-  const previewBonus = customValid ? computeBonus(customValue) : 0;
-  const previewTotal = customValid ? customValue + previewBonus : 0;
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
@@ -76,7 +108,7 @@ export const WalletPage: React.FC = () => {
       <div className="rounded-xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 px-4 py-3 flex items-center gap-3">
         <span className="text-2xl flex-shrink-0">🎁</span>
         <p className="text-sm text-amber-900 font-medium">
-          Offre Bonus B2B : recevez <span className="font-semibold">5 € offerts</span> pour chaque tranche de 100 € rechargés !
+          Rechargez par virement : <span className="font-semibold">{ratePct.toLocaleString('fr-FR')} € offerts</span> pour chaque tranche de 100 € reçue !
         </p>
       </div>
 
@@ -88,6 +120,11 @@ export const WalletPage: React.FC = () => {
         <p className="text-3xl font-semibold tabular-nums">
           {loading || walletError ? '—' : balance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
         </p>
+        {!loading && !walletError && bonusBalance > 0 && (
+          <p className="mt-1 text-xs text-gray-300">
+            dont {eur(bonusBalance)} de bonus virement — utilisable pour vos achats, non remboursable
+          </p>
+        )}
         {walletError && !loading && (
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-200">
             <span>Impossible de charger votre solde pour le moment.</span>
@@ -167,6 +204,87 @@ export const WalletPage: React.FC = () => {
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
         <h4 className="text-sm font-medium text-gray-900 mb-3">Recharger mon compte</h4>
+        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <button
+            onClick={() => setMode('transfer')}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors ${mode === 'transfer' ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
+          >
+            <Landmark className="h-4 w-4 flex-shrink-0" />
+            <span>Recharger par virement <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">+{ratePct.toLocaleString('fr-FR')} % offerts</span></span>
+          </button>
+          <button
+            onClick={() => setMode('card')}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors ${mode === 'card' ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
+          >
+            <CreditCard className="h-4 w-4 flex-shrink-0" />
+            Recharger par carte
+          </button>
+        </div>
+
+        {mode === 'transfer' ? (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Faites un virement vers le compte ci-dessous en indiquant <strong>obligatoirement votre référence</strong> dans le libellé.
+              Votre solde est crédité automatiquement à réception (en général sous 1 jour ouvré), avec {ratePct.toLocaleString('fr-FR')} € offerts
+              par tranche complète de 100 € (à partir de {eur(minAmount)}).
+            </p>
+            <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+              {[
+                { key: 'beneficiary', label: 'Bénéficiaire', value: settings?.beneficiary || 'OZË PARIS SAS', display: settings?.beneficiary || 'OZË PARIS SAS' },
+                { key: 'iban', label: 'IBAN', value: (settings?.iban || '').replace(/\s+/g, ''), display: settings?.iban ? formatIban(settings.iban) : '—' },
+                { key: 'bic', label: 'BIC', value: settings?.bic || '', display: settings?.bic || '—' },
+                { key: 'reference', label: 'Référence à indiquer', value: reference || '', display: reference || '…', strong: true },
+              ].map((row) => (
+                <div key={row.key} className={`flex items-center justify-between gap-3 px-3 py-2 ${row.strong ? 'bg-amber-50' : ''}`}>
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-500">{row.label}</p>
+                    <p className={`truncate font-mono text-sm ${row.strong ? 'font-semibold text-amber-900' : 'text-gray-900'}`}>{row.display}</p>
+                  </div>
+                  {row.value && (
+                    <button onClick={() => copy(row.key, row.value)} className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                      {copied === row.key ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copied === row.key ? 'Copié' : 'Copier'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <label className="block text-sm text-gray-700">
+              Montant que vous allez virer
+              <input
+                value={transferAmount}
+                onChange={(e) => setTransferAmount(e.target.value)}
+                inputMode="decimal"
+                placeholder={`Ex. ${Math.max(minAmount, 500)} €`}
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+              />
+            </label>
+            {transferValid && (
+              <div className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Montant viré</span>
+                  <span className="font-medium text-gray-900">{eur(transferValue)}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1 text-gray-600"><Gift className="h-3.5 w-3.5 text-amber-600" /> Bonus virement</span>
+                  <span className={`font-medium ${transferPreviewBonus > 0 ? 'text-amber-700' : 'text-gray-400'}`}>+{eur(transferPreviewBonus)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-amber-200 pt-1.5 text-sm font-semibold">
+                  <span className="text-gray-900">Total crédité sur votre solde</span>
+                  <span className="text-gray-900">{eur(transferValue + transferPreviewBonus)}</span>
+                </div>
+                {transferValue < minAmount && (
+                  <p className="text-xs text-amber-800">Bonus à partir de {eur(minAmount)} : ce virement sera crédité sans bonus.</p>
+                )}
+              </div>
+            )}
+            <p className="text-xs text-gray-400">
+              Le bonus est utilisable uniquement pour vos achats sur la plateforme : il n'est ni remboursable ni retirable.
+              Sans référence dans le libellé, le virement est attribué manuellement par notre équipe.
+            </p>
+          </div>
+        ) : (
+          <>
         <div className="flex flex-wrap gap-2 mb-3">
           {PRESET_AMOUNTS.map((amount) => (
             <button
@@ -201,30 +319,11 @@ export const WalletPage: React.FC = () => {
             <span>Recharger</span>
           </button>
         </div>
-
-        {customValid && (
-          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Montant payé</span>
-              <span className="font-medium text-gray-900">{customValue.toFixed(2)} €</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600 flex items-center gap-1">
-                <Gift className="h-3.5 w-3.5 text-amber-600" />
-                Bonus offert
-              </span>
-              <span className={`font-medium ${previewBonus > 0 ? 'text-amber-700' : 'text-gray-400'}`}>
-                +{previewBonus.toFixed(2)} €
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm font-semibold border-t border-amber-200 pt-1.5">
-              <span className="text-gray-900">Total crédité sur votre solde</span>
-              <span className="text-gray-900">{previewTotal.toFixed(2)} €</span>
-            </div>
-          </div>
+        <p className="text-xs text-gray-400 mt-2">
+          Paiement sécurisé par Stripe. Le solde est crédité dès confirmation du paiement. Le bonus de {ratePct.toLocaleString('fr-FR')} % est réservé aux rechargements par virement.
+        </p>
+          </>
         )}
-
-        <p className="text-xs text-gray-400 mt-2">Paiement sécurisé par Stripe. Le solde est crédité dès confirmation du paiement.</p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">

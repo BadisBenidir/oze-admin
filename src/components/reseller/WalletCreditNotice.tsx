@@ -29,7 +29,8 @@ export const WalletCreditNotice: React.FC<{ profileId: string | undefined; onAck
       .from('wallet_transactions')
       .select('id, amount, note, created_at')
       .eq('profile_id', profileId)
-      .eq('type', 'ajustement_admin')
+      // Crédit admin, ou rechargement par virement crédité à la synchro Qonto (0292).
+      .or('type.eq.ajustement_admin,bank_transaction_id.not.is.null')
       .gt('amount', 0)
       .is('acknowledged_at', null)
       .order('created_at', { ascending: true })

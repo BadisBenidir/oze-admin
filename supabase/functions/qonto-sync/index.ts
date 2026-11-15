@@ -225,6 +225,19 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // 3 ter. Rechargements du portefeuille par virement (0292) : un virement
+    // entrant dont le libellé contient la référence d'un membre (OZE-R-0042)
+    // est crédité (montant + bonus), une seule fois par transaction. Sans
+    // référence connue : rien, à attribuer dans l'admin. Coordonnées
+    // bancaires affichées aux membres tenues à jour depuis Qonto.
+    let walletCredited: unknown = null;
+    {
+      await adminClient.from('wallet_settings').update({ iban: account.iban || null, bic: account.bic || null, updated_at: new Date().toISOString() }).eq('id', true);
+      const { data: wm, error: wmError } = await adminClient.rpc('wallet_match_transfers');
+      if (wmError) console.error('qonto-sync: rechargements par virement', wmError.message);
+      else walletCredited = wm;
+    }
+
     // 3 bis. Débits importés en charges (accounting_import_bank_expenses,
     // 0276 / 0291) : à chaque synchro (cron 6 h / 18 h, « Actualiser »), plus
     // seulement au clic « Importer Qonto ».
@@ -316,6 +329,7 @@ Deno.serve(async (req: Request) => {
       advances_paid: advancesPaid,
       rectifications_regularized: rectificationsMatched,
       expenses_imported: expensesImported,
+      wallet_transfers: walletCredited,
     });
   } catch (err) {
     console.error('qonto-sync: erreur non gérée', err instanceof Error ? err.stack || err.message : err);

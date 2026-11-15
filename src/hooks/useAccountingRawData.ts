@@ -142,7 +142,7 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
         supabase
           .from('orders')
           .select(
-            'id, order_number, order_channel, status, payment_status, total_amount, shipping_cost, created_at, email, reseller_id, ' +
+            'id, order_number, order_channel, status, payment_status, total_amount, wallet_bonus_used, shipping_cost, created_at, email, reseller_id, ' +
             'resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name), ' +
             'order_items(id, line_total, quantity, status, product_snapshot, product:products(brand:brands(name)))'
           )
@@ -176,8 +176,11 @@ export const useAccountingRawData = (isAdmin: boolean = false) => {
       // Commandes de suivi des missions clôturées (0197/0204) : jamais dans
       // les chiffres — la mission est comptée plus bas (closedMissionOrders).
       const fulfillmentOrderIds = await fetchSourcingFulfillmentOrderIds();
-      const orders: AccountingOrder[] = ((ordersRes.data || []) as unknown as OrderRow[]).filter((o) => !fulfillmentOrderIds.has(o.id)).map((o) => ({
+      const orders: AccountingOrder[] = ((ordersRes.data || []) as unknown as (OrderRow & { wallet_bonus_used?: number | null })[]).filter((o) => !fulfillmentOrderIds.has(o.id)).map((o) => ({
         ...o,
+        // Bonus portefeuille utilisé (virement, 0292) : remise commerciale,
+        // déduite du CA et de la base de TVA de la vente.
+        total_amount: Math.round(((Number(o.total_amount) || 0) - (Number(o.wallet_bonus_used) || 0)) * 100) / 100,
         company_name: o.resellers?.company_name || null,
         requester_name: o.placed_by ? `${o.placed_by.first_name || ''} ${o.placed_by.last_name || ''}`.trim() || null : null,
         customer_name: o.email || null,

@@ -128,7 +128,7 @@ export const useSalesJournalExport = () => {
       if (scope === 'all' || scope === 'b2b') {
         const { data, error } = await supabase
           .from('orders')
-          .select('id, order_number, status, payment_status, total_amount, created_at, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email)')
+          .select('id, order_number, status, payment_status, total_amount, wallet_bonus_used, created_at, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name, email)')
           .eq('order_channel', 'b2b')
           .is('archived_at', null)
           .gte('created_at', startIso)
@@ -144,7 +144,9 @@ export const useSalesJournalExport = () => {
           // de tout dernier repli (commandes antérieures à
           // placed_by_profile_id, voir useB2BOrders.ts).
           const client = profileDisplayName(o.placed_by) || o.reseller?.company_name || 'Revendeur';
-          rows.push({ date: new Date(o.created_at), reference: o.order_number, client, amountTTC: Number(o.total_amount) || 0 });
+          // Bonus portefeuille utilisé (0292) : remise déduite du CA.
+          const bonusUsed = Number((o as unknown as { wallet_bonus_used?: number }).wallet_bonus_used) || 0;
+          rows.push({ date: new Date(o.created_at), reference: o.order_number, client, amountTTC: Math.round(((Number(o.total_amount) || 0) - bonusUsed) * 100) / 100 });
         }
       }
 

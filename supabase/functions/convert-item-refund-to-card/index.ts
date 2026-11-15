@@ -180,8 +180,11 @@ Deno.serve(async (req: Request) => {
         .eq('reseller_id', reseller_id)
         .maybeSingle();
       if (!link) return json({ error: 'Membre introuvable pour ce compte' }, 404);
-      const { data: profile } = await admin.from('profiles').select('wallet_balance').eq('id', profile_id).maybeSingle();
-      const balance = round2(Number(profile?.wallet_balance || 0));
+      const { data: profile } = await admin.from('profiles').select('wallet_balance, wallet_bonus_balance').eq('id', profile_id).maybeSingle();
+      // Bonus virement (0292) : utilisable en achats seulement, jamais
+      // remboursé — seule la part réellement versée est remboursable.
+      const bonus = round2(Number((profile as { wallet_bonus_balance?: number } | null)?.wallet_bonus_balance || 0));
+      const balance = round2(Math.max(0, Number(profile?.wallet_balance || 0) - bonus));
       if (!stripeSecretKey) return json({ error: 'STRIPE_SECRET_KEY manquant côté serveur' }, 500);
       const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
 
@@ -207,12 +210,12 @@ Deno.serve(async (req: Request) => {
           }
         }
         const cardRefundable = round2(refundableCents / 100);
-        return json({ wallet_balance: balance, card_refundable: cardRefundable, max_amount: round2(Math.min(balance, cardRefundable)) });
+        return json({ wallet_balance: balance, wallet_bonus: bonus, card_refundable: cardRefundable, max_amount: round2(Math.min(balance, cardRefundable)) });
       }
 
       const target = round2(Number(amount));
       if (!target || target <= 0) return json({ error: 'Montant invalide' }, 400);
-      if (target > balance) return json({ error: `Solde insuffisant : le membre n'a que ${balance.toFixed(2)} € sur son portefeuille` }, 400);
+      if (target > balance) return json({ error: `Solde remboursable insuffisant : ${balance.toFixed(2)} € (hors bonus virement ${bonus.toFixed(2)} €, non remboursable)` }, 400);
 
       const { error: debitError } = await admin.rpc('debit_wallet_for_card_refund', {
         p_profile_id: profile_id,
@@ -316,8 +319,9 @@ Deno.serve(async (req: Request) => {
       .reduce((sum, r) => sum + Number(r.amount || 0), 0);
     const suggested = round2(Number(item.line_total || 0) + (item.insured ? Number(item.insurance_cost || 0) : 0) + entrupy);
 
-    const { data: profile } = await admin.from('profiles').select('wallet_balance').eq('id', order.placed_by_profile_id).maybeSingle();
-    const balance = round2(Number(profile?.wallet_balance || 0));
+    const { data: profile } = await admin.from('profiles').select('wallet_balance, wallet_bonus_balance').eq('id', order.placed_by_profile_id).maybeSingle();
+    // Bonus virement (0292) jamais remboursé sur la carte.
+    const balance = round2(Math.max(0, Number(profile?.wallet_balance || 0) - Number((profile as { wallet_bonus_balance?: number } | null)?.wallet_bonus_balance || 0)));
 
     if (action === 'preview') return json({ suggested_amount: suggested, wallet_balance: balance, order_number: order.order_number });
 
