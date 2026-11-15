@@ -363,6 +363,18 @@ export const WalletPage: React.FC = () => {
                 {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                 {checking ? 'Vérification…' : waitingSince ? 'En attente du virement…' : "J'ai fait mon virement"}
               </button>
+              {waitingSince && (
+                <button
+                  onClick={async () => {
+                    await supabase.rpc('cancel_wallet_transfer_intents');
+                    setWaitingSince(null);
+                    setCheckMessage('Annonce annulée.');
+                  }}
+                  className="text-sm text-gray-500 underline hover:text-gray-800"
+                >
+                  Annuler
+                </button>
+              )}
               {checkMessage && <p className="text-sm text-gray-700">{checkMessage}</p>}
             </div>
             <p className="text-xs text-gray-400">
