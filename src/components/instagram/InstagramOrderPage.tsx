@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Copy, Download, Loader2, Package, ShieldCheck, Truck, Home, MapPin, Clock } from 'lucide-react';
 import ShippingForm, { ShippingAddress, ShippingFormResult } from './ShippingForm';
 import ShippingFormMobile from './ShippingFormMobile';
+// Logo du site ozeparis.com (oze-storefront/public/logov4.PNG).
+import logo from './logo_oze_paris.png';
 
 /**
  * Page publique d'une vente Instagram : pro.ozeparis.com/commande/<jeton>.
@@ -268,7 +270,7 @@ export const InstagramOrderPage: React.FC = () => {
   const header = (
     <header className="border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">
-        <p className="font-serif text-xl tracking-[0.3em] text-gray-900">OZË PARIS</p>
+        <img src={logo} alt="OZË Paris" className="h-12 w-auto object-contain sm:h-14" />
         {state?.status === 'ok' && <p className="text-xs text-gray-500">Commande {state.order_number}</p>}
       </div>
     </header>
