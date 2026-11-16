@@ -442,15 +442,12 @@ const ShippingFormMobile: React.FC<ShippingFormMobileProps> = ({
             </div>
           </button>
 
-          {/* Option Adresse spécifique */}
+          {/* Option Adresse spécifique — indisponible pour les ventes Instagram */}
           <button
             type="button"
-            onClick={() => setDeliveryType('domicile')}
-            className={`w-full flex items-center justify-between p-3 border-2 rounded-xl transition-all ${
-              deliveryType === 'domicile'
-                ? 'border-black bg-gray-50'
-                : 'border-gray-200'
-            }`}
+            disabled
+            aria-disabled="true"
+            className="w-full flex items-center justify-between p-3 border-2 rounded-xl border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
           >
             <div className="flex items-center">
               <Home className={`h-5 w-5 mr-3 ${deliveryType === 'domicile' ? 'text-black' : 'text-gray-400'}`} />
@@ -458,7 +455,7 @@ const ShippingFormMobile: React.FC<ShippingFormMobileProps> = ({
                 <span className={`font-medium text-sm ${deliveryType === 'domicile' ? 'text-black' : 'text-gray-700'}`}>
                   À une adresse
                 </span>
-                <p className="text-xs text-gray-500">Domicile, bureau, etc.</p>
+                <p className="text-xs text-gray-500">Indisponible pour cette commande</p>
                 <p className="text-xs text-gray-500 flex items-center mt-0.5">
                   <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
                   Livrée le lendemain ou le surlendemain

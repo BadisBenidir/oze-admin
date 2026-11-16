@@ -478,15 +478,12 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ initialData, isUserConnecte
               </div>
             </button>
 
-            {/* Option Adresse spécifique */}
+            {/* Option Adresse spécifique — indisponible pour les ventes Instagram */}
             <button
               type="button"
-              onClick={() => setDeliveryType('domicile')}
-              className={`relative flex flex-col p-4 border-2 rounded-lg transition-all ${
-                deliveryType === 'domicile'
-                  ? 'border-black bg-gray-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
+              disabled
+              aria-disabled="true"
+              className="relative flex flex-col p-4 border-2 rounded-lg border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center">
@@ -504,7 +501,7 @@ const ShippingForm: React.FC<ShippingFormProps> = ({ initialData, isUserConnecte
                 </div>
               </div>
               <p className="text-sm text-gray-500 text-left">
-                Livraison à l'adresse indiquée (domicile, bureau, etc.)
+                Indisponible pour cette commande
               </p>
               <p className="mt-1 flex items-center text-xs text-gray-500 text-left">
                 <Clock className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
