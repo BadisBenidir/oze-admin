@@ -3,11 +3,14 @@ import { Search, PackageCheck, RefreshCw, Package } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 
-type Stage = 'ordered' | 'received' | 'ready_to_ship';
+type Stage = 'ordered' | 'received' | 'ready_to_ship' | 'delivery_requested' | 'stock';
 
 interface Row {
   id: string;
+  /** 'stock' : article pas encore vendu (brouillon, sourcing sur mesure…) — id = id produit. */
   fulfillment_status: Stage;
+  received_at?: string | null;
+  product_status?: string | null;
   product_snapshot: { name?: string; images?: string[]; main_image_index?: number } | null;
   product: { name: string | null; images: string[] | null; main_image_index: number | null; reference: string | null; b2b_reference: string | null; product_code: string | null; source_reference: string | null; brand: { name: string } | null } | null;
   order: {
@@ -18,11 +21,28 @@ interface Row {
   } | null;
 }
 
-const STAGE_LABEL: Record<Stage, { label: string; variant: 'warning' | 'info' | 'success' }> = {
+const STAGE_LABEL: Record<Exclude<Stage, 'stock'>, { label: string; variant: 'warning' | 'info' | 'success' }> = {
   ordered: { label: 'En acheminement', variant: 'warning' },
   received: { label: 'Reçu', variant: 'info' },
   ready_to_ship: { label: 'Prêt à la livraison', variant: 'success' },
+  delivery_requested: { label: 'Livraison demandée', variant: 'warning' },
 };
+
+// Articles pas encore vendus, qu'on peut marquer reçus à l'atelier (0240).
+const STOCK_STATUSES: Record<string, string> = {
+  'draft-b2b': 'Brouillon',
+  'sourced-b2b': 'Sourcing sur mesure',
+  'for-sale-b2b': 'En vente',
+  'drop-b2b': 'Drop',
+  'reserved-b2b': 'Réservé',
+};
+
+/** Déjà fait : prêt à la livraison, ou reçu (livraison demandée / pas encore vendu). */
+const isDone = (r: Row) =>
+  r.fulfillment_status === 'ready_to_ship' ||
+  ((r.fulfillment_status === 'delivery_requested' || r.fulfillment_status === 'stock') && !!r.received_at);
+/** Ligne seulement à marquer reçue (pas de passage en « prêt »). */
+const receiveOnly = (r: Row) => r.fulfillment_status === 'delivery_requested' || r.fulfillment_status === 'stock';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -50,17 +70,35 @@ export const ReadyToShipManager: React.FC = () => {
     const { data, error: fetchError } = await supabase
       .from('order_items')
       .select(
-        'id, fulfillment_status, product_snapshot, ' +
+        'id, fulfillment_status, received_at, product_snapshot, ' +
           'product:products(name, images, main_image_index, reference, b2b_reference, product_code, source_reference, brand:brands(name)), ' +
           'order:orders!inner(order_number, email, order_channel, reseller:resellers(company_name), placed_by:profiles!placed_by_profile_id(first_name, last_name))'
       )
       .eq('status', 'active')
       .eq('order.order_channel', 'b2b')
-      .in('fulfillment_status', ['ordered', 'received', 'ready_to_ship'])
+      .in('fulfillment_status', ['ordered', 'received', 'ready_to_ship', 'delivery_requested'])
       .order('created_at', { ascending: false })
       .limit(3000);
-    if (fetchError) setError(fetchError.message);
-    setRows(((data || []) as unknown) as Row[]);
+    // Articles pas encore vendus (brouillon, sourcing sur mesure, en vente…).
+    const { data: stock, error: stockError } = await supabase
+      .from('products')
+      .select('id, status, received_at, name, images, main_image_index, reference, b2b_reference, product_code, source_reference, brand:brands(name)')
+      .in('status', Object.keys(STOCK_STATUSES))
+      .order('created_at', { ascending: false })
+      .limit(3000);
+    const firstError = fetchError || stockError;
+    if (firstError) setError(firstError.message);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stockRows: Row[] = ((stock || []) as any[]).map((prod) => ({
+      id: prod.id,
+      fulfillment_status: 'stock',
+      received_at: prod.received_at,
+      product_status: prod.status,
+      product_snapshot: null,
+      product: prod,
+      order: null,
+    }));
+    setRows([...(((data || []) as unknown) as Row[]), ...stockRows]);
     setLoading(false);
   }, []);
 
@@ -95,7 +133,7 @@ export const ReadyToShipManager: React.FC = () => {
   };
 
   const { visible, notFound } = useMemo(() => {
-    const inTab = rows.filter((r) => (filter === 'todo' ? r.fulfillment_status !== 'ready_to_ship' : r.fulfillment_status === 'ready_to_ship'));
+    const inTab = rows.filter((r) => (filter === 'todo' ? !isDone(r) : isDone(r)));
     if (terms.length === 0) return { visible: inTab, notFound: [] as string[] };
     const hay = new Map(inTab.map((r) => [r.id, haystackOf(r)]));
     const matched = inTab.filter((r) => terms.some((t) => hay.get(r.id)!.includes(t)));
@@ -104,7 +142,7 @@ export const ReadyToShipManager: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, terms, filter]);
 
-  const todoCount = rows.filter((r) => r.fulfillment_status !== 'ready_to_ship').length;
+  const todoCount = rows.filter((r) => !isDone(r)).length;
   const readyCount = rows.length - todoCount;
   const selectable = filter === 'todo';
   const allVisibleSelected = visible.length > 0 && visible.every((r) => selected.has(r.id));
@@ -125,12 +163,37 @@ export const ReadyToShipManager: React.FC = () => {
       return next;
     });
 
-  const markReady = async (ids: string[]) => {
-    if (ids.length === 0) return;
+  const markReady = async (selectedIds: string[]) => {
+    if (selectedIds.length === 0) return;
     setBusy(true);
     setError(null);
     setNotice(null);
-    const ordered = rows.filter((r) => ids.includes(r.id) && r.fulfillment_status === 'ordered').map((r) => r.id);
+    const picked = rows.filter((r) => selectedIds.includes(r.id));
+    // Livraison déjà demandée / pas encore vendu : on note seulement la réception (0299).
+    const receiveItems = picked.filter((r) => r.fulfillment_status === 'delivery_requested').map((r) => r.id);
+    const receiveProducts = picked.filter((r) => r.fulfillment_status === 'stock').map((r) => r.id);
+    const receivedCount = receiveItems.length + receiveProducts.length;
+    const plural = (n: number) => (n > 1 ? 's' : '');
+    if (receivedCount > 0) {
+      const { error: recError } = await supabase.rpc('admin_mark_received_any', {
+        p_item_ids: receiveItems,
+        p_product_ids: receiveProducts,
+      });
+      if (recError) {
+        setBusy(false);
+        setError(recError.message);
+        return;
+      }
+    }
+    const ids = picked.filter((r) => !receiveOnly(r)).map((r) => r.id);
+    if (ids.length === 0) {
+      setBusy(false);
+      setNotice(`${receivedCount} article${plural(receivedCount)} marqué${plural(receivedCount)} reçu${plural(receivedCount)}.`);
+      setSelected(new Set());
+      await load();
+      return;
+    }
+    const ordered = picked.filter((r) => r.fulfillment_status === 'ordered').map((r) => r.id);
     if (ordered.length > 0) {
       const { error: receivedError } = await supabase.rpc('admin_mark_items_received', { p_item_ids: ordered });
       if (receivedError) {
@@ -146,7 +209,10 @@ export const ReadyToShipManager: React.FC = () => {
       return;
     }
     const count = Number(data?.updated_count || 0);
-    setNotice(`${count} article${count > 1 ? 's' : ''} passé${count > 1 ? 's' : ''} prêt${count > 1 ? 's' : ''} à la livraison.`);
+    setNotice(
+      `${count} article${plural(count)} passé${plural(count)} prêt${plural(count)} à la livraison` +
+        (receivedCount > 0 ? ` · ${receivedCount} marqué${plural(receivedCount)} reçu${plural(receivedCount)}.` : '.')
+    );
     setSelected(new Set());
     await load();
   };
@@ -236,7 +302,7 @@ export const ReadyToShipManager: React.FC = () => {
               className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 font-medium text-white hover:bg-green-700 disabled:opacity-50"
             >
               <PackageCheck className="h-4 w-4" />
-              {busy ? 'En cours…' : `Mettre prêt à la livraison (${selected.size})`}
+              {busy ? 'En cours…' : `Valider la réception (${selected.size})`}
             </button>
           </div>
         </div>
@@ -275,7 +341,15 @@ export const ReadyToShipManager: React.FC = () => {
                 const buyer = r.order?.placed_by
                   ? `${r.order.placed_by.first_name || ''} ${r.order.placed_by.last_name || ''}`.trim()
                   : r.order?.email || '—';
-                const stage = STAGE_LABEL[r.fulfillment_status];
+                const stage =
+                  r.fulfillment_status === 'stock'
+                    ? {
+                        label: `${STOCK_STATUSES[r.product_status || ''] || 'Pas vendu'}${r.received_at ? ' · reçu' : ''}`,
+                        variant: (r.received_at ? 'success' : 'warning') as 'success' | 'warning',
+                      }
+                    : r.fulfillment_status === 'delivery_requested' && r.received_at
+                      ? { label: 'Livraison demandée · reçu', variant: 'success' as const }
+                      : STAGE_LABEL[r.fulfillment_status];
                 return (
                   <tr key={r.id} className="border-b border-gray-50 last:border-b-0 hover:bg-gray-50/60">
                     {selectable && (
@@ -322,7 +396,7 @@ export const ReadyToShipManager: React.FC = () => {
                           disabled={busy}
                           className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-green-200 px-2.5 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
                         >
-                          <PackageCheck className="h-3.5 w-3.5" /> Prêt à la livraison
+                          <PackageCheck className="h-3.5 w-3.5" /> {receiveOnly(r) ? 'Marquer reçu' : 'Prêt à la livraison'}
                         </button>
                       </td>
                     )}
