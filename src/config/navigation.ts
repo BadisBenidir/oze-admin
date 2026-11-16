@@ -37,6 +37,7 @@ import {
   TrendingDown,
   UserCog,
   Zap,
+  Instagram,
 } from 'lucide-react';
 import { MenuItem } from '../types';
 
@@ -63,6 +64,15 @@ export const navigationItems: MenuItem[] = [
       { id: 'b2b-orders', label: 'Commandes B2B', path: '/commandes/b2b', icon: Handshake },
       { id: 'reception', label: 'Vue Réception', path: '/commandes/reception', icon: PackageCheck },
       { id: 'shipment-requests', label: 'Demandes de livraison', path: '/commandes/demandes-livraison', icon: Truck },
+    ]
+  },
+  {
+    id: 'instagram',
+    label: 'Ventes Insta',
+    icon: Instagram,
+    path: '/ventes-insta',
+    subItems: [
+      { id: 'orders', label: 'Commandes Instagram', path: '/ventes-insta/commandes', icon: List },
     ]
   },
   {

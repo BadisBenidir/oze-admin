@@ -69,7 +69,10 @@ Deno.serve(async (req: Request) => {
 
     const { data: matched, error } = await admin.rpc('wallet_match_transfers');
     if (error) return json({ error: error.message }, 500);
-    return json({ success: true, checked: transactions.length, ...(matched as Record<string, unknown>) });
+    // Ventes Instagram (0302) : virements OZE-IG-XXXX / nom + annonce du client.
+    const { data: ig, error: igError } = await admin.rpc('instagram_match_transfers');
+    if (igError) console.error('qonto-wallet-transfers: ventes Instagram', igError.message);
+    return json({ success: true, checked: transactions.length, ...(matched as Record<string, unknown>), instagram: ig ?? null });
   } catch (e) {
     console.error('qonto-wallet-transfers', e);
     return json({ error: e instanceof Error ? e.message : 'Erreur' }, 500);

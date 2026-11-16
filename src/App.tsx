@@ -10,6 +10,7 @@ import { B2BLanding } from './components/landing/B2BLanding';
 import { B2BSignup } from './components/landing/B2BSignup';
 import { PublicMarketResults } from './components/landing/PublicMarketResults';
 import { PreviewLinkPage, getPreviewToken } from './components/landing/PreviewLinkPage';
+import { InstagramOrderPage, getInstagramOrderToken } from './components/instagram/InstagramOrderPage';
 import { isLandingHost } from './components/landing/plans';
 import { Terms } from './components/pages/reseller/Terms';
 import { PrivacyPolicy } from './components/pages/reseller/PrivacyPolicy';
@@ -67,6 +68,12 @@ function App() {
   // Lien d'avant-première d'un drop / d'une session d'enchères (voir
   // PreviewLinksModal / get_preview_link) — public, posté sur Discord :
   // s'affiche de la même façon connecté ou non, sur tous les domaines.
+  // Lien de commande d'une vente Instagram (InstagramSales) — public, sans
+  // compte, identique connecté ou non.
+  if (getInstagramOrderToken()) {
+    return <InstagramOrderPage />;
+  }
+
   if (getPreviewToken()) {
     return <PreviewLinkPage />;
   }

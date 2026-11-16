@@ -236,6 +236,9 @@ Deno.serve(async (req: Request) => {
       const { data: wm, error: wmError } = await adminClient.rpc('wallet_match_transfers');
       if (wmError) console.error('qonto-sync: rechargements par virement', wmError.message);
       else walletCredited = wm;
+      // Ventes Instagram (0302).
+      const { error: igError } = await adminClient.rpc('instagram_match_transfers');
+      if (igError) console.error('qonto-sync: ventes Instagram', igError.message);
     }
 
     // 3 bis. Débits importés en charges (accounting_import_bank_expenses,

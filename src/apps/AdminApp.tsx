@@ -9,6 +9,7 @@ import { Customers } from '../components/pages/Customers';
 import { Accounting } from '../components/pages/Accounting';
 import { B2B } from '../components/pages/B2B';
 import { B2BTraffic } from '../components/pages/B2BTraffic';
+import { InstagramSales } from '../components/pages/instagram/InstagramSales';
 import { navigationItems as staticNavigationItems } from '../config/navigation';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { usePendingGiftRewardsCount } from '../hooks/useGiftRewards';
@@ -123,6 +124,8 @@ function AdminApp() {
         return <Accounting />;
       case 'b2b':
         return <B2B activeSubTab={activeSubTab} />;
+      case 'instagram':
+        return <InstagramSales />;
       case 'b2b-traffic':
         return <B2BTraffic />;
       case 'sav':
