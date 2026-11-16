@@ -371,6 +371,8 @@ class OrderService {
       .from('orders')
       .select('*, order_items(line_total, insured, insurance_cost, status, refund_method)')
       .is('archived_at', null)
+      // Ventes Instagram (0300) : un lien pas encore payé n'est pas une vente.
+      .or('sales_source.is.null,payment_status.in.(paid,succeeded)')
       .order('created_at', { ascending: false })
       .limit(limit);
 
