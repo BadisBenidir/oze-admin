@@ -15,6 +15,17 @@ import { OrderTrackingCell } from '../../orders/OrderTrackingCell';
 const PUBLIC_BASE = 'https://pro.ozeparis.com/commande/';
 const SELLABLE = ['draft', 'draft-b2b', 'sourced-b2b', 'drop-b2b', 'for-sale-b2b', 'instant-b2b', 'for-sale-online', 'for-sale-other-platform'];
 
+const STATUS_LABEL: Record<string, string> = {
+  draft: 'Brouillon',
+  'draft-b2b': 'Brouillon',
+  'sourced-b2b': 'Sourcing sur mesure',
+  'drop-b2b': 'Drop',
+  'for-sale-b2b': 'En vente B2B',
+  'instant-b2b': 'Achat immédiat',
+  'for-sale-online': 'En vente en ligne',
+  'for-sale-other-platform': 'Autre plateforme',
+};
+
 type Stage = 'link_sent' | 'info_submitted' | 'transfer_declared' | 'paid' | 'shipped' | 'delivered' | 'expired' | 'cancelled' | 'payment_conflict';
 
 const STAGE: Record<Stage, { label: string; variant: 'default' | 'info' | 'warning' | 'success' | 'danger' }> = {
@@ -102,20 +113,22 @@ const CreateOrderPanel: React.FC<{ onClose: () => void; onCreated: (token: strin
 
   useEffect(() => {
     const term = q.replace(/[,()%*]/g, ' ').trim();
-    if (term.length < 2) {
-      setHits([]);
-      return;
-    }
+    // Sans recherche : les brouillons, proposés d'office. Avec recherche :
+    // tous les articles disponibles.
     const t = setTimeout(async () => {
       setSearching(true);
-      const like = `%${term}%`;
-      const { data } = await supabase
+      let query = supabase
         .from('products')
-        .select('id, name, status, images, main_image_index, b2b_reference, reference, source_reference, purchase_price, sale_price, brand:brands(name)')
-        .in('status', SELLABLE)
-        .or(`name.ilike.${like},b2b_reference.ilike.${like},reference.ilike.${like},source_reference.ilike.${like},product_code.ilike.${like}`)
-        .order('created_at', { ascending: false })
-        .limit(20);
+        .select('id, name, status, images, main_image_index, b2b_reference, reference, source_reference, purchase_price, sale_price, brand:brands(name)');
+      if (term.length < 2) {
+        query = query.in('status', ['draft', 'draft-b2b']);
+      } else {
+        const like = `%${term}%`;
+        query = query
+          .in('status', SELLABLE)
+          .or(`name.ilike.${like},b2b_reference.ilike.${like},reference.ilike.${like},source_reference.ilike.${like},product_code.ilike.${like}`);
+      }
+      const { data } = await query.order('created_at', { ascending: false }).limit(term.length < 2 ? 100 : 30);
       setHits(((data || []) as unknown) as ProductHit[]);
       setSearching(false);
     }, 250);
@@ -167,7 +180,12 @@ const CreateOrderPanel: React.FC<{ onClose: () => void; onCreated: (token: strin
               />
             </div>
             {(hits.length > 0 || searching) && (
-              <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-gray-100">
+              <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-gray-100">
+                {q.trim().length < 2 && !searching && (
+                  <p className="sticky top-0 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-500">
+                    Articles en brouillon ({hits.length}) — tapez pour chercher dans tout le stock disponible
+                  </p>
+                )}
                 {searching && <p className="p-3 text-sm text-gray-500">Recherche…</p>}
                 {hits.map((h) => (
                   <button
@@ -183,7 +201,7 @@ const CreateOrderPanel: React.FC<{ onClose: () => void; onCreated: (token: strin
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-gray-900">{h.name}</p>
                       <p className="text-xs text-gray-500">
-                        {h.brand?.name} · {h.b2b_reference || h.reference} {h.source_reference ? `· ${h.source_reference}` : ''} · {h.status}
+                        {h.brand?.name} · {h.b2b_reference || h.reference} {h.source_reference ? `· ${h.source_reference}` : ''} · {STATUS_LABEL[h.status] || h.status}
                       </p>
                     </div>
                     <span className="text-xs text-gray-500">Achat {eur(Number(h.purchase_price) || 0)}</span>
