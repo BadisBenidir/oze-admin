@@ -7,9 +7,10 @@ import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { useBankTransactions, BankTransaction, MatchedType } from '../../../hooks/useBankTransactions';
 import { useAccountingLedgerExport } from '../../../hooks/useAccountingLedgerExport';
-import { AccountingRawData, isOrderPaid } from '../../../hooks/useAccountingRawData';
+import { AccountingRawData } from '../../../hooks/useAccountingRawData';
 import { FRANCHISE_TVA_THRESHOLD, FRANCHISE_TVA_TOLERANCE_THRESHOLD } from '../../../config/accounting';
-import { COMPANY_CREATION_DATE } from '../../../config/legal';
+import { computeYtdRevenue } from '../../../utils/accountingCalc';
+import { VatSettings, vatRateAt } from '../../../utils/vat';
 import { BankTransactionMatchModal } from './BankTransactionMatchModal';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -36,14 +37,16 @@ const matchedTypeBadge = (t: BankTransaction) => {
 
 interface QontoTabProps {
   data: AccountingRawData;
+  /** Bascule TVA (0280) : franchise avant vat_start_at, assujetti ensuite. */
+  vatSettings: VatSettings | null;
 }
 
 /** Trésorerie Qonto — synchronisée côté serveur (qonto-sync, jamais d'appel
  * direct à l'API Qonto depuis le navigateur, voir 0114_qonto_bank_transactions.sql).
- * OZË Paris est en franchise en base de TVA (art. 293 B, voir config/legal.ts
- * et Terms.tsx) : pas de calcul de TVA sur marge ici, seulement un suivi du
- * CA cumulé de l'année face au seuil de franchise. */
-export const QontoTab: React.FC<QontoTabProps> = ({ data }) => {
+ * CA de l'année : exactement celui du Dashboard (computeYtdRevenue, HT, hors
+ * lives). TVA : réellement collectée depuis la bascule (0280) ; avant, suivi
+ * du CA face au seuil de franchise en base (art. 293 B). */
+export const QontoTab: React.FC<QontoTabProps> = ({ data, vatSettings }) => {
   const { isAdmin } = useAdminAuth();
   const [monthFilter, setMonthFilter] = useState(currentMonthIso());
   const { transactions, snapshot, loading, error, syncing, syncNow, setReconciliation, uploadAttachment, missingReceiptsCount } =
@@ -62,31 +65,12 @@ export const QontoTab: React.FC<QontoTabProps> = ({ data }) => {
     [transactions]
   );
 
-  // CA cumulé depuis le 1er janvier de l'année en cours, JAMAIS avant la
-  // création d'OZË PARIS SAS (COMPANY_CREATION_DATE) : l'activité tournait
-  // avant sous un statut différent (micro-entreprise), dont le CA n'entre
-  // pas dans le compteur de franchise de CETTE société. Les années
-  // suivantes repartiront normalement du 1er janvier. Tous canaux confondus
-  // (web, B2B, avances de sourcing encaissées) — même prédicat "encaissé"
-  // que le reste du module (isOrderPaid, useAccountingRawData.ts).
-  const yearToDateRevenue = useMemo(() => {
-    const calendarYearStart = new Date(new Date().getFullYear(), 0, 1);
-    const yearStart = new Date(Math.max(calendarYearStart.getTime(), new Date(COMPANY_CREATION_DATE).getTime()));
-    const ordersRevenue = data.orders
-      .filter((o) => isOrderPaid(o) && new Date(o.created_at) >= yearStart)
-      .reduce((sum, o) => sum + Number(o.total_amount), 0);
-    const sourcingRevenue = data.sourcingAdvances
-      .filter((m) => m.paid_at && new Date(m.paid_at) >= yearStart)
-      .reduce((sum, m) => sum + Number(m.advance_amount), 0);
-    const liveRevenue = data.liveSales
-      .filter((s) => new Date(s.sold_at) >= yearStart)
-      .reduce((sum, s) => sum + Number(s.sale_price), 0);
-    return ordersRevenue + sourcingRevenue + liveRevenue;
-  }, [data]);
-
-  const yearToDateStart = new Date(
-    Math.max(new Date(new Date().getFullYear(), 0, 1).getTime(), new Date(COMPANY_CREATION_DATE).getTime())
-  );
+  // CA HT de l'année en cours : le même chiffre que le Dashboard (avant :
+  // un calcul TTC distinct, avances de sourcing et lives compris).
+  const ytd = useMemo(() => computeYtdRevenue(data, vatSettings), [data, vatSettings]);
+  const yearToDateRevenue = ytd.ht;
+  const isVatRegistered = vatRateAt(vatSettings, new Date()) > 0;
+  const vatStart = vatSettings?.vat_start_at ? new Date(vatSettings.vat_start_at) : null;
   const thresholdPercent = Math.min((yearToDateRevenue / FRANCHISE_TVA_THRESHOLD) * 100, 100);
   const overTolerance = yearToDateRevenue > FRANCHISE_TVA_TOLERANCE_THRESHOLD;
   const overThreshold = yearToDateRevenue > FRANCHISE_TVA_THRESHOLD;
@@ -175,19 +159,31 @@ export const QontoTab: React.FC<QontoTabProps> = ({ data }) => {
               <p className="text-sm font-medium text-gray-600">TVA</p>
               <ShieldAlert className={`h-4 w-4 ${overThreshold ? 'text-red-500' : 'text-gray-400'}`} />
             </div>
-            <p className="text-xl font-bold text-gray-900">0,00 € dû</p>
-            <p className="text-xs text-gray-500 mt-0.5">Franchise en base (art. 293 B)</p>
-            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2">
-              <div
-                className={`h-full rounded-full transition-all ${overThreshold ? 'bg-red-500' : 'bg-gray-900'}`}
-                style={{ width: `${thresholdPercent}%` }}
-              />
-            </div>
-            <p className={`text-[11px] mt-1 ${overThreshold ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
-              CA depuis le {yearToDateStart.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })} : {EUR(yearToDateRevenue)} / {EUR(FRANCHISE_TVA_THRESHOLD)}
-              {overTolerance && ' — seuil majoré dépassé, sortie immédiate de la franchise'}
-              {!overTolerance && overThreshold && ' — seuil dépassé (sortie si 2 années consécutives)'}
-            </p>
+            {isVatRegistered ? (
+              <>
+                <p className="text-xl font-bold text-gray-900">{EUR(ytd.vatCollected)}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  TVA collectée{vatStart ? ` depuis le ${vatStart.toLocaleDateString('fr-FR')}` : ''} · détail dans l'onglet TVA
+                </p>
+                <p className="text-[11px] mt-2 text-gray-400">CA HT de l'année : {EUR(yearToDateRevenue)}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl font-bold text-gray-900">0,00 € dû</p>
+                <p className="text-xs text-gray-500 mt-0.5">Franchise en base (art. 293 B)</p>
+                <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2">
+                  <div
+                    className={`h-full rounded-full transition-all ${overThreshold ? 'bg-red-500' : 'bg-gray-900'}`}
+                    style={{ width: `${thresholdPercent}%` }}
+                  />
+                </div>
+                <p className={`text-[11px] mt-1 ${overThreshold ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                  CA HT de l'année : {EUR(yearToDateRevenue)} / {EUR(FRANCHISE_TVA_THRESHOLD)}
+                  {overTolerance && ' — seuil majoré dépassé, sortie immédiate de la franchise'}
+                  {!overTolerance && overThreshold && ' — seuil dépassé (sortie si 2 années consécutives)'}
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>

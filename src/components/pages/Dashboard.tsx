@@ -9,7 +9,7 @@ import { useMemo } from 'react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useAccountingRawData } from '../../hooks/useAccountingRawData';
 import { useVatSettings } from '../../utils/vat';
-import { toHtData, computeGlobalTotals } from '../../utils/accountingCalc';
+import { computeYtdRevenue } from '../../utils/accountingCalc';
 
 interface DashboardProps {
   activeSubTab: string;
@@ -34,12 +34,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeSubTab }) => {
   const vat = useVatSettings();
   const ytd = useMemo(() => {
     if (!isAdmin || accountingLoading) return null;
-    const now = new Date();
-    const range = { start: new Date(now.getFullYear(), 0, 1), end: now };
-    // Hors lives (demande admin) : CA global moins le CA des ventes live.
-    const noLive = (t: ReturnType<typeof computeGlobalTotals>) => t.global.revenue - t.live.revenue;
-    const ht = noLive(computeGlobalTotals(toHtData(accountingData, vat.settings), range));
-    const ttc = noLive(computeGlobalTotals(accountingData, range));
+    // Hors lives (demande admin), même calcul que l'onglet Trésorerie Qonto.
+    const { ht, ttc } = computeYtdRevenue(accountingData, vat.settings);
     return { ht, ttc };
   }, [isAdmin, accountingLoading, accountingData, vat.settings]);
   const eur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

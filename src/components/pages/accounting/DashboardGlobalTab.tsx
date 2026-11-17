@@ -172,9 +172,7 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
     const collected = current.web.revenue + current.b2b.revenue;
     const activeAdvances = data.sourcingAdvances.filter((m) => m.status === 'active');
     const activeAdvancesTotal = activeAdvances.reduce((s, m) => s + m.advance_amount, 0);
-    const tvaBase = collected + activeAdvancesTotal; // même périmètre que le Journal des ventes (scope "all")
-    const tvaCollectee = tvaBase - tvaBase / 1.2;
-    return { invoiced, collected, activeAdvancesCount: activeAdvances.length, activeAdvancesTotal, tvaCollectee };
+    return { invoiced, collected, activeAdvancesCount: activeAdvances.length, activeAdvancesTotal };
   }, [data, period.range, current]);
 
   return (
@@ -392,9 +390,9 @@ export const DashboardGlobalTab: React.FC<DashboardGlobalTabProps> = ({ data, pe
               <p className="text-xs text-gray-400">Encaissées, pas encore converties en CA</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5" /> TVA collectée (estimée)</p>
-              <p className="text-lg font-semibold text-gray-900 mt-1">{EUR(treasury.tvaCollectee)}</p>
-              <p className="text-xs text-gray-400">Régime standard 20% — aucun régime de la marge appliqué</p>
+              <p className="text-xs text-gray-500 flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5" /> TVA collectée</p>
+              <p className="text-lg font-semibold text-gray-900 mt-1">{EUR(vatCollected)}</p>
+              <p className="text-xs text-gray-400">Réellement collectée sur les ventes de la période (détail : onglet TVA)</p>
             </div>
           </div>
         </CardContent>

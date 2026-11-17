@@ -196,7 +196,7 @@ export const Accounting: React.FC = () => {
               refreshExpenses={expensesApi.refresh}
             />
           )}
-          {activeTab === 'qonto' && <QontoTab data={data} />}
+          {activeTab === 'qonto' && <QontoTab data={data} vatSettings={vat.settings} />}
         </>
       )}
       </div>

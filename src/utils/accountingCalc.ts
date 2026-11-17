@@ -383,6 +383,21 @@ export const toHtExpenses = <T extends { spent_at: string; amount: number; vat_a
   return vat ? { ...e, amount: (Number(e.amount) || 0) - vat } : e;
 });
 
+/** CA de l'année en cours, hors lives (demande admin) : HT, TTC et TVA
+ * réellement collectée. Source unique du Dashboard (accueil) et de l'onglet
+ * Trésorerie Qonto — jamais deux calculs différents du même chiffre. */
+export const computeYtdRevenue = (data: AccountingRawData, settings: VatSettings | null, now: Date = new Date()) => {
+  const range: DateRange = { start: new Date(now.getFullYear(), 0, 1), end: now };
+  const htData = toHtData(data, settings);
+  const noLive = (t: ReturnType<typeof computeGlobalTotals>) => t.global.revenue - t.live.revenue;
+  return {
+    range,
+    ht: noLive(computeGlobalTotals(htData, range)),
+    ttc: noLive(computeGlobalTotals(data, range)),
+    vatCollected: computeVatCollected(htData.vatSales.filter((s) => s.source !== 'live'), range),
+  };
+};
+
 /** Totaux globaux d'une période, tous canaux (web, B2B, lives, abonnements,
  * livraisons, autres revenus) + frais de port : le calcul du « Chiffre
  * d'affaires total » du Dashboard Global, réutilisé par le Dashboard. */
