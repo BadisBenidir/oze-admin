@@ -16,7 +16,10 @@ import type { Reseller } from '../../../hooks/useResellers';
  *     même règle que le badge « Gratuit à vie » de la liste des abonnés)
  *     est compté en Partenaire ;
  *   - Membres d'accompagnement : sous-comptes des entreprises partenaires
- *     (account_type 'company', contact non principal) ;
+ *     (account_type 'company', contact non principal) qui PAIENT leur
+ *     abonnement de communauté (community_sub_status actif, 0214), datés du
+ *     début de cet abonnement. Les membres arrivés quand l'accompagnement
+ *     était gratuit et qui n'ont jamais souscrit ne sont pas comptés ;
  *   - Partenaires : contact principal de chaque entreprise partenaire, plus
  *     les abonnés gratuits à vie.
  * Les comptes supprimés depuis n'apparaissent plus (aucun historique).
@@ -43,10 +46,20 @@ const SERIES: { key: Group; label: string; color: string }[] = [
 interface ContactRow {
   created_at: string;
   is_primary: boolean;
+  community_sub_status: string | null;
+  community_sub_started_at: string | null;
   reseller: { id: string; company_name: string | null; account_type: string | null; subscription_plan: Reseller['subscription_plan']; stripe_subscription_id: string | null } | null;
 }
 
 const dayKey = (d: Date) => d.toLocaleDateString('en-CA');
+
+// Abonnement de communauté en cours (même périmètre que useCommunityPayers).
+const PAYING_COMMUNITY = new Set(['active', 'trialing', 'past_due']);
+const isCommunityMember = (r: ContactRow) => r.reseller?.account_type === 'company' && !r.is_primary;
+/** Compté seulement s'il paie (membre d'accompagnement) ; les autres comptes toujours. */
+const isCounted = (r: ContactRow) => !isCommunityMember(r) || PAYING_COMMUNITY.has(r.community_sub_status || '');
+/** Date d'arrivée : début de l'abonnement payant pour un membre d'accompagnement. */
+const joinedAt = (r: ContactRow) => new Date((isCommunityMember(r) && r.community_sub_started_at) || r.created_at);
 const dayLabel = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
 
 export const MemberGrowthChart: React.FC = () => {
@@ -76,11 +89,16 @@ export const MemberGrowthChart: React.FC = () => {
   useEffect(() => {
     supabase
       .from('reseller_contacts')
-      .select('created_at, is_primary, reseller:resellers(id, company_name, account_type, subscription_plan, stripe_subscription_id)')
+      .select('created_at, is_primary, community_sub_status, community_sub_started_at, reseller:resellers(id, company_name, account_type, subscription_plan, stripe_subscription_id)')
       .order('created_at', { ascending: true })
       .then(({ data, error: fetchError }) => {
         if (fetchError) setError(fetchError.message);
-        else setRows((data || []) as unknown as ContactRow[]);
+        else
+          setRows(
+            ((data || []) as unknown as ContactRow[])
+              .filter(isCounted)
+              .sort((a, b) => joinedAt(a).getTime() - joinedAt(b).getTime())
+          );
       });
   }, []);
 
@@ -103,17 +121,17 @@ export const MemberGrowthChart: React.FC = () => {
     const since30 = Date.now() - 30 * 86_400_000;
     for (const r of rows) {
       const g = groupOf(r);
-      const key = dayKey(new Date(r.created_at));
+      const key = dayKey(joinedAt(r));
       if (!joinsByDay.has(key)) joinsByDay.set(key, { subscribers: 0, members: 0, partners: 0 });
       joinsByDay.get(key)![g] += 1;
       totals[g] += 1;
-      if (new Date(r.created_at).getTime() >= since30) last30[g] += 1;
+      if (joinedAt(r).getTime() >= since30) last30[g] += 1;
     }
 
     // Un point par jour, du premier inscrit à aujourd'hui (courbe cumulée).
     const series: Array<Record<string, number | string>> = [];
     const running: Record<Group, number> = { subscribers: 0, members: 0, partners: 0 };
-    const cursor = new Date(`${dayKey(new Date(rows[0].created_at))}T00:00:00`);
+    const cursor = new Date(`${dayKey(joinedAt(rows[0]))}T00:00:00`);
     const today = new Date(`${dayKey(new Date())}T00:00:00`);
     while (cursor <= today) {
       const key = dayKey(cursor);
@@ -158,12 +176,12 @@ export const MemberGrowthChart: React.FC = () => {
     const since30 = Date.now() - 30 * 86_400_000;
     for (const r of rows) {
       const o = originOf(r);
-      const key = dayKey(new Date(r.created_at));
+      const key = dayKey(joinedAt(r));
       if (!joinsByDay.has(key)) joinsByDay.set(key, new Map());
       const day = joinsByDay.get(key)!;
       day.set(o, (day.get(o) || 0) + 1);
       totalsBy.set(o, (totalsBy.get(o) || 0) + 1);
-      if (new Date(r.created_at).getTime() >= since30) last30By.set(o, (last30By.get(o) || 0) + 1);
+      if (joinedAt(r).getTime() >= since30) last30By.set(o, (last30By.get(o) || 0) + 1);
     }
     // Ordre : communautés et partenaires par taille, « Direct » en dernier.
     const origins = [...totalsBy.keys()].sort((a, b) => (a === DIRECT ? 1 : b === DIRECT ? -1 : (totalsBy.get(b) || 0) - (totalsBy.get(a) || 0)));
@@ -171,7 +189,7 @@ export const MemberGrowthChart: React.FC = () => {
 
     const series: Array<Record<string, number | string>> = [];
     const running = new Map<string, number>(origins.map((o) => [o, 0]));
-    const cursor = new Date(`${dayKey(new Date(rows[0].created_at))}T00:00:00`);
+    const cursor = new Date(`${dayKey(joinedAt(rows[0]))}T00:00:00`);
     const today = new Date(`${dayKey(new Date())}T00:00:00`);
     while (cursor <= today) {
       const key = dayKey(cursor);
