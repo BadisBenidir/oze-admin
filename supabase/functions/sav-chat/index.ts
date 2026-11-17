@@ -498,10 +498,23 @@ Deno.serve(async (req: Request) => {
   });
 
   // Historique rejoué (texte + outils) ; les images ne sont envoyées qu'au tour courant.
-  const messages: Anthropic.MessageParam[] = (history || []).map((m: { role: 'user' | 'assistant'; content: Block[] }) => ({
-    role: m.role,
-    content: m.content as unknown as Anthropic.ContentBlockParam[],
-  }));
+  // Un appel d'outil sans résultat (réponse coupée par la limite de longueur) rendrait la
+  // conversation impossible à rejouer : on le retire, ainsi que les tours vides.
+  const rows = (history || []) as { role: 'user' | 'assistant'; content: Block[] }[];
+  const messages: Anthropic.MessageParam[] = [];
+  rows.forEach((m, i) => {
+    let content = m.content || [];
+    if (m.role === 'assistant') {
+      const answered = new Set(
+        (rows[i + 1]?.role === 'user' ? rows[i + 1].content || [] : [])
+          .filter((b) => b.type === 'tool_result')
+          .map((b) => String(b.tool_use_id)),
+      );
+      content = content.filter((b) => b.type !== 'tool_use' || answered.has(String(b.id)));
+      if (!content.some((b) => b.type === 'text' || b.type === 'tool_use')) return;
+    }
+    messages.push({ role: m.role, content: content as unknown as Anthropic.ContentBlockParam[] });
+  });
   messages.push({ role: 'user', content: [...imageBlocks, ...userBlocks] as unknown as Anthropic.ContentBlockParam[] });
 
   const [knowledge, contactRes] = await Promise.all([
@@ -552,10 +565,30 @@ Deno.serve(async (req: Request) => {
 
       try {
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-          const s = anthropic.messages.stream({ model: MODEL, max_tokens: 1024, system, tools: TOOLS, messages });
+          // Marge large : la réflexion du modèle + un ticket détaillé dépassaient
+          // 1024 tokens, l'appel creer_ticket était coupé et jamais exécuté.
+          const s = anthropic.messages.stream({ model: MODEL, max_tokens: 8000, system, tools: TOOLS, messages });
           s.on('text', (t: string) => send({ type: 'text', text: t }));
           const final = await s.finalMessage();
-          const content = final.content as unknown as Block[];
+          let content = final.content as unknown as Block[];
+          if (final.stop_reason === 'max_tokens') {
+            // Réponse coupée : un appel d'outil incomplet n'est jamais exécuté
+            // ni enregistré ; le client est prévenu au lieu d'un silence.
+            console.error('sav-chat: réponse coupée (max_tokens)', convId);
+            const fallback = "\n\nDésolé, ma réponse a été interrompue. Pouvez-vous renvoyer votre dernier message ? Vous pouvez aussi ouvrir une demande dans « Mes demandes ».";
+            send({ type: 'text', text: fallback });
+            content = [...content.filter((c) => c.type !== 'tool_use'), { type: 'text', text: fallback.trim() }];
+            await admin.from('sav_chat_messages').insert({
+              conversation_id: convId,
+              role: 'assistant',
+              content,
+              display_text: textOf(content),
+              input_tokens: final.usage?.input_tokens ?? null,
+              output_tokens: final.usage?.output_tokens ?? null,
+              created_at: nextTs(),
+            });
+            break;
+          }
           const assistantRow = {
             conversation_id: convId,
             role: 'assistant',
