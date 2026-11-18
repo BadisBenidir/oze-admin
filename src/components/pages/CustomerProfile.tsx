@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, Mail, Phone, Calendar, MapPin, User, Package, Euro, Edit } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Calendar, MapPin, User, Package, Euro, Edit, Save, X, Loader2 } from 'lucide-react';
 import { CustomerWithDetails } from '../../hooks/useCustomers';
 
 interface CustomerProfileProps {
@@ -10,7 +10,24 @@ interface CustomerProfileProps {
   onBack: () => void;
 }
 
+/** Champs modifiables depuis l'admin (bouton « Modifier »). L'email n'en fait
+ * pas partie : c'est l'identifiant de connexion du client (auth). */
+interface EditForm {
+  first_name: string;
+  last_name: string;
+  phone: string;
+  birth_date: string;
+  address_line1: string;
+  address_line2: string;
+  postal_code: string;
+  city: string;
+  country: string;
+  newsletter: boolean;
+}
+
 interface CustomerProfileData extends CustomerWithDetails {
+  first_name: string;
+  last_name: string;
   // Données étendues pour le profil
   lastLoginDate?: string;
   registrationDate: string;
@@ -26,6 +43,82 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customerId, on
   const [customer, setCustomer] = useState<CustomerProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<EditForm | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const startEdit = () => {
+    if (!customer) return;
+    setSaveError(null);
+    setForm({
+      first_name: customer.first_name,
+      last_name: customer.last_name,
+      phone: customer.phone || '',
+      birth_date: customer.birth_date ? customer.birth_date.slice(0, 10) : '',
+      address_line1: customer.address_line1 || '',
+      address_line2: customer.address_line2 || '',
+      postal_code: customer.postal_code || '',
+      city: customer.city || '',
+      country: customer.country || '',
+      newsletter: Boolean(customer.newsletter),
+    });
+  };
+
+  const save = async () => {
+    if (!customer || !form) return;
+    setSaving(true);
+    setSaveError(null);
+    const nul = (v: string) => (v.trim() === '' ? null : v.trim());
+    try {
+      // .select() : une modification refusée par les droits de la base renvoie
+      // 0 ligne sans erreur — on le détecte au lieu d'afficher un faux succès.
+      const { data: prof, error: profErr } = await supabase
+        .from('profiles')
+        .update({ first_name: form.first_name.trim(), last_name: form.last_name.trim() })
+        .eq('id', customer.profile_id)
+        .select('id');
+      if (profErr) throw new Error(profErr.message);
+      if (!prof || prof.length === 0) throw new Error('Nom non enregistré : droits insuffisants sur le profil du client.');
+
+      const { data: cust, error: custErr } = await supabase
+        .from('customers')
+        .update({
+          phone: nul(form.phone),
+          birth_date: nul(form.birth_date),
+          address_line1: nul(form.address_line1),
+          address_line2: nul(form.address_line2),
+          postal_code: nul(form.postal_code),
+          city: nul(form.city),
+          country: nul(form.country),
+          newsletter: form.newsletter,
+        })
+        .eq('id', customer.id)
+        .select('id');
+      if (custErr) throw new Error(custErr.message);
+      if (!cust || cust.length === 0) throw new Error('Coordonnées non enregistrées : droits insuffisants sur la fiche client.');
+
+      setCustomer({
+        ...customer,
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
+        name: [form.first_name.trim(), form.last_name.trim()].filter(Boolean).join(' '),
+        phone: nul(form.phone),
+        birth_date: nul(form.birth_date),
+        address_line1: nul(form.address_line1),
+        address_line2: nul(form.address_line2),
+        postal_code: nul(form.postal_code),
+        city: nul(form.city),
+        country: nul(form.country),
+        newsletter: form.newsletter,
+        status: form.address_line1.trim() && form.city.trim() ? 'active' : 'inactive',
+      } as CustomerProfileData);
+      setForm(null);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Erreur inconnue');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     const fetchCustomerProfile = async () => {
@@ -76,6 +169,8 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customerId, on
           id: data.id,
           profile_id: data.profile_id,
           customer_code: data.customer_code,
+          first_name: data.profiles.first_name || '',
+          last_name: data.profiles.last_name || '',
           name: `${data.profiles.first_name} ${data.profiles.last_name}`.trim(),
           email: data.profiles.email,
           phone: data.phone,
@@ -157,10 +252,31 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customerId, on
           <Badge variant={customer.status === 'active' ? 'success' : 'secondary'}>
             {customer.status === 'active' ? 'Actif' : 'Inactif'}
           </Badge>
-          <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg">
-            <Edit className="h-4 w-4" />
-            Modifier
-          </button>
+          {form ? (
+            <>
+              <button
+                onClick={() => setForm(null)}
+                disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+                Annuler
+              </button>
+              <button
+                onClick={save}
+                disabled={saving || !form.first_name.trim()}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white hover:bg-gray-800 rounded-lg disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Enregistrer
+              </button>
+            </>
+          ) : (
+            <button onClick={startEdit} className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg">
+              <Edit className="h-4 w-4" />
+              Modifier
+            </button>
+          )}
         </div>
       </div>
 
@@ -169,6 +285,45 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customerId, on
         <h1 className="text-2xl font-bold text-gray-900">{customer.name}</h1>
         <p className="text-gray-600">Code client: {customer.customer_code}</p>
       </div>
+
+      {form && (
+        <Card className="mb-6">
+          <CardHeader>
+            <h3 className="text-lg font-semibold text-gray-900">Modifier les informations</h3>
+          </CardHeader>
+          <CardContent>
+            {saveError && <p className="mb-4 text-sm text-red-600">{saveError}</p>}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {([
+                ['first_name', 'Prénom', 'text'],
+                ['last_name', 'Nom', 'text'],
+                ['phone', 'Téléphone', 'tel'],
+                ['birth_date', 'Date de naissance', 'date'],
+                ['address_line1', 'Adresse', 'text'],
+                ['address_line2', "Complément d'adresse", 'text'],
+                ['postal_code', 'Code postal', 'text'],
+                ['city', 'Ville', 'text'],
+                ['country', 'Pays', 'text'],
+              ] as const).map(([key, label, type]) => (
+                <label key={key} className="block">
+                  <span className="text-sm text-gray-500">{label}</span>
+                  <input
+                    type={type}
+                    value={form[key]}
+                    onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+                  />
+                </label>
+              ))}
+              <label className="flex items-center gap-2 self-end pb-2">
+                <input type="checkbox" checked={form.newsletter} onChange={(e) => setForm({ ...form, newsletter: e.target.checked })} />
+                <span className="text-sm text-gray-700">Abonné à la newsletter</span>
+              </label>
+            </div>
+            <p className="mt-4 text-xs text-gray-400">L'email ({customer.email}) est l'identifiant de connexion du client : il n'est pas modifiable ici.</p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Informations principales */}
