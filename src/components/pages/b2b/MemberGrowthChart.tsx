@@ -93,12 +93,22 @@ export const MemberGrowthChart: React.FC = () => {
       .order('created_at', { ascending: true })
       .then(({ data, error: fetchError }) => {
         if (fetchError) setError(fetchError.message);
-        else
+        else {
+          // Abonnés et partenaires : UN par compte (un compte peut avoir
+          // plusieurs contacts « principaux ») ; contacts sans compte ignorés.
+          const seenAccounts = new Set<string>();
           setRows(
             ((data || []) as unknown as ContactRow[])
-              .filter(isCounted)
+              .filter((r) => r.reseller?.id && isCounted(r))
               .sort((a, b) => joinedAt(a).getTime() - joinedAt(b).getTime())
+              .filter((r) => {
+                if (isCommunityMember(r)) return true;
+                if (seenAccounts.has(r.reseller!.id)) return false;
+                seenAccounts.add(r.reseller!.id);
+                return true;
+              })
           );
+        }
       });
   }, []);
 
