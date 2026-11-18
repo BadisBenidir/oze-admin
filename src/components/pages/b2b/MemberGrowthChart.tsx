@@ -18,6 +18,8 @@ import type { Reseller } from '../../../hooks/useResellers';
  *   - Membres d'accompagnement : sous-comptes des communautés (account_type
  *     'company', contact non principal). Actif depuis son inscription, et :
  *       · qui paie son abonnement de communauté (0214) → toujours actif ;
+ *       · (aussi : abonnés payants venus par un code promo Vintellia, Matthieu,
+ *         Homade ou Dawsell — ACCOMPANYING_PARTNERS) ;
  *       · dont le groupe reste à 0 € (ex. Groupe 3 — 700 € déjà payés) →
  *         toujours actif ;
  *       · sinon actif tant que l'accompagnement était gratuit : jusqu'au
@@ -81,6 +83,9 @@ const dayLabel = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString
 const ONGOING = new Set(['active', 'trialing', 'past_due']);
 /** Groupe 3 — 700 € : accès déjà payé, compté actif sans abonnement mensuel. */
 const PREPAID_GROUP = 3;
+/** Partenaires de codes promo Club qui accompagnent leurs abonnés (club_promo_codes.partner_name) :
+ * un abonné payant venu par leur code compte en membre d'accompagnement. */
+const ACCOMPANYING_PARTNERS = /vintellia|homade|dawsell|matthieu/i;
 const isCommunityMember = (r: ContactRow) => r.reseller?.account_type === 'company' && !r.is_primary;
 
 /** Courbe jour par jour : nombre de périodes actives chaque jour, par clé. */
@@ -172,6 +177,19 @@ export const MemberGrowthChart: React.FC = () => {
 
   const communityIds = useMemo(() => new Set((prices || []).map((p) => p.reseller_id)), [prices]);
 
+  // Partenaire d'un abonné : code promo partenaire utilisé sur l'une de ses factures.
+  const partnerOf = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const pay of promoData?.payments || []) {
+      const partner = pay.promo_code ? partnerByCode.get(pay.promo_code.toUpperCase()) : undefined;
+      if (!partner) continue;
+      if (pay.reseller_id && !byKey.has(pay.reseller_id)) byKey.set(pay.reseller_id, partner);
+      if (pay.stripe_subscription_id && !byKey.has(pay.stripe_subscription_id)) byKey.set(pay.stripe_subscription_id, partner);
+    }
+    return (rs: NonNullable<ContactRow['reseller']>) =>
+      byKey.get(rs.id) || (rs.stripe_subscription_id ? byKey.get(rs.stripe_subscription_id) : undefined) || null;
+  }, [promoData, partnerByCode]);
+
   // Périodes d'activité (voir en-tête).
   const spans = useMemo<Span[] | null>(() => {
     if (!rows || !prices || !promoData) return null;
@@ -209,11 +227,14 @@ export const MemberGrowthChart: React.FC = () => {
           expectedMonthlyAmount(rs as unknown as Reseller, promoData) > 0;
         if (!paying) continue;
         seen.add(rs.id);
-        out.push({ row: r, group: 'subscribers', start, end: null });
+        // Abonnés venus d'un partenaire accompagnant (code promo) : membres d'accompagnement.
+        const partner = partnerOf(rs);
+        const accompanied = partner != null && ACCOMPANYING_PARTNERS.test(partner);
+        out.push({ row: r, group: accompanied ? 'members' : 'subscribers', start, end: null });
       }
     }
     return out;
-  }, [rows, prices, promoData]);
+  }, [rows, prices, promoData, partnerOf]);
 
   // ---- Vue par type ----
   const byType = useMemo(() => {
@@ -225,18 +246,10 @@ export const MemberGrowthChart: React.FC = () => {
   // ---- Vue par origine ----
   const byOrigin = useMemo(() => {
     if (!spans || spans.length === 0 || !promoData) return null;
-    // Partenaire d'un abonné : code promo partenaire utilisé sur l'une de ses factures.
-    const partnerOfReseller = new Map<string, string>();
-    for (const pay of promoData.payments) {
-      const partner = pay.promo_code ? partnerByCode.get(pay.promo_code.toUpperCase()) : undefined;
-      if (!partner) continue;
-      if (pay.reseller_id && !partnerOfReseller.has(pay.reseller_id)) partnerOfReseller.set(pay.reseller_id, partner);
-      if (pay.stripe_subscription_id && !partnerOfReseller.has(pay.stripe_subscription_id)) partnerOfReseller.set(pay.stripe_subscription_id, partner);
-    }
     const keyOf = (s: Span): string => {
       const rs = s.row.reseller!;
       if (rs.account_type === 'subscriber') {
-        return partnerOfReseller.get(rs.id) || (rs.stripe_subscription_id && partnerOfReseller.get(rs.stripe_subscription_id)) || DIRECT;
+        return partnerOf(rs) || DIRECT;
       }
       return communityIds.has(rs.id) ? (rs.company_name || 'Communauté').trim() : DIRECT;
     };
@@ -247,7 +260,7 @@ export const MemberGrowthChart: React.FC = () => {
     const colors = new Map(origins.map((o, i) => [o, o === DIRECT ? '#6b7280' : ORIGIN_COLORS[i % ORIGIN_COLORS.length]]));
     const series = buildSeries(spans, keyOf, origins, (k) => `o${origins.indexOf(k)}`);
     return { origins, colors, current, change, series };
-  }, [spans, promoData, partnerByCode, communityIds]);
+  }, [spans, promoData, partnerOf, communityIds]);
 
   const signed = (n: number) => `${n >= 0 ? '+' : '−'}${show(Math.abs(n))}`;
   const grandTotal = byType ? [...byType.current.values()].reduce((a, b) => a + b, 0) : 0;
@@ -354,7 +367,7 @@ export const MemberGrowthChart: React.FC = () => {
         )}
         <p className="text-xs text-gray-400">
           Comptes actifs chaque jour : abonnés qui paient ; membres d'accompagnement qui paient leur abonnement ou dont le groupe reste
-          gratuit (Groupe 3 — 700 €). Les autres membres comptent tant que l'accompagnement était gratuit, puis sortent le jour où le
+          gratuit (Groupe 3 — 700 €), dont les abonnés venus par un code Vintellia, Homade, Dawsell ou Matthieu. Les autres membres comptent tant que l'accompagnement était gratuit, puis sortent le jour où le
           prix de leur groupe est devenu payant. Entreprises partenaires non comptées.
         </p>
       </CardContent>
