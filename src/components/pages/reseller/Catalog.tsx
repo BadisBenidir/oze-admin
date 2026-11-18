@@ -94,8 +94,9 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
     // Pendant un drop, chaque ajout au panier de n'importe quel membre émet
     // un signal : sans limite, tous les membres rechargeaient le catalogue
     // en même temps et saturaient la base. Au plus un rechargement toutes
-    // les 8 s par onglet, décalé au hasard (2 à 7 s) pour étaler la charge.
-    // Onglet en arrière-plan : aucun rechargement, un seul au retour.
+    // les 5 s par onglet, décalé au hasard (1 à 4 s) pour étaler la charge.
+    // Onglet en arrière-plan : aucun rechargement, un rechargement immédiat
+    // au retour (le membre voit le catalogue à jour dès qu'il le regarde).
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let lastRun = 0;
     let pendingWhileHidden = false;
@@ -113,7 +114,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
         pendingWhileHidden = true;
         return;
       }
-      const wait = Math.max(lastRun + 8000 - Date.now(), 0) + 2000 + Math.random() * 5000;
+      const wait = Math.max(lastRun + 5000 - Date.now(), 0) + 1000 + Math.random() * 3000;
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
         run();
@@ -122,7 +123,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
     const onVisible = () => {
       if (!document.hidden && pendingWhileHidden) {
         pendingWhileHidden = false;
-        scheduleRefresh();
+        run();
       }
     };
     document.addEventListener('visibilitychange', onVisible);
