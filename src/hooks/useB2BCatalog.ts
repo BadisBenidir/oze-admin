@@ -148,7 +148,10 @@ export const useB2BCatalog = (isAuthenticated: boolean = false, instantBuy: bool
       // elle-même.
       let query = supabase
         .from('b2b_catalog')
-        .select('*, brand:brands(id, name), category:categories(id, name)', { count: 'exact' })
+        // Rechargement silencieux (signal de panier pendant un drop) : pas de
+        // count exact, qui recalcule toute la vue — le total de la page reste
+        // celui du dernier chargement complet. Allège la base pendant un drop.
+        .select('*, brand:brands(id, name), category:categories(id, name)', silent ? undefined : { count: 'exact' })
         .in('status', ['for-sale-b2b', 'instant-b2b', 'draft'])
         .eq('instant_buy', instantBuy);
 
@@ -204,7 +207,7 @@ export const useB2BCatalog = (isAuthenticated: boolean = false, instantBuy: bool
       }
       freshRef.current = fresh;
       composeItems();
-      setTotalCount(count || 0);
+      if (!silent) setTotalCount(count || 0);
     } catch (err) {
       console.error('Erreur lors du chargement du catalogue B2B:', err);
       setError(err instanceof Error ? err.message : 'Erreur inconnue');

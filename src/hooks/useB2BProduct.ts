@@ -68,16 +68,28 @@ export const useB2BProduct = (productId: string | undefined, isAuthenticated: bo
   useEffect(() => {
     if (!productId || !isAuthenticated) return;
 
+    // Une pièce très regardée pendant un drop reçoit des rafales de signaux :
+    // un seul rechargement, décalé au hasard (0,5 à 2,5 s) pour ne pas que tous
+    // les membres sur la fiche interrogent la base au même instant.
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        fetchProductRef.current(true);
+      }, 500 + Math.random() * 2000);
+    };
     const channel = supabase
       .channel(`product-reservation-signal-${productId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'product_reservation_signals', filter: `product_id=eq.${productId}` },
-        () => fetchProductRef.current(true)
+        schedule
       )
       .subscribe();
 
     return () => {
+      if (timer) clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, [productId, isAuthenticated]);

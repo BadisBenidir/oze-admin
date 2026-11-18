@@ -94,18 +94,38 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
     // Pendant un drop, chaque ajout au panier de n'importe quel membre émet
     // un signal : sans limite, tous les membres rechargeaient le catalogue
     // en même temps et saturaient la base. Au plus un rechargement toutes
-    // les 5 s par onglet, décalé au hasard (1 à 4 s) pour étaler la charge.
+    // les 8 s par onglet, décalé au hasard (2 à 7 s) pour étaler la charge.
+    // Onglet en arrière-plan : aucun rechargement, un seul au retour.
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let lastRun = 0;
+    let pendingWhileHidden = false;
+    const run = () => {
+      if (document.hidden) {
+        pendingWhileHidden = true;
+        return;
+      }
+      lastRun = Date.now();
+      refreshRef.current();
+    };
     const scheduleRefresh = () => {
       if (debounceTimer) return;
-      const wait = Math.max(lastRun + 5000 - Date.now(), 0) + 1000 + Math.random() * 3000;
+      if (document.hidden) {
+        pendingWhileHidden = true;
+        return;
+      }
+      const wait = Math.max(lastRun + 8000 - Date.now(), 0) + 2000 + Math.random() * 5000;
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
-        lastRun = Date.now();
-        refreshRef.current();
+        run();
       }, wait);
     };
+    const onVisible = () => {
+      if (!document.hidden && pendingWhileHidden) {
+        pendingWhileHidden = false;
+        scheduleRefresh();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
 
     const channel = supabase
       .channel(instantBuy ? 'instant-buy-reservation-signals' : 'catalog-reservation-signals')
@@ -115,9 +135,10 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
     // Filet de sécurité si la connexion Realtime se coupe (veille de
     // l'onglet, réseau instable...) — bien plus espacé qu'avant puisque ce
     // n'est plus le mécanisme principal de mise à jour.
-    const fallbackInterval = setInterval(refreshRef.current, 60000);
+    const fallbackInterval = setInterval(run, 60000);
 
     return () => {
+      document.removeEventListener('visibilitychange', onVisible);
       if (debounceTimer) clearTimeout(debounceTimer);
       clearInterval(fallbackInterval);
       supabase.removeChannel(channel);
