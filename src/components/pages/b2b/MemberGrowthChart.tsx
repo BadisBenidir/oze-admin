@@ -4,165 +4,227 @@ import { TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { supabase } from '../../../lib/supabase';
 import { useHideFigures } from '../../../hooks/useHideFigures';
-import { useSubscriptionPromos, lifetimeFreeCode } from '../../../hooks/useSubscriptionPromos';
+import { useSubscriptionPromos, expectedMonthlyAmount } from '../../../hooks/useSubscriptionPromos';
 import type { Reseller } from '../../../hooks/useResellers';
 
 /**
- * Croissance des membres depuis le lancement de la plateforme : nombre
- * cumulé, jour après jour, de comptes ayant rejoint le portail — date
- * d'arrivée = reseller_contacts.created_at.
- *   - Abonnés : comptes Club B2B payants (resellers.account_type =
- *     'subscriber'). Un abonné gratuit à vie (code promo Club 100 % à vie,
- *     même règle que le badge « Gratuit à vie » de la liste des abonnés)
- *     est compté en Partenaire ;
- *   - Membres d'accompagnement : sous-comptes des entreprises partenaires
- *     (account_type 'company', contact non principal) qui PAIENT leur
- *     abonnement de communauté (community_sub_status actif, 0214), datés du
- *     début de cet abonnement. Les membres arrivés quand l'accompagnement
- *     était gratuit et qui n'ont jamais souscrit ne sont pas comptés ;
- *   - Partenaires : contact principal de chaque entreprise partenaire, plus
- *     les abonnés gratuits à vie.
- * Les comptes supprimés depuis n'apparaissent plus (aucun historique).
+ * Évolution des comptes ACTIFS depuis le lancement de la plateforme, jour
+ * après jour (pas un cumul d'inscriptions : un compte qui devient inactif
+ * fait baisser la courbe). Décision admin : seuls les comptes actifs comptent.
+ *   - Abonnés : comptes Club (account_type 'subscriber') qui PAIENT — même
+ *     règle que la section « Payants » de la liste des abonnés (compte actif,
+ *     abonnement en cours, montant mensuel > 0), un par compte, depuis leur
+ *     inscription. Accès gratuits (dont gratuit à vie) non comptés.
+ *   - Membres d'accompagnement : sous-comptes des communautés (account_type
+ *     'company', contact non principal). Actif depuis son inscription, et :
+ *       · qui paie son abonnement de communauté (0214) → toujours actif ;
+ *       · dont le groupe reste à 0 € (ex. Groupe 3 — 700 € déjà payés) →
+ *         toujours actif ;
+ *       · sinon actif tant que l'accompagnement était gratuit : jusqu'au
+ *         premier prix > 0 de son groupe (community_group_prices, même règle
+ *         que la coupure d'accès 0221 ; non classé : premier prix payant de la
+ *         communauté), prolongé par un accès offert (free_access_until, 0222).
+ *         C'est la chute visible au passage au payant.
+ *     Un accès retiré par l'admin (access_revoked_at, 0237) arrête l'activité.
+ * Les entreprises partenaires (contact principal) et les contacts sans compte
+ * ne sont pas comptés. Les comptes supprimés n'apparaissent plus.
  *
- * Vue « Par origine » : d'où vient chaque compte —
+ * Vue « Par origine » : mêmes comptes actifs, par provenance —
  *   - une communauté partenaire (entreprise avec des prix d'abonnement
- *     programmés, ex. Aurel Vinted) : tous ses comptes ;
- *   - un partenaire de code promo Club (club_promo_codes.partner_name, ex.
- *     Julia, Dawsell, Homade) : abonnés ayant souscrit avec un de ses codes ;
- *   - Direct : tout le reste (abonnés sans code partenaire, autres comptes).
+ *     programmés, ex. Aurel Vinted) : ses membres ;
+ *   - un partenaire de code promo Club (club_promo_codes.partner_name) :
+ *     abonnés ayant souscrit avec un de ses codes ;
+ *   - Direct : le reste.
  */
 
 const DIRECT = 'Direct';
 const ORIGIN_COLORS = ['#2563eb', '#db2777', '#d97706', '#0891b2', '#7c3aed', '#65a30d', '#dc2626', '#0f766e'];
+const DAY = 86_400_000;
 
-type Group = 'subscribers' | 'members' | 'partners';
+type Group = 'subscribers' | 'members';
 
 const SERIES: { key: Group; label: string; color: string }[] = [
   { key: 'subscribers', label: 'Abonnés', color: '#7c3aed' },
   { key: 'members', label: "Membres d'accompagnement", color: '#2563eb' },
-  { key: 'partners', label: 'Partenaires', color: '#059669' },
 ];
 
 interface ContactRow {
   created_at: string;
   is_primary: boolean;
   community_sub_status: string | null;
-  community_sub_started_at: string | null;
-  reseller: { id: string; company_name: string | null; account_type: string | null; subscription_plan: Reseller['subscription_plan']; stripe_subscription_id: string | null } | null;
+  member_group: number | null;
+  free_access_until: string | null;
+  access_revoked_at: string | null;
+  reseller: Pick<
+    Reseller,
+    'id' | 'company_name' | 'account_type' | 'status' | 'subscription_plan' | 'subscription_status' | 'subscription_amount' | 'stripe_subscription_id'
+  > | null;
+}
+
+interface PriceRow {
+  reseller_id: string;
+  member_group: number;
+  monthly_price: number | null;
+  effective_from: string;
+}
+
+/** Période d'activité d'un compte : [start, end[, end null = toujours actif. */
+interface Span {
+  row: ContactRow;
+  group: Group;
+  start: number;
+  end: number | null;
 }
 
 const dayKey = (d: Date) => d.toLocaleDateString('en-CA');
-
-// Abonnement de communauté en cours (même périmètre que useCommunityPayers).
-const PAYING_COMMUNITY = new Set(['active', 'trialing', 'past_due']);
-const isCommunityMember = (r: ContactRow) => r.reseller?.account_type === 'company' && !r.is_primary;
-/** Compté seulement s'il paie (membre d'accompagnement) ; les autres comptes toujours. */
-const isCounted = (r: ContactRow) => !isCommunityMember(r) || PAYING_COMMUNITY.has(r.community_sub_status || '');
-/** Date d'arrivée : début de l'abonnement payant pour un membre d'accompagnement. */
-const joinedAt = (r: ContactRow) => new Date((isCommunityMember(r) && r.community_sub_started_at) || r.created_at);
 const dayLabel = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+const ONGOING = new Set(['active', 'trialing', 'past_due']);
+/** Groupe 3 — 700 € : accès déjà payé, compté actif sans abonnement mensuel. */
+const PREPAID_GROUP = 3;
+const isCommunityMember = (r: ContactRow) => r.reseller?.account_type === 'company' && !r.is_primary;
+
+/** Courbe jour par jour : nombre de périodes actives chaque jour, par clé. */
+function buildSeries(spans: Span[], keyOf: (s: Span) => string, keys: string[], field: (k: string) => string) {
+  const delta = new Map<string, Map<string, number>>();
+  const bump = (t: number, k: string, n: number) => {
+    const d = dayKey(new Date(t));
+    if (!delta.has(d)) delta.set(d, new Map());
+    const m = delta.get(d)!;
+    m.set(k, (m.get(k) || 0) + n);
+  };
+  for (const s of spans) {
+    bump(s.start, keyOf(s), 1);
+    if (s.end != null && s.end <= Date.now()) bump(s.end, keyOf(s), -1);
+  }
+  const series: Array<Record<string, number | string>> = [];
+  if (spans.length === 0) return series;
+  const running = new Map<string, number>(keys.map((k) => [k, 0]));
+  const cursor = new Date(`${dayKey(new Date(Math.min(...spans.map((s) => s.start))))}T00:00:00`);
+  const today = new Date(`${dayKey(new Date())}T00:00:00`);
+  while (cursor <= today) {
+    const key = dayKey(cursor);
+    const d = delta.get(key);
+    if (d) for (const [k, n] of d) running.set(k, (running.get(k) || 0) + n);
+    const point: Record<string, number | string> = { date: key, label: dayLabel(key) };
+    let total = 0;
+    for (const k of keys) {
+      point[field(k)] = running.get(k) || 0;
+      total += running.get(k) || 0;
+    }
+    point.total = total;
+    series.push(point);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return series;
+}
+
+/** Actifs aujourd'hui et variation nette sur 30 jours, par clé. */
+function countsOf(spans: Span[], keyOf: (s: Span) => string) {
+  const now = Date.now();
+  const ago = now - 30 * DAY;
+  const activeAt = (s: Span, t: number) => s.start <= t && (s.end == null || s.end > t);
+  const current = new Map<string, number>();
+  const change = new Map<string, number>();
+  for (const s of spans) {
+    const k = keyOf(s);
+    const diff = (activeAt(s, now) ? 1 : 0) - (activeAt(s, ago) ? 1 : 0);
+    if (activeAt(s, now)) current.set(k, (current.get(k) || 0) + 1);
+    change.set(k, (change.get(k) || 0) + diff);
+  }
+  return { current, change };
+}
 
 export const MemberGrowthChart: React.FC = () => {
   const [rows, setRows] = useState<ContactRow[] | null>(null);
+  const [prices, setPrices] = useState<PriceRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { show } = useHideFigures();
   const promoData = useSubscriptionPromos(true);
   const [view, setView] = useState<'type' | 'origin'>('type');
-  // Origine : partenaires des codes promo Club et communautés à abonnement.
   const [partnerByCode, setPartnerByCode] = useState<Map<string, string>>(new Map());
-  const [communityIds, setCommunityIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     Promise.all([
       supabase.from('club_promo_codes').select('code, partner_name'),
-      supabase.from('community_group_prices').select('reseller_id'),
+      supabase.from('community_group_prices').select('reseller_id, member_group, monthly_price, effective_from'),
     ]).then(([codesRes, pricesRes]) => {
       const map = new Map<string, string>();
       for (const c of (codesRes.data || []) as { code: string; partner_name: string | null }[]) {
         if (c.partner_name?.trim()) map.set(c.code.toUpperCase(), c.partner_name.trim());
       }
       setPartnerByCode(map);
-      setCommunityIds(new Set(((pricesRes.data || []) as { reseller_id: string }[]).map((r) => r.reseller_id)));
+      if (pricesRes.error) setError(pricesRes.error.message);
+      setPrices((pricesRes.data || []) as PriceRow[]);
     });
   }, []);
 
   useEffect(() => {
     supabase
       .from('reseller_contacts')
-      .select('created_at, is_primary, community_sub_status, community_sub_started_at, reseller:resellers(id, company_name, account_type, subscription_plan, stripe_subscription_id)')
-      .order('created_at', { ascending: true })
+      .select(
+        'created_at, is_primary, community_sub_status, member_group, free_access_until, access_revoked_at, reseller:resellers(id, company_name, account_type, status, subscription_plan, subscription_status, subscription_amount, stripe_subscription_id)'
+      )
       .then(({ data, error: fetchError }) => {
         if (fetchError) setError(fetchError.message);
-        else {
-          // Abonnés et partenaires : UN par compte (un compte peut avoir
-          // plusieurs contacts « principaux ») ; contacts sans compte ignorés.
-          const seenAccounts = new Set<string>();
-          setRows(
-            ((data || []) as unknown as ContactRow[])
-              .filter((r) => r.reseller?.id && isCounted(r))
-              .sort((a, b) => joinedAt(a).getTime() - joinedAt(b).getTime())
-              .filter((r) => {
-                if (isCommunityMember(r)) return true;
-                if (seenAccounts.has(r.reseller!.id)) return false;
-                seenAccounts.add(r.reseller!.id);
-                return true;
-              })
-          );
-        }
+        else setRows((data || []) as unknown as ContactRow[]);
       });
   }, []);
 
+  const communityIds = useMemo(() => new Set((prices || []).map((p) => p.reseller_id)), [prices]);
 
-  const { series, totals, last30, lifetimeFreeCount } = useMemo(() => {
-    const totals: Record<Group, number> = { subscribers: 0, members: 0, partners: 0 };
-    const last30: Record<Group, number> = { subscribers: 0, members: 0, partners: 0 };
-    if (!rows || rows.length === 0 || !promoData) return { series: [], totals, last30, lifetimeFreeCount: 0 };
-
-    // Abonnés gratuits à vie : comptés en Partenaires, pas en Abonnés.
-    const isLifetimeFree = (r: ContactRow) =>
-      r.reseller?.account_type === 'subscriber' && Boolean(lifetimeFreeCode(r.reseller as unknown as Reseller, promoData));
-    const groupOf = (r: ContactRow): Group =>
-      r.reseller?.account_type === 'subscriber'
-        ? isLifetimeFree(r) ? 'partners' : 'subscribers'
-        : r.is_primary ? 'partners' : 'members';
-    const lifetimeFreeCount = rows.filter(isLifetimeFree).length;
-
-    const joinsByDay = new Map<string, Record<Group, number>>();
-    const since30 = Date.now() - 30 * 86_400_000;
+  // Périodes d'activité (voir en-tête).
+  const spans = useMemo<Span[] | null>(() => {
+    if (!rows || !prices || !promoData) return null;
+    // Premier jour où le groupe (ou, pour un non classé, la communauté) devient payant.
+    const paidFrom = new Map<string, number>();
+    for (const p of prices) {
+      if (!(Number(p.monthly_price) > 0)) continue;
+      const t = new Date(`${p.effective_from}T00:00:00`).getTime();
+      for (const k of [`${p.reseller_id}:${p.member_group}`, `${p.reseller_id}:*`]) {
+        if (!paidFrom.has(k) || t < paidFrom.get(k)!) paidFrom.set(k, t);
+      }
+    }
+    const out: Span[] = [];
+    const seen = new Set<string>();
     for (const r of rows) {
-      const g = groupOf(r);
-      const key = dayKey(joinedAt(r));
-      if (!joinsByDay.has(key)) joinsByDay.set(key, { subscribers: 0, members: 0, partners: 0 });
-      joinsByDay.get(key)![g] += 1;
-      totals[g] += 1;
-      if (joinedAt(r).getTime() >= since30) last30[g] += 1;
+      const rs = r.reseller;
+      if (!rs?.id) continue;
+      const start = new Date(r.created_at).getTime();
+      const revoked = r.access_revoked_at ? new Date(r.access_revoked_at).getTime() : null;
+      if (isCommunityMember(r)) {
+        let end: number | null = null;
+        // Groupe 3 (700 € déjà payés) : accès gratuit, toujours actif.
+        if (!ONGOING.has(r.community_sub_status || '') && r.member_group !== PREPAID_GROUP) {
+          const cut = paidFrom.get(r.member_group != null ? `${rs.id}:${r.member_group}` : `${rs.id}:*`) ?? null;
+          const free = r.free_access_until ? new Date(r.free_access_until).getTime() : null;
+          end = cut == null ? null : Math.max(cut, free ?? 0);
+        }
+        if (revoked != null) end = end == null ? revoked : Math.min(end, revoked);
+        if (end != null && end <= start) continue; // jamais actif
+        out.push({ row: r, group: 'members', start, end });
+      } else if (rs.account_type === 'subscriber' && !seen.has(rs.id)) {
+        const paying =
+          rs.status === 'active' &&
+          ONGOING.has(rs.subscription_status || '') &&
+          expectedMonthlyAmount(rs as unknown as Reseller, promoData) > 0;
+        if (!paying) continue;
+        seen.add(rs.id);
+        out.push({ row: r, group: 'subscribers', start, end: null });
+      }
     }
+    return out;
+  }, [rows, prices, promoData]);
 
-    // Un point par jour, du premier inscrit à aujourd'hui (courbe cumulée).
-    const series: Array<Record<string, number | string>> = [];
-    const running: Record<Group, number> = { subscribers: 0, members: 0, partners: 0 };
-    const cursor = new Date(`${dayKey(joinedAt(rows[0]))}T00:00:00`);
-    const today = new Date(`${dayKey(new Date())}T00:00:00`);
-    while (cursor <= today) {
-      const key = dayKey(cursor);
-      const joins = joinsByDay.get(key);
-      if (joins) for (const s of SERIES) running[s.key] += joins[s.key];
-      series.push({
-        date: key,
-        label: dayLabel(key),
-        ...running,
-        total: running.subscribers + running.members + running.partners,
-      });
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    return { series, totals, last30, lifetimeFreeCount };
-  }, [rows, promoData]);
-
-  const grandTotal = totals.subscribers + totals.members + totals.partners;
+  // ---- Vue par type ----
+  const byType = useMemo(() => {
+    if (!spans) return null;
+    const keyOf = (s: Span) => s.group;
+    return { ...countsOf(spans, keyOf), series: buildSeries(spans, keyOf, SERIES.map((s) => s.key), (k) => k) };
+  }, [spans]);
 
   // ---- Vue par origine ----
   const byOrigin = useMemo(() => {
-    if (!rows || rows.length === 0 || !promoData) return null;
+    if (!spans || spans.length === 0 || !promoData) return null;
     // Partenaire d'un abonné : code promo partenaire utilisé sur l'une de ses factures.
     const partnerOfReseller = new Map<string, string>();
     for (const pay of promoData.payments) {
@@ -171,58 +233,31 @@ export const MemberGrowthChart: React.FC = () => {
       if (pay.reseller_id && !partnerOfReseller.has(pay.reseller_id)) partnerOfReseller.set(pay.reseller_id, partner);
       if (pay.stripe_subscription_id && !partnerOfReseller.has(pay.stripe_subscription_id)) partnerOfReseller.set(pay.stripe_subscription_id, partner);
     }
-    const originOf = (r: ContactRow): string => {
-      const rs = r.reseller;
-      if (!rs) return DIRECT;
+    const keyOf = (s: Span): string => {
+      const rs = s.row.reseller!;
       if (rs.account_type === 'subscriber') {
         return partnerOfReseller.get(rs.id) || (rs.stripe_subscription_id && partnerOfReseller.get(rs.stripe_subscription_id)) || DIRECT;
       }
       return communityIds.has(rs.id) ? (rs.company_name || 'Communauté').trim() : DIRECT;
     };
-
-    const totalsBy = new Map<string, number>();
-    const last30By = new Map<string, number>();
-    const joinsByDay = new Map<string, Map<string, number>>();
-    const since30 = Date.now() - 30 * 86_400_000;
-    for (const r of rows) {
-      const o = originOf(r);
-      const key = dayKey(joinedAt(r));
-      if (!joinsByDay.has(key)) joinsByDay.set(key, new Map());
-      const day = joinsByDay.get(key)!;
-      day.set(o, (day.get(o) || 0) + 1);
-      totalsBy.set(o, (totalsBy.get(o) || 0) + 1);
-      if (joinedAt(r).getTime() >= since30) last30By.set(o, (last30By.get(o) || 0) + 1);
-    }
-    // Ordre : communautés et partenaires par taille, « Direct » en dernier.
-    const origins = [...totalsBy.keys()].sort((a, b) => (a === DIRECT ? 1 : b === DIRECT ? -1 : (totalsBy.get(b) || 0) - (totalsBy.get(a) || 0)));
+    const { current, change } = countsOf(spans, keyOf);
+    const all = new Set(spans.map(keyOf));
+    // Ordre : par nombre d'actifs, « Direct » en dernier.
+    const origins = [...all].sort((a, b) => (a === DIRECT ? 1 : b === DIRECT ? -1 : (current.get(b) || 0) - (current.get(a) || 0)));
     const colors = new Map(origins.map((o, i) => [o, o === DIRECT ? '#6b7280' : ORIGIN_COLORS[i % ORIGIN_COLORS.length]]));
+    const series = buildSeries(spans, keyOf, origins, (k) => `o${origins.indexOf(k)}`);
+    return { origins, colors, current, change, series };
+  }, [spans, promoData, partnerByCode, communityIds]);
 
-    const series: Array<Record<string, number | string>> = [];
-    const running = new Map<string, number>(origins.map((o) => [o, 0]));
-    const cursor = new Date(`${dayKey(joinedAt(rows[0]))}T00:00:00`);
-    const today = new Date(`${dayKey(new Date())}T00:00:00`);
-    while (cursor <= today) {
-      const key = dayKey(cursor);
-      const joins = joinsByDay.get(key);
-      if (joins) for (const [o, n] of joins) running.set(o, (running.get(o) || 0) + n);
-      const point: Record<string, number | string> = { date: key, label: dayLabel(key) };
-      let total = 0;
-      origins.forEach((o, i) => {
-        point[`o${i}`] = running.get(o) || 0;
-        total += running.get(o) || 0;
-      });
-      point.total = total;
-      series.push(point);
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    return { origins, colors, totalsBy, last30By, series };
-  }, [rows, promoData, partnerByCode, communityIds]);
+  const signed = (n: number) => `${n >= 0 ? '+' : '−'}${show(Math.abs(n))}`;
+  const grandTotal = byType ? [...byType.current.values()].reduce((a, b) => a + b, 0) : 0;
+  const grandChange = byType ? [...byType.change.values()].reduce((a, b) => a + b, 0) : 0;
 
   return (
     <Card>
       <CardHeader>
         <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-gray-400" /> Croissance des membres depuis le lancement
+          <TrendingUp className="h-4 w-4 text-gray-400" /> Membres actifs depuis le lancement
         </h3>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -245,9 +280,9 @@ export const MemberGrowthChart: React.FC = () => {
           <>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
               <div className="rounded-lg border border-gray-100 p-3">
-                <p className="text-xs text-gray-500">Total membres</p>
+                <p className="text-xs text-gray-500">Membres actifs</p>
                 <p className="text-xl font-semibold tabular-nums text-gray-900">{show(grandTotal)}</p>
-                <p className="text-xs text-gray-500">+{show(last30.subscribers + last30.members + last30.partners)} sur 30 jours</p>
+                <p className="text-xs text-gray-500">{signed(grandChange)} sur 30 jours</p>
               </div>
               {byOrigin.origins.map((o) => (
                 <div key={o} className="rounded-lg border border-gray-100 p-3">
@@ -255,8 +290,8 @@ export const MemberGrowthChart: React.FC = () => {
                     <span className="h-2 w-2 rounded-full" style={{ backgroundColor: byOrigin.colors.get(o) }} />
                     {o === DIRECT ? 'Direct (sans partenaire)' : o}
                   </p>
-                  <p className="text-xl font-semibold tabular-nums text-gray-900">{show(byOrigin.totalsBy.get(o) || 0)}</p>
-                  <p className="text-xs text-gray-500">+{show(byOrigin.last30By.get(o) || 0)} sur 30 jours</p>
+                  <p className="text-xl font-semibold tabular-nums text-gray-900">{show(byOrigin.current.get(o) || 0)}</p>
+                  <p className="text-xs text-gray-500">{signed(byOrigin.change.get(o) || 0)} sur 30 jours</p>
                 </div>
               ))}
             </div>
@@ -275,57 +310,52 @@ export const MemberGrowthChart: React.FC = () => {
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-xs text-gray-400">
-              Origine : communauté partenaire (tous ses comptes), partenaire du code promo Club utilisé à l'abonnement (Codes promo Club → champ
-              « Partenaire »), sinon Direct.
-            </p>
           </>
         ) : (
-        <>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="rounded-lg border border-gray-100 p-3">
-            <p className="text-xs text-gray-500">Total membres</p>
-            <p className="text-xl font-semibold text-gray-900 tabular-nums">{show(grandTotal)}</p>
-            <p className="text-xs text-gray-500">+{show(last30.subscribers + last30.members + last30.partners)} sur 30 jours</p>
-          </div>
-          {SERIES.map((s) => (
-            <div key={s.key} className="rounded-lg border border-gray-100 p-3">
-              <p className="text-xs text-gray-500 flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
-                {s.label}
-              </p>
-              <p className="text-xl font-semibold text-gray-900 tabular-nums">{show(totals[s.key])}</p>
-              {s.key === 'partners' && lifetimeFreeCount > 0 && (
-                <p className="text-xs text-gray-400">dont {show(lifetimeFreeCount)} abonné{lifetimeFreeCount > 1 ? 's' : ''} gratuit{lifetimeFreeCount > 1 ? 's' : ''} à vie</p>
-              )}
-              <p className="text-xs text-gray-500">+{show(last30[s.key])} sur 30 jours</p>
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="rounded-lg border border-gray-100 p-3">
+                <p className="text-xs text-gray-500">Membres actifs</p>
+                <p className="text-xl font-semibold text-gray-900 tabular-nums">{show(grandTotal)}</p>
+                <p className="text-xs text-gray-500">{signed(grandChange)} sur 30 jours</p>
+              </div>
+              {SERIES.map((s) => (
+                <div key={s.key} className="rounded-lg border border-gray-100 p-3">
+                  <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
+                    {s.label}
+                  </p>
+                  <p className="text-xl font-semibold text-gray-900 tabular-nums">{show(byType?.current.get(s.key) || 0)}</p>
+                  <p className="text-xs text-gray-500">{signed(byType?.change.get(s.key) || 0)} sur 30 jours</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        <div className="h-72">
-          {rows === null || !promoData ? (
-            <div className="h-full bg-gray-50 rounded-lg animate-pulse" />
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={series} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} interval="preserveStartEnd" minTickGap={24} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} />
-                <Tooltip />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="total" name="Total" stroke="#111827" strokeWidth={2} dot={false} />
-                {SERIES.map((s) => (
-                  <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-        </>
+            <div className="h-72">
+              {!byType ? (
+                <div className="h-full bg-gray-50 rounded-lg animate-pulse" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={byType.series} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} interval="preserveStartEnd" minTickGap={24} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} />
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="total" name="Total" stroke="#111827" strokeWidth={2} dot={false} />
+                    {SERIES.map((s) => (
+                      <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </>
         )}
         <p className="text-xs text-gray-400">
-          Date d'arrivée = création du compte sur le portail. Les comptes supprimés depuis ne sont pas comptés.
+          Comptes actifs chaque jour : abonnés qui paient ; membres d'accompagnement qui paient leur abonnement ou dont le groupe reste
+          gratuit (Groupe 3 — 700 €). Les autres membres comptent tant que l'accompagnement était gratuit, puis sortent le jour où le
+          prix de leur groupe est devenu payant. Entreprises partenaires non comptées.
         </p>
       </CardContent>
     </Card>
