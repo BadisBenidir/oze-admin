@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   BadgeCheck, AlertCircle, ImageOff, Link as LinkIcon, Upload, X, ExternalLink,
   Trash2, Euro, TrendingUp, TrendingDown, Wallet, Pencil, Check, Eye, Package,
@@ -6,6 +6,7 @@ import {
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
+import { supabase } from '../../../lib/supabase';
 import { useEntrupyCertificates, useEntrupyManualAdjustment, EntrupyCertificateItem } from '../../../hooks/useEntrupyCertificates';
 
 type StatusFilter = 'all' | 'pending' | 'completed';
@@ -463,6 +464,18 @@ export const EntrupyCertificates: React.FC = () => {
   const revenueEur = paidRealized * SALE_PRICE_EUR;
   const profitEur = revenueEur - costEur;
 
+  // Total depuis le lancement : toutes les demandes payées sur la plateforme
+  // + tous les certificats hors plateforme saisis, tous mois confondus.
+  const [manualAllTime, setManualAllTime] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isAdmin) return;
+    supabase
+      .from('entrupy_manual_adjustments')
+      .select('count')
+      .then(({ data }) => setManualAllTime(((data || []) as { count: number }[]).reduce((sum, r) => sum + (Number(r.count) || 0), 0)));
+  }, [isAdmin, manualAdjustment.count]);
+  const soldAllTime = items.filter((i) => i.paid_at).length + (manualAllTime ?? 0);
+
   return (
     <div className="p-4 md:p-6">
       <div className="mb-6">
@@ -535,6 +548,11 @@ export const EntrupyCertificates: React.FC = () => {
             {breakEvenReached
               ? `Seuil de rentabilité atteint (${BREAKEVEN_COUNT}ᵉ certificat du mois passé)`
               : `Seuil de rentabilité à ${BREAKEVEN_COUNT} certificats — encore ${BREAKEVEN_COUNT - quotaRealized} ce mois-ci`}
+          </p>
+          <p className="text-sm text-gray-700 mt-2">
+            Depuis le lancement : <strong>{soldAllTime} certificat{soldAllTime > 1 ? 's' : ''} vendu{soldAllTime > 1 ? 's' : ''}</strong> —{' '}
+            <strong>{eur(soldAllTime * SALE_PRICE_EUR)} €</strong> de chiffre d'affaires
+            {manualAllTime ? ` (dont ${manualAllTime} hors plateforme)` : ''}
           </p>
         </div>
       )}
