@@ -11,6 +11,7 @@ import { LabelShareModal } from './LabelShareModal';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
 import { supabase } from '../../../lib/supabase';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
+import { ProductDetail } from '../ProductDetail';
 
 interface ShipmentDetailModalProps {
   shipment: AdminShipment | null;
@@ -69,9 +70,12 @@ interface ShippedItemRowProps {
   splitMode: boolean;
   selected: boolean;
   onToggleSelect: (itemId: string) => void;
+  /** Ouvre la fiche produit (clic sur la photo ou le nom). */
+  onOpenProduct: (productId: string) => void;
 }
 
-const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, onBackToReady, reverting, splitMode, selected, onToggleSelect }) => {
+const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, onBackToReady, reverting, splitMode, selected, onToggleSelect, onOpenProduct }) => {
+  const open = item.product_id ? () => onOpenProduct(item.product_id) : undefined;
   const product = item.product;
   const image = product?.images?.[product.main_image_index] || product?.images?.[0];
   return (
@@ -84,13 +88,23 @@ const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, onBackT
           className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400 flex-shrink-0"
         />
       )}
-      {image ? (
-        <img src={image} alt={product?.name || 'Article'} className="h-10 w-10 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
-      ) : (
-        <div className="h-10 w-10 rounded-lg bg-gray-100 flex-shrink-0" />
-      )}
+      <button type="button" onClick={open} disabled={!open} className="flex-shrink-0 disabled:cursor-default" title="Voir la fiche produit">
+        {image ? (
+          <img src={image} alt={product?.name || 'Article'} className="h-10 w-10 rounded-lg object-cover border border-gray-100 hover:opacity-80" />
+        ) : (
+          <div className="h-10 w-10 rounded-lg bg-gray-100" />
+        )}
+      </button>
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-gray-900 font-medium truncate">{product?.name || 'Article'}</p>
+        <button
+          type="button"
+          onClick={open}
+          disabled={!open}
+          className="block max-w-full truncate text-left text-sm text-gray-900 font-medium hover:underline disabled:no-underline disabled:cursor-default"
+          title="Voir la fiche produit"
+        >
+          {product?.name || 'Article'}
+        </button>
         <p className="text-xs text-gray-500">
           {product?.brand?.name && <span>{product.brand.name} · </span>}
           Réf. {itemRef(item)}
@@ -145,6 +159,7 @@ const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, onBackT
 export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipment, onClose, onGenerated, activeShipments = [] }) => {
   const { download: downloadLabel, downloadingUrl, pendingFile: pendingLabel, clearPendingFile: clearPendingLabel } = useDownloadShipmentLabel();
   const { sync: syncSendcloud } = useSendcloudSync();
+  const [viewingProductId, setViewingProductId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [revertingId, setRevertingId] = useState<string | null>(null);
@@ -729,6 +744,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                       splitMode={splitMode}
                       selected={selectedForSplit.has(item.id)}
                       onToggleSelect={toggleSelectForSplit}
+                      onOpenProduct={setViewingProductId}
                     />
                   ))}
                 </div>
@@ -854,6 +870,12 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
             onClose();
           }}
         />
+      )}
+
+      {viewingProductId && (
+        <div className="fixed inset-0 z-[80] bg-white overflow-y-auto">
+          <ProductDetail productId={viewingProductId} onBack={() => setViewingProductId(null)} />
+        </div>
       )}
     </div>
   );
