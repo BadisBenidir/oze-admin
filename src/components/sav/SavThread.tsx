@@ -95,7 +95,11 @@ export const SavThread: React.FC<{
   viewer: 'team' | 'client';
   /** Client : répondre à une question Oui / Non (absent = boutons inactifs). */
   onAnswerYesNo?: (messageId: string, answer: 'yes' | 'no') => Promise<void>;
-}> = ({ messages, viewer, onAnswerYesNo }) => {
+  /** Équipe : retirer l'attente de réponse Oui / Non d'une proposition de
+   * remboursement détectée à tort (sav_admin_set_pending_action 'dismissed'). */
+  onRemoveYesNo?: (message: SavThreadMessage) => Promise<void>;
+}> = ({ messages, viewer, onAnswerYesNo, onRemoveYesNo }) => {
+  const [removing, setRemoving] = useState<string | null>(null);
   const [answering, setAnswering] = useState<string | null>(null);
   const urls = useSignedAttachmentUrls(messages);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -175,7 +179,28 @@ export const SavThread: React.FC<{
                       </button>
                     ))
                   ) : (
-                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">En attente d'une réponse Oui / Non</span>
+                    <>
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">En attente d'une réponse Oui / Non</span>
+                      {viewer === 'team' && onRemoveYesNo && m.action?.type === 'refund' && (
+                        <button
+                          type="button"
+                          disabled={removing !== null}
+                          onClick={async () => {
+                            setRemoving(m.id);
+                            try {
+                              await onRemoveYesNo(m);
+                            } finally {
+                              setRemoving(null);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                          title="Ce message ne propose pas de remboursement : le client ne verra plus les boutons Oui / Non"
+                        >
+                          {removing === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                          Retirer l'attente de réponse
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               )}

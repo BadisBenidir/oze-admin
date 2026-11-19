@@ -458,7 +458,7 @@ export const SavTicketDetail: React.FC<{ ticketId: string; onBack: () => void; o
           )}
 
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <SavThread viewer="team" messages={messages} />
+            <SavThread viewer="team" messages={messages} onRemoveYesNo={dismissProposal} />
             {live.otherTyping && <SavTypingIndicator label={`${ticket.client_name || 'Le client'} écrit…`} />}
           </div>
 
