@@ -132,20 +132,36 @@ export const ReadyToShipManager: React.FC = () => {
       return norm(haystack);
   };
 
-  const { visible, notFound } = useMemo(() => {
-    const inTab = rows.filter((r) => (filter === 'todo' ? !isDone(r) : isDone(r)));
-    if (terms.length === 0) return { visible: inTab, notFound: [] as string[] };
-    const hay = new Map(inTab.map((r) => [r.id, haystackOf(r)]));
-    const matched = inTab.filter((r) => terms.some((t) => hay.get(r.id)!.includes(t)));
-    const missing = terms.length > 1 ? terms.filter((t) => !inTab.some((r) => hay.get(r.id)!.includes(t))) : [];
-    return { visible: matched, notFound: missing };
+  const inCurrentTab = (r: Row) => (filter === 'todo' ? !isDone(r) : isDone(r));
+
+  // Recherche : les articles de l'onglet, puis ceux trouvés dans l'autre
+  // onglet (ex. déjà prêts), et les recherches introuvables partout.
+  const { visible, inOtherTab, notFound } = useMemo(() => {
+    const inTab = rows.filter(inCurrentTab);
+    if (terms.length === 0) return { visible: inTab, inOtherTab: [] as string[], notFound: [] as string[] };
+    const hay = new Map(rows.map((r) => [r.id, haystackOf(r)]));
+    const matches = (r: Row) => terms.some((t) => hay.get(r.id)!.includes(t));
+    const matchedHere = inTab.filter(matches);
+    const matchedOther = rows.filter((r) => !inCurrentTab(r) && matches(r));
+    const other: string[] = [];
+    const missing: string[] = [];
+    if (terms.length > 1) {
+      for (const t of terms) {
+        if (inTab.some((r) => hay.get(r.id)!.includes(t))) continue;
+        if (matchedOther.some((r) => hay.get(r.id)!.includes(t))) other.push(t);
+        else missing.push(t);
+      }
+    }
+    return { visible: [...matchedHere, ...matchedOther], inOtherTab: other, notFound: missing };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, terms, filter]);
 
   const todoCount = rows.filter((r) => !isDone(r)).length;
   const readyCount = rows.length - todoCount;
   const selectable = filter === 'todo';
-  const allVisibleSelected = visible.length > 0 && visible.every((r) => selected.has(r.id));
+  const canSelect = (r: Row) => selectable && !isDone(r);
+  const selectableVisible = visible.filter(canSelect);
+  const allVisibleSelected = selectableVisible.length > 0 && selectableVisible.every((r) => selected.has(r.id));
 
   const toggle = (id: string) =>
     setSelected((cur) => {
@@ -158,8 +174,8 @@ export const ReadyToShipManager: React.FC = () => {
   const toggleAll = () =>
     setSelected((cur) => {
       const next = new Set(cur);
-      if (allVisibleSelected) visible.forEach((r) => next.delete(r.id));
-      else visible.forEach((r) => next.add(r.id));
+      if (allVisibleSelected) selectableVisible.forEach((r) => next.delete(r.id));
+      else selectableVisible.forEach((r) => next.add(r.id));
       return next;
     });
 
@@ -268,20 +284,29 @@ export const ReadyToShipManager: React.FC = () => {
         </div>
       </div>
 
-      {notFound.length > 0 && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          Introuvable{notFound.length > 1 ? 's' : ''} dans cet onglet ({notFound.length}) : <span className="font-mono">{notFound.join(' · ')}</span>
+      {inOtherTab.length > 0 && (
+        <p className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+          {filter === 'todo'
+            ? `Déjà prêt${inOtherTab.length > 1 ? 's' : ''} / déjà reçu${inOtherTab.length > 1 ? 's' : ''}`
+            : `Pas encore prêt${inOtherTab.length > 1 ? 's' : ''}`}{' '}
+          ({inOtherTab.length}, affichés dans la liste) : <span className="font-mono">{inOtherTab.join(' · ')}</span>
         </p>
       )}
 
-      {selectable && visible.length > 0 && (
+      {notFound.length > 0 && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Introuvable{notFound.length > 1 ? 's' : ''} ({notFound.length}) : <span className="font-mono">{notFound.join(' · ')}</span>
+        </p>
+      )}
+
+      {selectableVisible.length > 0 && (
         <div className="flex justify-end">
           <button
             type="button"
             onClick={toggleAll}
             className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
-            {allVisibleSelected ? 'Tout désélectionner' : `Sélectionner tout (${visible.length})`}
+            {allVisibleSelected ? 'Tout désélectionner' : `Sélectionner tout (${selectableVisible.length})`}
           </button>
         </div>
       )}
@@ -351,10 +376,15 @@ export const ReadyToShipManager: React.FC = () => {
                       ? { label: 'Livraison demandée · reçu', variant: 'success' as const }
                       : STAGE_LABEL[r.fulfillment_status];
                 return (
-                  <tr key={r.id} className="border-b border-gray-50 last:border-b-0 hover:bg-gray-50/60">
+                  <tr
+                    key={r.id}
+                    className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50/60 ${inCurrentTab(r) ? '' : 'bg-gray-50/80 opacity-70'}`}
+                  >
                     {selectable && (
                       <td className="px-4 py-3">
-                        <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} className="h-4 w-4 rounded border-gray-300" />
+                        {canSelect(r) && (
+                          <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} className="h-4 w-4 rounded border-gray-300" />
+                        )}
                       </td>
                     )}
                     <td className="px-4 py-3">
@@ -390,6 +420,7 @@ export const ReadyToShipManager: React.FC = () => {
                     </td>
                     {selectable && (
                       <td className="px-4 py-3 text-right">
+                        {canSelect(r) && (
                         <button
                           type="button"
                           onClick={() => markReady([r.id])}
@@ -398,6 +429,7 @@ export const ReadyToShipManager: React.FC = () => {
                         >
                           <PackageCheck className="h-3.5 w-3.5" /> {receiveOnly(r) ? 'Marquer reçu' : 'Prêt à la livraison'}
                         </button>
+                        )}
                       </td>
                     )}
                   </tr>
