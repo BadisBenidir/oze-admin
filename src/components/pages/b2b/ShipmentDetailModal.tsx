@@ -25,6 +25,7 @@ interface ShipmentDetailModalProps {
 interface RemovedItem {
   id: string;
   fulfillment_status: string;
+  order?: { order_number: string | null } | null;
   product: Pick<NonNullable<AdminShipmentItem['product']>, 'name' | 'images' | 'main_image_index' | 'product_code' | 'reference' | 'b2b_reference' | 'brand'> | null;
 }
 
@@ -213,20 +214,29 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   const loadReadyItems = useCallback(async (profileId: string, own: string) => {
     const { data, error } = await supabase
       .from('order_items')
-      .select('id, fulfillment_status, removed_from_shipment_id, product:products(name, images, main_image_index, product_code, reference, b2b_reference, brand:brands(name)), order:orders!inner(placed_by_profile_id, order_channel)')
+      .select('id, fulfillment_status, removed_from_shipment_id, product:products(name, images, main_image_index, product_code, reference, b2b_reference, brand:brands(name)), order:orders!inner(order_number, placed_by_profile_id, order_channel)')
       .eq('order.placed_by_profile_id', profileId)
       .eq('order.order_channel', 'b2b')
-      .eq('fulfillment_status', 'ready_to_ship')
+      .in('fulfillment_status', ['received', 'ready_to_ship'])
       .is('shipment_id', null)
       .eq('status', 'active')
       .order('created_at', { ascending: true });
     // Les articles retirés de CETTE demande ont déjà leur encadré « Remettre dans la demande ».
     setReadyItems(error ? [] : ((data || []) as unknown as (RemovedItem & { removed_from_shipment_id?: string | null })[]).filter((i) => i.removed_from_shipment_id !== own));
   }, []);
+  // Port déjà payé : tant que la demande a encore quelque chose à expédier
+  // (en attente, bordereau pas encore remis, articles sans étiquette), on
+  // peut y ajouter un article reçu ou prêt du même acheteur, sans nouveau paiement.
+  const acceptsItems = !!shipment && shipment.status !== 'cancelled' && (
+    shipment.status === 'requested' ||
+    shipment.status === 'preparing' ||
+    shipment.pendingItems.length > 0 ||
+    shipment.parcels.some((p) => p.status === 'label_created')
+  );
   useEffect(() => {
-    if (shipment?.requested_by_profile_id && shipment.status === 'requested') loadReadyItems(shipment.requested_by_profile_id, shipment.id);
+    if (shipment?.requested_by_profile_id && acceptsItems) loadReadyItems(shipment.requested_by_profile_id, shipment.id);
     else setReadyItems([]);
-  }, [shipment, loadReadyItems]);
+  }, [shipment, acceptsItems, loadReadyItems]);
 
   if (!shipment) return null;
 
@@ -264,7 +274,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
   };
 
   const handleRevertShippedItem = async (itemId: string) => {
-    if (!window.confirm("Annuler cette expédition ? L'article redeviendra 'reçu' côté réception, même si un bordereau a déjà été généré pour lui.")) {
+    if (!window.confirm("Annuler cette expédition ? L'article redeviendra 'reçu' côté réception, même si un bordereau a déjà été généré pour lui. Il reste rattaché à cette demande (port déjà payé) : « Remettre dans la demande » le fera revenir.")) {
       return;
     }
     setRevertError(null);
@@ -436,6 +446,8 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     if (!item.parcel_id) continue;
     itemCountByParcel.set(item.parcel_id, (itemCountByParcel.get(item.parcel_id) || 0) + 1);
   }
+  // Bordereau généré mais pas encore remis au transporteur.
+  const unsentParcel = realParcels.find((p) => p.status === 'label_created') || null;
   const pendingItemsKey = shipment.pendingItems.map((i) => i.id).sort().join(',');
   // Annulable tant qu'aucune étiquette Sendcloud n'existe sur la demande
   // (admin_cancel_delivery_request_core revérifie côté serveur).
@@ -626,11 +638,16 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
               </div>
             )}
 
-            {readyItems.length > 0 && realParcels.length === 0 && (
+            {readyItems.length > 0 && (
               <div className="rounded-lg border border-green-200 bg-green-50 p-3">
                 <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-green-800">
                   <PackagePlus className="h-3.5 w-3.5" />
-                  {readyItems.length} autre{readyItems.length > 1 ? 's' : ''} article{readyItems.length > 1 ? 's' : ''} prêt{readyItems.length > 1 ? 's' : ''} à livrer, non demandé{readyItems.length > 1 ? 's' : ''}
+                  {readyItems.length} autre{readyItems.length > 1 ? 's' : ''} article{readyItems.length > 1 ? 's' : ''} du même acheteur, hors demande
+                </p>
+                <p className="mb-2 text-xs text-green-800">
+                  {unsentParcel
+                    ? `Port déjà payé : l'article ajouté rejoint le colis ${unsentParcel.parcel_index} (bordereau déjà généré, pas encore remis au transporteur).`
+                    : "Port déjà payé : l'article ajouté passe dans les articles en attente, il reste à générer son bordereau."}
                 </p>
                 <ul className="divide-y divide-green-100">
                   {readyItems.map((item) => {
@@ -647,7 +664,11 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                           <p className="text-xs text-gray-600">
                             {item.product?.brand?.name && <span>{item.product.brand.name} · </span>}
                             Réf. {itemRef(item)}
+                            {item.order?.order_number && <span> · {item.order.order_number}</span>}
                           </p>
+                          <Badge variant={item.fulfillment_status === 'ready_to_ship' ? 'success' : 'info'}>
+                            {item.fulfillment_status === 'ready_to_ship' ? 'Prêt à la livraison' : 'Reçu'}
+                          </Badge>
                         </div>
                         <button
                           type="button"
@@ -688,7 +709,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                             Réf. {itemRef(item)}
                           </p>
                         </div>
-                        {(shipment.status === 'requested' || shipment.status === 'preparing') && (
+                        {shipment.status !== 'cancelled' && (
                           <button
                             type="button"
                             onClick={() => handleRestoreItem(item.id)}
@@ -704,9 +725,9 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                   })}
                 </ul>
                 <p className="mt-1 text-xs text-amber-700">
-                  {shipment.parcels.some((p) => p.status === 'label_created')
-                    ? "Une fois remis, l'article rejoint le colis déjà étiqueté (même bordereau)."
-                    : "Une fois remis, l'article apparaît dans les articles en attente d'étiquette."}
+                  {unsentParcel
+                    ? `Port déjà payé : une fois remis, l'article rejoint le colis ${unsentParcel.parcel_index} (même bordereau).`
+                    : "Port déjà payé : une fois remis, l'article apparaît dans les articles en attente, il reste à générer son bordereau."}
                 </p>
               </div>
             )}
@@ -803,6 +824,11 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                         </button>
                       )}
                     </div>
+                    {p.status === 'label_created' && !itemCountByParcel.has(p.id) && (
+                      <p className="mt-1 text-xs font-medium text-amber-700">
+                        Aucun article dans ce colis : remettez-y les articles (encadrés ci-dessus) ou annulez le bordereau.
+                      </p>
+                    )}
                     {p.tracking_number && (
                       <p className="text-xs text-gray-600 mt-1">
                         Suivi : {p.tracking_number}{' '}

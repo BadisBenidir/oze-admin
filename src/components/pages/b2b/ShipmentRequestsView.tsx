@@ -85,12 +85,27 @@ export const ShipmentRequestsView: React.FC = () => {
   const inTransitData = useAdminShipments(isAdmin, ['in_transit']);
   const deliveredData = useAdminShipments(isAdmin, ['delivered']);
 
-  const dataByTab: Record<Tab, ReturnType<typeof useAdminShipments>> = {
-    requested: requestedData,
-    preparing: preparingData,
-    in_transit: inTransitData,
-    delivered: deliveredData,
-  };
+  // Une demande en partie expédiée/livrée qui a encore du travail reste
+  // visible là où il faut agir : articles sans bordereau → « En attente »,
+  // bordereau généré pas encore remis au transporteur → « En préparation ».
+  const dataByTab = useMemo(() => {
+    const needsLabel = (s: AdminShipment) => s.pendingItems.length > 0;
+    const unsentLabel = (s: AdminShipment) => s.parcels.some((p) => p.status === 'label_created');
+    const advanced = [...inTransitData.shipments, ...deliveredData.shipments];
+    const done = (s: AdminShipment) => !needsLabel(s) && !unsentLabel(s);
+    const withList = (base: ReturnType<typeof useAdminShipments>, shipments: AdminShipment[], extraLoading = false) => ({
+      ...base,
+      shipments,
+      loading: base.loading || extraLoading,
+    });
+    const advancedLoading = inTransitData.loading || deliveredData.loading;
+    return {
+      requested: withList(requestedData, [...requestedData.shipments, ...advanced.filter(needsLabel)], advancedLoading),
+      preparing: withList(preparingData, [...preparingData.shipments, ...advanced.filter((s) => !needsLabel(s) && unsentLabel(s))], advancedLoading),
+      in_transit: withList(inTransitData, inTransitData.shipments.filter(done)),
+      delivered: withList(deliveredData, deliveredData.shipments.filter(done)),
+    } as Record<Tab, ReturnType<typeof useAdminShipments>>;
+  }, [requestedData, preparingData, inTransitData, deliveredData]);
   const { shipments: tabShipments, loading, error } = dataByTab[tab];
   const [search, setSearch] = useState('');
   const [carrier, setCarrier] = useState<CarrierFilter>('all');
@@ -305,7 +320,14 @@ export const ShipmentRequestsView: React.FC = () => {
                           <td className="py-4 px-4 md:px-6 hidden md:table-cell text-sm text-gray-600">
                             {articleCount} pièce{articleCount > 1 ? 's' : ''}
                           </td>
-                          <td className="py-4 px-4 md:px-6">{statusBadge(shipment.status)}</td>
+                          <td className="py-4 px-4 md:px-6">
+                            {statusBadge(shipment.status)}
+                            {(tab === 'requested' || tab === 'preparing') && (shipment.status === 'in_transit' || shipment.status === 'delivered') && (
+                              <p className="mt-1 text-xs text-amber-700">
+                                {tab === 'requested' ? 'Reste à expédier (port déjà payé)' : 'Un colis reste à remettre'}
+                              </p>
+                            )}
+                          </td>
                           <td className="py-4 px-4 md:px-6">
                             <button
                               onClick={() => openShipment(shipment)}
