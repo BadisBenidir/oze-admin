@@ -27,13 +27,16 @@ interface AddSourcingItemModalProps {
   /** product_id des pièces déjà sourcées (actives) sur CETTE mission — grisées
    * et non sélectionnables dans "Depuis le stock" pour éviter un doublon. */
   existingProductIds: Set<string>;
+  /** Personne de la mission : ses pièces déjà retirées (0309) sont signalées. */
+  requesterUserId?: string | null;
+  resellerId?: string | null;
 }
 
 /** Ajout de pièce(s) sourcée(s) : soit une sélection multiple depuis le stock
  * existant (tous les brouillons chargés à l'ouverture, filtrés en mémoire à
  * la frappe — même pattern que CreateDropModal.tsx), soit une pièce créée à
  * la volée — voir 0089_b2b_sourcing_missions.sql. */
-export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOpen, onClose, onSubmit, onSubmitBatch, remainingCostBudget, existingProductIds }) => {
+export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOpen, onClose, onSubmit, onSubmitBatch, remainingCostBudget, existingProductIds, requesterUserId, resellerId }) => {
   const { show: showFigure } = useHideFigures();
   const [mode, setMode] = useState<'stock' | 'manual'>('stock');
   const [draftProducts, setDraftProducts] = useState<StockProduct[]>([]);
@@ -41,6 +44,8 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  // Pièces déjà proposées puis retirées pour cette personne (toutes missions) : product_id → date.
+  const [removedAt, setRemovedAt] = useState<Map<string, string>>(new Map());
 
   const [title, setTitle] = useState('');
   const [brand, setBrand] = useState('');
@@ -102,16 +107,38 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen || (!requesterUserId && !resellerId)) {
+      setRemovedAt(new Map());
+      return;
+    }
+    let mounted = true;
+    let query = supabase.from('b2b_sourcing_removed_items').select('product_id, removed_at').order('removed_at', { ascending: true });
+    query = requesterUserId ? query.eq('user_id', requesterUserId) : query.eq('reseller_id', resellerId as string);
+    query.then(({ data }) => {
+      if (!mounted) return;
+      const map = new Map<string, string>();
+      for (const r of (data || []) as { product_id: string; removed_at: string }[]) map.set(r.product_id, r.removed_at);
+      setRemovedAt(map);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen, requesterUserId, resellerId]);
+
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return draftProducts;
-    return draftProducts.filter(
-      (p) =>
-        p.name.toLowerCase().includes(term) ||
-        p.product_code.toLowerCase().includes(term) ||
-        (p.brand?.name || '').toLowerCase().includes(term)
-    );
-  }, [draftProducts, search]);
+    const list = !term
+      ? draftProducts
+      : draftProducts.filter(
+          (p) =>
+            p.name.toLowerCase().includes(term) ||
+            p.product_code.toLowerCase().includes(term) ||
+            (p.brand?.name || '').toLowerCase().includes(term)
+        );
+    // Déjà retirées pour cette personne : en bas de liste.
+    return [...list.filter((p) => !removedAt.has(p.id)), ...list.filter((p) => removedAt.has(p.id))];
+  }, [draftProducts, search, removedAt]);
 
   const toggleProduct = (id: string) => {
     if (existingProductIds.has(id)) return;
@@ -126,8 +153,8 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
   // Une pièce déjà sourcée sur cette mission ne compte ni pour "tout
   // sélectionner" ni pour le "coché à la main" (grisée, voir le rendu ci-dessous).
   const selectableFilteredProducts = useMemo(
-    () => filteredProducts.filter((p) => !existingProductIds.has(p.id)),
-    [filteredProducts, existingProductIds]
+    () => filteredProducts.filter((p) => !existingProductIds.has(p.id) && !removedAt.has(p.id)),
+    [filteredProducts, existingProductIds, removedAt]
   );
   const allFilteredSelected = selectableFilteredProducts.length > 0 && selectableFilteredProducts.every((p) => selectedProductIds.has(p.id));
   const toggleSelectAll = () => {
@@ -317,12 +344,15 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                       filteredProducts.map((product) => {
                         const isSelected = selectedProductIds.has(product.id);
                         const alreadyAdded = existingProductIds.has(product.id);
+                        const refusedAt = removedAt.get(product.id);
                         return (
                           <label
                             key={product.id}
                             className={`flex items-center gap-3 p-3 transition-colors ${
                               alreadyAdded
                                 ? 'opacity-50 cursor-not-allowed'
+                                : refusedAt && !isSelected
+                                ? 'bg-red-50/60 cursor-pointer hover:bg-red-50'
                                 : isSelected
                                 ? 'bg-gray-900/5 cursor-pointer'
                                 : 'hover:bg-gray-50 cursor-pointer'
@@ -349,9 +379,16 @@ export const AddSourcingItemModal: React.FC<AddSourcingItemModalProps> = ({ isOp
                                 {product.purchase_price != null && <> · Achat {showFigure(product.purchase_price.toFixed(0))} €</>}
                               </p>
                             </div>
-                            {alreadyAdded && (
+                            {alreadyAdded ? (
                               <span className="text-xs text-gray-400 flex-shrink-0">Déjà ajoutée</span>
-                            )}
+                            ) : refusedAt ? (
+                              <span
+                                title="Déjà proposée à cette personne puis retirée : a priori pas intéressée"
+                                className="flex-shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700"
+                              >
+                                Déjà retirée le {new Date(refusedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+                              </span>
+                            ) : null}
                           </label>
                         );
                       })

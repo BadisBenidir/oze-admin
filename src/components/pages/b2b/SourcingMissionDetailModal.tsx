@@ -1077,6 +1077,8 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
         existingProductIds={
           new Set(activeItems.filter((i) => i.product_id).map((i) => i.product_id as string))
         }
+        requesterUserId={mission.user_id}
+        resellerId={mission.reseller_id}
       />
 
       <CreateSourcingMissionModal
