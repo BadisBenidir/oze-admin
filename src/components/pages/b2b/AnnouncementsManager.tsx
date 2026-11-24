@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ImagePlus, Megaphone, Trash2, Eye, EyeOff, Smartphone, Monitor, RotateCcw } from 'lucide-react';
+import { Megaphone, Trash2, Eye, EyeOff, Smartphone, Monitor, RotateCcw } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 
