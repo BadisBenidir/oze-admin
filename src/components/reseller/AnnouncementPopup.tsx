@@ -43,11 +43,11 @@ export const AnnouncementPopup: React.FC<{ profileId: string | undefined }> = ({
     supabase.from('b2b_announcement_views').insert({ announcement_id: current.id, profile_id: profileId }).then(() => {});
   };
 
-  const image = <img src={current.image_url} alt={current.title} className="block max-h-[88vh] w-full rounded-xl object-contain shadow-2xl" />;
+  const image = <img src={current.image_url} alt={current.title} className="block max-h-[82vh] w-full rounded-xl object-contain shadow-2xl" />;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-2 sm:p-4" onClick={close}>
-      <div className="relative w-[92vw] max-w-[1280px]" onClick={(e) => e.stopPropagation()}>
+      <div className="relative w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={close}
