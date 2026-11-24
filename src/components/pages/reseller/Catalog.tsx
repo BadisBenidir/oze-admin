@@ -9,6 +9,7 @@ import { useB2BCart } from '../../../hooks/useB2BCart';
 // notifier l'une l'autre. C'est ce qui causait un panier "ajouté" qui ne se
 // reflétait dans le badge/la page panier qu'après rechargement complet.
 import { DropPreviewBadge } from './DropPreviewBadge';
+import { AvailableForDeliveryBadge } from './AvailableForDeliveryBadge';
 import { ScheduleAnnouncement } from './ScheduleAnnouncement';
 
 interface NextDropAnnouncement {
@@ -558,12 +559,16 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
             État {product.condition.replace(/^grade\s*/i, '')}
           </span>
         )}
-        {isDropPreview && (
+        {isDropPreview ? (
           <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-gray-900/90 px-2.5 py-1 text-[11px] font-semibold text-white">
             <Eye className="h-3 w-3" />
             Avant-première
           </span>
-        )}
+        ) : product.available_for_delivery && !sold ? (
+          <span className="absolute bottom-2 left-2">
+            <AvailableForDeliveryBadge />
+          </span>
+        ) : null}
         {sold && (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="rounded-full bg-gray-900 px-3 py-1 text-sm font-semibold uppercase tracking-wide text-white">Vendu</span>

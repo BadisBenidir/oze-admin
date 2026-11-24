@@ -10,6 +10,7 @@ import { AuctionCountdown } from './AuctionCountdown';
 import { AuctionItemDetailModal } from './AuctionItemDetailModal';
 import { ScheduleAnnouncement } from './ScheduleAnnouncement';
 import { AuctionPaymentsDue } from './AuctionPaymentsDue';
+import { AvailableForDeliveryBadge } from './AvailableForDeliveryBadge';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
@@ -99,6 +100,11 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isWinning, isOutbid, myMax, c
         <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2">
           <Badge variant="info">{item.grade}</Badge>
         </div>
+        {item.available_for_delivery && (
+          <div className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2">
+            <AvailableForDeliveryBadge />
+          </div>
+        )}
       </div>
 
       <div className="p-2.5 sm:p-4 flex-1 flex flex-col">

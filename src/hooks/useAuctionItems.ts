@@ -42,6 +42,8 @@ export interface AuctionItem {
   serial_number?: string | null;
   /** Ordre d'affichage choisi par l'admin (0180) ; absent avant la migration. */
   position?: number | null;
+  /** Déjà reçu dans nos locaux : livraison demandable dès l'achat (0306). */
+  available_for_delivery?: boolean;
   created_at?: string;
 }
 

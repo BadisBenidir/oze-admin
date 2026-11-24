@@ -590,6 +590,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                             <PackageCheck className="h-3.5 w-3.5" />
                             Reçu le {new Date(receivedAt).toLocaleDateString('fr-FR')} · prêt à être livré
                           </span>
+                          <span className="text-gray-500">· badge « Disponible à la livraison » visible des revendeurs</span>
                           <button
                             onClick={() => handleToggleReceived(false)}
                             disabled={receivedBusy}
@@ -602,7 +603,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                         <button
                           onClick={() => handleToggleReceived(true)}
                           disabled={receivedBusy}
-                          title="L'article est physiquement à l'atelier : dès qu'il sera vendu, il sera directement prêt à être livré"
+                          title="L'article est physiquement dans nos locaux : les revendeurs voient le badge « Disponible à la livraison » (B2B, achat immédiat, enchères) et, une fois vendu, il est directement prêt à être livré"
                           className="mt-2 flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-gray-900 disabled:opacity-50"
                         >
                           <PackageCheck className="h-3.5 w-3.5" />

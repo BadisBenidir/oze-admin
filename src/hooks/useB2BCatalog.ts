@@ -30,6 +30,8 @@ export interface B2BCatalogItem {
   drop_preview_scheduled_at: string | null;
   /** Onglet « Achat immédiat » plutôt que Catalogue (0253). */
   instant_buy?: boolean;
+  /** Déjà reçu dans nos locaux : livraison demandable dès l'achat (0306). */
+  available_for_delivery?: boolean;
   brand?: { id: string; name: string };
   category?: { id: string; name: string };
   /** Côté client uniquement : l'article a disparu du catalogue pendant la

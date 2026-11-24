@@ -5,6 +5,7 @@ import { AuctionItem, QUICK_BID_INCREMENTS, computeQuickBidIncrement } from '../
 import { AuctionCountdown } from './AuctionCountdown';
 import { OVERDUE_RESTRICTION_MESSAGE } from '../../../hooks/useMyAuctionPayments';
 import { ImageLightbox } from '../../ui/ImageLightbox';
+import { AvailableForDeliveryBadge } from './AvailableForDeliveryBadge';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
@@ -154,6 +155,11 @@ export const AuctionItemDetailModal: React.FC<AuctionItemDetailModalProps> = ({ 
               <div className="mt-3">
                 <Badge variant="info">{item.grade}</Badge>
               </div>
+              {item.available_for_delivery && (
+                <div className="mt-3">
+                  <AvailableForDeliveryBadge variant="block" />
+                </div>
+              )}
 
               {(item.material || (item.colors && item.colors.length > 0) || item.serial_number) && (
                 <div className="flex flex-wrap gap-1.5 mt-3">

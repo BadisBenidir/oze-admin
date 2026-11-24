@@ -6,6 +6,7 @@ import { useB2BCart } from '../../../hooks/useB2BCart';
 import { supabase } from '../../../lib/supabase';
 import { GRADE_VARIANTS, isGrade } from '../../../utils/productGrade';
 import { DropPreviewBadge } from './DropPreviewBadge';
+import { AvailableForDeliveryBadge } from './AvailableForDeliveryBadge';
 import { ImageLightbox } from '../../ui/ImageLightbox';
 import { ZoomableImage } from '../../ui/ZoomableImage';
 import {
@@ -319,6 +320,12 @@ export const ProductPage: React.FC<ProductPageProps> = ({ productId, cart, onBac
             <div className="mt-4 pt-4 border-t border-gray-100">
               <p className="text-sm font-medium text-gray-700 mb-1">Description</p>
               <p className="text-sm text-gray-600 whitespace-pre-line">{product.description}</p>
+            </div>
+          )}
+
+          {product.available_for_delivery && !isDropPreview && (
+            <div className="mt-4">
+              <AvailableForDeliveryBadge variant="block" />
             </div>
           )}
 
