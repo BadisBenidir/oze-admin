@@ -73,7 +73,7 @@ export const AnnouncementPopup: React.FC<{ profileId: string | undefined }> = ({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-2 sm:p-4" onClick={close}>
-      <div className="relative w-full max-w-[920px]" onClick={(e) => e.stopPropagation()}>
+      <div className="relative w-full max-w-[840px]" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={close}
