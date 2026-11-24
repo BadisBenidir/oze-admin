@@ -113,8 +113,13 @@ export const useB2BCatalog = (isAuthenticated: boolean = false, instantBuy: bool
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [filters, setFiltersState] = useState<B2BCatalogFilters>(EMPTY_FILTERS);
-  const filtersRef = useRef(EMPTY_FILTERS);
+  // ?livraison=1 (lien de l'affiche d'actualités) : ouvre avec le filtre « Livraison disponible ».
+  const [initialFilters] = useState<B2BCatalogFilters>(() => ({
+    ...EMPTY_FILTERS,
+    deliveryOnly: typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('livraison') === '1',
+  }));
+  const [filters, setFiltersState] = useState<B2BCatalogFilters>(initialFilters);
+  const filtersRef = useRef(initialFilters);
 
   const [facets, setFacets] = useState<B2BCatalogFacets>(EMPTY_FACETS);
   const [facetsLoading, setFacetsLoading] = useState(true);

@@ -38,9 +38,27 @@ export const AnnouncementPopup: React.FC<{ profileId: string | undefined }> = ({
   const current = queue[0];
   if (!current || !profileId) return null;
 
+  const markSeen = () =>
+    supabase.from('b2b_announcement_views').insert({ announcement_id: current.id, profile_id: profileId }).then(({ error }) => {
+      if (error && error.code !== '23505') console.error('Actualité non marquée vue :', error.message);
+    });
+
   const close = () => {
     setQueue((q) => q.slice(1));
-    supabase.from('b2b_announcement_views').insert({ announcement_id: current.id, profile_id: profileId }).then(() => {});
+    markSeen();
+  };
+
+  // Lien interne (ex. /catalogue?livraison=1) : on enregistre la vue AVANT de
+  // changer de page, sinon la requête peut être coupée et l'affiche revenir.
+  const follow = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!current.link_url?.startsWith('/')) {
+      close();
+      return;
+    }
+    e.preventDefault();
+    setQueue((q) => q.slice(1));
+    await markSeen();
+    window.location.assign(current.link_url);
   };
 
   const image = <img src={current.image_url} alt={current.title} className="block max-h-[82vh] w-full rounded-xl object-contain shadow-2xl" />;
@@ -57,7 +75,7 @@ export const AnnouncementPopup: React.FC<{ profileId: string | undefined }> = ({
           <X className="h-7 w-7" />
         </button>
         {current.link_url ? (
-          <a href={current.link_url} onClick={close} target={current.link_url.startsWith('/') ? undefined : '_blank'} rel="noreferrer">
+          <a href={current.link_url} onClick={follow} className="block cursor-pointer" target={current.link_url.startsWith('/') ? undefined : '_blank'} rel="noreferrer">
             {image}
           </a>
         ) : (
@@ -67,7 +85,7 @@ export const AnnouncementPopup: React.FC<{ profileId: string | undefined }> = ({
           <div className="mt-3 flex justify-center">
             <a
               href={current.link_url}
-              onClick={close}
+              onClick={follow}
               target={current.link_url.startsWith('/') ? undefined : '_blank'}
               rel="noreferrer"
               className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100"
