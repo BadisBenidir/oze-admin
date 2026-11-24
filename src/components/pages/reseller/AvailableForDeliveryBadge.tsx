@@ -15,14 +15,14 @@ export const AvailableForDeliveryBadge: React.FC<{ variant?: 'overlay' | 'block'
     <span
       title="Déjà dans nos locaux : livraison demandable dès l'achat, reçu en 2 à 4 jours"
       style={{ backgroundColor: NAVY }}
-      className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-white shadow-sm"
+      className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-white shadow-sm"
     >
-      <Zap className="h-3 w-3" style={{ color: GOLD }} strokeWidth={2.25} />
+      <Zap className="h-[13px] w-[13px] motion-safe:animate-zap-flash" style={{ color: GOLD }} strokeWidth={2.25} />
       Livraison disponible
     </span>
   ) : (
     <div style={{ backgroundColor: NAVY }} className="flex items-start gap-3 rounded-lg px-4 py-3 text-sm text-white">
-      <Zap className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: GOLD }} strokeWidth={2.25} />
+      <Zap className="mt-0.5 h-4 w-4 flex-shrink-0 motion-safe:animate-zap-flash" style={{ color: GOLD }} strokeWidth={2.25} />
       <div>
         <p className="font-semibold">Livraison disponible</p>
         <p className="text-white/75">Déjà dans nos locaux : demandez la livraison dès l'achat, reçu en 2 à 4 jours.</p>
