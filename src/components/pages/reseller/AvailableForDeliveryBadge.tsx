@@ -18,16 +18,16 @@ export const AvailableForDeliveryBadge: React.FC<{ variant?: 'overlay' | 'block'
   variant === 'overlay' ? (
     <span
       title="Déjà dans nos locaux : livraison demandable dès l'achat, reçu en 2 à 4 jours"
-      className="flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[13px] font-bold text-emerald-700 shadow-md"
+      className="flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1.5 text-[13px] font-bold text-emerald-800 shadow-md ring-1 ring-emerald-200"
     >
       <Dot />
       Dispo à la livraison
     </span>
   ) : (
-    <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm">
+    <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
       <Dot className="mt-1.5" />
       <div>
-        <p className="font-bold text-emerald-700">Disponible à la livraison</p>
+        <p className="font-bold text-emerald-800">Disponible à la livraison</p>
         <p className="text-gray-600">Déjà dans nos locaux : demandez la livraison dès l'achat, reçu en 2 à 4 jours.</p>
       </div>
     </div>
