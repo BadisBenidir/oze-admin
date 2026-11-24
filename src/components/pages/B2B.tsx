@@ -12,6 +12,7 @@ import { SubscriptionPromoCodes } from './b2b/SubscriptionPromoCodes';
 import { B2BPriceChanges } from './b2b/B2BPriceChanges';
 import { ReadyToShipManager } from './b2b/ReadyToShipManager';
 import { InstantBuyManager } from './b2b/InstantBuyManager';
+import { AnnouncementsManager } from './b2b/AnnouncementsManager';
 
 interface B2BProps {
   activeSubTab: string;
@@ -31,6 +32,8 @@ export const B2B: React.FC<B2BProps> = ({ activeSubTab }) => {
       return <B2BSourcing />;
     case 'auctions':
       return <AuctionsAdmin />;
+    case 'announcements':
+      return <AnnouncementsManager />;
     case 'ready-to-ship':
       return <ReadyToShipManager />;
     case 'promo-codes':
