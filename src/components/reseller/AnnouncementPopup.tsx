@@ -10,12 +10,15 @@ interface Announcement {
   mobile_image_url: string | null;
   link_url: string | null;
   link_label: string | null;
+  /** null : une seule fois ; sinon revient si la dernière vue date d'au moins N h (0308). */
+  repeat_every_hours: number | null;
 }
 
 /**
  * Actualités (b2b_announcements, 0305) : à la connexion, chaque affiche en
- * cours pas encore vue s'ouvre en grand, la plus récente d'abord. Fermer
- * l'affiche l'enregistre comme vue : elle ne revient plus.
+ * cours s'ouvre en grand, la plus récente d'abord, si elle n'a jamais été vue
+ * — ou, pour une affiche répétée, si la dernière vue date d'au moins
+ * repeat_every_hours. Fermer l'affiche enregistre (ou rafraîchit) la vue.
  */
 export const AnnouncementPopup: React.FC<{ profileId: string | undefined }> = ({ profileId }) => {
   const [queue, setQueue] = useState<Announcement[]>([]);
@@ -25,12 +28,22 @@ export const AnnouncementPopup: React.FC<{ profileId: string | undefined }> = ({
     let cancelled = false;
     (async () => {
       const [{ data: live }, { data: seen }] = await Promise.all([
-        supabase.from('b2b_announcements').select('id, title, image_url, mobile_image_url, link_url, link_label').order('starts_at', { ascending: false }),
-        supabase.from('b2b_announcement_views').select('announcement_id').eq('profile_id', profileId),
+        supabase
+          .from('b2b_announcements')
+          .select('id, title, image_url, mobile_image_url, link_url, link_label, repeat_every_hours')
+          .order('starts_at', { ascending: false }),
+        supabase.from('b2b_announcement_views').select('announcement_id, seen_at').eq('profile_id', profileId),
       ]);
       if (cancelled || !live) return;
-      const seenIds = new Set((seen || []).map((v: { announcement_id: string }) => v.announcement_id));
-      setQueue((live as Announcement[]).filter((a) => !seenIds.has(a.id)));
+      const seenAt = new Map((seen || []).map((v: { announcement_id: string; seen_at: string }) => [v.announcement_id, new Date(v.seen_at).getTime()]));
+      const now = Date.now();
+      setQueue(
+        (live as Announcement[]).filter((a) => {
+          const last = seenAt.get(a.id);
+          if (last === undefined) return true;
+          return !!a.repeat_every_hours && now - last >= a.repeat_every_hours * 3_600_000;
+        })
+      );
     })();
     return () => {
       cancelled = true;
@@ -41,9 +54,12 @@ export const AnnouncementPopup: React.FC<{ profileId: string | undefined }> = ({
   if (!current || !profileId) return null;
 
   const markSeen = () =>
-    supabase.from('b2b_announcement_views').insert({ announcement_id: current.id, profile_id: profileId }).then(({ error }) => {
-      if (error && error.code !== '23505') console.error('Actualité non marquée vue :', error.message);
-    });
+    supabase
+      .from('b2b_announcement_views')
+      .upsert({ announcement_id: current.id, profile_id: profileId, seen_at: new Date().toISOString() }, { onConflict: 'announcement_id,profile_id' })
+      .then(({ error }) => {
+        if (error) console.error('Actualité non marquée vue :', error.message);
+      });
 
   const close = () => {
     setQueue((q) => q.slice(1));

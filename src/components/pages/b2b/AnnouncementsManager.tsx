@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Megaphone, Trash2, Eye, EyeOff, Smartphone, Monitor, RotateCcw, Link2 } from 'lucide-react';
+import { Megaphone, Trash2, Eye, EyeOff, Smartphone, Monitor, RotateCcw, Link2, Repeat } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 
@@ -10,6 +10,7 @@ interface Announcement {
   mobile_image_url: string | null;
   link_url: string | null;
   link_label: string | null;
+  repeat_every_hours: number | null;
   is_active: boolean;
   starts_at: string;
   ends_at: string | null;
@@ -72,6 +73,7 @@ export const AnnouncementsManager: React.FC = () => {
   const [linkUrl, setLinkUrl] = useState('');
   const [linkLabel, setLinkLabel] = useState('');
   const [endsAt, setEndsAt] = useState('');
+  const [repeat, setRepeat] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -115,6 +117,7 @@ export const AnnouncementsManager: React.FC = () => {
         link_url: linkUrl.trim() || null,
         link_label: linkLabel.trim() || null,
         ends_at: endsAt ? new Date(`${endsAt}T23:59:59`).toISOString() : null,
+        repeat_every_hours: repeat ? 1 : null,
         created_by: user?.id ?? null,
       });
       if (insErr) throw new Error(insErr.message);
@@ -122,6 +125,7 @@ export const AnnouncementsManager: React.FC = () => {
       setLinkUrl('');
       setLinkLabel('');
       setEndsAt('');
+      setRepeat(false);
       pickFile(null);
       pickMobileFile(null);
       load();
@@ -152,6 +156,12 @@ export const AnnouncementsManager: React.FC = () => {
 
   const removeMobileImage = async (a: Announcement) => {
     const { error: e } = await supabase.from('b2b_announcements').update({ mobile_image_url: null }).eq('id', a.id);
+    if (e) setError(e.message);
+    load();
+  };
+
+  const toggleRepeat = async (a: Announcement) => {
+    const { error: e } = await supabase.from('b2b_announcements').update({ repeat_every_hours: a.repeat_every_hours ? null : 1 }).eq('id', a.id);
     if (e) setError(e.message);
     load();
   };
@@ -247,6 +257,13 @@ export const AnnouncementsManager: React.FC = () => {
               className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-gray-400 focus:outline-none"
             />
           </label>
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={repeat} onChange={(e) => setRepeat(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-gray-300" />
+            <span>
+              Réafficher à chaque connexion
+              <span className="block text-xs text-gray-400">Au plus une fois par heure. Sinon : une seule fois par personne.</span>
+            </span>
+          </label>
           <button
             type="button"
             onClick={publish}
@@ -283,7 +300,7 @@ export const AnnouncementsManager: React.FC = () => {
                   <p className="truncate font-medium text-gray-900">{a.title}</p>
                   <p className="text-xs text-gray-500">
                     Publiée le {fmt(a.created_at)}
-                    {a.ends_at ? ` · jusqu'au ${fmt(a.ends_at)}` : ''} · vue par {a.views?.[0]?.count ?? 0} personne{(a.views?.[0]?.count ?? 0) > 1 ? 's' : ''}
+                    {a.ends_at ? ` · jusqu'au ${fmt(a.ends_at)}` : ''} · {a.repeat_every_hours ? `à chaque connexion (1×/${a.repeat_every_hours} h max)` : 'une seule fois'} · vue par {a.views?.[0]?.count ?? 0} personne{(a.views?.[0]?.count ?? 0) > 1 ? 's' : ''}
                   </p>
                   {a.link_url && <p className="truncate text-xs text-gray-500">Lien : {a.link_url}</p>}
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
@@ -306,6 +323,9 @@ export const AnnouncementsManager: React.FC = () => {
                         Retirer
                       </button>
                     )}
+                    <button type="button" onClick={() => toggleRepeat(a)} className="inline-flex items-center gap-1 font-medium text-gray-700 hover:text-gray-900">
+                      <Repeat className="h-3.5 w-3.5" /> {a.repeat_every_hours ? 'Afficher une seule fois' : 'Réafficher à chaque connexion'}
+                    </button>
                     <button type="button" onClick={() => editLink(a)} className="inline-flex items-center gap-1 font-medium text-gray-700 hover:text-gray-900">
                       <Link2 className="h-3.5 w-3.5" /> {a.link_url ? 'Modifier le lien' : 'Ajouter un lien'}
                     </button>
