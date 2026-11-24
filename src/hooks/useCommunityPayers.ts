@@ -38,3 +38,54 @@ export const useCommunityPayers = (enabled = true) => {
   }, [enabled]);
   return payers;
 };
+
+/** Membre de communauté sans abonnement en cours : accès gratuit (groupe à
+ * 0 €, accès offert en cours, non classé) ou achats bloqués (groupe payant
+ * sans abonnement, 0221/0228). */
+export interface CommunityNonPayer extends CommunityPayer {
+  member_group: number | null;
+  free_access_until: string | null;
+  group_price: number | null;
+  free: boolean;
+}
+
+export const useCommunityNonPayers = (enabled = true) => {
+  const [members, setMembers] = useState<CommunityNonPayer[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    (async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const [{ data: prices, error: pricesError }, { data, error }] = await Promise.all([
+        supabase.from('community_group_prices').select('reseller_id, member_group, monthly_price, effective_from').lte('effective_from', today),
+        supabase
+          .from('reseller_contacts')
+          .select(
+            'id, reseller_id, member_group, free_access_until, community_sub_status, community_sub_price, community_sub_plan, community_sub_current_period_end, community_sub_started_at, created_at, profile:profiles(first_name, last_name, email, phone), reseller:resellers(company_name)'
+          )
+          .eq('is_primary', false)
+          .is('access_revoked_at', null)
+          .not('member_group', 'is', null),
+      ]);
+      if (pricesError || error) return;
+      // Prix en vigueur par communauté + groupe (le plus récent déjà appliqué).
+      const current = new Map<string, { price: number; from: string }>();
+      for (const p of (prices || []) as { reseller_id: string; member_group: number; monthly_price: number; effective_from: string }[]) {
+        const key = `${p.reseller_id}:${p.member_group}`;
+        const prev = current.get(key);
+        if (!prev || p.effective_from > prev.from) current.set(key, { price: Number(p.monthly_price) || 0, from: p.effective_from });
+      }
+      const communities = new Set(((prices || []) as { reseller_id: string }[]).map((p) => p.reseller_id));
+      const now = Date.now();
+      const rows = ((data || []) as unknown as (CommunityPayer & { member_group: number | null; free_access_until: string | null; created_at: string })[])
+        .filter((c) => communities.has(c.reseller_id) && !['active', 'trialing', 'past_due'].includes(c.community_sub_status || ''))
+        .map((c) => {
+          const price = current.get(`${c.reseller_id}:${c.member_group}`)?.price ?? null;
+          const freeUntil = c.free_access_until ? new Date(c.free_access_until).getTime() > now : false;
+          return { ...c, group_price: price, free: freeUntil || !price };
+        })
+        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      setMembers(rows);
+    })();
+  }, [enabled]);
+  return members;
+};

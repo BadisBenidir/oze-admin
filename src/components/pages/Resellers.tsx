@@ -12,7 +12,7 @@ import { InviteLinkPanel } from '../reseller/InviteLinkPanel';
 import { SubscriptionStats } from './b2b/SubscriptionStats';
 import { useSubscriptionPromos, lifetimeFreeCode, expectedMonthlyAmount, signupPromoCode } from '../../hooks/useSubscriptionPromos';
 import { PendingWalletDebitsButton } from './b2b/PendingWalletDebitsButton';
-import { useCommunityPayers, communityPayerName } from '../../hooks/useCommunityPayers';
+import { useCommunityPayers, useCommunityNonPayers, communityPayerName, CommunityPayer, CommunityNonPayer } from '../../hooks/useCommunityPayers';
 import { generateSecurePassword } from '../../utils/generatePassword';
 import { whatsappUrl } from '../../utils/whatsapp';
 
@@ -77,6 +77,8 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
   } = useResellers(isAdmin);
   const promoData = useSubscriptionPromos(isSubscribers);
   const communityPayers = useCommunityPayers(isSubscribers);
+  // Membres de communauté qui ne paient pas : accès gratuit ou achats bloqués.
+  const communityNonPayers = useCommunityNonPayers(isSubscribers);
   const [subscriberTab, setSubscriberTab] = useState<'paying' | 'community' | 'free' | 'other'>('paying');
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -273,25 +275,29 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
   const ongoingSub = (r: Reseller) => ['active', 'trialing', 'past_due'].includes(r.subscription_status || '');
   const isFreeSub = (r: Reseller) => Boolean(promoData) && ongoingSub(r) && expectedMonthlyAmount(r, promoData!) === 0;
   const search = searchTerm.trim().toLowerCase();
-  const filteredCommunity = communityPayers.filter(
-    (c) =>
-      !search ||
-      communityPayerName(c).toLowerCase().includes(search) ||
-      (c.profile?.email || '').toLowerCase().includes(search) ||
-      (c.reseller?.company_name || '').toLowerCase().includes(search)
-  );
+  const matchesMember = (c: CommunityPayer) =>
+    !search ||
+    communityPayerName(c).toLowerCase().includes(search) ||
+    (c.profile?.email || '').toLowerCase().includes(search) ||
+    (c.reseller?.company_name || '').toLowerCase().includes(search);
+  const filteredCommunity = communityPayers.filter(matchesMember);
+  const communityFree = communityNonPayers.filter((c) => c.free && matchesMember(c));
+  const communityUnpaid = communityNonPayers.filter((c) => !c.free && matchesMember(c));
+  const membersOfTab = (key: typeof subscriberTab): CommunityPayer[] =>
+    key === 'community' ? filteredCommunity : key === 'free' ? communityFree : key === 'other' ? communityUnpaid : [];
   const subscriberTabs: { key: typeof subscriberTab; label: string; items: Reseller[] }[] = [
     { key: 'paying', label: 'Payants', items: filteredResellers.filter((r) => r.status === 'active' && ongoingSub(r) && !isFreeSub(r)) },
     { key: 'community', label: 'Communauté', items: [] },
     { key: 'free', label: 'Accès gratuit', items: filteredResellers.filter((r) => isFreeSub(r)) },
     { key: 'other', label: 'En attente / terminés', items: filteredResellers.filter((r) => !isFreeSub(r) && !(r.status === 'active' && ongoingSub(r))) },
   ];
-  const tabCount = (key: typeof subscriberTab) => (key === 'community' ? filteredCommunity.length : subscriberTabs.find((t) => t.key === key)!.items.length);
-  const tabRows = isSubscribers ? (subscriberTab === 'community' ? filteredCommunity.length : subscriberTabs.find((t) => t.key === subscriberTab)!.items.length) : filteredResellers.length;
+  const tabCount = (key: typeof subscriberTab) => subscriberTabs.find((t) => t.key === key)!.items.length + membersOfTab(key).length;
+  const tabRows = isSubscribers ? tabCount(subscriberTab) : filteredResellers.length;
   const showAllRows = !isSubscribers || Boolean(expandedSections[subscriberTab]) || Boolean(search);
   const rowLimit = showAllRows ? Infinity : SECTION_PREVIEW;
 
-  const renderCommunityRow = (c: (typeof communityPayers)[number]) => {
+  const renderCommunityRow = (c: CommunityPayer | CommunityNonPayer) => {
+    const nonPayer = 'free' in c ? c : null;
     const name = communityPayerName(c);
     const initials = name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
     return (
@@ -321,14 +327,31 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
           </div>
         </td>
         <td className="py-4 px-4 md:px-6 hidden sm:table-cell">
-          {c.community_sub_status === 'past_due' ? <Badge variant="danger">Paiement en échec</Badge> : <Badge variant="success">Actif</Badge>}
+          {nonPayer ? (
+            nonPayer.free ? <Badge variant="purple">Accès gratuit</Badge> : <Badge variant="warning">Sans abonnement · achats bloqués</Badge>
+          ) : c.community_sub_status === 'past_due' ? <Badge variant="danger">Paiement en échec</Badge> : <Badge variant="success">Actif</Badge>}
         </td>
         <td className="py-4 px-4 md:px-6 hidden lg:table-cell">
           <div className="text-sm">
+            {nonPayer ? (
+              <>
+                <p className="font-medium text-gray-900">
+                  {c.reseller?.company_name || 'Communauté'} · groupe {nonPayer.member_group ?? '—'}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {nonPayer.free_access_until && new Date(nonPayer.free_access_until).getTime() > Date.now()
+                    ? `Accès offert jusqu'au ${formatShortDate(nonPayer.free_access_until)}`
+                    : nonPayer.group_price
+                      ? `${nonPayer.group_price.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}/mois non souscrit`
+                      : 'Groupe à 0 €'}
+                </p>
+              </>
+            ) : (
             <p className="font-medium text-gray-900">
               {c.reseller?.company_name || 'Communauté'} · {(Number(c.community_sub_price) || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}/mois
             </p>
-            {c.community_sub_current_period_end && (
+            )}
+            {!nonPayer && c.community_sub_current_period_end && (
               <p className="text-xs text-gray-500">Renouvellement le {formatShortDate(c.community_sub_current_period_end)}</p>
             )}
           </div>
@@ -617,11 +640,13 @@ export const Resellers: React.FC<ResellersProps> = ({ accountType = 'company' })
                     ))
                   ) : (
                     <>
-                      {(isSubscribers && subscriberTab === 'community'
-                        ? filteredCommunity.slice(0, rowLimit).map((c) => renderCommunityRow(c))
-                        : (isSubscribers ? subscriberTabs.find((t) => t.key === subscriberTab)!.items : filteredResellers)
-                            .slice(0, rowLimit)
-                            .map((reseller) => renderResellerRow(reseller)))}
+                      {(isSubscribers ? subscriberTabs.find((t) => t.key === subscriberTab)!.items : filteredResellers)
+                        .slice(0, rowLimit)
+                        .map((reseller) => renderResellerRow(reseller))}
+                      {isSubscribers &&
+                        membersOfTab(subscriberTab)
+                          .slice(0, Math.max(0, rowLimit - subscriberTabs.find((t) => t.key === subscriberTab)!.items.length))
+                          .map((c) => renderCommunityRow(c))}
                       {tabRows === 0 && (
                         <tr>
                           <td colSpan={4} className="py-10 text-center text-sm text-gray-500">
