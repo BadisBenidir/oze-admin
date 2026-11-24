@@ -439,7 +439,7 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {loading
           ? [...Array(10)].map((_, i) => (
               <div key={`skeleton-${i}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -552,10 +552,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
           </div>
         )}
         {hasDiscount && (
-          <span className="absolute left-2 top-2 rounded-full bg-red-600 px-2.5 py-1 text-xs font-semibold text-white">-{discountPercent}%</span>
+          <span className="absolute left-1.5 top-1.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white sm:left-2 sm:top-2 sm:px-2.5 sm:py-1 sm:text-xs">-{discountPercent}%</span>
         )}
         {product.condition && (
-          <span className="absolute right-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-gray-900 shadow-sm">
+          <span className="absolute right-1.5 top-1.5 rounded-full bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-gray-900 shadow-sm sm:right-2 sm:top-2 sm:px-2.5 sm:py-1 sm:text-xs">
             État {product.condition.replace(/^grade\s*/i, '')}
           </span>
         )}
@@ -565,7 +565,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
             Avant-première
           </span>
         ) : product.available_for_delivery && !sold ? (
-          <span className="absolute bottom-2 left-2">
+          <span className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2">
             <AvailableForDeliveryBadge />
           </span>
         ) : null}
@@ -583,13 +583,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
           </div>
         )}
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-4 text-sm">
-        <p className="text-center text-base font-semibold uppercase tracking-[0.2em] text-gray-900">{product.brand?.name || '—'}</p>
-        <p className="line-clamp-2 min-h-[2.5rem] text-center text-gray-600">{product.name}</p>
-        <div className="mt-auto space-y-3 pt-2">
+      <div className="flex flex-1 flex-col gap-0.5 p-2.5 text-sm sm:gap-1 sm:p-4">
+        <p className="truncate text-center text-xs font-semibold uppercase tracking-[0.15em] text-gray-900 sm:text-base sm:tracking-[0.2em]">{product.brand?.name || '—'}</p>
+        <p className="line-clamp-2 min-h-[2rem] text-center text-xs text-gray-600 sm:min-h-[2.5rem] sm:text-sm">{product.name}</p>
+        <div className="mt-auto space-y-2 pt-1 sm:space-y-3 sm:pt-2">
           <div className="flex items-baseline justify-center gap-2">
-            <span className="text-xl font-semibold text-gray-900">{product.price.toFixed(0)} €</span>
-            {hasDiscount && <span className="text-sm text-gray-400 line-through">{product.original_price!.toFixed(0)} €</span>}
+            <span className="text-base font-semibold text-gray-900 sm:text-xl">{product.price.toFixed(0)} €</span>
+            {hasDiscount && <span className="text-xs text-gray-400 line-through sm:text-sm">{product.original_price!.toFixed(0)} €</span>}
           </div>
           {isDropPreview ? (
             <DropPreviewBadge scheduledAt={product.drop_preview_scheduled_at!} compact />
@@ -598,7 +598,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
               <button
                 onClick={handleAdd}
                 disabled={disabled}
-                className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                className={`flex w-full items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors sm:gap-1.5 sm:px-3 sm:py-2.5 sm:text-sm ${
                   inCart
                     ? 'cursor-default bg-green-50 text-green-700'
                     : disabled
@@ -610,18 +610,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, inCart, onAdd, onVie
                   <span>Vendu</span>
                 ) : inCart ? (
                   <>
-                    <Check className="h-4 w-4" />
+                    <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     <span>Dans le panier</span>
                   </>
                 ) : held ? (
                   <>
-                    <Clock className="h-4 w-4" />
+                    <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     <span>Dans un panier</span>
                   </>
                 ) : (
                   <>
-                    <ShoppingCart className="h-4 w-4" />
-                    <span>{adding ? 'Ajout…' : 'Ajouter au panier'}</span>
+                    <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <span>{adding ? 'Ajout…' : <>Ajouter<span className="hidden sm:inline"> au panier</span></>}</span>
                   </>
                 )}
               </button>
