@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Megaphone, Trash2, Eye, EyeOff, Smartphone, Monitor, RotateCcw } from 'lucide-react';
+import { Megaphone, Trash2, Eye, EyeOff, Smartphone, Monitor, RotateCcw, Link2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../ui/Badge';
 
@@ -156,6 +156,17 @@ export const AnnouncementsManager: React.FC = () => {
     load();
   };
 
+  const editLink = async (a: Announcement) => {
+    const next = window.prompt(
+      "Lien au clic sur l'affiche (vide = aucun lien).\nEx. /catalogue?livraison=1 pour le catalogue filtré « Livraison disponible ».",
+      a.link_url || '/catalogue?livraison=1'
+    );
+    if (next === null) return;
+    const { error: e } = await supabase.from('b2b_announcements').update({ link_url: next.trim() || null }).eq('id', a.id);
+    if (e) setError(e.message);
+    load();
+  };
+
   // Efface les vues : l'affiche revient à la prochaine connexion de chacun.
   const resetViews = async (a: Announcement) => {
     if (!window.confirm(`Réafficher « ${a.title} » à tout le monde (vous compris) à la prochaine connexion ?`)) return;
@@ -295,6 +306,9 @@ export const AnnouncementsManager: React.FC = () => {
                         Retirer
                       </button>
                     )}
+                    <button type="button" onClick={() => editLink(a)} className="inline-flex items-center gap-1 font-medium text-gray-700 hover:text-gray-900">
+                      <Link2 className="h-3.5 w-3.5" /> {a.link_url ? 'Modifier le lien' : 'Ajouter un lien'}
+                    </button>
                     <button type="button" onClick={() => resetViews(a)} className="inline-flex items-center gap-1 font-medium text-gray-700 hover:text-gray-900">
                       <RotateCcw className="h-3.5 w-3.5" /> Réafficher à tout le monde
                     </button>
