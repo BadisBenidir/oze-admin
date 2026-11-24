@@ -582,33 +582,39 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
                     {statusUpdateSuccess && (
                       <p className="text-xs text-green-600 mt-1">✓ Statut mis à jour avec succès</p>
                     )}
-                    {(product.status.endsWith('-b2b') || !!product.b2b_reference) && (() => {
+                    {(() => {
+                      // Toujours visible : l'article est-il physiquement dans nos locaux ?
                       const receivedAt = (product as Product & { received_at?: string | null }).received_at;
-                      return receivedAt ? (
-                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                          <span className="inline-flex items-center gap-1 font-medium text-green-700">
-                            <PackageCheck className="h-3.5 w-3.5" />
-                            Reçu le {new Date(receivedAt).toLocaleDateString('fr-FR')} · prêt à être livré
-                          </span>
-                          <span className="text-gray-500">· badge « Disponible à la livraison » visible des revendeurs</span>
-                          <button
-                            onClick={() => handleToggleReceived(false)}
-                            disabled={receivedBusy}
-                            className="text-gray-500 underline hover:text-gray-700 disabled:opacity-50"
-                          >
-                            Annuler
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleToggleReceived(true)}
-                          disabled={receivedBusy}
-                          title="L'article est physiquement dans nos locaux : les revendeurs voient le badge « Disponible à la livraison » (B2B, achat immédiat, enchères) et, une fois vendu, il est directement prêt à être livré"
-                          className="mt-2 flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-gray-900 disabled:opacity-50"
+                      return (
+                        <label
+                          title="Coché : les revendeurs voient le badge « Disponible à la livraison » (B2B, achat immédiat, enchères) et, une fois vendu, l'article est directement prêt à être livré"
+                          className={`mt-2 flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                            receivedAt ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                          } ${receivedBusy ? 'opacity-50' : ''}`}
                         >
-                          <PackageCheck className="h-3.5 w-3.5" />
-                          {receivedBusy ? 'Enregistrement…' : 'Marquer comme reçu (prêt à être livré)'}
-                        </button>
+                          <input
+                            type="checkbox"
+                            checked={!!receivedAt}
+                            disabled={receivedBusy}
+                            onChange={(e) => handleToggleReceived(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-green-600"
+                          />
+                          <span>
+                            <span className={`flex items-center gap-1 font-medium ${receivedAt ? 'text-green-800' : 'text-gray-800'}`}>
+                              <PackageCheck className="h-3.5 w-3.5" />
+                              {receivedBusy
+                                ? 'Enregistrement…'
+                                : receivedAt
+                                  ? `Reçu dans nos locaux le ${new Date(receivedAt).toLocaleDateString('fr-FR')}`
+                                  : 'Pas encore reçu dans nos locaux'}
+                            </span>
+                            <span className="block text-xs text-gray-500">
+                              {receivedAt
+                                ? 'Disponible à la livraison : badge visible des revendeurs, livraison demandable dès l\'achat.'
+                                : 'Cochez quand l\'article est chez nous : badge « Disponible à la livraison » côté revendeurs.'}
+                            </span>
+                          </span>
+                        </label>
                       );
                     })()}
                     {(product.status === 'draft' || product.status === 'draft-b2b') && (
