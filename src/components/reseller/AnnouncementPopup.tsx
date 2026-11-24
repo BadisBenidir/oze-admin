@@ -6,6 +6,8 @@ interface Announcement {
   id: string;
   title: string;
   image_url: string;
+  /** Version téléphone (portrait), affichée à la place sur petit écran (0307). */
+  mobile_image_url: string | null;
   link_url: string | null;
   link_label: string | null;
 }
@@ -23,7 +25,7 @@ export const AnnouncementPopup: React.FC<{ profileId: string | undefined }> = ({
     let cancelled = false;
     (async () => {
       const [{ data: live }, { data: seen }] = await Promise.all([
-        supabase.from('b2b_announcements').select('id, title, image_url, link_url, link_label').order('starts_at', { ascending: false }),
+        supabase.from('b2b_announcements').select('id, title, image_url, mobile_image_url, link_url, link_label').order('starts_at', { ascending: false }),
         supabase.from('b2b_announcement_views').select('announcement_id').eq('profile_id', profileId),
       ]);
       if (cancelled || !live) return;
@@ -61,7 +63,13 @@ export const AnnouncementPopup: React.FC<{ profileId: string | undefined }> = ({
     window.location.assign(current.link_url);
   };
 
-  const image = <img src={current.image_url} alt={current.title} className="block max-h-[82vh] w-full rounded-xl object-contain shadow-2xl" />;
+  // Téléphone (< 640 px) : version portrait si elle existe, sinon l'affiche principale.
+  const image = (
+    <picture>
+      {current.mobile_image_url && <source media="(max-width: 639px)" srcSet={current.mobile_image_url} />}
+      <img src={current.image_url} alt={current.title} className="block max-h-[82vh] w-full rounded-xl object-contain shadow-2xl" />
+    </picture>
+  );
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-2 sm:p-4" onClick={close}>
