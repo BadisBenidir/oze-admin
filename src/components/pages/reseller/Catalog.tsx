@@ -211,7 +211,8 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
         (filters.categoryIds.length === 0 || (p.category_id && filters.categoryIds.includes(p.category_id))) &&
         (filters.conditions.length === 0 || filters.conditions.includes(p.condition)) &&
         (filters.priceMin === null || p.price >= filters.priceMin) &&
-        (filters.priceMax === null || p.price <= filters.priceMax)
+        (filters.priceMax === null || p.price <= filters.priceMax) &&
+        (!filters.deliveryOnly || !!p.available_for_delivery)
     );
   }, [soldItems, items, filters]);
   // Sur la dernière page de la grille (ou s'il n'y a plus rien en vente).
@@ -235,7 +236,8 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
     filters.brandIds.length +
     filters.categoryIds.length +
     filters.conditions.length +
-    (filters.priceMin !== null || filters.priceMax !== null ? 1 : 0);
+    (filters.priceMin !== null || filters.priceMax !== null ? 1 : 0) +
+    (filters.deliveryOnly ? 1 : 0);
   const hasActiveFilters = activeFilterCount > 0 || Boolean(filters.search);
 
   const currentPriceBracket = useMemo(
@@ -416,6 +418,18 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
             <option key={b.id} value={b.id}>{b.label}</option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={() => setFilters({ deliveryOnly: !filters.deliveryOnly })}
+          aria-pressed={filters.deliveryOnly}
+          title="Seulement les pièces déjà dans nos locaux : livraison demandable dès l'achat, reçue en 2 à 4 jours"
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+            filters.deliveryOnly ? 'border-[#0F172A] bg-[#0F172A] text-white' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
+          }`}
+        >
+          <Zap className="h-4 w-4" style={{ color: '#E9C46A' }} strokeWidth={2.25} />
+          Livraison disponible
+        </button>
         <select value={filters.sort} onChange={(e) => setFilters({ sort: e.target.value as B2BCatalogSort })} className={selectClass}>
           <option value="recent">Nouveautés</option>
           <option value="price_asc">Prix croissant</option>

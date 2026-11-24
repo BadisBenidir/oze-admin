@@ -63,6 +63,8 @@ export interface B2BCatalogFilters {
   conditions: string[];
   priceMin: number | null;
   priceMax: number | null;
+  /** Seulement les pièces déjà dans nos locaux (0306). */
+  deliveryOnly: boolean;
   sort: B2BCatalogSort;
 }
 
@@ -73,6 +75,7 @@ const EMPTY_FILTERS: B2BCatalogFilters = {
   conditions: [],
   priceMin: null,
   priceMax: null,
+  deliveryOnly: false,
   sort: 'recent',
 };
 
@@ -174,6 +177,9 @@ export const useB2BCatalog = (isAuthenticated: boolean = false, instantBuy: bool
       }
       if (currentFilters.priceMax !== null) {
         query = query.lte('price', currentFilters.priceMax);
+      }
+      if (currentFilters.deliveryOnly) {
+        query = query.eq('available_for_delivery', true);
       }
 
       // Nouveautés : ordre du drop à sa publication (0234), sinon date de
