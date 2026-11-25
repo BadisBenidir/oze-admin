@@ -25,6 +25,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { hasAdminAccess } from '../_shared/adminAccess.ts';
+import { computeSendcloudInsurance, insuredParcelFields } from '../_shared/sendcloudInsurance.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -209,8 +210,12 @@ const fetchShippingMethods = async (
 // Sendcloud pour CE compte, jamais sur un id ou un carrier deviné à l'avance.
 const selectShippingMethod = (methods: SendcloudShippingMethod[], weightKg: number): SendcloudShippingMethod | null => {
   const eligible = methods.filter((m) => m.service_point_input && m.service_point_input !== 'none');
-  const inRange = eligible.find((m) => weightKg >= Number(m.min_weight) && weightKg <= Number(m.max_weight));
-  return inRange || eligible[0] || null;
+  // Méthodes « QR code » (dépôt sans étiquette) : Sendcloud ne renvoie qu'un
+  // QR code au lieu d'un bordereau imprimable — à n'utiliser qu'en dernier recours.
+  const isQr = (m: SendcloudShippingMethod) => /\bqr\b|qr[ -]?code|label[ -]?less|paperless|sans [ée]tiquette/i.test(m.name);
+  const fits = (m: SendcloudShippingMethod) => weightKg >= Number(m.min_weight) && weightKg <= Number(m.max_weight);
+  const withLabel = eligible.filter((m) => !isQr(m));
+  return withLabel.find(fits) || eligible.filter(isQr).find(fits) || withLabel[0] || eligible[0] || null;
 };
 
 // L'API v3 (utilisée pour la création du colis) n'accepte pas un id de
@@ -373,6 +378,15 @@ Deno.serve(async (req: Request) => {
     if (isInternationalRelay) {
       console.log('[Sendcloud] Méthodes actives pour ce pays/point relais', internationalMethods);
     }
+    // Transporteur voulu pour un point relais à l'étranger : celui que l'admin
+    // force (boutons Mondial Relay / Colissimo), sinon le réseau du point choisi
+    // par le membre. Jamais un autre transporteur en silence (cas réel :
+    // Belgique, point Mondial Relay expédié en Colissimo puis refusé au relais).
+    const wantedInternationalCarrier = isInternationalRelay ? resolveCarrier(network, carrierOverride) : null;
+    const wantedLabel = wantedInternationalCarrier === 'mondial_relay' ? 'Mondial Relay' : 'Colissimo';
+    const matchingInternationalMethods = internationalMethods.filter((m) =>
+      wantedInternationalCarrier === 'mondial_relay' ? m.carrier.toLowerCase().includes('mondial') : !m.carrier.toLowerCase().includes('mondial')
+    );
 
     const { data: profile } = await adminClient
       .from('profiles')
@@ -503,6 +517,9 @@ Deno.serve(async (req: Request) => {
       }, 0);
       const weightKg = parcel.weight_kg ?? Math.max(0.5, Math.round((itemsKg + PACKAGING_WEIGHT_KG) * 1000) / 1000);
       const totalValue = items.reduce((sum, it) => sum + Number(it.line_total) + (it.insured ? Number(it.insurance_cost) : 0), 0);
+      // Assurance de chaque envoi : prix de vente des articles du colis (sans
+      // la prime d'assurance), règle partagée (_shared/sendcloudInsurance.ts).
+      const insurance = computeSendcloudInsurance(items.reduce((sum, it) => sum + Number(it.line_total || 0), 0));
 
       // Toujours recalculé juste avant l'insert : jamais fourni par le
       // client, pour qu'une relance après échec partiel ne puisse jamais
@@ -525,9 +542,10 @@ Deno.serve(async (req: Request) => {
       let parcelShipWith = shipWith;
       let parcelDeliveryIndicator = deliveryIndicator;
       if (isInternationalRelay) {
-        const method = selectShippingMethod(internationalMethods, weightKg);
+        const method = selectShippingMethod(matchingInternationalMethods, weightKg);
         if (!method) {
-          const errorMessage = `Aucune méthode d'expédition compatible avec ce point relais (${relayCountry}) et ce poids (${weightKg.toFixed(2)}kg) n'est active sur ce compte Sendcloud — vérifiez Settings → Shipping methods sur panel.sendcloud.sc.`;
+          const others = [...new Set(internationalMethods.map((m) => m.carrier))].join(', ');
+          const errorMessage = `${wantedLabel} n'a aucune méthode active pour ce point relais (${relayCountry}, ${weightKg.toFixed(2)} kg) sur ce compte Sendcloud${others ? ` (seulement : ${others})` : ''}. Activez ${wantedLabel} pour ce pays dans Sendcloud (Settings → Carriers / Shipping methods), ou faites choisir au membre un point relais du bon réseau. Aucun bordereau n'a été créé avec un autre transporteur.`;
           await adminClient.from('shipment_parcels').insert({
             shipment_id, parcel_index: parcelIndex, status: 'failed', weight_kg: weightKg, error_message: errorMessage,
           });
@@ -555,9 +573,13 @@ Deno.serve(async (req: Request) => {
       // pour les commandes de haute valeur", id 325800, visible dans
       // applied_shipping_rules de la réponse d'erreur) qui force une option
       // d'assurance non supportée par ce transporteur/cette destination,
-      // provoquant "No shipping option could be found...". On ne gère JAMAIS
-      // l'assurance via une règle dashboard opaque et non contrôlée depuis
-      // ce code — total_insured_value n'est d'ailleurs jamais envoyé ici.
+      // provoquant "No shipping option could be found...". Les règles du
+      // dashboard restent donc désactivées : l'assurance est envoyée
+      // explicitement par ce code, colis par colis, via
+      // parcels[].additional_insured_price (API v3, assurance XCover de 2 € à
+      // 5000 €) — elle ne dépend jamais d'une règle opaque. Si l'assurance
+      // est refusée pour une destination, l'erreur Sendcloud s'affiche et
+      // aucune étiquette n'est créée sans assurance.
       const payload: Record<string, unknown> = {
         apply_shipping_rules: false,
         apply_shipping_defaults: true,
@@ -567,7 +589,10 @@ Deno.serve(async (req: Request) => {
         total_order_price: { currency: 'EUR', value: totalValue.toFixed(2) },
         from_address: SENDER_ADDRESS,
         to_address: toAddress,
-        parcels: [{ weight: { value: weightKg.toFixed(3), unit: 'kg' } }],
+        parcels: [{
+          weight: { value: weightKg.toFixed(3), unit: 'kg' },
+          ...insuredParcelFields(insurance),
+        }],
       };
       if (parcelShipWith) payload.ship_with = parcelShipWith;
       if (hasRealCode) {
@@ -629,7 +654,7 @@ Deno.serve(async (req: Request) => {
           .update({ fulfillment_status: 'label_created', parcel_id: newParcel.id, label_created_at: new Date().toISOString() })
           .in('id', parcel.item_ids);
 
-        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'label_created', carrier: parcelCarrier, tracking_number: trackingNumber, tracking_url: trackingUrl, label_url: labelUrl });
+        results.push({ parcel_index: parcelIndex, item_ids: parcel.item_ids, status: 'label_created', carrier: parcelCarrier, tracking_number: trackingNumber, tracking_url: trackingUrl, label_url: labelUrl, insured_value: insurance.insuredValue, warning: insurance.warning });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Erreur réseau Sendcloud inconnue';
         await adminClient.from('shipment_parcels').insert({
