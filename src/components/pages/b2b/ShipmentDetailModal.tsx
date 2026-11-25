@@ -238,6 +238,8 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     else setReadyItems([]);
   }, [shipment, acceptsItems, loadReadyItems]);
 
+  const [cancellingParcelId, setCancellingParcelId] = useState<string | null>(null);
+
   if (!shipment) return null;
 
   const handleRestoreItem = async (itemId: string) => {
@@ -363,7 +365,6 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
 
   // Annule UN bordereau pas encore remis (les autres colis de la demande, même
   // déjà expédiés, ne bougent pas). Ses articles éventuels repassent à préparer.
-  const [cancellingParcelId, setCancellingParcelId] = useState<string | null>(null);
   const handleCancelParcel = async (parcelId: string, parcelIndex: number, itemCount: number) => {
     const detail = itemCount > 0
       ? ` Ses ${itemCount} article${itemCount > 1 ? 's' : ''} repasseront à préparer (port déjà payé).`
