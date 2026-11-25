@@ -344,6 +344,22 @@ Deno.serve(async (req: Request) => {
           },
         };
 
+    // Qonto exige rue, ville et code postal : message clair plutôt que le 422
+    // brut de Qonto quand la fiche du membre n'a pas d'adresse.
+    const billing = (clientPayload.billing_address || {}) as Record<string, unknown>;
+    const missing = [
+      !billing.street_address && 'rue',
+      !billing.city && 'ville',
+      !billing.zip_code && 'code postal',
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      const who = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email;
+      const where = isPro ? 'adresse de la société (statut juridique)' : 'adresse';
+      return json({
+        error: `Adresse de facturation incomplète pour ${who} (${missing.join(', ')} manquant${missing.length > 1 ? 's' : ''}). Renseignez son ${where} sur sa fiche (Abonnés → sous-compte), puis émettez la facture depuis la mission.`,
+      }, 422);
+    }
+
     let qontoClientId = profile.qonto_client_id as string | null;
     if (!qontoClientId) {
       const clientRes = await fetch(`${QONTO_BASE_URL}/clients`, {
