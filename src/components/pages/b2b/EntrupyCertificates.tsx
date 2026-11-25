@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   BadgeCheck, AlertCircle, ImageOff, Link as LinkIcon, Upload, X, ExternalLink,
-  Trash2, Euro, TrendingUp, TrendingDown, Wallet, Pencil, Check, Eye, Package,
+  Trash2, Euro, TrendingUp, TrendingDown, Wallet, Pencil, Check, Eye, Package, Search,
 } from 'lucide-react';
+
+const normalizeText = (value: string): string =>
+  value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 import { Card, CardContent } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
@@ -430,6 +433,7 @@ export const EntrupyCertificates: React.FC = () => {
   const { items, loading, error, importCertificate, uploadPdf, deleteCertificate } = useEntrupyCertificates(isAdmin);
   const manualAdjustment = useEntrupyManualAdjustment(isAdmin);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
+  const [search, setSearch] = useState('');
   const [importingItem, setImportingItem] = useState<EntrupyCertificateItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewingItem, setViewingItem] = useState<EntrupyCertificateItem | null>(null);
@@ -441,10 +445,20 @@ export const EntrupyCertificates: React.FC = () => {
   const filteredItems = useMemo(() => {
     const pending = items.filter((i) => i.entrupy_status === 'pending');
     const completed = items.filter((i) => i.entrupy_status === 'completed');
-    if (statusFilter === 'pending') return pending;
-    if (statusFilter === 'completed') return completed;
-    return [...pending, ...completed];
-  }, [items, statusFilter]);
+    const base = statusFilter === 'pending' ? pending : statusFilter === 'completed' ? completed : [...pending, ...completed];
+    // Recherche : réf. OZË, réf. fournisseur, nom de l'article, n° de
+    // commande, revendeur, demandeur (accents et casse ignorés ; chaque mot
+    // doit apparaître).
+    const words = normalizeText(search).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return base;
+    return base.filter((i) => {
+      const hay = normalizeText([
+        i.product_reference, i.supplier_reference, i.product_name, i.order_number,
+        i.reseller_company_name, i.requester_name, i.requester_email,
+      ].filter(Boolean).join(' '));
+      return words.every((w) => hay.includes(w));
+    });
+  }, [items, statusFilter, search]);
 
   const now = new Date();
   // Quota/coût Entrupy réel : consommé au moment de l'authentification
@@ -564,7 +578,17 @@ export const EntrupyCertificates: React.FC = () => {
         </div>
       )}
 
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="relative w-full sm:w-80">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Réf., nom de l'article ou de la personne"
+            className="w-full rounded-lg border border-gray-200 py-1.5 pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none"
+          />
+        </div>
         {([
           { id: 'pending', label: 'À faire' },
           { id: 'completed', label: 'Terminés' },
