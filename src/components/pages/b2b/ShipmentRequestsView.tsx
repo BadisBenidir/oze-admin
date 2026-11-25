@@ -86,8 +86,8 @@ export const ShipmentRequestsView: React.FC = () => {
   const deliveredData = useAdminShipments(isAdmin, ['delivered']);
 
   // Une demande en partie expédiée/livrée qui a encore du travail reste
-  // visible là où il faut agir : articles sans bordereau → « En attente »,
-  // bordereau généré pas encore remis au transporteur → « En préparation ».
+  // visible dans « En attente » : articles sans bordereau, ou bordereau
+  // généré pas encore remis au transporteur.
   const dataByTab = useMemo(() => {
     const needsLabel = (s: AdminShipment) => s.pendingItems.length > 0;
     const unsentLabel = (s: AdminShipment) => s.parcels.some((p) => p.status === 'label_created');
@@ -100,8 +100,8 @@ export const ShipmentRequestsView: React.FC = () => {
     });
     const advancedLoading = inTransitData.loading || deliveredData.loading;
     return {
-      requested: withList(requestedData, [...requestedData.shipments, ...advanced.filter(needsLabel)], advancedLoading),
-      preparing: withList(preparingData, [...preparingData.shipments, ...advanced.filter((s) => !needsLabel(s) && unsentLabel(s))], advancedLoading),
+      requested: withList(requestedData, [...requestedData.shipments, ...advanced.filter((s) => !done(s))], advancedLoading),
+      preparing: preparingData,
       in_transit: withList(inTransitData, inTransitData.shipments.filter(done)),
       delivered: withList(deliveredData, deliveredData.shipments.filter(done)),
     } as Record<Tab, ReturnType<typeof useAdminShipments>>;
@@ -309,7 +309,7 @@ export const ShipmentRequestsView: React.FC = () => {
                     ))
                   ) : (
                     shipments.map((shipment) => {
-                      const articleCount = tab === 'requested' ? shipment.pendingItems.length : shipment.shippedItems.length;
+                      const articleCount = tab === 'requested' ? shipment.pendingItems.length || shipment.shippedItems.length : shipment.shippedItems.length;
                       return (
                         <tr key={shipment.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                           <td className="py-4 px-4 md:px-6 text-sm">
@@ -322,9 +322,9 @@ export const ShipmentRequestsView: React.FC = () => {
                           </td>
                           <td className="py-4 px-4 md:px-6">
                             {statusBadge(shipment.status)}
-                            {(tab === 'requested' || tab === 'preparing') && (shipment.status === 'in_transit' || shipment.status === 'delivered') && (
+                            {tab === 'requested' && (shipment.status === 'in_transit' || shipment.status === 'delivered') && (
                               <p className="mt-1 text-xs text-amber-700">
-                                {tab === 'requested' ? 'Reste à expédier (port déjà payé)' : 'Un colis reste à remettre'}
+                                {shipment.pendingItems.length > 0 ? 'Reste à expédier (port déjà payé)' : 'Un colis reste à remettre'}
                               </p>
                             )}
                           </td>

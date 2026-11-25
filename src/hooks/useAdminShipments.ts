@@ -171,6 +171,11 @@ export const useAdminShipments = (isAuthenticated: boolean = false, statuses: Ad
       const parcelsByShipment = new Map<string, AdminShipmentParcel[]>();
       for (const row of (parcelRows || []) as Array<AdminShipmentParcel & { shipment_id: string }>) {
         const list = parcelsByShipment.get(row.shipment_id) || [];
+        // Sendcloud ne renvoie pas toujours le document à la création du
+        // colis : le lien de l'étiquette se déduit de son n° de colis.
+        if (!row.label_url && row.sendcloud_parcel_id && row.status !== 'failed') {
+          row.label_url = `https://panel.sendcloud.sc/api/v3/parcels/${row.sendcloud_parcel_id}/documents/label`;
+        }
         list.push(row);
         parcelsByShipment.set(row.shipment_id, list);
       }
