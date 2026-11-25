@@ -361,6 +361,25 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
     onGenerated();
   };
 
+  // Annule UN bordereau pas encore remis (les autres colis de la demande, même
+  // déjà expédiés, ne bougent pas). Ses articles éventuels repassent à préparer.
+  const [cancellingParcelId, setCancellingParcelId] = useState<string | null>(null);
+  const handleCancelParcel = async (parcelId: string, parcelIndex: number, itemCount: number) => {
+    const detail = itemCount > 0
+      ? ` Ses ${itemCount} article${itemCount > 1 ? 's' : ''} repasseront à préparer (port déjà payé).`
+      : '';
+    if (!window.confirm(`Annuler le bordereau du colis ${parcelIndex} chez Sendcloud ?${detail}`)) return;
+    setCancelLabelsError(null);
+    setCancellingParcelId(parcelId);
+    const { error } = await invokeEdgeFunction('cancel-shipment-labels', { shipment_id: shipment.id, parcel_id: parcelId });
+    setCancellingParcelId(null);
+    if (error) {
+      setCancelLabelsError(error);
+      return;
+    }
+    onGenerated();
+  };
+
   // Sendcloud tarde parfois à remonter le premier scan (dépôt en Point Relais) :
   // confirmation manuelle de la remise au transporteur (0243).
   const handleHandedOver = async () => {
@@ -813,6 +832,7 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                         {p.status === 'shipped' && <Badge variant="info">Expédié / En transit</Badge>}
                         {p.status === 'delivered' && <Badge variant="success">Livré</Badge>}
                       </p>
+                      <div className="flex flex-wrap items-center justify-end gap-3">
                       {p.label_url && (
                         <button
                           type="button"
@@ -823,6 +843,17 @@ export const ShipmentDetailModal: React.FC<ShipmentDetailModalProps> = ({ shipme
                           <FileDown className="h-3.5 w-3.5" /> {downloadingUrl === p.label_url ? 'Ouverture...' : "Réimprimer l'étiquette"}
                         </button>
                       )}
+                      {p.status === 'label_created' && !canCancelLabels && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelParcel(p.id, p.parcel_index, itemCountByParcel.get(p.id) || 0)}
+                          disabled={cancellingParcelId !== null}
+                          className="flex items-center gap-1 text-xs text-red-600 underline hover:text-red-800 disabled:opacity-50"
+                        >
+                          <Ban className="h-3.5 w-3.5" /> {cancellingParcelId === p.id ? 'Annulation...' : 'Annuler ce bordereau'}
+                        </button>
+                      )}
+                      </div>
                     </div>
                     {p.status === 'label_created' && !itemCountByParcel.has(p.id) && (
                       <p className="mt-1 text-xs font-medium text-amber-700">

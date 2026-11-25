@@ -62,7 +62,9 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Action réservée aux administrateurs' }, 403);
     }
 
-    const { shipment_id } = await req.json();
+    // parcel_id (optionnel) : n'annule que ce bordereau-là — les autres colis
+    // de la demande (déjà expédiés ou non) ne sont pas touchés.
+    const { shipment_id, parcel_id } = await req.json();
     if (!shipment_id) return json({ error: 'shipment_id est requis' }, 400);
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -74,13 +76,15 @@ Deno.serve(async (req: Request) => {
       .in('status', ['label_created', 'shipped', 'delivered']);
     if (parcelsError) return json({ error: parcelsError.message }, 500);
 
-    const alreadyShipped = (parcels || []).filter((p) => p.status !== 'label_created');
+    const scoped = parcel_id ? (parcels || []).filter((p) => p.id === parcel_id) : (parcels || []);
+    if (parcel_id && scoped.length === 0) return json({ error: 'Bordereau introuvable sur cette demande' }, 404);
+    const alreadyShipped = scoped.filter((p) => p.status !== 'label_created');
     if (alreadyShipped.length > 0) {
       return json({
         error: `Impossible d'annuler : ${alreadyShipped.map((p) => `colis ${p.parcel_index}`).join(', ')} déjà pris en charge par le transporteur.`,
       }, 409);
     }
-    const toCancel = (parcels || []).filter((p) => p.status === 'label_created');
+    const toCancel = scoped.filter((p) => p.status === 'label_created');
     if (toCancel.length === 0) {
       return json({ error: 'Aucun bordereau à annuler sur cette demande' }, 400);
     }
