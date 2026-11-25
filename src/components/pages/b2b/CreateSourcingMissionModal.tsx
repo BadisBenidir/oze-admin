@@ -1,7 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { X, AlertCircle } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { X, AlertCircle, Search } from 'lucide-react';
+import { supabase } from '../../../lib/supabase';
 import { SourcingMission, SourcingMissionInput } from '../../../hooks/useSourcingMissions';
 import { useResellers, ResellerContact } from '../../../hooks/useResellers';
+
+interface PersonHit {
+  profile_id: string;
+  reseller_id: string;
+  company_name: string;
+  name: string;
+  email: string;
+}
+
+const norm = (v: string) => v.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
 interface CreateSourcingMissionModalProps {
   isOpen: boolean;
@@ -27,6 +38,11 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
   const [contacts, setContacts] = useState<ResellerContact[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [userId, setUserId] = useState('');
+  // Recherche directe d'une personne (toutes entreprises) : remplit
+  // l'entreprise puis le sous-compte choisi.
+  const [people, setPeople] = useState<PersonHit[]>([]);
+  const [personQuery, setPersonQuery] = useState('');
+  const pendingUserRef = useRef<string | null>(null);
 
   const [title, setTitle] = useState('');
   const [advanceAmount, setAdvanceAmount] = useState('');
@@ -55,6 +71,49 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, editingMission]);
 
+  useEffect(() => {
+    if (!isOpen || lockedReseller) return;
+    let mounted = true;
+    supabase
+      .from('reseller_contacts')
+      .select('profile_id, reseller_id, resellers!inner(company_name), profiles!inner(first_name, last_name, email)')
+      .then(({ data }) => {
+        if (!mounted || !data) return;
+        type Row = { profile_id: string; reseller_id: string; resellers: { company_name: string }; profiles: { first_name: string | null; last_name: string | null; email: string | null } };
+        setPeople((data as unknown as Row[]).map((r) => ({
+          profile_id: r.profile_id,
+          reseller_id: r.reseller_id,
+          company_name: r.resellers?.company_name || '',
+          name: [r.profiles?.first_name, r.profiles?.last_name].filter(Boolean).join(' '),
+          email: r.profiles?.email || '',
+        })));
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen, lockedReseller]);
+
+  const personHits = useMemo(() => {
+    const words = norm(personQuery).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return [];
+    return people
+      .filter((p) => {
+        const hay = norm(p.name + ' ' + p.email + ' ' + p.company_name);
+        return words.every((w) => hay.includes(w));
+      })
+      .slice(0, 8);
+  }, [people, personQuery]);
+
+  const pickPerson = (p: PersonHit) => {
+    setPersonQuery('');
+    if (p.reseller_id === resellerId) {
+      setUserId(p.profile_id);
+      return;
+    }
+    pendingUserRef.current = p.profile_id;
+    setResellerId(p.reseller_id);
+  };
+
   // Sous-comptes rechargés dynamiquement dès que l'entreprise change (fixe
   // ou choisie dans le sélecteur) — même pattern que ResellerDetail.tsx.
   useEffect(() => {
@@ -73,8 +132,12 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
         // changé — sinon (admin qui corrige la société de la mission) c'est
         // un profile_id d'une autre entreprise, invalide pour ce sélecteur.
         const keepOriginalRequester = editingMission && resellerId === editingMission.reseller_id;
+        const picked = pendingUserRef.current;
+        pendingUserRef.current = null;
         setUserId(
-          keepOriginalRequester
+          picked && data.some((c) => c.profile_id === picked)
+            ? picked
+            : keepOriginalRequester
             ? editingMission!.user_id || data.find((c) => c.is_primary)?.profile_id || ''
             : data.find((c) => c.is_primary)?.profile_id || ''
         );
@@ -92,6 +155,7 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
     setResellerId('');
     setContacts([]);
     setUserId('');
+    setPersonQuery('');
     setTitle('');
     setAdvanceAmount('');
     setAllocatedCostBudget('');
@@ -192,6 +256,43 @@ export const CreateSourcingMissionModal: React.FC<CreateSourcingMissionModalProp
           </div>
 
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            {!lockedReseller && (
+              <div className="relative">
+                <label htmlFor="mission-person-search" className="block text-sm font-medium text-gray-700 mb-1">Rechercher la personne</label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    id="mission-person-search"
+                    type="search"
+                    autoComplete="off"
+                    value={personQuery}
+                    onChange={(e) => setPersonQuery(e.target.value)}
+                    placeholder="Nom, prénom ou email"
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                  />
+                </div>
+                {personQuery.trim() && (
+                  <div className="absolute z-10 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                    {personHits.length === 0 ? (
+                      <p className="px-3 py-2 text-sm text-gray-500">Aucune personne trouvée</p>
+                    ) : (
+                      personHits.map((p) => (
+                        <button
+                          key={p.reseller_id + p.profile_id}
+                          type="button"
+                          onClick={() => pickPerson(p)}
+                          className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                        >
+                          <span className="block text-sm font-medium text-gray-900">{p.name || p.email}</span>
+                          <span className="block text-xs text-gray-500">{p.company_name}{p.email ? ' · ' + p.email : ''}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {lockedReseller ? (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Entreprise</label>
