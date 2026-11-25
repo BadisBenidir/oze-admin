@@ -18,7 +18,8 @@ export interface SourcingItem {
   status: 'sourced' | 'validated' | 'shipped' | 'cancelled';
   photos: string[];
   created_at: string;
-  product: { id: string; name: string; images: string[]; main_image_index: number } | null;
+  /** received_at : pièce déjà dans nos locaux (envoi partiel, 0310). */
+  product: { id: string; name: string; images: string[]; main_image_index: number; received_at?: string | null } | null;
 }
 
 export interface SourcingItemInput {
@@ -67,7 +68,7 @@ export const useSourcingItems = (missionId: string | null): UseSourcingItemsResu
       setError(null);
       const { data, error: fetchError } = await supabase
         .from('b2b_sourcing_items')
-        .select('*, product:products(id, name, images, main_image_index)')
+        .select('*, product:products(id, name, images, main_image_index, received_at)')
         .eq('mission_id', missionId)
         .order('created_at', { ascending: false });
 

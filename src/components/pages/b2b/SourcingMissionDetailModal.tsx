@@ -241,6 +241,11 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
     setExtensionInput('');
   }, [mission?.id]);
 
+  // Envoi partiel (0310) — états déclarés avant le retour anticipé.
+  const [shipMode, setShipMode] = useState(false);
+  const [shipSelection, setShipSelection] = useState<Set<string>>(new Set());
+  const [shipping, setShipping] = useState(false);
+
   if (!mission) return null;
 
   const invoiceBadge = mission.order_id ? invoiceBadges[mission.order_id] : undefined;
@@ -281,6 +286,42 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
   // RÉELLE plutôt que l'enveloppe allouée au départ — voir
   // getSourcingMissionMetrics (même règle que les vues d'ensemble).
   const isCompleted = mission.status === 'completed';
+
+  // Envoi partiel (0310) : pièces déjà reçues envoyées avant la clôture,
+  // port payé, vers le point relais favori du membre.
+  const shipBlockReason = (item: SourcingItem): string | null => {
+    if (item.status === 'cancelled') return 'Pièce annulée';
+    if (!item.product_id) return 'Pas de fiche produit';
+    if (orderLines[item.product_id]) return 'Déjà envoyée';
+    if (!item.product?.received_at) return 'Pas encore reçue';
+    return null;
+  };
+  const toggleShipItem = (id: string) =>
+    setShipSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const handleShipPartial = async () => {
+    const ids = [...shipSelection];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Envoyer ${ids.length} pièce${ids.length > 1 ? 's' : ''} au membre maintenant ? Une demande de livraison (port déjà payé) est créée vers son point relais favori ; la mission reste ouverte pour la suite.`)) return;
+    setShipping(true);
+    const { data, error: rpcError } = await supabase.rpc('admin_sourcing_ship_partial', { p_mission_id: mission.id, p_item_ids: ids });
+    setShipping(false);
+    if (rpcError) {
+      alert(rpcError.message);
+      return;
+    }
+    setShipMode(false);
+    setShipSelection(new Set());
+    setLinesVersion((v) => v + 1);
+    await refreshItems();
+    onItemsChanged();
+    const n = (data as { items?: number } | null)?.items ?? ids.length;
+    setSuccessToast(`${n} pièce${n > 1 ? 's' : ''} envoyée${n > 1 ? 's' : ''} : demande de livraison créée (Commandes → Demandes de livraison, « En attente »).`);
+  };
   // Barème par défaut (avance/enveloppe), inchangé : sert de base au calcul
   // automatique par pièce (computeUnitPrice) — exactement la formule déjà
   // exposée au revendeur (0151/0152), jamais un second taux saisi
@@ -833,6 +874,20 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                   </button>
                 )}
               </div>
+              <div className="flex items-center gap-2">
+              {mission.status === 'active' && !shipMode && (
+                <button
+                  onClick={() => {
+                    setShipSelection(new Set());
+                    setShipMode(true);
+                  }}
+                  title="Envoyer dès maintenant les pièces déjà reçues (port payé, point relais favori) sans clôturer la mission"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-800 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium"
+                >
+                  <Truck className="h-3.5 w-3.5" />
+                  Envoyer une partie
+                </button>
+              )}
               <button
                 onClick={() => setShowAddModal(true)}
                 title={isCompleted ? 'Mission clôturée : la pièce est ajoutée à la commande et à la demande de livraison' : undefined}
@@ -841,7 +896,37 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                 <Plus className="h-3.5 w-3.5" />
                 Ajouter une pièce
               </button>
+              </div>
             </div>
+
+            {shipMode && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-900 bg-gray-50 px-3 py-2">
+                <p className="text-xs text-gray-700">
+                  Coche les pièces à envoyer maintenant (grisées : pas encore reçues ou déjà envoyées). Livraison port payé au point relais favori du membre.
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShipMode(false);
+                      setShipSelection(new Set());
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleShipPartial}
+                    disabled={shipping || shipSelection.size === 0}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-40 text-xs font-medium"
+                  >
+                    <Truck className="h-3.5 w-3.5" />
+                    {shipping ? 'Envoi...' : `Envoyer ${shipSelection.size} pièce${shipSelection.size > 1 ? 's' : ''}`}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center space-x-2">
@@ -880,10 +965,21 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                     ) : (
                       items.map((item) => {
                         const photo = item.photos?.[0] || item.product?.images?.[item.product.main_image_index] || item.product?.images?.[0];
+                        const blockReason = shipMode ? shipBlockReason(item) : null;
                         return (
-                          <tr key={item.id} className="border-b border-gray-50 last:border-b-0">
+                          <tr key={item.id} className={`border-b border-gray-50 last:border-b-0 ${shipMode && blockReason ? 'opacity-40' : ''}`}>
                             <td className="py-2.5 px-3">
                               <div className="flex items-center gap-2.5 min-w-0">
+                                {shipMode && (
+                                  <input
+                                    type="checkbox"
+                                    checked={shipSelection.has(item.id)}
+                                    onChange={() => toggleShipItem(item.id)}
+                                    disabled={Boolean(blockReason)}
+                                    title={blockReason || 'Envoyer cette pièce maintenant'}
+                                    className="h-4 w-4 flex-shrink-0 rounded border-gray-300 text-gray-900 focus:ring-gray-900 disabled:cursor-not-allowed"
+                                  />
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => item.product_id && setViewingProductId(item.product_id)}
@@ -911,6 +1007,7 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                                     <p className="text-sm font-medium text-gray-900 break-words line-clamp-2">{item.title}</p>
                                   )}
                                   {item.brand && <p className="text-xs text-gray-500 truncate">{item.brand}</p>}
+                                  {shipMode && blockReason && <p className="text-[11px] text-gray-500">{blockReason}</p>}
                                   {!item.product_id && (
                                     <button
                                       type="button"
@@ -990,7 +1087,12 @@ export const SourcingMissionDetailModal: React.FC<SourcingMissionDetailModalProp
                               <button
                                 type="button"
                                 onClick={() => handleRemoveItem(item)}
-                                title={isCompleted ? 'Retirer cette pièce (absente du carton) : sortie de la commande et de la livraison' : 'Retirer cette pièce de la mission'}
+                                disabled={!isCompleted && Boolean(item.product_id && orderLines[item.product_id])}
+                                title={
+                                  !isCompleted && item.product_id && orderLines[item.product_id]
+                                    ? 'Pièce déjà envoyée au membre : plus retirable'
+                                    : isCompleted ? 'Retirer cette pièce (absente du carton) : sortie de la commande et de la livraison' : 'Retirer cette pièce de la mission'
+                                }
                                 className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
