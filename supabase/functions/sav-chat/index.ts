@@ -240,7 +240,7 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: Ctx): 
       .from('orders')
       .select(
         'id, order_number, created_at, payment_status, subtotal, shipping_cost, total_amount, paid_at, ' +
-          'order_items(product_snapshot, unit_price, status, cancellation_reason, refund_status, fulfillment_status, shipped_at, delivered_at, insured, entrupy_requested, ' +
+          'order_items(product_snapshot, unit_price, status, cancellation_reason, refund_status, fulfillment_status, shipped_at, delivered_at, insured, entrupy_requested, entrupy_status, entrupy_cert_url, entrupy_pdf_path, ' +
           'shipment_parcel:shipment_parcels(tracking_number, tracking_url))'
       )
       .eq('reseller_id', resellerId)
@@ -273,7 +273,18 @@ async function runTool(name: string, input: Record<string, unknown>, ctx: Ctx): 
           expedie_le: i.shipped_at ? String(i.shipped_at).slice(0, 10) : null,
           livre_le: i.delivered_at ? String(i.delivered_at).slice(0, 10) : null,
           assurance: i.insured,
-          certificat_entrupy: i.entrupy_requested,
+          certificat_entrupy: !i.entrupy_requested
+            ? null
+            : i.entrupy_status === 'completed' && (i.entrupy_cert_url || i.entrupy_pdf_path)
+              ? {
+                  disponible: true,
+                  ou_le_trouver:
+                    "Espace Pro → « Mes commandes » → ouvrir cette commande (icône œil) → bouton violet « Télécharger le certificat Entrupy » sous l'article.",
+                }
+              : {
+                  disponible: false,
+                  statut: "En cours d'édition par l'équipe OZË : il apparaîtra dans la commande (bouton « Télécharger le certificat Entrupy ») dès qu'il sera prêt.",
+                },
           suivi_colis: parcel?.tracking_number ? { numero: parcel.tracking_number, lien: parcel.tracking_url } : null,
         };
       }),
