@@ -132,6 +132,13 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
       return;
     }
     const unpacked = nonEmpty.flatMap((p) => p.items).filter((id) => !packed[id]).length;
+    // Certificat Entrupy payé mais pas encore fait : une fois la pièce partie,
+    // il ne peut plus être réalisé (authentification sur la pièce en main).
+    const selected = new Set(nonEmpty.flatMap((p) => p.items));
+    const noCert = items.filter((i) => selected.has(i.id) && i.entrupy_requested && !(i.entrupy_status === 'completed' && i.entrupy_cert_url));
+    if (noCert.length > 0 && !window.confirm(
+      `⚠ Certificat Entrupy payé mais PAS ENCORE FAIT pour ${noCert.length} pièce${noCert.length > 1 ? 's' : ''} :\n${noCert.map((i) => '• ' + itemRef(i)).join('\n')}\n\nUne fois expédiée, la pièce ne pourra plus être authentifiée. Générer le bordereau quand même ?`
+    )) return;
     if (unpacked > 0 && !window.confirm(`${unpacked} article${unpacked > 1 ? 's ne sont pas cochés' : " n'est pas coché"} « dans le carton ». Générer le bordereau quand même ?`)) return;
     setError(null);
     setGenerating(true);
@@ -200,6 +207,9 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                 </p>
               )}
               {r.status === 'failed' && <p className="text-xs text-red-700 mt-1">{r.error}</p>}
+              {r.status === 'label_created' && r.warning && (
+                <p className="text-xs font-medium text-amber-700 mt-1">⚠ {r.warning}</p>
+              )}
             </div>
           ))}
           {stillPendingCount > 0 && (
@@ -264,8 +274,8 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                                     </Badge>
                                   </a>
                                 ) : (
-                                  <Badge variant="purple">
-                                    <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy à joindre
+                                  <Badge variant="danger">
+                                    <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy à faire avant envoi
                                   </Badge>
                                 )}
                                 <button
@@ -380,7 +390,7 @@ export const ParcelSplitEditor: React.FC<ParcelSplitEditorProps> = ({ shipmentId
                 ))}
               </div>
               <p className="text-[11px] text-gray-400 mt-1.5">
-                Pour un point relais hors France, la méthode réellement disponible sur le compte Sendcloud est détectée automatiquement (ce choix ne s'applique alors pas).
+                Pour un point relais hors France aussi, ce choix (ou le réseau du point relais) est respecté : si ce transporteur n'est pas activé pour ce pays sur Sendcloud, aucun bordereau n'est créé et un message l'explique.
               </p>
             </div>
           )}

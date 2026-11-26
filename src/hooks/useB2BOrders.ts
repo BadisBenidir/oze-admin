@@ -32,6 +32,9 @@ export interface B2BOrderItem {
   insurance_cost: number;
   entrupy_requested: boolean;
   entrupy_cost: number;
+  /** 'completed' + entrupy_cert_url quand le certificat est réellement fait (EntrupyCertificates). */
+  entrupy_status?: string | null;
+  entrupy_cert_url?: string | null;
   product_snapshot: { name?: string; images?: string[]; main_image_index?: number; product_code?: string; reference?: string | null; serial_number?: string | null };
   status: 'active' | 'cancelled';
   cancellation_reason: string | null;

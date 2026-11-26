@@ -120,8 +120,8 @@ const ShippedItemRow: React.FC<ShippedItemRowProps> = ({ item, onRevert, onBackT
                 </Badge>
               </a>
             ) : (
-              <Badge variant="purple">
-                <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy à joindre
+              <Badge variant="danger">
+                <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy à faire avant envoi
               </Badge>
             )
           )}

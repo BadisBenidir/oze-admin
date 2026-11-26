@@ -997,9 +997,17 @@ export const B2BOrderDetailModal: React.FC<B2BOrderDetailModalProps> = ({ order,
                                   )}
                                   {!isCancelled && item.entrupy_requested && (
                                     <div className="mt-1 flex items-center gap-1.5">
-                                      <Badge variant="purple">
-                                        <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy inclus
-                                      </Badge>
+                                      {item.entrupy_status === 'completed' && item.entrupy_cert_url ? (
+                                        <a href={item.entrupy_cert_url} target="_blank" rel="noopener noreferrer" title="Ouvrir le certificat">
+                                          <Badge variant="success">
+                                            <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy fait
+                                          </Badge>
+                                        </a>
+                                      ) : (
+                                        <Badge variant="danger">
+                                          <BadgeCheck className="h-3 w-3 mr-1" /> Certificat Entrupy payé — à faire
+                                        </Badge>
+                                      )}
                                       <button
                                         type="button"
                                         onClick={() => handleCancelEntrupy(item.id)}

@@ -18,6 +18,10 @@ export interface ParcelResult {
   tracking_url?: string | null;
   label_url?: string | null;
   error?: string;
+  /** Valeur assurée envoyée à Sendcloud (additional_insured_price), en €. */
+  insured_value?: number;
+  /** Avertissement non bloquant (ex. assurance plafonnée à 5000 €). */
+  warning?: string | null;
 }
 
 interface GenerateResult {
