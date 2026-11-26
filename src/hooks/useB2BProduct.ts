@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, RESERVATION_SIGNALS_TOPIC } from '../lib/supabase';
 import { B2BCatalogItem } from './useB2BCatalog';
 
 interface UseB2BProductResult {
@@ -68,13 +68,12 @@ export const useB2BProduct = (productId: string | undefined, isAuthenticated: bo
   useEffect(() => {
     if (!productId || !isAuthenticated) return;
 
+    // Signal diffusé (0311) : on ne recharge que si c'est CE produit.
     const channel = supabase
-      .channel(`product-reservation-signal-${productId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'product_reservation_signals', filter: `product_id=eq.${productId}` },
-        () => fetchProductRef.current(true)
-      )
+      .channel(RESERVATION_SIGNALS_TOPIC)
+      .on('broadcast', { event: 'signal' }, ({ payload }) => {
+        if ((payload as { product_id?: string } | undefined)?.product_id === productId) fetchProductRef.current(true);
+      })
       .subscribe();
 
     return () => {

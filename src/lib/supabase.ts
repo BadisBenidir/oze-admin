@@ -65,3 +65,5 @@ export interface CustomerData {
   created_at: string
   updated_at: string
 }
+/** Canal Realtime « broadcast » des réservations panier (0311, realtime.send côté base). */
+export const RESERVATION_SIGNALS_TOPIC = 'reservation-signals';

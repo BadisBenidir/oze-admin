@@ -206,10 +206,26 @@ export const useB2BCart = (profileId: string | undefined, legalStatusComplete: b
   // libérer des articles expirés sans action locale — garde le panier
   // synchronisé avec la réalité serveur plutôt que de ne se fier qu'au
   // décompte local du timer global.
+  // Allègement (drops) : onglet en arrière-plan → aucun appel, rechargement
+  // au retour ; panier vide → une fois par minute seulement (rien ne peut
+  // expirer, seules les infos de drop bougent).
   useEffect(() => {
     if (!profileId) return;
-    const interval = setInterval(refresh, 15000);
-    return () => clearInterval(interval);
+    let ticks = 0;
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      ticks += 1;
+      if (itemsRef.current.length === 0 && ticks % 4 !== 0) return;
+      refresh();
+    }, 15000);
+    const onVisible = () => {
+      if (!document.hidden) refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [profileId, refresh]);
 
   // Tick chaque seconde : force le recalcul de l'affichage des chronos, et

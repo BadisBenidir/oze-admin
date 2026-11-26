@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { supabase, RESERVATION_SIGNALS_TOPIC } from '../../../lib/supabase';
 import { useResellerAuth } from '../../../hooks/useResellerAuth';
 import { useB2BCatalog, B2BCatalogItem, B2BCatalogSort } from '../../../hooks/useB2BCatalog';
 import { useB2BCart } from '../../../hooks/useB2BCart';
@@ -129,9 +129,13 @@ export const Catalog: React.FC<CatalogProps> = ({ cart, onOpenProduct, instantBu
     };
     document.addEventListener('visibilitychange', onVisible);
 
+    // Signal diffusé par la base à chaque réservation (0311, realtime.send) :
+    // bien plus léger que postgres_changes, qui revérifiait les droits de
+    // chaque membre connecté pour chaque changement et saturait la base
+    // pendant les drops.
     const channel = supabase
-      .channel(instantBuy ? 'instant-buy-reservation-signals' : 'catalog-reservation-signals')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_reservation_signals' }, scheduleRefresh)
+      .channel(RESERVATION_SIGNALS_TOPIC)
+      .on('broadcast', { event: 'signal' }, scheduleRefresh)
       .subscribe();
 
     // Filet de sécurité si la connexion Realtime se coupe (veille de
