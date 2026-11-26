@@ -52,7 +52,10 @@ const fetchSessionDates = async (since: string) => {
  *     (0125), rechargés une fois au montage (pas de temps réel nécessaire
  *     pour un historique journalier).
  */
-export const useB2BTraffic = (isAdmin: boolean, historyDays: 14 | 30 = 30) => {
+/** 'all' : depuis le premier jour de suivi réel (reseller_daily_sessions). */
+export type TrafficRange = 14 | 30 | 'all';
+
+export const useB2BTraffic = (isAdmin: boolean, historyDays: TrafficRange = 30) => {
   const [onlineResellers, setOnlineResellers] = useState<OnlineReseller[]>([]);
   const [uniqueToday, setUniqueToday] = useState(0);
   const [dailyHistory, setDailyHistory] = useState<DailyVisitCount[]>([]);
@@ -102,12 +105,28 @@ export const useB2BTraffic = (isAdmin: boolean, historyDays: 14 | 30 = 30) => {
       setError(null);
 
       const today = toDateKey(new Date());
+      // « Depuis le début » : à partir du premier jour de suivi réel.
+      let days = historyDays === 'all' ? 30 : historyDays;
+      if (historyDays === 'all') {
+        const { data: first } = await supabase
+          .from('reseller_daily_sessions')
+          .select('date')
+          .order('date', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (first?.date) {
+          const start = new Date(`${first.date}T00:00:00`);
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          days = Math.max(1, Math.round((now.getTime() - start.getTime()) / 86_400_000) + 1);
+        }
+      }
       const windowStart = new Date();
-      windowStart.setDate(windowStart.getDate() - (historyDays - 1));
+      windowStart.setDate(windowStart.getDate() - (days - 1));
 
       const [realRes, backfillRes] = await Promise.all([
         fetchSessionDates(toDateKey(windowStart)),
-        supabase.rpc('backfill_reseller_daily_activity', { p_days: historyDays }),
+        supabase.rpc('backfill_reseller_daily_activity', { p_days: days }),
       ]);
       if (realRes.error) throw new Error(realRes.error.message);
       // Le rattrapage est un confort d'affichage, pas une donnée critique :
@@ -129,7 +148,7 @@ export const useB2BTraffic = (isAdmin: boolean, historyDays: 14 | 30 = 30) => {
       // foi ; sinon on retombe sur l'estimation reconstituée, sinon 0 — un
       // graphique continu plutôt que des trous silencieux.
       const series: DailyVisitCount[] = [];
-      for (let i = 0; i < historyDays; i++) {
+      for (let i = 0; i < days; i++) {
         const d = new Date(windowStart);
         d.setDate(d.getDate() + i);
         const key = toDateKey(d);

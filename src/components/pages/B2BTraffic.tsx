@@ -4,7 +4,7 @@ import { Radio, Users, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { AccountingKpiCard } from './accounting/AccountingKpiCard';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-import { useB2BTraffic } from '../../hooks/useB2BTraffic';
+import { useB2BTraffic, TrafficRange } from '../../hooks/useB2BTraffic';
 import { MemberGrowthChart } from './b2b/MemberGrowthChart';
 import { TopBuyers } from './b2b/TopBuyers';
 
@@ -27,7 +27,7 @@ const dateLabel = (dateKey: string): string => {
 
 export const B2BTraffic: React.FC = () => {
   const { isAdmin } = useAdminAuth();
-  const [historyDays, setHistoryDays] = useState<14 | 30>(30);
+  const [historyDays, setHistoryDays] = useState<TrafficRange>(30);
   const { onlineResellers, uniqueToday, dailyHistory, loading } = useB2BTraffic(isAdmin, historyDays);
 
   const chartData = useMemo(() => dailyHistory.map((d) => ({ ...d, label: dateLabel(d.date) })), [dailyHistory]);
@@ -67,7 +67,7 @@ export const B2BTraffic: React.FC = () => {
         </Card>
         <AccountingKpiCard label="Visiteurs uniques aujourd'hui" value={String(uniqueToday)} icon={Users} tone="default" />
         <AccountingKpiCard
-          label={`Moyenne quotidienne (${historyDays} j)`}
+          label={historyDays === 'all' ? `Moyenne quotidienne (depuis le début, ${dailyHistory.length} j)` : `Moyenne quotidienne (${historyDays} j)`}
           value={averageDaily.toFixed(1)}
           icon={Building2}
         />
@@ -115,7 +115,7 @@ export const B2BTraffic: React.FC = () => {
           <div className="flex items-center justify-between">
             <h3 className="text-base font-semibold text-gray-900">Visiteurs uniques par jour</h3>
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-              {([14, 30] as const).map((d) => (
+              {([14, 30, 'all'] as const).map((d) => (
                 <button
                   key={d}
                   onClick={() => setHistoryDays(d)}
@@ -123,7 +123,7 @@ export const B2BTraffic: React.FC = () => {
                     historyDays === d ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  {d} jours
+                  {d === 'all' ? 'Depuis le début' : `${d} jours`}
                 </button>
               ))}
             </div>
@@ -137,7 +137,7 @@ export const B2BTraffic: React.FC = () => {
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={historyDays === 30 ? 2 : 0} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={historyDays === 14 ? 0 : Math.max(0, Math.ceil(dailyHistory.length / 15) - 1)} />
                   <YAxis tick={{ fontSize: 12 }} width={30} allowDecimals={false} />
                   <Tooltip
                     formatter={(v: any, _name: any, item: any) => [
