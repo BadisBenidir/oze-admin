@@ -106,7 +106,7 @@ export const useB2BTraffic = (isAdmin: boolean, historyDays: TrafficRange = 30) 
 
       const today = toDateKey(new Date());
       // « Depuis le début » : à partir du premier jour de suivi réel.
-      let days = historyDays === 'all' ? 30 : historyDays;
+      let days: number = historyDays === 'all' ? 30 : historyDays;
       if (historyDays === 'all') {
         const { data: first } = await supabase
           .from('reseller_daily_sessions')
