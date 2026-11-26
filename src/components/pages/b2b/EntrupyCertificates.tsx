@@ -455,6 +455,8 @@ export const EntrupyCertificates: React.FC = () => {
       const hay = normalizeText([
         i.product_reference, i.supplier_reference, i.product_name, i.order_number,
         i.reseller_company_name, i.requester_name, i.requester_email,
+        // N° du certificat Entrupy (ex. G688QQB dans cert.entrupy.com/G688QQB).
+        i.entrupy_cert_url, i.entrupy_pdf_path,
       ].filter(Boolean).join(' '));
       return words.every((w) => hay.includes(w));
     });
@@ -585,7 +587,7 @@ export const EntrupyCertificates: React.FC = () => {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Réf., nom de l'article ou de la personne"
+            placeholder="Réf., n° Entrupy, article ou personne"
             className="w-full rounded-lg border border-gray-200 py-1.5 pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none"
           />
         </div>
