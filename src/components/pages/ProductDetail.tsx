@@ -9,6 +9,7 @@ import { Modal } from '../ui/Modal';
 import { validateProductByBarcode } from '../../services/productValidationService';
 import { DirectB2BSaleModal } from '../products/DirectB2BSaleModal';
 import { ProductSaleDetails } from '../products/ProductSaleDetails';
+import { ProductSourcingOwner } from '../products/ProductSourcingOwner';
 import { ImageLightbox } from '../ui/ImageLightbox';
 import {
   ArrowLeft,
@@ -345,6 +346,7 @@ export const ProductDetail: React.FC<ProductDetailProps> = ({ productId, onBack,
             {product.b2b_reference && (
               <p className="text-sm text-gray-500 font-mono mt-1">SKU B2B : {product.b2b_reference}</p>
             )}
+            <ProductSourcingOwner productId={productId} />
           </div>
           
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 lg:flex-shrink-0">
