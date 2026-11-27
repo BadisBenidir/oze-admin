@@ -8,6 +8,8 @@ import { Expense } from '../../../hooks/useExpenses';
 import { AccountingPeriod, monthKeyLabel } from '../../../utils/accountingPeriods';
 import { expenseDate, expensesInRange, isCountedCharge } from '../../../utils/accountingCalc';
 import { invokeEdgeFunction } from '../../../utils/invokeEdgeFunction';
+import { VatSettings } from '../../../utils/vat';
+import { CategoryVatMap, expenseVatDetail, expenseVatProfile } from '../../../utils/vatRecovery';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 const UNCATEGORIZED = 'Sans catégorie';
@@ -17,14 +19,18 @@ export interface ExpenseCategoryRow {
   id: string;
   name: string;
   position: number;
+  /** 0313 : taux de récupération de la TVA par défaut (%). */
+  vat_recovery_rate?: number;
+  /** 0313 : fournisseur étranger par défaut (TVA autoliquidée). */
+  foreign_supplier?: boolean;
 }
 
 /** Catégories de charges (0274 / 0276), gérées depuis l'onglet. */
 const useExpenseCategories = () => {
   const [categories, setCategories] = useState<ExpenseCategoryRow[]>([]);
   const refresh = useCallback(async () => {
-    const { data } = await supabase.from('expense_categories').select('id, name, position').order('position').order('name');
-    setCategories((data || []) as ExpenseCategoryRow[]);
+    const { data } = await supabase.from('expense_categories').select('id, name, position, vat_recovery_rate, foreign_supplier').order('position').order('name');
+    setCategories(((data || []) as ExpenseCategoryRow[]).map((c) => ({ ...c, vat_recovery_rate: c.vat_recovery_rate == null ? 100 : Number(c.vat_recovery_rate) })));
   }, []);
   useEffect(() => {
     refresh();
@@ -64,6 +70,9 @@ interface ChargesTabProps {
   updateExpense: (id: string, data: Partial<Expense>) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
   refreshExpenses: () => Promise<void>;
+  /** TVA (0313) : réglage et défauts par catégorie, pour la colonne TVA. */
+  vatSettings?: VatSettings | null;
+  categoryVat?: CategoryVatMap;
 }
 
 /**
@@ -77,7 +86,7 @@ interface ChargesTabProps {
 /** Charge reliée à un débit Qonto sans justificatif déposé sur Qonto. */
 const missingReceipt = (e: Expense) => Boolean(e.bank_transaction_id) && !(e.bank?.attachment_ids?.length);
 
-export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, createExpense, updateExpense, deleteExpense, refreshExpenses }) => {
+export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, createExpense, updateExpense, deleteExpense, refreshExpenses, vatSettings = null, categoryVat = {} }) => {
   const { categories, refresh: refreshCategories } = useExpenseCategories();
   const [editing, setEditing] = useState<Expense | 'new' | null>(null);
   const [managing, setManaging] = useState(false);
@@ -337,6 +346,7 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
                     <th className="px-4 py-2.5 text-left font-medium">Catégorie</th>
                     <th className="px-4 py-2.5 text-left font-medium">Statut</th>
                     <th className="px-4 py-2.5 text-right font-medium">Montant</th>
+                    <th className="px-4 py-2.5 text-right font-medium" title="TVA déductible (× taux de récupération, + TVA import B00) ; étranger : autoliquidée">TVA déd.</th>
                     <th className="px-4 py-2.5" />
                   </tr>
                 </thead>
@@ -404,6 +414,9 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
                       <td className="whitespace-nowrap px-4 py-2.5 text-right text-sm font-medium tabular-nums text-gray-900">
                         {EUR(e.amount)}
                       </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right text-xs tabular-nums">
+                        <ChargeVatCell expense={e} settings={vatSettings} categories={categoryVat} />
+                      </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right">
                         {busy === e.id ? (
                           <Loader2 className="ml-auto h-4 w-4 animate-spin text-gray-400" />
@@ -442,6 +455,7 @@ export const ChargesTab: React.FC<ChargesTabProps> = ({ expenses, period, create
         <ExpenseFormModal
           expense={editing === 'new' ? null : editing}
           categories={categories}
+          categoryVat={categoryVat}
           onClose={() => setEditing(null)}
           onSave={async (data) => {
             if (editing === 'new') await createExpense(data);
@@ -479,7 +493,7 @@ const ModalShell: React.FC<{ title: string; onClose: () => void; children: React
   <div className="fixed inset-0 z-50 overflow-y-auto">
     <div className="fixed inset-0 bg-black/40" onClick={onClose} />
     <div className="flex min-h-full items-center justify-center p-4">
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-100 p-4">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
@@ -492,12 +506,30 @@ const ModalShell: React.FC<{ title: string; onClose: () => void; children: React
 
 const inputCls = 'mt-1 h-9 w-full rounded-lg border border-gray-200 px-2.5 text-sm font-normal text-gray-900 focus:border-gray-400 focus:outline-none';
 
+/** TVA d'une charge dans la liste : déduite (taux si partiel), ou autoliquidée (étranger). */
+const ChargeVatCell: React.FC<{ expense: Expense; settings: VatSettings | null; categories: CategoryVatMap }> = ({ expense, settings, categories }) => {
+  const d = expenseVatDetail(expense, settings, categories);
+  if (d.foreign) {
+    return <span className="text-gray-500" title={`Fournisseur étranger : TVA autoliquidée ${EUR(d.autoliquidated)} (due = déductible)`}>autoliq. {EUR(d.autoliquidated)}</span>;
+  }
+  if (!d.deductible && !d.invoiceVat) return <span className="text-gray-300">—</span>;
+  const why = [`TVA facture ${EUR(d.invoiceVat)} × ${d.rate} % (${d.rateSource}${d.why ? ` : ${d.why}` : ''})`, d.importVat ? `+ TVA import B00 ${EUR(d.importVat)}` : ''].filter(Boolean).join(' ');
+  return (
+    <span className="text-gray-700" title={why}>
+      {EUR(d.deductible)}
+      {d.rate !== 100 && <span className="ml-1 rounded bg-gray-100 px-1 py-0.5 text-[10px] text-gray-500">{d.rate} %</span>}
+      {d.importVat > 0 && <span className="ml-1 rounded bg-blue-50 px-1 py-0.5 text-[10px] text-blue-700">B00</span>}
+    </span>
+  );
+};
+
 const ExpenseFormModal: React.FC<{
   expense: Expense | null;
   categories: ExpenseCategoryRow[];
+  categoryVat: CategoryVatMap;
   onClose: () => void;
   onSave: (data: Partial<Expense>) => Promise<void>;
-}> = ({ expense, categories, onClose, onSave }) => {
+}> = ({ expense, categories, categoryVat, onClose, onSave }) => {
   const [form, setForm] = useState({
     label: expense?.label ?? '',
     category: expense?.category ?? categories[0]?.name ?? '',
@@ -506,7 +538,13 @@ const ExpenseFormModal: React.FC<{
     notes: expense?.notes ?? '',
     // TVA déductible (0280) : saisie ici si Qonto ne la connaît pas.
     vat: expense?.vat_amount != null ? String(expense.vat_amount).replace('.', ',') : '',
+    // 0313 : '' = automatique (libellé, puis catégorie).
+    recovery: expense?.vat_recovery_rate != null ? String(Number(expense.vat_recovery_rate)) : '',
+    foreign: expense?.foreign_supplier == null ? '' : expense.foreign_supplier ? 'yes' : 'no',
+    importVat: expense?.import_vat_amount != null ? String(expense.import_vat_amount).replace('.', ',') : '',
   });
+  // Réglage automatique (sans choix sur la charge).
+  const auto = expenseVatProfile({ label: form.label, category: form.category || null }, categoryVat);
   const qontoVat = expense?.bank?.vat_amount ?? null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -520,10 +558,19 @@ const ExpenseFormModal: React.FC<{
     if (!form.amount.trim() || Number.isNaN(amount) || amount < 0) return setError('Montant invalide.');
     const vat = form.vat.trim() ? Number(form.vat.replace(/\s/g, '').replace(',', '.')) : null;
     if (vat !== null && (Number.isNaN(vat) || vat < 0 || vat > amount)) return setError('TVA invalide.');
+    const importVat = form.importVat.trim() ? Number(form.importVat.replace(/\s/g, '').replace(',', '.')) : null;
+    if (importVat !== null && (Number.isNaN(importVat) || importVat < 0)) return setError('TVA import invalide.');
+    const recovery = form.recovery === '' ? null : Number(form.recovery);
+    if (recovery !== null && (Number.isNaN(recovery) || recovery < 0 || recovery > 100)) return setError('Taux de récupération invalide.');
     setBusy(true);
     setError(null);
     try {
-      await onSave({ label: form.label.trim(), category: form.category || null, amount, spent_at: form.spent_at, notes: form.notes.trim() || null, vat_amount: vat });
+      await onSave({
+        label: form.label.trim(), category: form.category || null, amount, spent_at: form.spent_at, notes: form.notes.trim() || null, vat_amount: vat,
+        vat_recovery_rate: recovery,
+        foreign_supplier: form.foreign === '' ? null : form.foreign === 'yes',
+        import_vat_amount: importVat,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Enregistrement impossible');
       setBusy(false);
@@ -576,8 +623,33 @@ const ExpenseFormModal: React.FC<{
             className={inputCls}
           />
           <span className="mt-1 block text-xs font-normal text-gray-500">
-            Montant indiqué sur la facture. Vide : TVA lue par Qonto sur le débit relié. Déduite seulement à partir de la bascule TVA.
+            Montant indiqué sur la facture. Vide : TVA lue par Qonto sur le débit relié. Déduite à partir du début d'assujettissement, × taux de récupération.
           </span>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-sm font-medium text-gray-700">
+            Taux de récupération
+            <select value={form.recovery} onChange={(e) => setForm({ ...form, recovery: e.target.value })} className={inputCls}>
+              <option value="">Auto : {auto.rate} % ({auto.why || auto.rateSource})</option>
+              <option value="100">100 %</option>
+              <option value="80">80 % (carburant)</option>
+              <option value="50">50 %</option>
+              <option value="0">0 % (non récupérable)</option>
+            </select>
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            Fournisseur étranger
+            <select value={form.foreign} onChange={(e) => setForm({ ...form, foreign: e.target.value })} className={inputCls}>
+              <option value="">Auto : {auto.foreign ? 'oui' : 'non'}</option>
+              <option value="yes">Oui : TVA autoliquidée</option>
+              <option value="no">Non</option>
+            </select>
+          </label>
+        </div>
+        <label className="block text-sm font-medium text-gray-700">
+          TVA import payée (€) <span className="font-normal text-gray-500">ligne B00 du DAU, DHL / douane</span>
+          <input inputMode="decimal" value={form.importVat} onChange={(e) => setForm({ ...form, importVat: e.target.value })} placeholder="0,00" className={inputCls} />
+          <span className="mt-1 block text-xs font-normal text-gray-500">Déductible en entier, au mois de la charge (en plus de la TVA de la facture ci-dessus).</span>
         </label>
         <label className="block text-sm font-medium text-gray-700">
           Note (facultatif)
@@ -637,6 +709,9 @@ const CategoriesModal: React.FC<{ categories: ExpenseCategoryRow[]; onClose: () 
     });
   };
 
+  const setVat = (c: ExpenseCategoryRow, patch: { vat_recovery_rate?: number; foreign_supplier?: boolean }) =>
+    run(c.id, async () => supabase.from('expense_categories').update(patch).eq('id', c.id));
+
   const remove = (c: ExpenseCategoryRow) => {
     if (!window.confirm(`Supprimer la catégorie « ${c.name} » ? Ses charges passeront « ${UNCATEGORIZED} ».`)) return;
     run(c.id, async () => {
@@ -658,6 +733,18 @@ const CategoriesModal: React.FC<{ categories: ExpenseCategoryRow[]; onClose: () 
               onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
               className="h-9 flex-1 rounded-lg border border-gray-200 px-2.5 text-sm focus:border-gray-400 focus:outline-none"
             />
+            <select
+              value={String(c.vat_recovery_rate ?? 100)}
+              onChange={(e) => setVat(c, { vat_recovery_rate: Number(e.target.value) })}
+              title="Taux de récupération de la TVA par défaut"
+              className="h-9 rounded-lg border border-gray-200 bg-white px-1.5 text-xs text-gray-700"
+            >
+              {[100, 80, 50, 0].map((r) => <option key={r} value={r}>TVA {r} %</option>)}
+            </select>
+            <label className="flex items-center gap-1 text-xs text-gray-600" title="Fournisseur étranger : TVA autoliquidée (due = déductible)">
+              <input type="checkbox" checked={Boolean(c.foreign_supplier)} onChange={(e) => setVat(c, { foreign_supplier: e.target.checked })} className="h-3.5 w-3.5 accent-gray-900" />
+              Étranger
+            </label>
             {busy === c.id ? (
               <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
             ) : (
@@ -680,7 +767,7 @@ const CategoriesModal: React.FC<{ categories: ExpenseCategoryRow[]; onClose: () 
           </button>
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <p className="text-xs text-gray-500">Renommer une catégorie met à jour les charges déjà saisies.</p>
+        <p className="text-xs text-gray-500">Renommer une catégorie met à jour les charges déjà saisies. Taux de récupération et « Étranger » : valeurs par défaut, modifiables charge par charge (carburant, Uber / SNCF, restaurants, Anthropic, Supabase, Google, Meta sont reconnus au libellé).</p>
       </div>
     </ModalShell>
   );
