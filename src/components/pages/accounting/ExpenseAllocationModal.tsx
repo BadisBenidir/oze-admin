@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Expense } from '../../../hooks/useExpenses';
-import { useVatSettings, vatRateAt } from '../../../utils/vat';
+import { useVatSettings, vatAccountingRateAt } from '../../../utils/vat';
+import { expenseVatProfile, useCategoryVat } from '../../../utils/vatRecovery';
 import { useHideFigures } from '../../../hooks/useHideFigures';
 
 /**
@@ -50,10 +51,13 @@ export const ExpenseAllocationModal: React.FC<{
 }> = ({ expense, onClose, onDone, updateExpense }) => {
   const { show } = useHideFigures();
   const { settings } = useVatSettings();
-  const vatApplies = vatRateAt(settings, new Date(`${expense.spent_at}T12:00:00`)) > 0;
+  const { categories } = useCategoryVat();
+  const vatApplies = vatAccountingRateAt(settings, new Date(`${expense.spent_at}T12:00:00`)) > 0;
+  // Part récupérable de la TVA saisie (0313) + TVA import B00 : hors coût.
+  const recovery = expenseVatProfile(expense, categories);
   const [vat, setVat] = useState(expense.vat_amount != null ? String(expense.vat_amount).replace('.', ',') : '');
   const vatValue = vatApplies ? Number(vat.replace(',', '.')) || 0 : 0;
-  const base = Math.round((Number(expense.amount) - vatValue) * 100) / 100;
+  const base = Math.round((Number(expense.amount) - (vatApplies ? (recovery.foreign ? 0 : (vatValue * recovery.rate) / 100) + (Number(expense.import_vat_amount) || 0) : 0)) * 100) / 100;
 
   const [refs, setRefs] = useState('');
   const [productIds, setProductIds] = useState<string[] | null>(null);

@@ -1,5 +1,6 @@
 import { AccountingOrder, AccountingLiveSale, AccountingManualRevenue, AccountingRawData, AccountingSubscriptionPayment, isOrderPaid } from '../hooks/useAccountingRawData';
-import { VatSettings, splitTtc, vatRateAt } from './vat';
+import { VatSettings, splitTtc, vatAccountingRateAt } from './vat';
+import { CategoryVatMap, ExpenseVatInput, expenseVatDetail } from './vatRecovery';
 import { DateRange, isWithinRange, monthKey } from './accountingPeriods';
 
 export interface ChannelTotals {
@@ -312,25 +313,27 @@ export interface VatSale {
   date: string;
   ht: number;
   vat: number;
-  source: 'web' | 'b2b' | 'live' | 'subscription' | 'delivery' | 'other';
+  /** 'advance' : avance de sourcing taxée à l'encaissement (option), contre-passée à la clôture. */
+  source: 'web' | 'b2b' | 'live' | 'subscription' | 'delivery' | 'other' | 'advance';
 }
 
-/** Données comptables en HT (0280) : à partir de la bascule TVA, chaque
- * montant encaissé (prix inchangés, désormais TTC) est ramené au HT — CA,
- * marge et résultat sont alors calculés HT. Avant la bascule, rien ne
- * change (franchise : HT = TTC). `vatSales` liste la TVA collectée par vente
+/** Données comptables en HT (0280, 0313) : sur la période assujettie
+ * (miniréel : depuis le 20/05/2026, même pour les ventes facturées sans
+ * TVA), chaque montant encaissé est TTC et ramené au HT (HT = TTC / 1,2) —
+ * CA, marge et résultat sont alors calculés HT. Hors période assujettie,
+ * rien ne change (franchise : HT = TTC). `vatSales` liste la TVA collectée par vente
  * (commandes encaissées uniquement). Les montants d'origine restent dans
  * `data` (onglet Autres revenus : saisie en montant encaissé). */
 export const toHtData = (data: AccountingRawData, settings: VatSettings | null): AccountingRawData & { vatSales: VatSale[] } => {
   const vatSales: VatSale[] = [];
   const conv = (ttc: number, at: string, source: VatSale['source'], record = true) => {
-    const { ht, vat } = splitTtc(ttc, vatRateAt(settings, at));
+    const { ht, vat } = splitTtc(ttc, vatAccountingRateAt(settings, at));
     if (record && vat !== 0) vatSales.push({ date: at, ht, vat, source });
     return ht;
   };
   const orders = data.orders.map((o) => {
     const at = o.created_at;
-    const rate = vatRateAt(settings, at);
+    const rate = vatAccountingRateAt(settings, at);
     if (!rate) return o;
     return {
       ...o,
@@ -346,8 +349,27 @@ export const toHtData = (data: AccountingRawData, settings: VatSettings | null):
     subscriptionPayments: data.subscriptionPayments.map((p) => ({ ...p, amount: conv(p.amount, p.paid_at, 'subscription') })),
     deliveryPayments: data.deliveryPayments.map((d) => ({ ...d, amount: conv(d.amount, d.date, 'delivery') })),
     manualRevenues: data.manualRevenues.map((r) => ({ ...r, amount: conv(r.amount, manualRevenueDate(r), 'other') })),
-    vatSales,
+    vatSales: [...vatSales, ...advanceVatSales(data, settings)],
   };
+};
+
+/** Option « TVA sur avances à l'encaissement » (0313) : l'avance de sourcing
+ * encaissée est taxée au mois d'encaissement, puis contre-passée au mois de
+ * clôture (la vente de la mission, comptée à la clôture, porte alors toute
+ * la TVA) — jamais comptée deux fois. Hors CA : seules la base et la TVA
+ * bougent dans l'onglet TVA. */
+const advanceVatSales = (data: AccountingRawData, settings: VatSettings | null): VatSale[] => {
+  if (!settings?.advances_vat_on_receipt) return [];
+  const out: VatSale[] = [];
+  for (const a of data.sourcingAdvances || []) {
+    if (!a.paid_at || !(a.advance_amount > 0)) continue;
+    const rate = vatAccountingRateAt(settings, a.paid_at);
+    if (!rate) continue;
+    const { ht, vat } = splitTtc(a.advance_amount, rate);
+    out.push({ date: a.paid_at, ht, vat, source: 'advance' });
+    if (a.status === 'completed' && a.completed_at) out.push({ date: a.completed_at, ht: -ht, vat: -vat, source: 'advance' });
+  }
+  return out;
 };
 
 /** TVA collectée sur une plage. */
@@ -364,23 +386,25 @@ export const vatCollectedByMonth = (sales: VatSale[]): Record<string, number> =>
   return out;
 };
 
-/** TVA déductible d'une charge (0280) : saisie à la main, sinon lue par
- * Qonto sur le débit relié ; nulle avant la bascule (franchise). */
+/** TVA déductible d'une charge (0280, 0313) : TVA saisie à la main, sinon
+ * lue par Qonto, × taux de récupération (charge, libellé, catégorie), + TVA
+ * import (B00) ; nulle hors période assujettie. Hors autoliquidation
+ * (fournisseurs étrangers : due = déductible, voir vatLedger). */
 export const expenseDeductibleVat = (
-  e: { spent_at: string; vat_amount?: number | null; bank?: { vat_amount: number | null } | null },
-  settings: VatSettings | null
-): number => {
-  if (!vatRateAt(settings, expenseDate(e))) return 0;
-  return Number(e.vat_amount ?? e.bank?.vat_amount ?? 0) || 0;
-};
+  e: ExpenseVatInput,
+  settings: VatSettings | null,
+  categories?: CategoryVatMap | null
+): number => expenseVatDetail(e, settings, categories).deductible;
 
-/** Charges en HT : TVA déductible retirée du montant (après la bascule). */
-export const toHtExpenses = <T extends { spent_at: string; amount: number; vat_amount?: number | null; bank?: { vat_amount: number | null } | null }>(
+/** Charges en HT : TVA déductible retirée du montant (période assujettie) ;
+ * la part non récupérable reste une charge. */
+export const toHtExpenses = <T extends ExpenseVatInput>(
   expenses: T[],
-  settings: VatSettings | null
+  settings: VatSettings | null,
+  categories?: CategoryVatMap | null
 ): T[] => (expenses || []).map((e) => {
-  const vat = expenseDeductibleVat(e, settings);
-  return vat ? { ...e, amount: (Number(e.amount) || 0) - vat } : e;
+  const vat = expenseDeductibleVat(e, settings, categories);
+  return vat ? { ...e, amount: Math.round(((Number(e.amount) || 0) - vat) * 100) / 100 } : e;
 });
 
 /** CA de l'année en cours, hors lives (demande admin) : HT, TTC et TVA

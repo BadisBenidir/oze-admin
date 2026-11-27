@@ -26,6 +26,12 @@ export interface Expense {
   external_ref: string | null
   /** TVA déductible saisie à la main (0280), prioritaire sur celle lue par Qonto. */
   vat_amount?: number | null
+  /** 0313 : taux de récupération de la TVA (%) propre à la charge (null : libellé, puis catégorie). */
+  vat_recovery_rate?: number | null
+  /** 0313 : fournisseur étranger, TVA autoliquidée (null : libellé, puis catégorie). */
+  foreign_supplier?: boolean | null
+  /** 0313 : TVA import payée (ligne B00 du DAU). */
+  import_vat_amount?: number | null
   /** Débit Qonto relié : TVA lue par Qonto (0280) et justificatifs déposés sur Qonto. */
   bank?: { vat_amount: number | null; attachment_ids?: string[] | null } | null
 }
@@ -87,6 +93,9 @@ export const useExpenses = (isAuthenticated: boolean = false): UseExpensesResult
       spent_at: data.spent_at || new Date().toISOString().slice(0, 10),
       notes: data.notes ?? null,
       vat_amount: data.vat_amount ?? null,
+      vat_recovery_rate: data.vat_recovery_rate ?? null,
+      foreign_supplier: data.foreign_supplier ?? null,
+      import_vat_amount: data.import_vat_amount ?? null,
     }])
     if (error) throw new Error(error.message)
     await fetchExpenses()
@@ -96,7 +105,7 @@ export const useExpenses = (isAuthenticated: boolean = false): UseExpensesResult
     // Mise à jour PARTIELLE : seuls les champs fournis sont modifiés (un appel
     // avec { vat_amount } seul ne doit jamais remettre le montant à 0).
     const patch: Record<string, unknown> = {}
-    for (const k of ['label', 'category', 'amount', 'spent_at', 'notes', 'vat_amount'] as const) {
+    for (const k of ['label', 'category', 'amount', 'spent_at', 'notes', 'vat_amount', 'vat_recovery_rate', 'foreign_supplier', 'import_vat_amount'] as const) {
       if (k in data) patch[k] = data[k] ?? null
     }
     const { error } = await supabase.from('expenses').update(patch).eq('id', id)

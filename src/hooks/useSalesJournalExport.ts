@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase';
 import { fetchSourcingFulfillmentOrderIds } from '../utils/sourcingFulfillment';
 import { isCountedCharge } from '../utils/accountingCalc';
 import { ASSOCIATE_TYPES, AssociateEntryType, associateSigned } from '../utils/associateAccount';
-import { fetchVatSettings, splitTtc, vatRateAt } from '../utils/vat';
+import { fetchVatSettings, splitTtc, vatAccountingRateAt } from '../utils/vat';
+import { expenseVatDetail, fetchCategoryVat } from '../utils/vatRecovery';
 
 export type SalesJournalScope = 'all' | 'web' | 'b2b' | 'sourcing' | 'manual';
 
@@ -203,12 +204,13 @@ export const useSalesJournalExport = () => {
       // TVA déductible : toutes les dépenses validées, y compris les achats de
       // marchandise (ex. TVA import d'un dédouanement DHL) — jamais comptés en
       // charge externe, mais leur TVA se déduit.
-      let vatCharges: { spent_at: string; vat_amount: number | null; bank: { vat_amount: number | null } | null }[] = [];
-      let charges: { spent_at: string; label: string; category: string | null; amount: number; bank_transaction_id: string | null; review_status: string; vat_amount: number | null; bank: { vat_amount: number | null } | null }[] = [];
+      type ChargeRow = { spent_at: string; label: string; category: string | null; amount: number; bank_transaction_id: string | null; review_status: string; vat_amount: number | null; vat_recovery_rate: number | null; foreign_supplier: boolean | null; import_vat_amount: number | null; bank: { vat_amount: number | null } | null };
+      let vatCharges: ChargeRow[] = [];
+      let charges: ChargeRow[] = [];
       if (scope === 'all') {
         const { data, error } = await supabase
           .from('expenses')
-          .select('spent_at, label, category, amount, bank_transaction_id, review_status, vat_amount, bank:bank_transactions!expenses_bank_transaction_id_fkey(vat_amount)')
+          .select('spent_at, label, category, amount, bank_transaction_id, review_status, vat_amount, vat_recovery_rate, foreign_supplier, import_vat_amount, bank:bank_transactions!expenses_bank_transaction_id_fkey(vat_amount)')
           .gte('spent_at', startDate)
           .lte('spent_at', effectiveEndDate)
           .order('spent_at');
@@ -242,9 +244,10 @@ export const useSalesJournalExport = () => {
 
       const dateStr = (d: Date) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
       const vat = await fetchVatSettings();
+      const categoryVat = await fetchCategoryVat();
       const header = ['Date', 'N° Commande / Facture', 'Client', 'Prix Encaissé TTC', 'Base HT', 'TVA Collectée', 'Régime'];
       const split = rows.map((r) => {
-        const rate = vatRateAt(vat, r.date);
+        const rate = vatAccountingRateAt(vat, r.date);
         return { r, rate, ...splitTtc(r.amountTTC, rate) };
       });
       const aoa: (string | number)[][] = [
@@ -263,8 +266,8 @@ export const useSalesJournalExport = () => {
       XLSX.utils.book_append_sheet(wb, ws, 'Ventes');
 
       if (scope === 'all') {
-        const deductibleOf = (c: (typeof vatCharges)[number]) =>
-          vatRateAt(vat, new Date(`${c.spent_at}T12:00:00`)) ? Number(c.vat_amount ?? c.bank?.vat_amount ?? 0) || 0 : 0;
+        // TVA déductible (0313) : × taux de récupération, + TVA import B00.
+        const deductibleOf = (c: (typeof vatCharges)[number]) => expenseVatDetail(c, vat, categoryVat).deductible;
         const chargesSheet = XLSX.utils.aoa_to_sheet([
           ['Date', 'Catégorie', 'Libellé', 'Montant TTC', 'TVA déductible', 'Source'],
           ...charges.map((c) => [dateStr(new Date(`${c.spent_at}T12:00:00`)), c.category || 'Sans catégorie', c.label, Number(c.amount) || 0, deductibleOf(c), c.bank_transaction_id ? 'Qonto' : 'Saisie']),
@@ -310,7 +313,7 @@ export const useSalesJournalExport = () => {
         // Factures Sendcloud (0239) : TVA = TTC − HT.
         const { data: scRows } = await supabase.from('sendcloud_invoices').select('invoice_date, price_excl, price_incl').gte('invoice_date', startDate).lte('invoice_date', effectiveEndDate);
         for (const f of (scRows || []) as { invoice_date: string; price_excl: number; price_incl: number }[]) {
-          if (!vatRateAt(vat, new Date(`${f.invoice_date}T12:00:00`))) continue;
+          if (!vatAccountingRateAt(vat, new Date(`${f.invoice_date}T12:00:00`))) continue;
           const d = Math.round(((Number(f.price_incl) || 0) - (Number(f.price_excl) || 0)) * 100) / 100;
           if (d > 0) bucket(f.invoice_date.slice(0, 7)).deductible += d;
         }
