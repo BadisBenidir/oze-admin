@@ -4,6 +4,7 @@ import { Badge } from '../../ui/Badge';
 import { useAdminAuth } from '../../../hooks/useAdminAuth';
 import { useAdminShipments, AdminShipment } from '../../../hooks/useAdminShipments';
 import { useSendcloudSync } from '../../../hooks/useSendcloudSync';
+import { supabase } from '../../../lib/supabase';
 import { ShipmentDetailModal } from './ShipmentDetailModal';
 import { AlertCircle, Truck, Eye, CheckCircle, RefreshCw, Package, Search, X } from 'lucide-react';
 
@@ -85,6 +86,32 @@ export const ShipmentRequestsView: React.FC = () => {
   const inTransitData = useAdminShipments(isAdmin, ['in_transit']);
   const deliveredData = useAdminShipments(isAdmin, ['delivered']);
 
+  // Articles retirés d'une demande (pas encore reçus) puis reçus depuis :
+  // demande id → nombre d'articles à remettre. La demande apparaît aussi
+  // dans « En attente » pour ces articles seuls, sans quitter son onglet.
+  const [toRestore, setToRestore] = useState<Record<string, number>>({});
+  const [restoreTick, setRestoreTick] = useState(0);
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    supabase
+      .from('order_items')
+      .select('removed_from_shipment_id')
+      .not('removed_from_shipment_id', 'is', null)
+      .in('fulfillment_status', ['received', 'ready_to_ship'])
+      .is('shipment_id', null)
+      .eq('status', 'active')
+      .then(({ data }) => {
+        if (cancelled) return;
+        const counts: Record<string, number> = {};
+        for (const r of (data || []) as { removed_from_shipment_id: string }[]) {
+          counts[r.removed_from_shipment_id] = (counts[r.removed_from_shipment_id] || 0) + 1;
+        }
+        setToRestore(counts);
+      });
+    return () => { cancelled = true; };
+  }, [isAdmin, restoreTick]);
+
   // Une demande en partie expédiée/livrée qui a encore du travail reste
   // visible dans « En attente » : articles sans bordereau, ou bordereau
   // généré pas encore remis au transporteur.
@@ -93,6 +120,7 @@ export const ShipmentRequestsView: React.FC = () => {
     const unsentLabel = (s: AdminShipment) => s.parcels.some((p) => p.status === 'label_created');
     const advanced = [...inTransitData.shipments, ...deliveredData.shipments];
     const done = (s: AdminShipment) => !needsLabel(s) && !unsentLabel(s);
+    const restoreOnly = [...preparingData.shipments, ...advanced].filter((s) => toRestore[s.id] && !(advanced.includes(s) && !done(s)));
     const withList = (base: ReturnType<typeof useAdminShipments>, shipments: AdminShipment[], extraLoading = false) => ({
       ...base,
       shipments,
@@ -100,12 +128,12 @@ export const ShipmentRequestsView: React.FC = () => {
     });
     const advancedLoading = inTransitData.loading || deliveredData.loading;
     return {
-      requested: withList(requestedData, [...requestedData.shipments, ...advanced.filter((s) => !done(s))], advancedLoading),
+      requested: withList(requestedData, [...requestedData.shipments, ...advanced.filter((s) => !done(s)), ...restoreOnly], advancedLoading || preparingData.loading),
       preparing: preparingData,
       in_transit: withList(inTransitData, inTransitData.shipments.filter(done)),
       delivered: withList(deliveredData, deliveredData.shipments.filter(done)),
     } as Record<Tab, ReturnType<typeof useAdminShipments>>;
-  }, [requestedData, preparingData, inTransitData, deliveredData]);
+  }, [requestedData, preparingData, inTransitData, deliveredData, toRestore]);
   const { shipments: tabShipments, loading, error } = dataByTab[tab];
   const [search, setSearch] = useState('');
   const [carrier, setCarrier] = useState<CarrierFilter>('all');
@@ -129,6 +157,7 @@ export const ShipmentRequestsView: React.FC = () => {
     preparingData.refresh();
     inTransitData.refresh();
     deliveredData.refresh();
+    setRestoreTick((t) => t + 1);
   };
 
   const { sync: syncSendcloud } = useSendcloudSync();
@@ -309,7 +338,11 @@ export const ShipmentRequestsView: React.FC = () => {
                     ))
                   ) : (
                     shipments.map((shipment) => {
-                      const articleCount = tab === 'requested' ? shipment.pendingItems.length || shipment.shippedItems.length : shipment.shippedItems.length;
+                      const restoreCount = toRestore[shipment.id] || 0;
+                      const restoreOnlyRow = tab === 'requested' && restoreCount > 0 && shipment.status !== 'requested' && shipment.pendingItems.length === 0 && !shipment.parcels.some((p) => p.status === 'label_created');
+                      const articleCount = restoreOnlyRow
+                        ? restoreCount
+                        : tab === 'requested' ? shipment.pendingItems.length || shipment.shippedItems.length : shipment.shippedItems.length;
                       return (
                         <tr key={shipment.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                           <td className="py-4 px-4 md:px-6 text-sm">
@@ -322,7 +355,11 @@ export const ShipmentRequestsView: React.FC = () => {
                           </td>
                           <td className="py-4 px-4 md:px-6">
                             {statusBadge(shipment.status)}
-                            {tab === 'requested' && (shipment.status === 'in_transit' || shipment.status === 'delivered') && (
+                            {restoreOnlyRow ? (
+                              <p className="mt-1 text-xs text-amber-700">
+                                {restoreCount > 1 ? `${restoreCount} articles reçus à remettre dans la demande` : 'Article reçu à remettre dans la demande'} (port déjà payé)
+                              </p>
+                            ) : tab === 'requested' && (shipment.status === 'in_transit' || shipment.status === 'delivered') && (
                               <p className="mt-1 text-xs text-amber-700">
                                 {shipment.pendingItems.length > 0 ? 'Reste à expédier (port déjà payé)' : 'Un colis reste à remettre'}
                               </p>
