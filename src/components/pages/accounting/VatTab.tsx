@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Loader2, Percent, RefreshCw, Save, Send, Undo2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, EyeOff, FileText, Loader2, Paperclip, Percent, RefreshCw, Save, Send, Undo2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { AccountingKpiCard } from './AccountingKpiCard';
-import { Expense } from '../../../hooks/useExpenses';
-import { VatSale, expenseDeductibleVat } from '../../../utils/accountingCalc';
-import { VatSettings, vatRateAt } from '../../../utils/vat';
-import { monthKey } from '../../../utils/accountingPeriods';
+import { VatSale } from '../../../utils/accountingCalc';
+import { VatSettings, vatAccountingStart, vatAccountingRateAt, vatRateAt } from '../../../utils/vat';
+import { VatDeclaration, VatDeclStatus, VatExpenseLine, VatMonthRow, buildVatMonths, vatRemainingToPay, SendcloudInvoiceRow } from '../../../utils/vatLedger';
 import { paymentMethodLabel } from '../../../utils/paymentMethod';
 import { buildInvoiceItems, generateInvoicePdf, InvoiceBillingDetails, InvoiceSourceItem } from '../../../utils/generateInvoicePdf';
 import { CREDIT_NOTE_SELECT, CreditNoteRow, advanceInvoiceItems, creditNotePdfData } from '../../../hooks/useInvoices';
@@ -15,9 +15,10 @@ const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFra
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
 const inputCls = 'h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-900 focus:border-gray-400 focus:outline-none';
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /** ISO → valeur d'un <input type="datetime-local"> en heure de Paris (secondes comprises). */
-const toParisLocal = (iso: string | null) => {
+const toParisLocal = (iso: string | null | undefined) => {
   if (!iso) return '';
   const parts = new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -27,25 +28,19 @@ const toParisLocal = (iso: string | null) => {
 /** Valeur locale (heure de Paris) → ISO UTC. */
 const fromParisLocal = (local: string) => {
   if (!local) return null;
-  const asUtc = new Date(`${local.length === 16 ? `${local}:00` : local}Z`);
+  const asUtc = new Date(`${local.length === 16 ? `${local}:00` : local.length === 10 ? `${local}T00:00:00` : local}Z`);
   const paris = new Date(asUtc.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
   const utc = new Date(asUtc.toLocaleString('en-US', { timeZone: 'UTC' }));
   return new Date(asUtc.getTime() - (paris.getTime() - utc.getTime())).toISOString();
 };
 const parisDate = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', year: 'numeric' });
 
-type DeclStatus = 'a_declarer' | 'declaree' | 'payee';
-const STATUS_LABELS: Record<DeclStatus, string> = { a_declarer: 'À déclarer', declaree: 'Déclarée', payee: 'Payée' };
-
-interface Declaration {
-  period: string;
-  status: DeclStatus;
-  import_autoliquidation: number;
-  declared_at: string | null;
-  paid_at: string | null;
-  paid_amount: number | null;
-  notes: string | null;
-}
+const STATUS_LABELS: Record<VatDeclStatus, string> = { a_declarer: 'À déclarer', declaree: 'Déclarée', payee: 'Payée' };
+const REGIME_LABELS: Record<VatSettings['regime'], string> = {
+  reel: 'Miniréel (réel normal TVA, CA3 mensuelle)',
+  assujetti: 'Franchise puis bascule',
+  franchise: 'Franchise en base (art. 293 B)',
+};
 
 interface Rectification {
   id: string;
@@ -63,6 +58,8 @@ interface Rectification {
   rectification_number: string | null;
   issued_at: string | null;
   external_note: string | null;
+  /** Suggestion masquée (0313) : brouillon laissé de côté, jamais émis. */
+  hidden_at?: string | null;
   /** Facture d'origine annulée (ex. avoir total sur Qonto) : plus rien à rectifier. */
   cancelled?: boolean;
 }
@@ -70,22 +67,23 @@ interface Rectification {
 interface VatTabProps {
   settings: VatSettings | null;
   onSettingsChanged: () => Promise<void>;
-  /** TVA collectée par vente (toHtData). */
+  /** TVA collectée par vente (toHtData), lives comprises. */
   vatSales: VatSale[];
-  /** Charges (montants TTC, avec la TVA Qonto du débit relié). */
-  expenses: Expense[];
+  /** TVA par charge de la période assujettie (vatExpenseLines). */
+  vatLines: VatExpenseLine[];
 }
 
-/** Comptabilité → TVA (0280 / 0281) : réglage de la bascule (franchise →
- * assujetti), TVA collectée / déductible / nette par mois, statut des
- * déclarations et factures émises sans TVA à rectifier. */
-export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vatSales, expenses }) => {
-  const [declarations, setDeclarations] = useState<Record<string, Declaration>>({});
+/** Comptabilité → TVA (0280 / 0281 / 0313) : régime (miniréel depuis le
+ * 20/05/2026), TVA par mois comme sur la CA3 (collectée, déductible,
+ * autoliquidée, crédit reporté), statut des déclarations, export pour
+ * l'expert-comptable et factures émises sans TVA à rectifier. */
+export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vatSales, vatLines }) => {
+  const [declarations, setDeclarations] = useState<Record<string, VatDeclaration>>({});
   const [rectifications, setRectifications] = useState<Rectification[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   // Factures Sendcloud (0239) : TVA = TTC − HT, déductible (hors charges).
-  const [sendcloud, setSendcloud] = useState<{ invoice_date: string; price_excl: number; price_incl: number }[]>([]);
+  const [sendcloud, setSendcloud] = useState<SendcloudInvoiceRow[]>([]);
 
   const load = useCallback(async () => {
     const [d, r, sc] = await Promise.all([
@@ -93,10 +91,16 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
       supabase.from('vat_invoice_rectifications').select('*, invoice:invoices(transmission_status)').order('original_issued_at'),
       supabase.from('sendcloud_invoices').select('invoice_date, price_excl, price_incl'),
     ]);
-    setSendcloud(((sc.data || []) as { invoice_date: string; price_excl: number; price_incl: number }[]));
+    setSendcloud((sc.data || []) as SendcloudInvoiceRow[]);
     if (d.error || r.error) setError((d.error || r.error)!.message);
-    const map: Record<string, Declaration> = {};
-    for (const row of (d.data || []) as Declaration[]) map[row.period.slice(0, 7)] = { ...row, import_autoliquidation: Number(row.import_autoliquidation) || 0 };
+    const map: Record<string, VatDeclaration> = {};
+    for (const row of (d.data || []) as VatDeclaration[]) {
+      map[row.period.slice(0, 7)] = {
+        ...row,
+        import_autoliquidation: Number(row.import_autoliquidation) || 0,
+        foreign_services_autoliquidation: Number(row.foreign_services_autoliquidation) || 0,
+      };
+    }
     setDeclarations(map);
     type Row = Rectification & { invoice: { transmission_status: string | null } | null };
     setRectifications(
@@ -114,69 +118,31 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
     load();
   }, [load]);
 
-  const start = settings?.regime === 'assujetti' ? settings.vat_start_at : null;
+  const start = vatAccountingStart(settings);
 
-  // Mois depuis la bascule jusqu'au mois courant.
-  const rows = useMemo(() => {
-    if (!start) return [];
-    const keys: string[] = [];
-    const d = new Date(start);
-    let cur = new Date(d.getFullYear(), d.getMonth(), 1);
-    const now = new Date();
-    while (cur <= now) {
-      keys.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`);
-      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
-    }
-    const collected: Record<string, { ht: number; vat: number }> = {};
-    for (const s of vatSales) {
-      const k = monthKey(s.date);
-      collected[k] = collected[k] || { ht: 0, vat: 0 };
-      collected[k].ht += s.ht;
-      collected[k].vat += s.vat;
-    }
-    const deductible: Record<string, number> = {};
-    for (const e of expenses) {
-      if ((e.review_status ?? 'validated') !== 'validated') continue;
-      const v = expenseDeductibleVat(e, settings);
-      if (v) deductible[e.spent_at.slice(0, 7)] = (deductible[e.spent_at.slice(0, 7)] || 0) + v;
-    }
-    for (const f of sendcloud) {
-      if (!vatRateAt(settings, new Date(`${f.invoice_date}T12:00:00`))) continue;
-      const v = Math.round(((Number(f.price_incl) || 0) - (Number(f.price_excl) || 0)) * 100) / 100;
-      if (v > 0) deductible[f.invoice_date.slice(0, 7)] = (deductible[f.invoice_date.slice(0, 7)] || 0) + v;
-    }
-    return keys.map((ym) => {
-      const decl = declarations[ym];
-      const autoliq = decl?.import_autoliquidation || 0;
-      const coll = collected[ym]?.vat || 0;
-      const ded = deductible[ym] || 0;
-      return {
-        ym,
-        ht: collected[ym]?.ht || 0,
-        collected: coll,
-        deductible: ded,
-        autoliq,
-        // Autoliquidation : collectée = déduite, impact net nul.
-        net: coll + autoliq - (ded + autoliq),
-        decl,
-      };
-    });
-  }, [start, vatSales, expenses, declarations, settings, sendcloud]);
+  const rows = useMemo(
+    () => buildVatMonths({ settings, vatSales, lines: vatLines, sendcloud, declarations }),
+    [settings, vatSales, vatLines, sendcloud, declarations]
+  );
 
-  // Indicateurs sur les mois pas encore payés (à déclarer ou déclarés) :
-  // TVA à payer = TVA due − TVA déductible (autoliquidation des deux côtés).
-  const unpaid = rows.filter((r) => r.decl?.status !== 'payee');
-  const vatDue = unpaid.reduce((s, r) => s + r.collected + r.autoliq, 0);
-  const vatDeductible = unpaid.reduce((s, r) => s + r.deductible + r.autoliq, 0);
-  const vatToPay = vatDue - vatDeductible;
-  const declaredUnpaid = rows.filter((r) => r.decl?.status === 'declaree').reduce((s, r) => s + r.net, 0);
-  const drafts = rectifications.filter((r) => r.status === 'draft' && !r.cancelled);
-  // Traitées (émises ici, régularisées ailleurs, annulées) : historique replié.
-  const done = rectifications.filter((r) => !(r.status === 'draft' && !r.cancelled));
+  const remaining = vatRemainingToPay(rows);
+  const unpaidMonths = rows.filter((r) => r.status !== 'payee');
+  const declaredUnpaid = r2(rows.filter((r) => r.status === 'declaree').reduce((s, r) => s + r.toPay, 0));
+  const creditNow = rows.length ? rows[rows.length - 1].creditOut : 0;
+  const totalCollected = r2(rows.reduce((s, r) => s + r.collected, 0));
+  const totalDeductible = r2(rows.reduce((s, r) => s + r.deductible, 0));
+  // TVA déduite sans justificatif déposé sur Qonto : à régulariser avant la déclaration.
+  const missingReceipts = useMemo(() => vatLines.filter((l) => l.deductible > 0 && !l.hasReceipt), [vatLines]);
+  const [showMissing, setShowMissing] = useState(false);
+
+  const isOpen = (r: Rectification) => r.status === 'draft' && !r.cancelled && !r.hidden_at;
+  const drafts = rectifications.filter(isOpen);
+  // Traitées (émises, régularisées ailleurs, annulées, masquées) : historique replié.
+  const done = rectifications.filter((r) => !isOpen(r));
   const [showDone, setShowDone] = useState(false);
   const visible = showDone ? [...drafts, ...done] : drafts;
 
-  const saveDeclaration = async (ym: string, patch: Partial<Declaration>) => {
+  const saveDeclaration = async (ym: string, patch: Partial<VatDeclaration>) => {
     setBusy(`decl-${ym}`);
     setError(null);
     const current = declarations[ym];
@@ -184,6 +150,7 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
       period: `${ym}-01`,
       status: current?.status ?? 'a_declarer',
       import_autoliquidation: current?.import_autoliquidation ?? 0,
+      foreign_services_autoliquidation: current?.foreign_services_autoliquidation ?? 0,
       declared_at: current?.declared_at ?? null,
       paid_at: current?.paid_at ?? null,
       paid_amount: current?.paid_amount ?? null,
@@ -228,6 +195,17 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
     await load();
   };
 
+  // Suggestion masquée : le brouillon reste en base (jamais émis, jamais
+  // envoyé), il sort seulement de la liste à traiter.
+  const setHidden = async (r: Rectification, hidden: boolean) => {
+    setBusy(r.id);
+    setError(null);
+    const { error: e } = await supabase.from('vat_invoice_rectifications').update({ hidden_at: hidden ? new Date().toISOString() : null }).eq('id', r.id).eq('status', 'draft');
+    setBusy(null);
+    if (e) return setError(e.message);
+    await load();
+  };
+
   const pdf = async (r: Rectification) => {
     setBusy(`pdf-${r.id}`);
     setError(null);
@@ -246,14 +224,14 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
       {start && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <AccountingKpiCard
-            label="TVA à payer"
-            value={EUR(vatToPay)}
+            label="Reste à payer"
+            value={EUR(remaining)}
             icon={Percent}
-            tone={vatToPay > 0 ? 'red' : 'green'}
-            hint={`Depuis le ${parisDate(start).slice(0, 5)}, mois non payés${declaredUnpaid ? ` · dont ${EUR(declaredUnpaid)} déjà déclarée` : ''}${drafts.length ? ` · ${drafts.length} facture${drafts.length > 1 ? 's' : ''} à rectifier` : ''}`}
+            tone={remaining > 0 ? 'red' : 'green'}
+            hint={`${unpaidMonths.length} mois non payé${unpaidMonths.length > 1 ? 's' : ''} depuis le ${parisDate(start)}${declaredUnpaid ? ` · dont ${EUR(declaredUnpaid)} déjà déclarée` : ''}${creditNow ? ` · crédit à reporter ${EUR(creditNow)}` : ''}`}
           />
-          <AccountingKpiCard label="TVA due totale" value={EUR(vatDue)} icon={Percent} hint="TVA collectée sur les ventes (+ autoliquidée)" />
-          <AccountingKpiCard label="TVA déductible" value={EUR(vatDeductible)} icon={FileText} tone="green" hint="TVA sur les achats pro (+ autoliquidée)" />
+          <AccountingKpiCard label="TVA collectée" value={EUR(totalCollected)} icon={Percent} hint={`Depuis le ${parisDate(start)}, toutes ventes encaissées (TTC × 20/120)`} />
+          <AccountingKpiCard label="TVA déductible" value={EUR(totalDeductible)} icon={FileText} tone="green" hint={`Charges × taux de récupération, Sendcloud, TVA import B00${missingReceipts.length ? ` · ${missingReceipts.length} sans justificatif` : ''}`} />
         </div>
       )}
 
@@ -262,10 +240,20 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
       {start && (
         <Card>
           <CardHeader>
-            <h3 className="text-base font-semibold text-gray-900">TVA par mois</h3>
-            <p className="text-sm text-gray-500">
-              Depuis la bascule. CA HT et TVA collectée : ventes encaissées (prix inchangés, désormais TTC). TVA déductible : charges validées (TVA saisie sur la charge, sinon lue par Qonto sur le débit relié) et factures Sendcloud.
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">TVA par mois</h3>
+                <p className="text-sm text-gray-500">
+                  Depuis le {parisDate(start)}. Collectée : ventes encaissées, tous canaux (prix TTC, TVA = TTC × 20/120, même facturées sans TVA). Déductible : charges validées (TVA saisie, sinon Qonto, × taux de récupération), Sendcloud et TVA import B00. Autoliquidée : due = déductible, net 0. Un crédit est reporté sur le mois suivant.
+                </p>
+              </div>
+              <button
+                onClick={() => exportVatWorkbook(rows, vatLines)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <Download className="h-4 w-4" /> Export Excel
+              </button>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -273,11 +261,15 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                 <thead>
                   <tr className="border-b border-gray-100 text-xs text-gray-500">
                     <th className="px-3 py-2.5 text-left font-medium">Mois</th>
+                    <th className="px-3 py-2.5 text-right font-medium">CA TTC</th>
                     <th className="px-3 py-2.5 text-right font-medium">CA HT</th>
                     <th className="px-3 py-2.5 text-right font-medium">TVA collectée</th>
-                    <th className="px-3 py-2.5 text-right font-medium">TVA déductible</th>
-                    <th className="px-3 py-2.5 text-right font-medium" title="Collectée = déduite : impact net nul">TVA import autoliquidée</th>
+                    <th className="px-3 py-2.5 text-right font-medium" title="Charges + Sendcloud + TVA import B00">TVA déductible</th>
+                    <th className="px-3 py-2.5 text-right font-medium" title="TVA import autoliquidée (saisie) : due = déductible">Autoliq. import</th>
+                    <th className="px-3 py-2.5 text-right font-medium" title="Services de fournisseurs étrangers (charges marquées + saisie) : due = déductible">Autoliq. services étrangers</th>
                     <th className="px-3 py-2.5 text-right font-medium">TVA nette</th>
+                    <th className="px-3 py-2.5 text-right font-medium" title="Crédit du mois précédent imputé">Crédit reporté</th>
+                    <th className="px-3 py-2.5 text-right font-medium">À payer</th>
                     <th className="px-3 py-2.5 text-left font-medium">Statut</th>
                     <th className="px-3 py-2.5 text-left font-medium">Déclarée le</th>
                     <th className="px-3 py-2.5 text-left font-medium">Payée le</th>
@@ -292,11 +284,15 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                 <tfoot>
                   <tr className="border-t border-gray-200 text-sm font-semibold text-gray-900">
                     <td className="px-3 py-2.5">Total</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{EUR(rows.reduce((s, r) => s + r.ttc, 0))}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{EUR(rows.reduce((s, r) => s + r.ht, 0))}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{EUR(rows.reduce((s, r) => s + r.collected, 0))}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{EUR(rows.reduce((s, r) => s + r.deductible, 0))}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{EUR(rows.reduce((s, r) => s + r.autoliq, 0))}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{EUR(totalCollected)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{EUR(totalDeductible)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{EUR(rows.reduce((s, r) => s + r.autoliqImport, 0))}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{EUR(rows.reduce((s, r) => s + r.autoliqForeign, 0))}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{EUR(rows.reduce((s, r) => s + r.net, 0))}</td>
+                    <td />
+                    <td className="px-3 py-2.5 text-right tabular-nums">{EUR(rows.reduce((s, r) => s + r.toPay, 0))}</td>
                     <td colSpan={4} />
                   </tr>
                 </tfoot>
@@ -306,13 +302,59 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
         </Card>
       )}
 
+      {start && missingReceipts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <button onClick={() => setShowMissing((v) => !v)} className="flex w-full items-center justify-between gap-3 text-left">
+              <div>
+                <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                  <Paperclip className="h-4 w-4 text-amber-600" /> TVA déduite sans justificatif ({missingReceipts.length})
+                </h3>
+                <p className="text-sm text-gray-500">
+                  {EUR(missingReceipts.reduce((s, l) => s + l.deductible, 0))} de TVA déduite sur des charges sans facture déposée sur Qonto : à joindre (onglet Charges) avant la déclaration, sinon non déductible en cas de contrôle.
+                </p>
+              </div>
+              {showMissing ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+            </button>
+          </CardHeader>
+          {showMissing && (
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-xs text-gray-500">
+                      <th className="px-3 py-2.5 text-left font-medium">Date</th>
+                      <th className="px-3 py-2.5 text-left font-medium">Libellé</th>
+                      <th className="px-3 py-2.5 text-left font-medium">Catégorie</th>
+                      <th className="px-3 py-2.5 text-right font-medium">TTC</th>
+                      <th className="px-3 py-2.5 text-right font-medium">TVA déduite</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {missingReceipts.map((l) => (
+                      <tr key={l.id} className="border-b border-gray-50 text-sm">
+                        <td className="px-3 py-2 text-gray-600">{new Date(`${l.date}T12:00:00`).toLocaleDateString('fr-FR')}</td>
+                        <td className="px-3 py-2 text-gray-900">{l.label}</td>
+                        <td className="px-3 py-2 text-gray-600">{l.category || '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-600">{EUR(l.ttc)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-900">{EUR(l.deductible)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-semibold text-gray-900">Factures à rectifier</h3>
               <p className="text-sm text-gray-500">
-                Factures et avoirs émis sans TVA alors que l'opération est postérieure à la bascule. Chaque rectificative reste en brouillon jusqu'à ce que vous l'émettiez : rien n'est envoyé au client.
+                Suggestions seulement : factures et avoirs émis sans TVA alors que la TVA était facturée (à partir du {settings?.vat_start_at ? parisDate(settings.vat_start_at) : '—'}). Rien n'est généré pour les ventes antérieures. Chaque rectificative reste en brouillon tant que vous ne l'émettez pas, et rien n'est jamais envoyé au client.
               </p>
             </div>
             <button onClick={refreshRectifications} disabled={busy === 'refresh'} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50">
@@ -359,6 +401,8 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                           <span className="text-green-700" title={r.external_note || undefined}>
                             Régularisée ailleurs{r.external_note ? ` · ${r.external_note}` : ''}
                           </span>
+                        ) : r.hidden_at ? (
+                          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">Masquée le {parisDate(r.hidden_at)}</span>
                         ) : (
                           <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">Brouillon</span>
                         )}
@@ -368,6 +412,10 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                           {r.cancelled && r.status !== 'issued' ? null : r.status === 'external' ? (
                             <button onClick={() => markExternal(r, true)} disabled={busy === r.id} className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-50">
                               <Undo2 className="h-3.5 w-3.5" /> Annuler
+                            </button>
+                          ) : r.status === 'draft' && r.hidden_at ? (
+                            <button onClick={() => setHidden(r, false)} disabled={busy === r.id} className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-50">
+                              <Undo2 className="h-3.5 w-3.5" /> Réafficher
                             </button>
                           ) : (
                           <>
@@ -385,6 +433,11 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
                               <CheckCircle2 className="h-3.5 w-3.5" /> Régularisée ailleurs
                             </button>
                           )}
+                          {r.status === 'draft' && (
+                            <button onClick={() => setHidden(r, true)} disabled={busy === r.id} title="Masquer cette suggestion (le brouillon n'est ni émis ni envoyé)" className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-50">
+                              <EyeOff className="h-3.5 w-3.5" /> Masquer
+                            </button>
+                          )}
                           </>
                           )}
                         </div>
@@ -398,7 +451,7 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
           {done.length > 0 && (
             <button onClick={() => setShowDone((v) => !v)} className="flex w-full items-center justify-center gap-1 border-t border-gray-100 py-2.5 text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-800">
               {showDone ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              {showDone ? 'Masquer les factures traitées' : `Factures traitées (${done.length}) : émises, régularisées ou annulées`}
+              {showDone ? 'Masquer les factures traitées' : `Factures traitées (${done.length}) : émises, régularisées, annulées ou masquées`}
             </button>
           )}
         </CardContent>
@@ -407,24 +460,31 @@ export const VatTab: React.FC<VatTabProps> = ({ settings, onSettingsChanged, vat
   );
 };
 
-type MonthRow = { ym: string; ht: number; collected: number; deductible: number; autoliq: number; net: number; decl?: Declaration };
-
-const DeclarationRow: React.FC<{ row: MonthRow; busy: boolean; onSave: (patch: Partial<Declaration>) => void }> = ({ row, busy, onSave }) => {
-  const [autoliq, setAutoliq] = useState(String(row.autoliq || '').replace('.', ','));
+const DeclarationRow: React.FC<{ row: VatMonthRow; busy: boolean; onSave: (patch: Partial<VatDeclaration>) => void }> = ({ row, busy, onSave }) => {
+  const fmt = (n: number | null | undefined) => (n ? String(n).replace('.', ',') : '');
+  const [autoliq, setAutoliq] = useState(fmt(row.autoliqImport));
+  const [foreign, setForeign] = useState(fmt(row.autoliqForeignManual));
   const [paidAmount, setPaidAmount] = useState(row.decl?.paid_amount != null ? String(row.decl.paid_amount).replace('.', ',') : '');
   useEffect(() => {
-    setAutoliq(row.autoliq ? String(row.autoliq).replace('.', ',') : '');
+    setAutoliq(fmt(row.autoliqImport));
+    setForeign(fmt(row.autoliqForeignManual));
     setPaidAmount(row.decl?.paid_amount != null ? String(row.decl.paid_amount).replace('.', ',') : '');
-  }, [row.autoliq, row.decl?.paid_amount]);
+  }, [row.autoliqImport, row.autoliqForeignManual, row.decl?.paid_amount]);
   const num = (v: string) => (v.trim() ? Number(v.replace(/\s/g, '').replace(',', '.')) : null);
-  const status = row.decl?.status ?? 'a_declarer';
   const cell = 'h-8 rounded-md border border-gray-200 bg-white px-2 text-xs focus:border-gray-400 focus:outline-none';
+  const computedForeign = r2(row.autoliqForeign - row.autoliqForeignManual);
   return (
     <tr className="border-b border-gray-50 text-sm hover:bg-gray-50">
-      <td className="px-3 py-2 capitalize text-gray-900">{monthLabel(row.ym)} {busy && <Loader2 className="ml-1 inline h-3.5 w-3.5 animate-spin text-gray-400" />}</td>
+      <td className="whitespace-nowrap px-3 py-2 capitalize text-gray-900">{monthLabel(row.ym)} {busy && <Loader2 className="ml-1 inline h-3.5 w-3.5 animate-spin text-gray-400" />}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-gray-600">{EUR(row.ttc)}</td>
       <td className="px-3 py-2 text-right tabular-nums text-gray-600">{EUR(row.ht)}</td>
       <td className="px-3 py-2 text-right tabular-nums text-gray-900">{EUR(row.collected)}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-gray-600">{EUR(row.deductible)}</td>
+      <td
+        className="px-3 py-2 text-right tabular-nums text-gray-600"
+        title={`Charges ${EUR(row.dedCharges)} · Sendcloud ${EUR(row.dedSendcloud)} · Import B00 ${EUR(row.dedImport)}`}
+      >
+        {EUR(row.deductible)}
+      </td>
       <td className="px-3 py-2 text-right">
         <input
           inputMode="decimal"
@@ -432,16 +492,38 @@ const DeclarationRow: React.FC<{ row: MonthRow; busy: boolean; onSave: (patch: P
           onChange={(e) => setAutoliq(e.target.value)}
           onBlur={() => {
             const v = num(autoliq) ?? 0;
-            if (!Number.isNaN(v) && v !== row.autoliq) onSave({ import_autoliquidation: v });
+            if (!Number.isNaN(v) && v !== row.autoliqImport) onSave({ import_autoliquidation: v });
           }}
           placeholder="0,00"
           className={`${cell} w-24 text-right`}
         />
       </td>
+      <td className="px-3 py-2 text-right">
+        <div className="flex items-center justify-end gap-1.5">
+          {computedForeign > 0 && <span className="text-xs tabular-nums text-gray-600" title="Charges de fournisseurs étrangers du mois (20 % du montant)">{EUR(computedForeign)} +</span>}
+          <input
+            inputMode="decimal"
+            value={foreign}
+            onChange={(e) => setForeign(e.target.value)}
+            onBlur={() => {
+              const v = num(foreign) ?? 0;
+              if (!Number.isNaN(v) && v !== row.autoliqForeignManual) onSave({ foreign_services_autoliquidation: v });
+            }}
+            placeholder="0,00"
+            title="Autres services étrangers autoliquidés (saisie)"
+            className={`${cell} w-20 text-right`}
+          />
+        </div>
+      </td>
       <td className={`px-3 py-2 text-right font-medium tabular-nums ${row.net >= 0 ? 'text-gray-900' : 'text-green-700'}`} title={row.net < 0 ? 'Crédit de TVA' : undefined}>{EUR(row.net)}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-green-700">{row.creditIn ? `− ${EUR(row.creditIn)}` : '—'}</td>
+      <td className="px-3 py-2 text-right font-semibold tabular-nums text-gray-900" title={row.creditOut ? `Crédit à reporter : ${EUR(row.creditOut)}` : undefined}>
+        {EUR(row.toPay)}
+        {row.creditOut > 0 && <span className="block text-xs font-normal text-green-700">crédit {EUR(row.creditOut)}</span>}
+      </td>
       <td className="px-3 py-2">
-        <select value={status} onChange={(e) => onSave({ status: e.target.value as DeclStatus })} className={cell}>
-          {(Object.keys(STATUS_LABELS) as DeclStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+        <select value={row.status} onChange={(e) => onSave({ status: e.target.value as VatDeclStatus })} className={cell}>
+          {(Object.keys(STATUS_LABELS) as VatDeclStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
         </select>
       </td>
       <td className="px-3 py-2"><input type="date" value={row.decl?.declared_at || ''} onChange={(e) => onSave({ declared_at: e.target.value || null })} className={cell} /></td>
@@ -463,33 +545,75 @@ const DeclarationRow: React.FC<{ row: MonthRow; busy: boolean; onSave: (patch: P
   );
 };
 
+/** Export pour l'expert-comptable : tableau mensuel + détail des charges. */
+const exportVatWorkbook = (rows: VatMonthRow[], lines: VatExpenseLine[]) => {
+  const wb = XLSX.utils.book_new();
+  const months = XLSX.utils.aoa_to_sheet([
+    ['Mois', 'CA TTC', 'CA HT', 'TVA collectée', 'TVA déductible charges', 'TVA déductible Sendcloud', 'TVA import B00', 'TVA déductible totale',
+      'Autoliq. import', 'Autoliq. services étrangers', 'TVA nette', 'Crédit reporté', 'À payer', 'Crédit à reporter', 'Statut', 'Déclarée le', 'Payée le', 'Montant payé'],
+    ...rows.map((r) => [
+      monthLabel(r.ym), r.ttc, r.ht, r.collected, r.dedCharges, r.dedSendcloud, r.dedImport, r.deductible,
+      r.autoliqImport, r.autoliqForeign, r.net, r.creditIn, r.toPay, r.creditOut,
+      STATUS_LABELS[r.status], r.decl?.declared_at || '', r.decl?.paid_at || '', r.decl?.paid_amount ?? '',
+    ]),
+  ]);
+  months['!cols'] = [{ wch: 16 }, ...Array(13).fill({ wch: 14 }), { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, months, 'TVA par mois');
+  const charges = XLSX.utils.aoa_to_sheet([
+    ['Date', 'Libellé', 'Catégorie', 'Montant TTC', 'TVA facture', 'Taux de récupération', 'Origine du taux', 'TVA déduite', 'TVA import B00', 'Fournisseur étranger', 'TVA autoliquidée', 'Justificatif'],
+    ...lines.map((l) => [
+      new Date(`${l.date}T12:00:00`).toLocaleDateString('fr-FR'), l.label, l.category || '', l.ttc, l.invoiceVat, l.rate / 100,
+      l.why ? `${l.rateSource} (${l.why})` : l.rateSource, l.recovered, l.importVat, l.foreign ? 'oui' : 'non', l.autoliquidated, l.hasReceipt ? 'oui' : 'non',
+    ]),
+  ]);
+  charges['!cols'] = [{ wch: 11 }, { wch: 40 }, { wch: 24 }, { wch: 12 }, { wch: 11 }, { wch: 12 }, { wch: 30 }, { wch: 11 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 11 }];
+  // Taux de récupération en pourcentage.
+  for (let i = 2; i <= lines.length + 1; i++) {
+    const c = charges[`F${i}`];
+    if (c) c.z = '0%';
+  }
+  XLSX.utils.book_append_sheet(wb, charges, 'Charges déductibles');
+  XLSX.writeFile(wb, `TVA_OZE_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+
 const VatSettingsCard: React.FC<{ settings: VatSettings | null; onSaved: () => Promise<void> }> = ({ settings, onSaved }) => {
-  const [form, setForm] = useState({ regime: 'franchise', start: '', rate: '20', number: '', note: '' });
+  const [form, setForm] = useState({ regime: 'reel' as VatSettings['regime'], liability: '', start: '', rate: '20', number: '', note: '', advances: false });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
     if (!settings) return;
     setForm({
       regime: settings.regime,
+      liability: toParisLocal(settings.liability_start_at).slice(0, 10),
       start: toParisLocal(settings.vat_start_at),
       rate: String(settings.vat_rate).replace('.', ','),
       number: settings.vat_number || '',
       note: settings.note || '',
+      advances: Boolean(settings.advances_vat_on_receipt),
     });
   }, [settings]);
-  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = async (ev: React.FormEvent) => {
     ev.preventDefault();
     const rate = Number(form.rate.replace(',', '.'));
     if (Number.isNaN(rate) || rate < 0 || rate >= 100) return setMessage('Taux invalide.');
-    if (form.regime === 'assujetti' && !form.start) return setMessage('Date de bascule obligatoire.');
+    if (form.regime !== 'franchise' && !form.start) return setMessage('Date de TVA facturée obligatoire.');
+    if (form.regime === 'reel' && !form.liability) return setMessage("Date de début d'assujettissement obligatoire.");
     if (!window.confirm('Modifier le réglage TVA ? Le CA HT, la TVA et la liste des factures à rectifier seront recalculés. Les factures déjà émises ne changent pas.')) return;
     setBusy(true);
     setMessage(null);
     const { error } = await supabase
       .from('vat_settings')
-      .update({ regime: form.regime, vat_start_at: fromParisLocal(form.start), vat_rate: rate, vat_number: form.number.trim() || null, note: form.note.trim() || null })
+      .update({
+        regime: form.regime,
+        liability_start_at: form.liability ? fromParisLocal(form.liability) : null,
+        vat_start_at: fromParisLocal(form.start),
+        vat_rate: rate,
+        vat_number: form.number.trim() || null,
+        note: form.note.trim() || null,
+        advances_vat_on_receipt: form.advances,
+      })
       .eq('id', true);
     if (error) {
       setBusy(false);
@@ -513,21 +637,26 @@ const VatSettingsCard: React.FC<{ settings: VatSettings | null; onSaved: () => P
       <CardHeader>
         <h3 className="text-base font-semibold text-gray-900">Réglage TVA</h3>
         <p className="text-sm text-gray-500">
-          Franchise en base (art. 293 B) jusqu'à la date de bascule, TVA ensuite. Prix inchangés : ils deviennent TTC (HT = TTC / (1 + taux)). Taux actuel appliqué aux ventes du jour : {vatRateAt(settings, new Date())} %.
+          {REGIME_LABELS[settings.regime]}. Calculs (CA HT, TVA due et déductible) : taux du jour {vatAccountingRateAt(settings, new Date())} %{vatAccountingStart(settings) ? `, depuis le ${parisDate(vatAccountingStart(settings)!)}` : ''}. TVA facturée sur les factures : taux du jour {vatRateAt(settings, new Date())} %{settings.vat_start_at && settings.regime !== 'franchise' ? `, depuis le ${parisDate(settings.vat_start_at)}` : ''}.
         </p>
       </CardHeader>
       <CardContent>
         <form onSubmit={save} className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <label className="block text-xs font-medium text-gray-600">
             Régime
-            <select value={form.regime} onChange={(e) => set('regime', e.target.value)} className={`${inputCls} mt-1`}>
-              <option value="franchise">Franchise en base</option>
-              <option value="assujetti">Assujetti à la TVA</option>
+            <select value={form.regime} onChange={(e) => set('regime', e.target.value as VatSettings['regime'])} className={`${inputCls} mt-1`}>
+              <option value="reel">{REGIME_LABELS.reel}</option>
+              <option value="assujetti">{REGIME_LABELS.assujetti}</option>
+              <option value="franchise">{REGIME_LABELS.franchise}</option>
             </select>
           </label>
-          <label className="block text-xs font-medium text-gray-600">
-            Bascule (heure de Paris)
-            <input type="datetime-local" step={1} value={form.start} onChange={(e) => set('start', e.target.value)} className={`${inputCls} mt-1`} />
+          <label className="block text-xs font-medium text-gray-600" title="Miniréel : la TVA est due sur toutes les ventes encaissées depuis cette date, même facturées sans TVA">
+            Début d'assujettissement
+            <input type="date" value={form.liability} onChange={(e) => set('liability', e.target.value)} disabled={form.regime !== 'reel'} className={`${inputCls} mt-1 disabled:bg-gray-50 disabled:text-gray-400`} />
+          </label>
+          <label className="block text-xs font-medium text-gray-600" title="Factures, rectificatives et ventes Instagram : TVA imprimée à partir de cette date">
+            {form.regime === 'assujetti' ? 'Bascule (heure de Paris)' : 'TVA facturée à partir du (Paris)'}
+            <input type="datetime-local" step={1} value={form.start} onChange={(e) => set('start', e.target.value)} disabled={form.regime === 'franchise'} className={`${inputCls} mt-1 disabled:bg-gray-50 disabled:text-gray-400`} />
           </label>
           <label className="block text-xs font-medium text-gray-600">
             Taux (%)
@@ -537,11 +666,15 @@ const VatSettingsCard: React.FC<{ settings: VatSettings | null; onSaved: () => P
             N° de TVA intracommunautaire
             <input value={form.number} onChange={(e) => set('number', e.target.value)} placeholder="FR…" className={`${inputCls} mt-1`} />
           </label>
-          <label className="block text-xs font-medium text-gray-600 md:col-span-3">
+          <label className="block text-xs font-medium text-gray-600 md:col-span-2">
             Note
             <input value={form.note} onChange={(e) => set('note', e.target.value)} className={`${inputCls} mt-1`} />
           </label>
-          <div className="flex items-end">
+          <label className="flex items-start gap-2 text-xs text-gray-600 md:pt-5" title="Avances de sourcing sur mesure non clôturées : taxées au mois d'encaissement, retirées au mois de clôture">
+            <input type="checkbox" checked={form.advances} onChange={(e) => set('advances', e.target.checked)} className="mt-0.5 h-4 w-4 accent-gray-900" />
+            <span><span className="font-medium">TVA sur avances à l'encaissement</span><span className="block text-gray-500">Sourcing : taxée à l'encaissement, retirée à la clôture</span></span>
+          </label>
+          <div className="flex items-end md:col-start-4">
             <button type="submit" disabled={busy} className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Enregistrer
             </button>
@@ -552,7 +685,6 @@ const VatSettingsCard: React.FC<{ settings: VatSettings | null; onSaved: () => P
     </Card>
   );
 };
-
 
 /** PDF d'une rectificative (brouillon : « BROUILLON » à la place du numéro). */
 const downloadRectificationPdf = async (r: Rectification) => {

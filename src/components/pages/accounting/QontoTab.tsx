@@ -10,7 +10,7 @@ import { useAccountingLedgerExport } from '../../../hooks/useAccountingLedgerExp
 import { AccountingRawData } from '../../../hooks/useAccountingRawData';
 import { FRANCHISE_TVA_THRESHOLD, FRANCHISE_TVA_TOLERANCE_THRESHOLD } from '../../../config/accounting';
 import { computeYtdRevenue } from '../../../utils/accountingCalc';
-import { VatSettings, vatRateAt } from '../../../utils/vat';
+import { VatSettings, vatAccountingRateAt, vatAccountingStart } from '../../../utils/vat';
 import { BankTransactionMatchModal } from './BankTransactionMatchModal';
 
 const EUR = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -69,8 +69,9 @@ export const QontoTab: React.FC<QontoTabProps> = ({ data, vatSettings }) => {
   // un calcul TTC distinct, avances de sourcing et lives compris).
   const ytd = useMemo(() => computeYtdRevenue(data, vatSettings), [data, vatSettings]);
   const yearToDateRevenue = ytd.ht;
-  const isVatRegistered = vatRateAt(vatSettings, new Date()) > 0;
-  const vatStart = vatSettings?.vat_start_at ? new Date(vatSettings.vat_start_at) : null;
+  const isVatRegistered = vatAccountingRateAt(vatSettings, new Date()) > 0;
+  const vatStartIso = vatAccountingStart(vatSettings);
+  const vatStart = vatStartIso ? new Date(vatStartIso) : null;
   const thresholdPercent = Math.min((yearToDateRevenue / FRANCHISE_TVA_THRESHOLD) * 100, 100);
   const overTolerance = yearToDateRevenue > FRANCHISE_TVA_TOLERANCE_THRESHOLD;
   const overThreshold = yearToDateRevenue > FRANCHISE_TVA_THRESHOLD;

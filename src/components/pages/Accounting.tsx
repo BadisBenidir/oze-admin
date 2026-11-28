@@ -18,6 +18,8 @@ import { useExpenses } from '../../hooks/useExpenses';
 import { VatTab } from './accounting/VatTab';
 import { useVatSettings } from '../../utils/vat';
 import { toHtData, toHtExpenses } from '../../utils/accountingCalc';
+import { useCategoryVat } from '../../utils/vatRecovery';
+import { vatExpenseLines } from '../../utils/vatLedger';
 import { invokeEdgeFunction } from '../../utils/invokeEdgeFunction';
 
 type AccountingTab = 'global' | 'b2c' | 'b2b' | 'lives' | 'other-revenues' | 'expenses' | 'associate' | 'vat' | 'qonto';
@@ -51,15 +53,19 @@ export const Accounting: React.FC = () => {
   // Charges (0274 / 0276) : onglet dédié + déduites de la marge du Dashboard
   // Global (Résultat net).
   const expensesApi = useExpenses(isAdmin);
-  // TVA (0280) : à partir de la bascule, CA, marge et résultat en HT (prix
-  // inchangés, désormais TTC) ; charges diminuées de la TVA déductible.
+  // TVA (0280, 0313) : sur la période assujettie (miniréel : depuis le
+  // 20/05/2026), CA, marge et résultat en HT (prix TTC) ; charges diminuées
+  // de la TVA récupérable (taux de récupération par catégorie / charge).
   const vat = useVatSettings();
+  const categoryVat = useCategoryVat();
   const htData = useMemo(() => toHtData(data, vat.settings), [data, vat.settings]);
   // Dashboard Global HORS lives (demande admin) : CA, coût d'achat, marge,
   // résultat et graphiques sans les ventes live ; l'onglet « Lives » et la
   // TVA (onglet TVA) les gardent.
   const globalData = useMemo(() => ({ ...htData, liveSales: [], vatSales: htData.vatSales.filter((s) => s.source !== 'live') }), [htData]);
-  const htExpenses = useMemo(() => toHtExpenses(expensesApi.expenses, vat.settings), [expensesApi.expenses, vat.settings]);
+  const htExpenses = useMemo(() => toHtExpenses(expensesApi.expenses, vat.settings, categoryVat.categories), [expensesApi.expenses, vat.settings, categoryVat.categories]);
+  // TVA par charge (onglet TVA, Dashboard global, export) : montants TTC d'origine.
+  const vatLines = useMemo(() => vatExpenseLines(expensesApi.expenses, vat.settings, categoryVat.categories), [expensesApi.expenses, vat.settings, categoryVat.categories]);
 
   const [activeTab, setActiveTab] = useState<AccountingTab>('global');
   const [preset, setPreset] = useState<PeriodPreset>('current-month');
@@ -77,7 +83,7 @@ export const Accounting: React.FC = () => {
   const refreshAll = async () => {
     setRefreshing(true);
     await invokeEdgeFunction('qonto-sync', {});
-    await Promise.all([refresh(true), expensesApi.refresh(), vat.refresh()]);
+    await Promise.all([refresh(true), expensesApi.refresh(), vat.refresh(), categoryVat.refresh()]);
     setReloadKey((k) => k + 1);
     setRefreshedAt(new Date());
     setRefreshing(false);
@@ -168,7 +174,7 @@ export const Accounting: React.FC = () => {
         </div>
       ) : (
         <>
-          {activeTab === 'global' && <DashboardGlobalTab data={globalData} period={period} expenses={htExpenses} vatSales={globalData.vatSales} />}
+          {activeTab === 'global' && <DashboardGlobalTab data={globalData} period={period} expenses={htExpenses} vatSales={globalData.vatSales} allVatSales={htData.vatSales} vatLines={vatLines} vatSettings={vat.settings} />}
           {activeTab === 'b2c' && <B2CTab data={htData} period={period} />}
           {activeTab === 'b2b' && <B2BTab data={htData} period={period} />}
           {activeTab === 'lives' && <LivesTab data={htData} period={period} />}
@@ -180,7 +186,7 @@ export const Accounting: React.FC = () => {
               settings={vat.settings}
               onSettingsChanged={vat.refresh}
               vatSales={htData.vatSales}
-              expenses={expensesApi.expenses}
+              vatLines={vatLines}
             />
           )}
           {activeTab === 'associate' && (
@@ -193,7 +199,9 @@ export const Accounting: React.FC = () => {
               createExpense={expensesApi.createExpense}
               updateExpense={expensesApi.updateExpense}
               deleteExpense={expensesApi.deleteExpense}
-              refreshExpenses={expensesApi.refresh}
+              refreshExpenses={async () => { await Promise.all([expensesApi.refresh(), categoryVat.refresh()]); }}
+              vatSettings={vat.settings}
+              categoryVat={categoryVat.categories}
             />
           )}
           {activeTab === 'qonto' && <QontoTab data={data} vatSettings={vat.settings} />}
