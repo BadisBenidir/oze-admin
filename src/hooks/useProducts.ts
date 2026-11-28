@@ -56,6 +56,8 @@ export interface ProductFilters {
    * variantes B2B à la fois, sans laisser passer les statuts B2C). */
   status?: string | string[]
   sortBy?: 'recent' | 'oldest' | 'price-asc' | 'price-desc'
+  /** Réception dans nos locaux (products.received_at) : 'yes' reçus, 'no' pas encore reçus. */
+  received?: 'yes' | 'no'
 }
 
 interface UseProductsResult {
@@ -128,6 +130,8 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
       } else if (currentFilters.status) {
         countQuery = countQuery.eq('status', currentFilters.status)
       }
+      if (currentFilters.received === 'yes') countQuery = countQuery.not('received_at', 'is', null)
+      else if (currentFilters.received === 'no') countQuery = countQuery.is('received_at', null)
 
       const { count, error: countError } = await countQuery
 
@@ -153,6 +157,8 @@ export const useProducts = (isAuthenticated: boolean = false): UseProductsResult
       } else if (currentFilters.status) {
         dataQuery = dataQuery.eq('status', currentFilters.status)
       }
+      if (currentFilters.received === 'yes') dataQuery = dataQuery.not('received_at', 'is', null)
+      else if (currentFilters.received === 'no') dataQuery = dataQuery.is('received_at', null)
 
       switch (currentFilters.sortBy) {
         case 'oldest':
